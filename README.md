@@ -1,3 +1,19 @@
+# Modify
+This is for my anet4x board
+
+#define ET_LEVELLING ET_LV_MOUNTED_PROBE
+#define ET_BOARD ET_BOARD_NOISY
+#define ET_LEVELLING ET_LV_MOUNTED_PROBE
+#define FIX_MOUNTED_PROBE
+#define LCD_LANGUAGE en
+
+change debug tool to stlink
+debug_tool                  = stlink
+upload_protocol             = stlink
+board_build.offset  = 0x10000
+
+- Temporate disable zprobe util i having one =))
+#define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
 # Marlin for ET4/5 series 3D printers
 ![counter](https://enoreg85bg22wzz.m.pipedream.net)
 
