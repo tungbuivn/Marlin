@@ -631,10 +631,10 @@
     114.00, 114.00      \
   }
 #else
-// ET4 Autotune PID results
-#define DEFAULT_Kp 30.11
-#define DEFAULT_Ki 2.63
-#define DEFAULT_Kd 86.12
+// ET4X Autotune PID results
+#define DEFAULT_Kp 25.16
+#define DEFAULT_Ki 2.06
+#define DEFAULT_Kd 77.0
 #endif
 #endif // PIDTEMP
 
@@ -673,9 +673,12 @@
 
 // 120V 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
 // from FOPDT model - kp=.39 Tp=405 Tdead=66, Tc set to 79.2, aggressive factor of .15 (vs .1, 1, 10)
-#define DEFAULT_bedKp 102.91
-#define DEFAULT_bedKi 20.42
-#define DEFAULT_bedKd 345.78
+// #define DEFAULT_bedKp 102.91
+// #define DEFAULT_bedKi 20.42
+// #define DEFAULT_bedKd 345.78
+#define DEFAULT_bedKp 67.01
+#define DEFAULT_bedKi 11.80
+#define DEFAULT_bedKd 253.78
 
 // FIND YOUR OWN: "M303 E-1 C8 S90" to run autotune on the bed at 90 degreesC for 8 cycles.
 #endif // PIDTEMPBED
@@ -810,19 +813,19 @@
 // extra connectors. Leave undefined any used for non-endstop and non-probe purposes.
 #define USE_XMIN_PLUG
 #define USE_YMIN_PLUG
-//#define USE_ZMIN_PLUG
+#define USE_ZMIN_PLUG
 //#define USE_IMIN_PLUG
 //#define USE_JMIN_PLUG
 //#define USE_KMIN_PLUG
 //#define USE_XMAX_PLUG
 //#define USE_YMAX_PLUG
-#define USE_ZMAX_PLUG
+//#define USE_ZMAX_PLUG
 //#define USE_IMAX_PLUG
 //#define USE_JMAX_PLUG
 //#define USE_KMAX_PLUG
 
 // Enable pullup for all endstops to prevent a floating state
-#define ENDSTOPPULLUPS
+//#define ENDSTOPPULLUPS
 #if DISABLED(ENDSTOPPULLUPS)
 // Disable ENDSTOPPULLUPS to set pullups individually
 //#define ENDSTOPPULLUP_XMIN
@@ -1082,7 +1085,7 @@
 //#define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
 
 // Force the use of the probe for Z-axis homing
-//#define USE_PROBE_FOR_Z_HOMING
+#define USE_PROBE_FOR_Z_HOMING
 
 /**
  * Z_MIN_PROBE_PIN
@@ -1099,7 +1102,7 @@
  *      - normally-closed switches to GND and D32.
  *      - normally-open switches to 5V and D32.
  */
-//#define Z_MIN_PROBE_PIN 32 // Pin 32 is the RAMPS default
+#define Z_MIN_PROBE_PIN PE11 // Pin 32 is the RAMPS default
 
 /**
  * Probe Type
@@ -1125,7 +1128,7 @@
  * Use the nozzle as the probe, as with a conductive
  * nozzle system or a piezo-electric smart effector.
  */
-#define NOZZLE_AS_PROBE
+//#define NOZZLE_AS_PROBE
 
 /**
  * Z Servo Probe, such as an endstop switch on a rotating arm.
@@ -1230,7 +1233,7 @@
  */
 #define NOZZLE_TO_PROBE_OFFSET \
   {                            \
-    0, 0, 0                    \
+    -40, -6, 0                 \
   }
 
 // Most probes should stay away from the edges of the bed, but
@@ -1244,7 +1247,7 @@
 #define Z_PROBE_FEEDRATE_FAST (8 * 60)
 
 // Feedrate (mm/min) for the "accurate" probe of each point
-#define Z_PROBE_FEEDRATE_SLOW (Z_PROBE_FEEDRATE_FAST / 2)
+#define Z_PROBE_FEEDRATE_SLOW (Z_PROBE_FEEDRATE_FAST / 4)
 
 /**
  * Probe Activation Switch
@@ -1618,7 +1621,7 @@
 
 #if ANY(MESH_BED_LEVELING, AUTO_BED_LEVELING_UBL, PROBE_MANUALLY)
 // Set a height for the start of manual adjustment
-#define MANUAL_PROBE_START_Z 0.2 // (mm) Comment out to use the last-measured height
+#define MANUAL_PROBE_START_Z 5.1 // (mm) Comment out to use the last-measured height
 #endif
 
 #if ANY(MESH_BED_LEVELING, AUTO_BED_LEVELING_BILINEAR, AUTO_BED_LEVELING_UBL)

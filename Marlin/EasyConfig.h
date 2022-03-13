@@ -119,7 +119,7 @@
  * Values: ET_Z_ENDSTOP_POSTION_NONE, ET_Z_ENDSTOP_POSTION_TOP, ET_Z_ENDSTOP_POSTION_BOTTOM
  */
 
-//#define ET_Z_ENDSTOP_POSTION      ET_Z_ENDSTOP_POSTION_NONE
+#define ET_Z_ENDSTOP_POSTION ET_Z_ENDSTOP_POSTION_BOTTOM
 
 /**
  * Parameter: ET_CUSTOM_MACHINE_NAME
@@ -127,7 +127,7 @@
  * Type: Optional
  */
 
-#define ET_CUSTOM_MACHINE_NAME "Custom Anet ET4X"
+#define ET_CUSTOM_MACHINE_NAME "ML2"
 
 // ----------------------------------------------
 // 3. Basic Post-installation configuration steps

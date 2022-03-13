@@ -1,5 +1,5 @@
 # Modify
-This is for my anet4x board
+This is for my anet4x board, this version using openblt bootloader
 
 #define ET_LEVELLING ET_LV_MOUNTED_PROBE
 #define ET_BOARD ET_BOARD_NOISY
@@ -14,6 +14,15 @@ board_build.offset  = 0x10000
 
 - Temporate disable zprobe util i having one =))
 #define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
+autopid turning:
+extrude at 200 degrees
+M303 E0 S200 U1
+turn bed at 60 degrees:
+M303 E-1 S60 U1
+
+ref source:
+https://damsteen.nl/blog/2020/11/06/flash-marlin-on-anet-et-printers
+https://shop.anet3d.com/blogs/anet-et4-et5-3d-printer-faq/bed-leveling-anet-et4-3d-printer-with-marlin-firmware
 # Marlin for ET4/5 series 3D printers
 ![counter](https://enoreg85bg22wzz.m.pipedream.net)
 
