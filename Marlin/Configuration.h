@@ -2456,7 +2456,10 @@
 //
 // MKS MINI12864 V3 is an alias for FYSETC_MINI_12864_2_1. Type A/B. NeoPixel RGB Backlight.
 //
-//#define MKS_MINI_12864_V3
+#define MKS_MINI_12864_V3
+#define NEOPIXEL_PIN PB0
+#define DOGLCD_CS PB2
+#define DOGLCD_A0 PE5  
 
 //
 // MKS LCD12864A/B with graphic controller and SD support. Follows MKS_MINI_12864 pinout.
@@ -2730,7 +2733,7 @@
 //
 // 320x240, 2.8", FSMC Stock Display from ET4
 //
-#define ANET_ET4_TFT28
+// #define ANET_ET4_TFT28
 
 //
 // 480x320, 3.5", FSMC Stock Display from ET5
@@ -2777,7 +2780,7 @@
  *   root of your SD card, together with the compiled firmware.
  */
 //#define TFT_CLASSIC_UI
-#define TFT_COLOR_UI
+// #define TFT_COLOR_UI
 //#define TFT_LVGL_UI
 
 /* ET4/ET5 Black Theme */
@@ -2837,7 +2840,7 @@
 //
 // Touch Screen Settings
 //
-#define TOUCH_SCREEN
+// #define TOUCH_SCREEN
 #if ENABLED(TOUCH_SCREEN)
   #define BUTTON_DELAY_EDIT  50 // (ms) Button repeat delay for edit screens
   #define BUTTON_DELAY_MENU 250 // (ms) Button repeat delay for menus
@@ -2950,7 +2953,7 @@
 #endif
 
 // Support for Adafruit NeoPixel LED driver
-//#define NEOPIXEL_LED
+#define NEOPIXEL_LED
 #if ENABLED(NEOPIXEL_LED)
   #define NEOPIXEL_TYPE   NEO_GRBW // NEO_GRBW / NEO_GRB - four/three channel driver type (defined in Adafruit_NeoPixel.h)
   //#define NEOPIXEL_PIN     4     // LED driving pin
