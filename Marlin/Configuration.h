@@ -2457,20 +2457,24 @@
 // MKS MINI12864 V3 is an alias for FYSETC_MINI_12864_2_1. Type A/B. NeoPixel RGB Backlight.
 //
 #define MKS_MINI_12864_V3
-#define FORCE_SOFT_SPI 
-// EXP1
-#define DOGLCD_CS PB2
-#define DOGLCD_A0 PE5 
+#ifdef BOARD_ANET_ET4
+    #ifdef MKS_MINI_12864_V3
+        #define U8G_PARAM DOGLCD_SCK,DOGLCD_MOSI,DOGLCD_CS,DOGLCD_A0,LCD_RESET_PIN
+        #define FORCE_SOFT_SPI
+        // EXP1
+        #define DOGLCD_CS PB2
+        #define DOGLCD_A0 PE5
 
-#define LCD_RESET_PIN PE4
+        #define LCD_RESET_PIN PE4
 
-#define NEOPIXEL_PIN PB0
+        #define NEOPIXEL_PIN PB0
 
-// EXP2
-#define DOGLCD_SCK PD13
-#define DOGLCD_MOSI PD0
+        // EXP2
+        #define DOGLCD_SCK PD13
+        #define DOGLCD_MOSI PD0
 
-#define U8G_PARAM DOGLCD_SCK,DOGLCD_MOSI,DOGLCD_CS,DOGLCD_A0,LCD_RESET_PIN
+    #endif
+#endif
 
 //#define LCD_PINS_D4 XXXX
 //#define LCD_PINS_D5 XXXX
