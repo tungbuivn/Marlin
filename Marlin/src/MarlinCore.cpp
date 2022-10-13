@@ -1112,6 +1112,16 @@ void setup() {
     FASTIO_INIT();
   #endif
 
+  // setup lcd
+  pinMode(PD14,OUTPUT);
+  digitalWrite(PD14,HIGH);// disable CS sd card
+  pinMode(DOGLCD_CS,OUTPUT);
+  digitalWrite(DOGLCD_CS,LOW);
+  pinMode(PE10,OUTPUT);
+  digitalWrite(PE10,LOW); // gnd
+  pinMode(PE9,OUTPUT);
+  digitalWrite(PE9,HIGH); // 3v3
+
   #ifdef BOARD_PREINIT
     BOARD_PREINIT(); // Low-level init (before serial init)
   #endif
