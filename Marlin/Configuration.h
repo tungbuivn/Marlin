@@ -97,9 +97,9 @@
 // @section machine
 
 // Choose the name from boards.h that matches your setup
-#ifndef MOTHERBOARD
-  #define MOTHERBOARD BOARD_ANET_ET4
-#endif
+// #ifndef MOTHERBOARD
+// #define MOTHERBOARD BOARD_ANET_ET4
+// #endif
 
 /**
  * Select the serial port on the board to use for communication with the host.
