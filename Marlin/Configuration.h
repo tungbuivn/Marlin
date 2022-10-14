@@ -2457,7 +2457,29 @@
 // MKS MINI12864 V3 is an alias for FYSETC_MINI_12864_2_1. Type A/B. NeoPixel RGB Backlight.
 //
 //#define MKS_MINI_12864_V3
+#ifdef BOARD_ANET_ET4
 
+  // #define U8G_PARAM DOGLCD_SCK, DOGLCD_MOSI, DOGLCD_CS, DOGLCD_A0, LCD_RESET_PIN
+  // #define FORCE_SOFT_SPI
+  // // EXP1
+  // #define DOGLCD_CS PB2
+  // #define DOGLCD_A0 PE5
+
+  // #define LCD_RESET_PIN PE4
+
+  // #define NEOPIXEL_PIN PB0
+
+  // // EXP2
+  // #define DOGLCD_SCK PD13
+  // #define DOGLCD_MOSI PD0
+  
+
+  #define BTN_ENC PB2
+  #define BTN_EN1 PE5
+  #define BTN_EN2 PE4
+  // #define BEEPER_PIN PD7
+
+#endif
 //
 // MKS LCD12864A/B with graphic controller and SD support. Follows MKS_MINI_12864 pinout.
 // https://www.aliexpress.com/item/33018110072.html
@@ -2837,7 +2859,7 @@
 //
 // Touch Screen Settings
 //
-#define TOUCH_SCREEN
+//#define TOUCH_SCREEN
 #if ENABLED(TOUCH_SCREEN)
   #define BUTTON_DELAY_EDIT  50 // (ms) Button repeat delay for edit screens
   #define BUTTON_DELAY_MENU 250 // (ms) Button repeat delay for menus
