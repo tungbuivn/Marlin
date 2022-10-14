@@ -21,6 +21,6 @@
  */
 #pragma once
 
-#define BOARD_INFO_NAME "BTT SKR Mini MZ V1.0"
+#define BOARD_INFO_NAME "Anet ET4P 1.x"
 
-#include "pins_BTT_SKR_MINI_E3_V2_0.h" // ... BTT_SKR_MINI_E3_common
+#include "pins_ANET_ET4.h"
