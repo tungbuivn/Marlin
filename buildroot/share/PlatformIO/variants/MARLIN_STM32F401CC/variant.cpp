@@ -1,26 +1,18 @@
 /*
-  Copyright (c) 2011 Arduino.  All right reserved.
-
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
-
-  This library is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public
-  License along with this library; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-*/
+ *******************************************************************************
+ * Copyright (c) 2011-2021, STMicroelectronics
+ * All rights reserved.
+ *
+ * This software component is licensed by ST under BSD 3-Clause license,
+ * the "License"; You may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at:
+ *                        opensource.org/licenses/BSD-3-Clause
+ *
+ *******************************************************************************
+ */
+#if defined(ARDUINO_BLACKPILL_F401CC) || defined(ARDUINO_BLACKPILL_F401CE)
 
 #include "pins_arduino.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // Digital PinName array
 const PinName digitalPin[] = {
@@ -57,27 +49,12 @@ const PinName digitalPin[] = {
   PB_14, // Digital pin 29
   PB_15, // Digital pin 30
 
-  PC_0,  // Digital pin 31
-  PC_1,  // Digital pin 32
-  PC_2,  // Digital pin 33
-  PC_3,  // Digital pin 34
-  PC_4,  // Digital pin 35
-  PC_5,  // Digital pin 36
-  PC_6,  // Digital pin 37
-  PC_7,  // Digital pin 38
-  PC_8,  // Digital pin 39
-  PC_9,  // Digital pin 40
-  PC_10, // Digital pin 41
-  PC_11, // Digital pin 42
-  PC_12, // Digital pin 43
-  PC_13, // Digital pin 44
-  PC_14, // Digital pin 45
-  PC_15, // Digital pin 46
+  PC_13, // Digital pin 31
+  PC_14, // Digital pin 32
+  PC_15, // Digital pin 33
 
-  PD_2,  // Digital pin 47
-
-  PH_0,  // Digital pin 48, used by the external oscillator
-  PH_1   // Digital pin 49, used by the external oscillator
+  PH_0,  // Digital pin 34, used by the external oscillator
+  PH_1   // Digital pin 35, used by the external oscillator
 };
 
 // Analog (Ax) pin number array
@@ -92,17 +69,7 @@ const uint32_t analogInputPin[] = {
   7,  // A7,  PA7
   16, // A8,  PB0
   17, // A9,  PB1
-  31, // A10, PC0
-  32, // A11, PC1
-  33, // A12, PC2
-  34, // A13, PC3
-  35, // A14, PC4
-  36  // A15, PC5
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 // ----------------------------------------------------------------------------
 
@@ -110,129 +77,45 @@ const uint32_t analogInputPin[] = {
 extern "C" {
 #endif
 
-/*
- * @brief  Configures the System clock source, PLL Multiplier and Divider factors,
- *               AHB/APBx prescalers and Flash settings
- * @note   This function should be called only once the RCC clock configuration
- *         is reset to the default reset state (done in SystemInit() function).
- * @param  None
- * @retval None
- */
-
-/******************************************************************************/
-/*            PLL (clocked by HSE) used as System clock source                */
-/******************************************************************************/
-static uint8_t SetSysClock_PLL_HSE(uint8_t bypass)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct;
-  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-
-  /* The voltage scaling allows optimizing the power consumption when the device is
-  clocked below the maximum system frequency, to update the voltage scaling value
-  regarding system frequency refer to product datasheet. */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
-
-  // Enable HSE oscillator and activate PLL with HSE as source
-  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSE;
-  if (bypass == 0) {
-    RCC_OscInitStruct.HSEState          = RCC_HSE_ON; // External 8 MHz xtal on OSC_IN/OSC_OUT
-  } else {
-    RCC_OscInitStruct.HSEState          = RCC_HSE_BYPASS; // External 8 MHz clock on OSC_IN
-  }
-
-  RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource       = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM            = HSE_VALUE / 1000000L; // Expects an 8 MHz external clock by default. Redefine HSE_VALUE if not
-  RCC_OscInitStruct.PLL.PLLN            = 336;           // VCO output clock = 336 MHz (1 MHz * 336)
-  RCC_OscInitStruct.PLL.PLLP            = RCC_PLLP_DIV4; // PLLCLK = 84 MHz (336 MHz / 4)
-  RCC_OscInitStruct.PLL.PLLQ            = 7;             // USB clock = 48 MHz (336 MHz / 7) --> OK for USB
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-    return 0; // FAIL
-  }
-
-  // Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2 clocks dividers
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_PLLCLK; // 84 MHz
-  RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;         // 84 MHz
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;           // 42 MHz
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;           // 84 MHz
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
-    return 0; // FAIL
-  }
-
-  /* Output clock on MCO1 pin(PA8) for debugging purpose */
-  /*
-  if (bypass == 0)
-    HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_HSE, RCC_MCODIV_2); // 4 MHz
-  else
-    HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_HSE, RCC_MCODIV_1); // 8 MHz
-  */
-
-  return 1; // OK
-}
-
-/******************************************************************************/
-/*            PLL (clocked by HSI) used as System clock source                */
-/******************************************************************************/
-uint8_t SetSysClock_PLL_HSI(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct;
-  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-
-  /* The voltage scaling allows optimizing the power consumption when the device is
-    clocked below the maximum system frequency, to update the voltage scaling value
-    regarding system frequency refer to product datasheet. */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
-
-  // Enable HSI oscillator and activate PLL with HSI as source
-  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSIState            = RCC_HSI_ON;
-  RCC_OscInitStruct.HSEState            = RCC_HSE_OFF;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource       = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM            = 16;            // VCO input clock = 1 MHz (16 MHz / 16)
-  RCC_OscInitStruct.PLL.PLLN            = 336;           // VCO output clock = 336 MHz (1 MHz * 336)
-  RCC_OscInitStruct.PLL.PLLP            = RCC_PLLP_DIV4; // PLLCLK = 84 MHz (336 MHz / 4)
-  RCC_OscInitStruct.PLL.PLLQ            = 7;             // USB clock = 48 MHz (336 MHz / 7) --> freq is ok but not precise enough
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-    return 0; // FAIL
-  }
-
-  /* Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2 clocks dividers */
-  RCC_ClkInitStruct.ClockType      = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
-  RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_PLLCLK; // 84 MHz
-  RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;         // 84 MHz
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;           // 42 MHz
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;           // 84 MHz
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
-    return 0; // FAIL
-  }
-
-  /* Output clock on MCO1 pin(PA8) for debugging purpose */
-  //HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_HSI, RCC_MCODIV_1); // 16 MHz
-
-  return 1; // OK
-}
-
 WEAK void SystemClock_Config(void)
 {
-  /* 1- If fail try to start with HSE and external xtal */
-  if (SetSysClock_PLL_HSE(0) == 0) {
-    /* 2- Try to start with HSE and external clock */
-    if (SetSysClock_PLL_HSE(1) == 0) {
-      /* 3- If fail start with HSI clock */
-      if (SetSysClock_PLL_HSI() == 0) {
-        Error_Handler();
-      }
-    }
+  RCC_OscInitTypeDef RCC_OscInitStruct = {};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {};
+
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 336;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    Error_Handler();
   }
-  /* Output clock on MCO2 pin(PC9) for debugging purpose */
-  //HAL_RCC_MCOConfig(RCC_MCO2, RCC_MCO2SOURCE_SYSCLK, RCC_MCODIV_4);
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
+                                | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+    Error_Handler();
+  }
 }
 
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* (ARDUINO_BLACKPILL_F401CC) || (ARDUINO_BLACKPILL_F401CE) */

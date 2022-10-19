@@ -50,25 +50,8 @@
 #define PC14                    32
 #define PC15                    33
 #define PH0                     34
-#define PH1                     35
+#define PH1                                        35
 
-// Alternate pins number
-#define PA0_ALT1                (PA0  | ALT1)
-#define PA1_ALT1                (PA1  | ALT1)
-#define PA2_ALT1                (PA2  | ALT1)
-#define PA2_ALT2                (PA2  | ALT2)
-#define PA3_ALT1                (PA3  | ALT1)
-#define PA3_ALT2                (PA3  | ALT2)
-#define PA4_ALT1                (PA4  | ALT1)
-#define PA7_ALT1                (PA7  | ALT1)
-#define PA15_ALT1               (PA15 | ALT1)
-#define PB0_ALT1                (PB0  | ALT1)
-#define PB1_ALT1                (PB1  | ALT1)
-#define PB3_ALT1                (PB3  | ALT1)
-#define PB4_ALT1                (PB4  | ALT1)
-#define PB5_ALT1                (PB5  | ALT1)
-#define PB8_ALT1                (PB8  | ALT1)
-#define PB9_ALT1                (PB9  | ALT1)
 
 #define NUM_DIGITAL_PINS        36
 #define NUM_ANALOG_INPUTS       10
