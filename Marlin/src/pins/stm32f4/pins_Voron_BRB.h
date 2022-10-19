@@ -58,33 +58,52 @@
 #ifndef DEFAULT_MACHINE_NAME
   #define DEFAULT_MACHINE_NAME "Voron 2.4 v0.1"
 #endif
+
+
+#define TFT_SCK_PIN PA5
+#define TFT_MOSI_PIN PA7
+#define TFT_MISO_PIN PA6
+#define TFT_CS_PIN PA4
+
+#define TFT_A0_PIN PA3
+#define LCD_RESET_PIN PA10
+
+// #define TOUCH_CS_PIN PA2
+// #define TOUCH_MOSI_PIN PA0
+// #define TOUCH_SCK_PIN PA0
+// #define TOUCH_MISO_PIN PA0
+
+#define FORCE_SOFT_SPI
+// reset A10
+
+
 //
 // Limit Switches
 //
-#define Z_STOP_PIN                          PA15
+#define Z_STOP_PIN                          PA0
 
 #ifndef Z_MIN_PROBE_PIN
-  #define Z_MIN_PROBE_PIN                   PC14  // BLTouch IN
+  #define Z_MIN_PROBE_PIN                   PA0  // BLTouch IN
 #endif
 
 //
 // Filament Runout Sensor
 //
 #ifndef FIL_RUNOUT_PIN
-  #define FIL_RUNOUT_PIN                    PC15  // "Pulled-high"
+  #define FIL_RUNOUT_PIN                    PA0  // "Pulled-high"
 #endif
 
 //
 // Heaters / Fans
 //
-#define HEATER_BED_PIN                      PA7   // HOT BED
+#define HEATER_BED_PIN                      PA0   // HOT BED
 #define FAN1_PIN                            PA0   // extruder fan
 
 //
 // SD Card
 //
 #define ONBOARD_SPI_DEVICE                     1
-#define ONBOARD_SD_CS_PIN                   PA4   // SDSS
+#define ONBOARD_SD_CS_PIN                   PA0   // SDSS
 
 //#define BOARD_NO_NATIVE_USB
 
@@ -111,10 +130,10 @@
 // Limit Switches
 //
 #ifndef X_STOP_PIN
-  #define X_STOP_PIN                        PA5
+  #define X_STOP_PIN                        PA0
 #endif
 #ifndef Y_STOP_PIN
-  #define Y_STOP_PIN                        PA6
+  #define Y_STOP_PIN                        PA0
 #endif
 #ifndef Z_STOP_PIN
   #define Z_STOP_PIN                        PA7
@@ -138,7 +157,7 @@
   #define X_STEP_PIN                        PA0
 #endif
 #ifndef X_DIR_PIN
-  #define X_DIR_PIN                         PB9
+  #define X_DIR_PIN                         PB0
 #endif
 #define X_ENABLE_PIN                        PA0   // Shared
 
@@ -146,23 +165,23 @@
   #define Y_STEP_PIN                        PB8
 #endif
 #ifndef Y_DIR_PIN
-  #define Y_DIR_PIN                         PB7
+  #define Y_DIR_PIN                         PB0
 #endif
 #define Y_ENABLE_PIN                X_ENABLE_PIN
 
 #ifndef Z_STEP_PIN
-  #define Z_STEP_PIN                        PB6
+  #define Z_STEP_PIN                        PB0
 #endif
 #ifndef Z_DIR_PIN
-  #define Z_DIR_PIN                         PB5
+  #define Z_DIR_PIN                         PB0
 #endif
 #define Z_ENABLE_PIN                X_ENABLE_PIN
 
 #ifndef E0_STEP_PIN
-  #define E0_STEP_PIN                       PB4
+  #define E0_STEP_PIN                       PB0
 #endif
 #ifndef E0_DIR_PIN
-  #define E0_DIR_PIN                        PB3
+  #define E0_DIR_PIN                        PB0
 #endif
 #define E0_ENABLE_PIN               X_ENABLE_PIN
 
@@ -177,7 +196,7 @@
 // Heaters / Fans
 //
 #ifndef HEATER_0_PIN
-  #define HEATER_0_PIN                      PA1   // HEATER1
+  #define HEATER_0_PIN                      PA0   // HEATER1
 #endif
 #ifndef HEATER_BED_PIN
   #define HEATER_BED_PIN                    PA2   // HOT BED
