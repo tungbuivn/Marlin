@@ -18,21 +18,21 @@
 #define PA0                     PIN_A0  // NOT USED
 #define PA1                     PIN_A1  // HotEnd FAN1 PWM, FAN2 will direct connect to 24v
 #define PA2                     PIN_A2  // HotBed PWM
-#define PA3                     PIN_A3  // HOTEND thermistor
-#define PA4                     PIN_A4  // BED thermistor
-#define PA5                     PIN_A5
-#define PA6                     PIN_A6
-#define PA7                     PIN_A7
+#define PA3                     PIN_A3  // HotEnd thermistor
+#define PA4                     PIN_A4  // xxxxxxxxxxx cs_1
+#define PA5                     PIN_A5  // xxxxxxxxxxx sclk_1
+#define PA6                     PIN_A6  // xxxxxxxxxxx miso_1
+#define PA7                     PIN_A7  // xxxxxxxxxxx mosi_1
 #define PA8                     8       // I2C3 SCL 12864
 #define PA9                     9       // PIN_SERIAL_TX usb cable
 #define PA10                    10      // PIN_SERIAL_RX usb cable
-#define PA11                    11      // XYZE end stop, probe, need to check E-Stop will be trigger if using share mode, otherwise will to separate to a new pin
+#define PA11                    11      // XYZ end stop this can be share but e will not, just becausse when x,y trigger then e will stop too
 #define PA12                    12      // XYZE enable
 #define PA13                    13      // SWDCLK
 #define PA14                    14      // SWDIO
 #define PA15                    15      // X-Dir
-#define PB0                     PIN_A8  // X-PULSE
-#define PB1                     PIN_A9  // Y-DIR
+#define PB0                     PIN_A8  // BED thermistor
+#define PB1                     PIN_A9
 #define PB2                     18      // Y-PULSE
 #define PB3                     19      // SDA2 sdcard
 #define PB4                     20      // I2C3 SDA 12864
@@ -43,11 +43,11 @@
 #define PB9                     25      // E-DIR
 #define PB10                    26      // SCL2 SD card
 #define PB12                    27      // E-PULSE
-#define PB13                    28
-#define PB14                    29
-#define PB15                    30
-#define PC13                    31
-#define PC14                    32
+#define PB13                    28      // X-PULSE
+#define PB14                    29      // Y-DIR
+#define PB15                    30      // xxxxxxxxxx lcd_a0
+#define PC13                    31      // xxxxxxxxxx lcd_reset
+#define PC14                    32      // E-EndStop
 #define PC15                    33
 #define PH0                     34      // crysal
 #define PH1                     35      // crysal
