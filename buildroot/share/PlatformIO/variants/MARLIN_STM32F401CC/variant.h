@@ -123,7 +123,7 @@
 #endif
 
 #ifndef HSE_VALUE
-  #define HSE_VALUE             25000000U
+  #define HSE_VALUE             8000000U
 #endif
 
 /*----------------------------------------------------------------------------
