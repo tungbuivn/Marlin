@@ -47,7 +47,7 @@
 #define PB14                    29      // Y-DIR
 #define PB15                    30      // xxxxxxxxxx lcd_spi_lcd_a0
 #define PC13                    31      // xxxxxxxxxx lcd_spi_lcd_reset
-#define PC14                    32      // E-EndStop
+#define PC14                    32      // E-EndStop (filament sensor)
 #define PC15                    33
 #define PH0                     34      // crysal
 #define PH1                     35      // crysal
