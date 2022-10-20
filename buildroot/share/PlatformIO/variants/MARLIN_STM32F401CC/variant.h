@@ -15,21 +15,21 @@
 /*----------------------------------------------------------------------------
  *        STM32 pins number
  *----------------------------------------------------------------------------*/
-#define PA0                     PIN_A0
-#define PA1                     PIN_A1
-#define PA2                     PIN_A2
+#define PA0                     PIN_A0  // NOT USED
+#define PA1                     PIN_A1  // HotEnd FAN1 PWM, FAN2 will direct connect to 24v
+#define PA2                     PIN_A2  // HotBed PWM
 #define PA3                     PIN_A3
 #define PA4                     PIN_A4
 #define PA5                     PIN_A5
 #define PA6                     PIN_A6
 #define PA7                     PIN_A7
-#define PA8                     8
-#define PA9                     9
-#define PA10                    10
+#define PA8                     8       // XYZE end stop, need to check E-Stop will be trigger if using share mode, otherwise will to separate to a new pin
+#define PA9                     9       // PIN_SERIAL_TX
+#define PA10                    10      // PIN_SERIAL_RX
 #define PA11                    11
 #define PA12                    12
-#define PA13                    13
-#define PA14                    14
+#define PA13                    13      // SWDCLK
+#define PA14                    14      // SWDIO
 #define PA15                    15
 #define PB0                     PIN_A8
 #define PB1                     PIN_A9
@@ -37,8 +37,8 @@
 #define PB3                     19
 #define PB4                     20
 #define PB5                     21
-#define PB6                     22
-#define PB7                     23
+#define PB6                     22      // SCL eeprom
+#define PB7                     23      // SDA eeprom
 #define PB8                     24
 #define PB9                     25
 #define PB10                    26
@@ -49,8 +49,8 @@
 #define PC13                    31
 #define PC14                    32
 #define PC15                    33
-#define PH0                     34
-#define PH1                                        35
+#define PH0                     34      // crysal
+#define PH1                     35      // crysal
 
 
 #define NUM_DIGITAL_PINS        36
@@ -123,7 +123,7 @@
 #endif
 
 #ifndef HSE_VALUE
-  #define HSE_VALUE             8000000U
+  #define HSE_VALUE             25000000U
 #endif
 
 /*----------------------------------------------------------------------------

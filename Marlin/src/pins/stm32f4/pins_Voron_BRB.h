@@ -60,12 +60,23 @@
 #endif
 
 
-#define TFT_SCK_PIN PA5
-#define TFT_MOSI_PIN PA7
-#define TFT_MISO_PIN PA6
-#define TFT_CS_PIN PA4
 
-#define TFT_A0_PIN PA3
+// #define PIN_SERIAL6_RX          PA12
+// #define PIN_SERIAL6_TX          PA11
+// #define X_HARDWARE_SERIAL  MSerial6
+// #define Y_HARDWARE_SERIAL  MSerial6
+// #define Z_HARDWARE_SERIAL  MSerial6
+// #define E0_HARDWARE_SERIAL MSerial6
+
+// =============================================================================================
+
+
+#define TFT_SCK_PIN PIN_SPI_SCK
+#define TFT_MOSI_PIN PIN_SPI_MOSI
+#define TFT_MISO_PIN PIN_SPI_MISO
+#define TFT_CS_PIN PIN_SPI_SS
+
+#define TFT_A0_PIN PA3 
 #define LCD_RESET_PIN PA10
 
 // #define TOUCH_CS_PIN PA2
@@ -120,7 +131,7 @@
 #if ENABLED(IIC_BL24CXX_EEPROM)
   #define IIC_EEPROM_SDA                    PA11
   #define IIC_EEPROM_SCL                    PA12
-  #define MARLIN_EEPROM_SIZE               0x800  // 512K (24C512)
+  #define MARLIN_EEPROM_SIZE               0x7D000  // 512K (24C512)
 #elif ENABLED(SDCARD_EEPROM_EMULATION)
   #define MARLIN_EEPROM_SIZE               0x800  // 2K
 #endif
@@ -135,9 +146,9 @@
 #ifndef Y_STOP_PIN
   #define Y_STOP_PIN                        PA0
 #endif
-#ifndef Z_STOP_PIN
-  #define Z_STOP_PIN                        PA7
-#endif
+// #ifndef Z_STOP_PIN
+//   #define Z_STOP_PIN                        PA7
+// #endif
 
 #ifndef Z_MIN_PROBE_PIN
   #define Z_MIN_PROBE_PIN                   PB1   // BLTouch IN
@@ -184,6 +195,7 @@
   #define E0_DIR_PIN                        PB0
 #endif
 #define E0_ENABLE_PIN               X_ENABLE_PIN
+
 
 
 //
