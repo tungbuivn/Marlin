@@ -61,60 +61,112 @@
 
 
 
-// #define PIN_SERIAL6_RX          PA12
-// #define PIN_SERIAL6_TX          PA11
-// #define X_HARDWARE_SERIAL  MSerial6
-// #define Y_HARDWARE_SERIAL  MSerial6
-// #define Z_HARDWARE_SERIAL  MSerial6
-// #define E0_HARDWARE_SERIAL MSerial6
+
+
+
+
+
+
+
+// #define PA8                     8       // yyyyyyyyyyy I2C3 SCL3 lcd_12864 | encoderB_LCD
+// #define PA9                     9       // PIN_SERIAL_TX usb cable
+// #define PA10                    10      // PIN_SERIAL_RX usb cable
+
+
+// #define PA13                    13      // SWDCLK
+// #define PA14                    14      // SWDIO
+
+
+
+
+
+// #define PB4                     20      // yyyyyyyyyyy I2C3 SDA3 lcd_12864 | encoderA_LCD
+// #define PB5                     21      // Z-DIR
+// #define PB6                     22      // SCL1 eeprom
+// #define PB7                     23      // SDA1 eeprom, PIN_WIRE_SDA
+
+
+
+
+
+
+
+// #define PC13                    31      // xxxxxxxxxx lcd_spi_lcd_reset
+
+// #define PC15                    33      // Encoder-click
+// #define PH0                     34      // crysal
+// #define PH1                     35      // crysal
+
+
 
 // =============================================================================================
+#ifdef USE_12864_LCD
+#else
 
-
-#define TFT_SCK_PIN PIN_SPI_SCK
-#define TFT_MOSI_PIN PIN_SPI_MOSI
-#define TFT_MISO_PIN PIN_SPI_MISO
-#define TFT_CS_PIN PIN_SPI_SS
-
-#define TFT_A0_PIN PA3 
-#define LCD_RESET_PIN PA10
-
+  #define TFT_SCK_PIN                       PIN_SPI_SCK
+  #define TFT_MOSI_PIN                      PIN_SPI_MOSI
+  #define TFT_MISO_PIN                      PIN_SPI_MISO
+  #define TFT_CS_PIN                        PIN_SPI_SS
+  #define TFT_A0_PIN                        PB15 
+  #define LCD_RESET_PIN                     PC13
+// #define FORCE_SOFT_SPI
+#endif
 // #define TOUCH_CS_PIN PA2
 // #define TOUCH_MOSI_PIN PA0
 // #define TOUCH_SCK_PIN PA0
 // #define TOUCH_MISO_PIN PA0
 
-#define FORCE_SOFT_SPI
-// reset A10
+
+#define XYZ_END_STOP                        PA11
+#define XYZ_ENABLE                          PA12
 
 
 //
 // Limit Switches
 //
-#define Z_STOP_PIN                          PA0
+#define Z_STOP_PIN                          XYZ_END_STOP
+#define X_STOP_PIN                          XYZ_END_STOP
+#define Y_STOP_PIN                          XYZ_END_STOP
+// #define Z_MIN_PROBE_PIN                     XYZ_END_STOP
 
-#ifndef Z_MIN_PROBE_PIN
-  #define Z_MIN_PROBE_PIN                   PA0  // BLTouch IN
-#endif
 
 //
 // Filament Runout Sensor
 //
-#ifndef FIL_RUNOUT_PIN
-  #define FIL_RUNOUT_PIN                    PA0  // "Pulled-high"
-#endif
+#define FIL_RUNOUT_PIN                      PC14  // "Pulled-high"
+
+
 
 //
 // Heaters / Fans
 //
-#define HEATER_BED_PIN                      PA0   // HOT BED
-#define FAN1_PIN                            PA0   // extruder fan
+
+#define HEATER_0_PIN                        PB1   // HEATER1
+#define FAN1_PIN                            PA1   // extruder fan
+
+
+// 
+// Bed
+//  
+#define HEATER_BED_PIN                    PA2   // HOT BED
+// #define FAN_PIN                           PA0   // NO BED FAN, DIRECT connect to 24v
+
+
+//
+// Temperature Sensors
+//
+#define TEMP_0_PIN                          PA3   // TH1
+#define TEMP_BED_PIN                        PB0   // TB1
+
 
 //
 // SD Card
 //
-#define ONBOARD_SPI_DEVICE                     1
-#define ONBOARD_SD_CS_PIN                   PA0   // SDSS
+// #define ONBOARD_SPI_DEVICE                     1
+#define SDSUPPORT
+//#define 
+SD_CS_PIN                   PA0   // SDSS
+#define ONBOARD_SD_CS_PIN != SD_SS_PIN
 
 //#define BOARD_NO_NATIVE_USB
 
@@ -129,94 +181,57 @@
 #endif
 
 #if ENABLED(IIC_BL24CXX_EEPROM)
-  #define IIC_EEPROM_SDA                    PA11
-  #define IIC_EEPROM_SCL                    PA12
+  #define IIC_EEPROM_SDA                    PB3
+  #define IIC_EEPROM_SCL                    PB10
   #define MARLIN_EEPROM_SIZE               0x7D000  // 512K (24C512)
 #elif ENABLED(SDCARD_EEPROM_EMULATION)
   #define MARLIN_EEPROM_SIZE               0x800  // 2K
 #endif
 
 
-//
-// Limit Switches
-//
-#ifndef X_STOP_PIN
-  #define X_STOP_PIN                        PA0
-#endif
-#ifndef Y_STOP_PIN
-  #define Y_STOP_PIN                        PA0
-#endif
-// #ifndef Z_STOP_PIN
-//   #define Z_STOP_PIN                        PA7
-// #endif
 
-#ifndef Z_MIN_PROBE_PIN
-  #define Z_MIN_PROBE_PIN                   PB1   // BLTouch IN
-#endif
 
-//
-// Filament Runout Sensor
-//
-#ifndef FIL_RUNOUT_PIN
-  #define FIL_RUNOUT_PIN                    PA4   // "Pulled-high"
-#endif
 
 //
 // Steppers
 //
 #ifndef X_STEP_PIN
-  #define X_STEP_PIN                        PA0
+  #define X_STEP_PIN                       PB13
 #endif
 #ifndef X_DIR_PIN
-  #define X_DIR_PIN                         PB0
+  #define X_DIR_PIN                        PA15
 #endif
-#define X_ENABLE_PIN                        PA0   // Shared
+#define X_ENABLE_PIN                 XYZ_ENABLE   // Shared
 
 #ifndef Y_STEP_PIN
-  #define Y_STEP_PIN                        PB8
+  #define Y_STEP_PIN                        PB2
 #endif
 #ifndef Y_DIR_PIN
-  #define Y_DIR_PIN                         PB0
+  #define Y_DIR_PIN                        PB14
 #endif
-#define Y_ENABLE_PIN                X_ENABLE_PIN
+#define Y_ENABLE_PIN                 XYZ_ENABLE
 
 #ifndef Z_STEP_PIN
-  #define Z_STEP_PIN                        PB0
+  #define Z_STEP_PIN                        PB8
 #endif
 #ifndef Z_DIR_PIN
-  #define Z_DIR_PIN                         PB0
+  #define Z_DIR_PIN                         PB5
 #endif
-#define Z_ENABLE_PIN                X_ENABLE_PIN
+#define Z_ENABLE_PIN                 XYZ_ENABLE
 
 #ifndef E0_STEP_PIN
-  #define E0_STEP_PIN                       PB0
+  #define E0_STEP_PIN                      PB12
 #endif
 #ifndef E0_DIR_PIN
-  #define E0_DIR_PIN                        PB0
+  #define E0_DIR_PIN                        PB9
 #endif
-#define E0_ENABLE_PIN               X_ENABLE_PIN
+#define E0_ENABLE_PIN                XYZ_ENABLE
 
 
 
-//
-// Temperature Sensors
-//
-#define TEMP_0_PIN                          PA0   // TH1
-#define TEMP_BED_PIN                        PA0   // TB1
 
-//
-// Heaters / Fans
-//
-#ifndef HEATER_0_PIN
-  #define HEATER_0_PIN                      PA0   // HEATER1
-#endif
-#ifndef HEATER_BED_PIN
-  #define HEATER_BED_PIN                    PA2   // HOT BED
-#endif
-#ifndef FAN_PIN
-  #define FAN_PIN                           PA0   // FAN
-#endif
-#define FAN_SOFT_PWM_REQUIRED
+
+// #define FAN_SOFT_PWM_REQUIRED
 
 // //
 // // SD Card

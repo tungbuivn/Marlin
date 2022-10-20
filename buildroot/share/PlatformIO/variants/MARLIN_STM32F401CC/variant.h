@@ -19,11 +19,11 @@
 #define PA1                     PIN_A1  // HotEnd FAN1 PWM, FAN2 will direct connect to 24v
 #define PA2                     PIN_A2  // HotBed PWM
 #define PA3                     PIN_A3  // HotEnd thermistor
-#define PA4                     PIN_A4  // xxxxxxxxxxx lcd_spi_cs_1
-#define PA5                     PIN_A5  // xxxxxxxxxxx lcd_spi_sclk_1
-#define PA6                     PIN_A6  // xxxxxxxxxxx lcd_spi_miso_1
-#define PA7                     PIN_A7  // xxxxxxxxxxx lcd_spi_mosi_1
-#define PA8                     8       // yyyyyyyyyyy I2C3 SCL3 lcd_12864
+#define PA4                     PIN_A4  // xxxxxxxxxxx spi1 lcd_spi_cs 
+#define PA5                     PIN_A5  // xxxxxxxxxxx spi1 lcd_spi_sclk | encoderA_12864
+#define PA6                     PIN_A6  // xxxxxxxxxxx spi1 lcd_spi_miso | encoderB_12864 
+#define PA7                     PIN_A7  // xxxxxxxxxxx spi1 lcd_spi_mosi
+#define PA8                     8       // yyyyyyyyyyy I2C3 SCL3 lcd_12864 | encoderB_LCD
 #define PA9                     9       // PIN_SERIAL_TX usb cable
 #define PA10                    10      // PIN_SERIAL_RX usb cable
 #define PA11                    11      // XYZ end stop this can be share but e will not, just becausse when x,y trigger then e will stop too
@@ -32,10 +32,10 @@
 #define PA14                    14      // SWDIO
 #define PA15                    15      // X-Dir
 #define PB0                     PIN_A8  // BED thermistor
-#define PB1                     PIN_A9
+#define PB1                     PIN_A9  // FAN2 
 #define PB2                     18      // Y-PULSE
 #define PB3                     19      // SDA2 sdcard
-#define PB4                     20      // yyyyyyyyyyy I2C3 SDA3 lcd_12864
+#define PB4                     20      // yyyyyyyyyyy I2C3 SDA3 lcd_12864 | encoderA_LCD
 #define PB5                     21      // Z-DIR
 #define PB6                     22      // SCL1 eeprom
 #define PB7                     23      // SDA1 eeprom, PIN_WIRE_SDA
@@ -48,7 +48,7 @@
 #define PB15                    30      // xxxxxxxxxx lcd_spi_lcd_a0
 #define PC13                    31      // xxxxxxxxxx lcd_spi_lcd_reset
 #define PC14                    32      // E-EndStop (filament sensor)
-#define PC15                    33
+#define PC15                    33      // Encoder-click
 #define PH0                     34      // crysal
 #define PH1                     35      // crysal
 
