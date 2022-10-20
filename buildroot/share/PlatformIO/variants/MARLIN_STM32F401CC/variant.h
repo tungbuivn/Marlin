@@ -24,8 +24,8 @@
 #define PA6                     PIN_A6
 #define PA7                     PIN_A7
 #define PA8                     8       // XYZE end stop, need to check E-Stop will be trigger if using share mode, otherwise will to separate to a new pin
-#define PA9                     9       // PIN_SERIAL_TX
-#define PA10                    10      // PIN_SERIAL_RX
+#define PA9                     9       // PIN_SERIAL_TX 
+#define PA10                    10      // PIN_SERIAL_RX 
 #define PA11                    11
 #define PA12                    12
 #define PA13                    13      // SWDCLK
@@ -34,14 +34,14 @@
 #define PB0                     PIN_A8
 #define PB1                     PIN_A9
 #define PB2                     18
-#define PB3                     19
+#define PB3                     19      // SDA sdcard
 #define PB4                     20
 #define PB5                     21
 #define PB6                     22      // SCL eeprom
-#define PB7                     23      // SDA eeprom
+#define PB7                     23      // SDA eeprom, PIN_WIRE_SDA
 #define PB8                     24
 #define PB9                     25
-#define PB10                    26
+#define PB10                    26      // SCL SD card
 #define PB12                    27
 #define PB13                    28
 #define PB14                    29
