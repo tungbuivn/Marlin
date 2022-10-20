@@ -18,31 +18,31 @@
 #define PA0                     PIN_A0  // NOT USED
 #define PA1                     PIN_A1  // HotEnd FAN1 PWM, FAN2 will direct connect to 24v
 #define PA2                     PIN_A2  // HotBed PWM
-#define PA3                     PIN_A3
-#define PA4                     PIN_A4
+#define PA3                     PIN_A3  // HOTEND thermistor
+#define PA4                     PIN_A4  // BED thermistor
 #define PA5                     PIN_A5
 #define PA6                     PIN_A6
 #define PA7                     PIN_A7
-#define PA8                     8       // XYZE end stop, need to check E-Stop will be trigger if using share mode, otherwise will to separate to a new pin
-#define PA9                     9       // PIN_SERIAL_TX 
-#define PA10                    10      // PIN_SERIAL_RX 
-#define PA11                    11
-#define PA12                    12
+#define PA8                     8       // I2C3 SCL 12864
+#define PA9                     9       // PIN_SERIAL_TX usb cable
+#define PA10                    10      // PIN_SERIAL_RX usb cable
+#define PA11                    11      // XYZE end stop, probe, need to check E-Stop will be trigger if using share mode, otherwise will to separate to a new pin
+#define PA12                    12      // XYZE enable
 #define PA13                    13      // SWDCLK
 #define PA14                    14      // SWDIO
-#define PA15                    15
-#define PB0                     PIN_A8
-#define PB1                     PIN_A9
-#define PB2                     18
-#define PB3                     19      // SDA sdcard
-#define PB4                     20
-#define PB5                     21
-#define PB6                     22      // SCL eeprom
-#define PB7                     23      // SDA eeprom, PIN_WIRE_SDA
-#define PB8                     24
-#define PB9                     25
-#define PB10                    26      // SCL SD card
-#define PB12                    27
+#define PA15                    15      // X-Dir
+#define PB0                     PIN_A8  // X-PULSE
+#define PB1                     PIN_A9  // Y-DIR
+#define PB2                     18      // Y-PULSE
+#define PB3                     19      // SDA2 sdcard
+#define PB4                     20      // I2C3 SDA 12864
+#define PB5                     21      // Z-DIR
+#define PB6                     22      // SCL1 eeprom
+#define PB7                     23      // SDA1 eeprom, PIN_WIRE_SDA
+#define PB8                     24      // Z-PULSE
+#define PB9                     25      // E-DIR
+#define PB10                    26      // SCL2 SD card
+#define PB12                    27      // E-PULSE
 #define PB13                    28
 #define PB14                    29
 #define PB15                    30
@@ -122,9 +122,9 @@
   #define PIN_SERIAL_TX         PA9
 #endif
 
-#ifndef HSE_VALUE
-  #define HSE_VALUE             25000000U
-#endif
+// #ifndef HSE_VALUE
+//   #define HSE_VALUE             25000000U
+// #endif
 
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
