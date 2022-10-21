@@ -89,7 +89,7 @@
 
 // Choose the name from boards.h that matches your setup
 #ifndef MOTHERBOARD
-  #define MOTHERBOARD BOARD_VORON_BRB
+  #define MOTHERBOARD BOARD_VORON_BRB_STM32F407VET6 //BOARD_VORON_BRB
 #endif
 
 /**

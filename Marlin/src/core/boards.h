@@ -467,6 +467,7 @@
 //
 // Custom board
 //
+#define BOARD_VORON_BRB_STM32F407VET6 9996
 #define BOARD_VORON_BRB               9997
 #define BOARD_CUSTOM                  9998  // Custom pins definition for development and/or rare boards
 
