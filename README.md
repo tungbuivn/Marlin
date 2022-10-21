@@ -4,3 +4,5 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 - Support two power source at once
 - Support atleast 7 motor
 - Support mullipe LCD input pin to which switchable by jump
+- Support external arduino sdcard (if there is free pin)
+- z-axis can config to reverse rotate by jump

@@ -164,8 +164,7 @@
 //
 // #define ONBOARD_SPI_DEVICE                     1
 #define SDSUPPORT
-//#define 
-SD_CS_PIN                   PA0   // SDSS
+//#define SD_CS_PIN                   PA0   // SDSS
 #define ONBOARD_SD_CS_PIN != SD_SS_PIN
 
 //#define BOARD_NO_NATIVE_USB
