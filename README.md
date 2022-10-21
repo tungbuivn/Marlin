@@ -6,3 +6,4 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 - Support atleast 7 motor
 - Support external arduino sdcard (if there is free pin, need to separate from board to put it any where)
 - z-axis divide into front and back
+- use tmc 2009 driver with USART
