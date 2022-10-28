@@ -47,25 +47,15 @@
 #include "env_validate.h"
 
 
+// https://oshwlab.com/tungbuivn/voron-3d-printer-board
 #ifndef BOARD_INFO_NAME
-  #define BOARD_INFO_NAME      "Custom Voron 2.4"
+  #define BOARD_INFO_NAME      "TTL Voron 2.4"
 #endif
 #ifndef DEFAULT_MACHINE_NAME
   #define DEFAULT_MACHINE_NAME "Voron 2.4 v0.1"
 #endif
-#ifdef USE_12864_LCD
-#else
 
-  #define TFT_SCK_PIN                       PIN_SPI_SCK
-  #define TFT_MOSI_PIN                      PIN_SPI_MOSI
-  #define TFT_MISO_PIN                      PIN_SPI_MISO
-  #define TFT_CS_PIN                        PIN_SPI_SS
-  #define TFT_A0_PIN                        PB15 
-  #define LCD_RESET_PIN                     PC13
-// #define FORCE_SOFT_SPI
-#endif
 
-// #include "pins_BLACK_STM32F407VE.h"
 
 
 
