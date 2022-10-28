@@ -172,10 +172,10 @@
 //   #define PIN_SPI_SS1           PB0 // W25Q16 (on board flash)
 // #endif
 #ifndef PIN_SPI_MOSI
-  #define PIN_SPI_MOSI          PB15
+  #define PIN_SPI_MOSI          PC3
 #endif
 #ifndef PIN_SPI_MISO
-  #define PIN_SPI_MISO          PB14
+  #define PIN_SPI_MISO          PC2
 #endif
 #ifndef PIN_SPI_SCK
   #define PIN_SPI_SCK           PB13 
