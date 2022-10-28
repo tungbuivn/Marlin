@@ -57,6 +57,24 @@
 
 
 
+//
+// Onboard SD support
+//
+#ifndef SDCARD_CONNECTION
+  #define SDCARD_CONNECTION              ONBOARD
+#endif
+
+#if SD_CONNECTION_IS(ONBOARD)
+  #define SDIO_SUPPORT                            // Use SDIO for onboard SD
+  #if DISABLED(SDIO_SUPPORT)
+    #define SOFTWARE_SPI                          // Use soft SPI for onboard SD
+    #define SDSS                            PC11
+    #define SD_SCK_PIN                      PC12
+    #define SD_MISO_PIN                     PC8
+    #define SD_MOSI_PIN                     PD2
+  #endif
+#endif
+
 
 
 
