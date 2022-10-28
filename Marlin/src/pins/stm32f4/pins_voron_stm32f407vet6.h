@@ -57,16 +57,13 @@
   #define BOARD_WEBSITE_URL "https://oshwlab.com/tungbuivn/voron-3d-printer-board"
 #endif
 
-//#define V3_EZABL_ON_SERVO                       // As in TH3D Firmware Config
-
-#define DISABLE_JTAGSWD                           // Disabling J-tag and Debug via SWD
 
 // Onboard I2C EEPROM
 #if NO_EEPROM_SELECTED
   #define I2C_EEPROM
-  #define MARLIN_EEPROM_SIZE              0x1000  // 4K
-  #define I2C_SCL_PIN                       PB6
-  #define I2C_SDA_PIN                       PB7
+  #define MARLIN_EEPROM_SIZE              0x80000  // 512K
+  #define I2C_SCL_PIN                       PB8
+  #define I2C_SDA_PIN                       PB9
   #undef NO_EEPROM_SELECTED
 #endif
 
