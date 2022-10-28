@@ -18,31 +18,22 @@
     "variant": "MARLIN_F407VE"
   },
   "debug": {
+    "default_tools": [
+      "stlink"
+    ],
     "jlink_device": "STM32F407VE",
+    "openocd_extra_args": [
+      "-c",
+      "reset_config none"
+    ],
     "openocd_target": "stm32f4x",
-    "svd_path": "STM32F40x.svd",
-    "tools": {
-      "stlink": {
-        "server": {
-          "arguments": [
-            "-f",
-            "scripts/interface/stlink.cfg",
-            "-c",
-            "transport select hla_swd",
-            "-f",
-            "scripts/target/stm32f4x.cfg",
-            "-c",
-            "reset_config none"
-          ],
-          "executable": "bin/openocd",
-          "package": "tool-openocd"
-        }
-      }
-    }
+    "svd_path": "STM32F40x.svd"
   },
   "frameworks": [
     "arduino",
-    "stm32cube"
+    "cmsis",
+    "stm32cube",
+    "libopencm3"
   ],
   "name": "STM32F407VE (192k RAM. 512k Flash)",
   "upload": {

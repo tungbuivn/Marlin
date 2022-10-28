@@ -204,15 +204,6 @@
   #define SERIAL_UART_INSTANCE  1
 #endif
 
-// Default pin used for 'Serial' instance
-// Mandatory for Firmata
-#ifndef PIN_SERIAL_RX
-  #define PIN_SERIAL_RX         PA10
-#endif
-#ifndef PIN_SERIAL_TX
-  #define PIN_SERIAL_TX         PA9
-#endif
-
 
 // Default pin used for 'Serial' instance (ex: ST-Link)
 // Mandatory for Firmata

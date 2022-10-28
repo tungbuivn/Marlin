@@ -57,8 +57,74 @@
   #define BOARD_WEBSITE_URL "https://oshwlab.com/tungbuivn/voron-3d-printer-board"
 #endif
 
+#define X_MIN_PIN                           PC13
+// #define X_MAX_PIN                           PA15
+#define Y_MIN_PIN                           PB3
+// #define Y_MAX_PIN                           PD12
+#define Z_MIN_PIN                           PD14
+// #define Z_MAX_PIN                           PD15
 
-// Onboard I2C EEPROM
+#define X_STEP_PIN                          PE5
+#define X_DIR_PIN                           PE4
+#define X_ENABLE_PIN                        PE6
+
+#define Y_STEP_PIN                          PB7
+#define Y_DIR_PIN                           PB6
+#define Y_ENABLE_PIN                        PB5
+
+#define Z_STEP_PIN                          PD15
+#define Z_DIR_PIN                           PC7
+#define Z_ENABLE_PIN                        PC6
+
+#define Z2_STEP_PIN                          PB1
+#define Z2_DIR_PIN                           PE7
+#define Z2_ENABLE_PIN                        Z_ENABLE_PIN
+
+#define E0_STEP_PIN                         PC4
+#define E0_DIR_PIN                          PC5
+#define E0_ENABLE_PIN                       PB0
+
+// #define X_HARDWARE_SERIAL Serial2
+// #define X_SLAVE_ADDRESS 0b00
+// #define Y_HARDWARE_SERIAL Serial2
+// #define Y_SLAVE_ADDRESS 0b01
+// #define Z_HARDWARE_SERIAL Serial2
+// #define Z_SLAVE_ADDRESS 0b10
+// #define Z2_HARDWARE_SERIAL Serial2
+// #define Z2_SLAVE_ADDRESS 0b10
+// #define E0_HARDWARE_SERIAL Serial3
+// #define E0_SLAVE_ADDRESS 0b11
+
+
+//
+// Temperature Sensors
+//
+#define TEMP_0_PIN                          PC0   // T0
+#define TEMP_BED_PIN                        PC1   // TB
+
+
+//
+// Heaters / Fans
+//
+#define HEATER_0_PIN                        PA2   // Heater0
+#define HEATER_BED_PIN                      PA1   // Hotbed
+
+
+#define FAN_PIN                             PE9   // Fan0
+#define FAN1_PIN                            PE10  // Fan1
+#define FAN2_PIN                            PE11  // Fan2
+
+
+
+#define TFT_A0_PIN PD9
+#define TFT_CS_PIN PB12
+#define TFT_SCK_PIN PB13
+#define TFT_MOSI_PIN PC3
+#define TFT_MISO_PIN PC2
+#define TFT_RESET_PIN PD8
+
+
+// External I2C EEPROM
 #if NO_EEPROM_SELECTED
   #define I2C_EEPROM
   #define MARLIN_EEPROM_SIZE              0x80000  // 512K
