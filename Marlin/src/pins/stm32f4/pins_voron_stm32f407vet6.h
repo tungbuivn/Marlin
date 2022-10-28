@@ -65,7 +65,7 @@
 // #define FORCE_SOFT_SPI
 #endif
 
-#include "pins_BLACK_STM32F407VE.h"
+// #include "pins_BLACK_STM32F407VE.h"
 
 
 
