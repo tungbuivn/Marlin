@@ -213,6 +213,22 @@
   #define PIN_SERIAL_TX         PA9
 #endif
 
+
+// Default pin used for 'Serial' instance (ex: ST-Link)
+// Mandatory for Firmata
+#define PIN_SERIAL_RX           PD6
+#define PIN_SERIAL_TX           PD5
+
+// Optional PIN_SERIALn_RX and PIN_SERIALn_TX where 'n' is the U(S)ART number
+// Used when user instantiate a hardware Serial using its peripheral name.
+// Example: HardwareSerial mySerial(USART3);
+// will use PIN_SERIAL3_RX and PIN_SERIAL3_TX if defined.
+#define PIN_SERIAL2_RX          PD6
+#define PIN_SERIAL2_TX          PD5
+#define PIN_SERIAL3_RX          PB11
+#define PIN_SERIAL3_TX          PB10
+
+
 /* Extra HAL modules */
 #if !defined(HAL_DAC_MODULE_DISABLED)
   #define HAL_DAC_MODULE_ENABLED
@@ -252,6 +268,8 @@
     #define SERIAL_PORT_MONITOR   Serial
   #endif
   #ifndef SERIAL_PORT_HARDWARE
-    #define SERIAL_PORT_HARDWARE  Serial1
+    #define SERIAL_PORT_HARDWARE  Serial2
   #endif
+  #define SERIAL_PORT_HARDWARE_OPEN   Serial2
+  #define SERIAL_PORT_HARDWARE_OPEN1  Serial3
 #endif
