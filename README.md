@@ -7,3 +7,18 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 - Support external arduino sdcard (if there is free pin, need to separate from board to put it any where)
 - z-axis divide into front and back
 - use tmc 2009 driver with USART
+
+## Schematic tests
+[x] LCD Display 2.8"
+[x] SDCARD Connection
+[ ] Fan hot end
+[ ] Fan layer
+[ ] Fan electric
+[ ] Temp bed
+[ ] Temp hotend
+[ ] EEProm
+[ ] TMC2209 UART
+[ ] Motor rotation (Voron style)
+[ ] Sensor LJC 18mm
+[ ] Sensor Servo
+[ ] Deploy/Stow Sensor (turn on/ off 24v sensor)
