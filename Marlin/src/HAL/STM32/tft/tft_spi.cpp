@@ -19,7 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
-
+#ifndef USE_ADAFRUIT_SPI
 #include "../../platforms.h"
 
 #ifdef HAL_STM32
@@ -268,3 +268,4 @@ void TFT_SPI::TransmitDMA(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Coun
 
 #endif // HAS_SPI_TFT
 #endif // HAL_STM32
+#endif

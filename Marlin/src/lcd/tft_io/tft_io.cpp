@@ -60,6 +60,8 @@ TFT_IO_DRIVER TFT_IO::io;
 uint32_t TFT_IO::lcd_id = 0xFFFFFFFF;
 
 void TFT_IO::InitTFT() {
+   lcd_id = TFT_DRIVER;
+  return;
 if (lcd_id != 0xFFFFFFFF) return;
 
   #if PIN_EXISTS(TFT_BACKLIGHT)
@@ -94,6 +96,7 @@ if (lcd_id != 0xFFFFFFFF) return;
     write_esc_sequence(ssd1963_init);
   #elif TFT_DRIVER == ST7789
     write_esc_sequence(st7789v_init);
+    
   #elif TFT_DRIVER == ST7796
     write_esc_sequence(st7796s_init);
   #elif TFT_DRIVER == R61505
@@ -157,6 +160,7 @@ if (lcd_id != 0xFFFFFFFF) return;
 }
 
 void TFT_IO::set_window(uint16_t Xmin, uint16_t Ymin, uint16_t Xmax, uint16_t Ymax) {
+ 
   #ifdef OFFSET_X
     Xmin += OFFSET_X; Xmax += OFFSET_X;
   #endif
@@ -201,6 +205,7 @@ void TFT_IO::set_window(uint16_t Xmin, uint16_t Ymin, uint16_t Xmax, uint16_t Ym
 
       // RAMWR: Memory Write
       io.WriteReg(ILI9341_RAMWR);
+    
       break;
     case R61505:    // R61505U    320x240
     case ILI9328:   // ILI9328    320x240

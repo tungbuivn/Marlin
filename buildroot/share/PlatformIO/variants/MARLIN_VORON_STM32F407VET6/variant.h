@@ -207,13 +207,15 @@
 
 // Default pin used for 'Serial' instance (ex: ST-Link)
 // Mandatory for Firmata
-#define PIN_SERIAL_RX           PD6
-#define PIN_SERIAL_TX           PD5
+#define PIN_SERIAL_RX           PA10
+#define PIN_SERIAL_TX           PA9
 
 // Optional PIN_SERIALn_RX and PIN_SERIALn_TX where 'n' is the U(S)ART number
 // Used when user instantiate a hardware Serial using its peripheral name.
 // Example: HardwareSerial mySerial(USART3);
 // will use PIN_SERIAL3_RX and PIN_SERIAL3_TX if defined.
+#define PIN_SERIAL1_RX          PA10
+#define PIN_SERIAL1_TX          PA9
 #define PIN_SERIAL2_RX          PD6
 #define PIN_SERIAL2_TX          PD5
 #define PIN_SERIAL3_RX          PB11
@@ -227,7 +229,8 @@
 #if !defined(HAL_SD_MODULE_DISABLED)
   #define HAL_SD_MODULE_ENABLED
 #endif
-
+#define PinMap_PWM PinMap_TIM
+// extern const PinMap PinMap_TIM[];
 // This indicates that there is an external and fixed 1.5k pullup
 // on the D+ line. This define is only needed on boards that have
 // internal pullups *and* an external pullup. Note that it would have
@@ -259,7 +262,7 @@
     #define SERIAL_PORT_MONITOR   Serial
   #endif
   #ifndef SERIAL_PORT_HARDWARE
-    #define SERIAL_PORT_HARDWARE  Serial2
+    #define SERIAL_PORT_HARDWARE  Serial1
   #endif
   #define SERIAL_PORT_HARDWARE_OPEN   Serial2
   #define SERIAL_PORT_HARDWARE_OPEN1  Serial3
