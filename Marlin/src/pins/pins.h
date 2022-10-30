@@ -776,8 +776,8 @@
 //
 // Custom board (with custom PIO env)
 
-#elif MB(VORON_BRB_STM32F407VET6)
-  #include "stm32f4/pins_voron_stm32f407vet6.h"         // STM32                                  env:Voron_STM32F407VET6
+#elif MB(TTLBRB)
+  #include "stm32f4/pins_TTLBRB.h"              // STM32                                  env:TTLBRB
 
 #elif MB(CUSTOM)
   #include "pins_custom.h"                      //                                        env:custom

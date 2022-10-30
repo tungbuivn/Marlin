@@ -10,6 +10,7 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 
 ## Schematic tests
 [x] LCD Display 2.8"
+[ ] Rotary Encoder
 [x] SDCARD Connection
 [ ] Fan hot end
 [ ] Fan layer
