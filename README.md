@@ -20,7 +20,7 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 [ ] EEProm
 [ ] TMC2209 UART
 [ ] Motor rotation (Voron style)
-[ ] Sensor LJC 18mm
+[ ] Sensor LJC 18mm, Lj123A4 Z-bx
 [ ] Sensor Servo
 [ ] Deploy/Stow Sensor (turn on/ off 24v sensor)
 
