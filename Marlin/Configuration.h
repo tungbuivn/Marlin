@@ -1168,7 +1168,10 @@
  * Override with M92
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 400, 500 }
+// 415 is value from bondtech bgm document, this apply to motorStep x4 microstep
+// https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
+// 80 is microstep x4
+#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 400, 415 }
 
 /**
  * Default Max Feed Rate (linear=mm/s, rotational=°/s)
@@ -2086,7 +2089,7 @@
  * - Allows Z homing only when XY positions are known and trusted.
  * - If stepper drivers sleep, XY homing may be required again before Z homing.
  */
-//#define Z_SAFE_HOMING
+#define Z_SAFE_HOMING
 
 #if ENABLED(Z_SAFE_HOMING)
   #define Z_SAFE_HOMING_X_POINT X_CENTER  // X point for Z homing

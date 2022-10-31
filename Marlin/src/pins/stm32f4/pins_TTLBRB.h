@@ -102,7 +102,14 @@
 #define TEMP_0_PIN                          PC0   // T0
 #define TEMP_BED_PIN                        PC1   // TB
 
-#define SOL1_PIN   xxxxxxxxxxxxxx // turn on/off capacitive probe, using to deploy, stow probe
+
+//
+// Sensor probe on/off
+//
+#define SOL1_PIN                            PE8 // turn on/off capacitive probe, using to deploy, stow probe
+
+// servo pin
+#define SERVO0                              PA6
 
 //
 // Heaters / Fans
