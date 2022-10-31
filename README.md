@@ -23,3 +23,8 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 [ ] Sensor LJC 18mm
 [ ] Sensor Servo
 [ ] Deploy/Stow Sensor (turn on/ off 24v sensor)
+
+Changes:
+31/10: 
+- Update schematic serial connection for the motor
+- Update board pin config

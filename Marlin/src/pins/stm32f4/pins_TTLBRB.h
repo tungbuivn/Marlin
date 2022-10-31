@@ -84,16 +84,18 @@
 #define E0_DIR_PIN                          PC5
 #define E0_ENABLE_PIN                       PA7
 
-// #define X_HARDWARE_SERIAL Serial2
-// #define X_SLAVE_ADDRESS 0b00
-// #define Y_HARDWARE_SERIAL Serial2
-// #define Y_SLAVE_ADDRESS 0b01
-// #define Z_HARDWARE_SERIAL Serial2
-// #define Z_SLAVE_ADDRESS 0b10
-// #define Z2_HARDWARE_SERIAL Serial2
-// #define Z2_SLAVE_ADDRESS 0b10
-// #define E0_HARDWARE_SERIAL Serial3
-// #define E0_SLAVE_ADDRESS 0b11
+#define X_HARDWARE_SERIAL Serial2
+#define X_SLAVE_ADDRESS 0b01
+#define Y_HARDWARE_SERIAL Serial2
+#define Y_SLAVE_ADDRESS 0b10
+#define E0_HARDWARE_SERIAL Serial2
+#define E0_SLAVE_ADDRESS 0b11
+
+#define Z_HARDWARE_SERIAL Serial3
+#define Z_SLAVE_ADDRESS 0b01
+#define Z2_HARDWARE_SERIAL Serial3
+#define Z2_SLAVE_ADDRESS 0b10
+
 
 
 //
@@ -118,9 +120,9 @@
 #define HEATER_BED_PIN                      PA1   // Hotbed
 
 
-#define FAN_PIN                             PE9  // Fan0
-#define FAN1_PIN                           PE10  // Fan1
-#define FAN2_PIN                           PE11  // Fan2
+#define FAN_PIN                             PE9  // Layer fan
+#define FAN1_PIN                           PE10  // Hotend fan
+#define FAN2_PIN                           PE11  // Electric Board Fan
 
 
 
