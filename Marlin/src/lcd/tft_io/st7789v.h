@@ -133,78 +133,22 @@
 #define ST7789V_NVMSET            0xFC // NVM Setting
 #define ST7789V_PROMACT           0xFE // Program action
 
-// static const uint16_t st7789v_init[] = {
-//   DATASIZE_8BIT,
-//   ESC_REG(ST7789V_SWRESET), ESC_DELAY(100),
-//   ESC_REG(ST7789V_SLPOUT), ESC_DELAY(20),
-
-//   ESC_REG(ST7789V_PORCTRL), 0x000C, 0x000C, 0x0000, 0x0033, 0x0033,
-//   ESC_REG(ST7789V_GCTRL), 0x0035,
-//   ESC_REG(ST7789V_VCOMS), 0x001F,
-//   ESC_REG(ST7789V_LCMCTRL), 0x002C,
-//   ESC_REG(ST7789V_VDVVRHEN), 0x0001, 0x00C3,
-//   ESC_REG(ST7789V_VDVS), 0x0020,
-//   ESC_REG(ST7789V_FRCTRL2), 0x000F,
-//   ESC_REG(ST7789V_PWCTRL1), 0x00A4, 0x00A1,
-
-//   ESC_REG(ST7789V_MADCTL), ST7789V_MADCTL_DATA,
-//   ESC_REG(ST7789V_COLMOD), 0x0055,
-
-//   ESC_REG(ST7789V_NORON),
-//   ESC_REG(ST7789V_DISPON),
-//   ESC_END
-// };
-
-
-//  ST77XX_SWRESET,   ST_CMD_DELAY, //  1: Software reset, no args, w/delay
-//       150,                          //     ~150 ms delay
-//     ST77XX_SLPOUT ,   ST_CMD_DELAY, //  2: Out of sleep mode, no args, w/delay
-//       10,                          //      10 ms delay
-//     ST77XX_COLMOD , 1+ST_CMD_DELAY, //  3: Set color mode, 1 arg + delay:
-//       0x55,                         //     16-bit color
-//       10,                           //     10 ms delay
-//     ST77XX_MADCTL , 1,              //  4: Mem access ctrl (directions), 1 arg:
-//       0x08,                         //     Row/col addr, bottom-top refresh
-//     ST77XX_CASET  , 4,              //  5: Column addr set, 4 args, no delay:
-//       0x00,
-//       0,        //     XSTART = 0
-//       0,
-//       240,  //     XEND = 240
-//     ST77XX_RASET  , 4,              //  6: Row addr set, 4 args, no delay:
-//       0x00,
-//       0,             //     YSTART = 0
-//       320>>8,
-//       320&0xFF,  //     YEND = 320
-//     ST77XX_INVON  ,   ST_CMD_DELAY,  //  7: hack
-//       10,
-//     ST77XX_NORON  ,   ST_CMD_DELAY, //  8: Normal display on, no args, w/delay
-//       10,                           //     10 ms delay
-//     ST77XX_DISPON ,   ST_CMD_DELAY, //  9: Main screen turn on, no args, delay
-//       10
 static const uint16_t st7789v_init[] = {
   DATASIZE_8BIT,
   ESC_REG(ST7789V_SWRESET), ESC_DELAY(100),
   ESC_REG(ST7789V_SLPOUT), ESC_DELAY(20),
-  ESC_REG(ST7789V_COLMOD), 0x0055, ESC_DELAY(10),
-  ESC_REG(ST7789V_MADCTL), 0x08, //ST7789V_MADCTL_DATA,
-   ESC_REG(ST7789V_CASET),0,0,0,240,
-   ESC_REG(ST7789V_RASET),0,0,320>>8,320&0xFF,
 
+  ESC_REG(ST7789V_PORCTRL), 0x000C, 0x000C, 0x0000, 0x0033, 0x0033,
+  ESC_REG(ST7789V_GCTRL), 0x0035,
+  ESC_REG(ST7789V_VCOMS), 0x001F,
+  ESC_REG(ST7789V_LCMCTRL), 0x002C,
+  ESC_REG(ST7789V_VDVVRHEN), 0x0001, 0x00C3,
+  ESC_REG(ST7789V_VDVS), 0x0020,
+  ESC_REG(ST7789V_FRCTRL2), 0x000F,
+  ESC_REG(ST7789V_PWCTRL1), 0x00A4, 0x00A1,
 
-  ESC_REG(ST77XX_INVON),ESC_DELAY(10),
-
-  
-  // ESC_REG(ST7789V_PORCTRL), 0x000C, 0x000C, 0x0000, 0x0033, 0x0033,
-  // ESC_REG(ST7789V_GCTRL), 0x0035,
-  // ESC_REG(ST7789V_VCOMS), 0x001F,
-  // ESC_REG(ST7789V_LCMCTRL), 0x002C,
-  // ESC_REG(ST7789V_VDVVRHEN), 0x0001, 0x00C3,
-  // ESC_REG(ST7789V_VDVS), 0x0020,
-  // ESC_REG(ST7789V_FRCTRL2), 0x000F,
-  // ESC_REG(ST7789V_PWCTRL1), 0x00A4, 0x00A1,
-
-  
-  
+  ESC_REG(ST7789V_MADCTL), ST7789V_MADCTL_DATA,
+  ESC_REG(ST7789V_COLMOD), 0x0055,
 
   ESC_REG(ST7789V_NORON),
   ESC_REG(ST7789V_DISPON),

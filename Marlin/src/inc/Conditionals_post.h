@@ -155,7 +155,7 @@
   #define W_BED_SIZE W_MAX_LENGTH
 #endif
 
-// Require 0,0 bed center for Delta, SCARA, and Polargraph
+// Require 0,0 bed center for Delta and SCARA
 #if IS_KINEMATIC
   #define BED_CENTER_AT_0_0
 #endif
@@ -2446,7 +2446,7 @@
 //
 
 // Flag the indexed hardware serial ports in use
-#define SERIAL_IN_USE(N) (  (defined(SERIAL_PORT)      && SERIAL_PORT == N) \
+#define CONF_SERIAL_IS(N) (  (defined(SERIAL_PORT)      && SERIAL_PORT == N) \
                           || (defined(SERIAL_PORT_2)    && SERIAL_PORT_2 == N) \
                           || (defined(SERIAL_PORT_3)    && SERIAL_PORT_3 == N) \
                           || (defined(MMU2_SERIAL_PORT) && MMU2_SERIAL_PORT == N) \
@@ -2454,7 +2454,7 @@
 
 // Flag the named hardware serial ports in use
 #define TMC_UART_IS(A,N) (defined(A##_HARDWARE_SERIAL) && (CAT(HW_,A##_HARDWARE_SERIAL) == HW_Serial##N || CAT(HW_,A##_HARDWARE_SERIAL) == HW_MSerial##N))
-#define ANY_SERIAL_IS(N) (  SERIAL_IN_USE(N) \
+#define ANY_SERIAL_IS(N) (  CONF_SERIAL_IS(N) \
                          || TMC_UART_IS(X,  N) || TMC_UART_IS(Y , N) || TMC_UART_IS(Z , N) \
                          || TMC_UART_IS(I,  N) || TMC_UART_IS(J , N) || TMC_UART_IS(K , N) \
                          || TMC_UART_IS(U,  N) || TMC_UART_IS(V , N) || TMC_UART_IS(W , N) \
@@ -2481,7 +2481,7 @@
 #define HW_MSerial9  518
 #define HW_MSerial10 519
 
-#if SERIAL_IN_USE(-1)
+#if CONF_SERIAL_IS(-1)
   #define USING_HW_SERIALUSB 1
 #endif
 #if ANY_SERIAL_IS(0)
@@ -2656,7 +2656,7 @@
 //
 // ADC Temp Sensors (Thermistor or Thermocouple with amplifier ADC interface)
 //
-#define HAS_ADC_TEST(P) (TEMP_SENSOR(P) && PIN_EXISTS(TEMP_##P) && !TEMP_SENSOR_IS_MAX_TC(P) && !TEMP_SENSOR_##P##_IS_DUMMY)
+#define HAS_ADC_TEST(P) (PIN_EXISTS(TEMP_##P) && TEMP_SENSOR_##P != 0 && !TEMP_SENSOR_IS_MAX_TC(P) && !TEMP_SENSOR_##P##_IS_DUMMY)
 #if HOTENDS > 0 && HAS_ADC_TEST(0)
   #define HAS_TEMP_ADC_0 1
 #endif

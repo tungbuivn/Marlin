@@ -35,9 +35,7 @@ void CANVAS::New(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   CANVAS::height = height;
   startLine = 0;
   endLine = 0;
-  char buf[100];
-  sprintf(buf,"new call: %d %d %d %d",x,y,width,height);
-  Serial.println(buf);
+
   tft.set_window(x, y, x + width - 1, y + height - 1);
 }
 
