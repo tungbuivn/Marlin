@@ -26,5 +26,7 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 
 Changes:
 31/10: 
+- Add support servo, bltouch, 24 sensor
+- Add invert input signal Z axis
 - Update schematic serial connection for the motor
 - Update board pin config
