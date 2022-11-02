@@ -84,17 +84,22 @@
 #define E0_DIR_PIN                          PC5
 #define E0_ENABLE_PIN                       PA7
 
-#define X_HARDWARE_SERIAL Serial2
-#define X_SLAVE_ADDRESS 0b01
-#define Y_HARDWARE_SERIAL Serial2
-#define Y_SLAVE_ADDRESS 0b10
-#define E0_HARDWARE_SERIAL Serial2
-#define E0_SLAVE_ADDRESS 0b11
 
-#define Z_HARDWARE_SERIAL Serial3
-#define Z_SLAVE_ADDRESS 0b01
-#define Z2_HARDWARE_SERIAL Serial3
-#define Z2_SLAVE_ADDRESS 0b10
+//
+// All step motor setting micro step is 8
+//
+#define X_HARDWARE_SERIAL               Serial2
+#define X_SLAVE_ADDRESS                    0b00
+#define Y_HARDWARE_SERIAL               Serial2
+#define Y_SLAVE_ADDRESS                    0b00
+#define Z_HARDWARE_SERIAL               Serial2
+#define Z_SLAVE_ADDRESS                    0b00
+#define Z2_HARDWARE_SERIAL              Serial2
+#define Z2_SLAVE_ADDRESS                   0b00
+
+#define E0_HARDWARE_SERIAL              Serial2
+#define E0_SLAVE_ADDRESS                   0b00
+
 
 
 
@@ -124,7 +129,7 @@
 #define FAN1_PIN                           PE10  // Hotend fan
 #define FAN2_PIN                           PE11  // Electric Board Fan
 
-
+#define FIL_RUNOUT_PIN                     PD10
 
 #define TFT_A0_PIN                          PD9
 #define TFT_CS_PIN                   PIN_SPI_SS
@@ -154,13 +159,13 @@
 
 // #if SD_CONNECTION_IS(ONBOARD)
   // #define SDIO_SUPPORT                            // Use SDIO for onboard SD
-  #if DISABLED(SDIO_SUPPORT)
-    #define SOFTWARE_SPI                          // Use soft SPI for onboard SD
-    #define SDSS                            PC11
-    #define SD_SCK_PIN                      PC12
-    #define SD_MISO_PIN                     PC8
-    #define SD_MOSI_PIN                     PD2
-  #endif
+#if DISABLED(SDIO_SUPPORT)
+  #define SOFTWARE_SPI                          // Use soft SPI for onboard SD
+  #define SDSS                            PC11
+  #define SD_SCK_PIN                      PC12
+  #define SD_MISO_PIN                     PC8
+  #define SD_MOSI_PIN                     PD2
+#endif
 
 
 
