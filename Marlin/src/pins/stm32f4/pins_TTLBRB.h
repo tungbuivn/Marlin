@@ -86,19 +86,19 @@
 
 
 //
-// All step motor setting micro step is 8
+// All step motor setting micro step is 8, remove UART control, we dont need that, need 8 pin in software serial to control drive ?
 //
-#define X_HARDWARE_SERIAL               Serial2
-#define X_SLAVE_ADDRESS                    0b00
-#define Y_HARDWARE_SERIAL               Serial2
-#define Y_SLAVE_ADDRESS                    0b00
-#define Z_HARDWARE_SERIAL               Serial2
-#define Z_SLAVE_ADDRESS                    0b00
-#define Z2_HARDWARE_SERIAL              Serial2
-#define Z2_SLAVE_ADDRESS                   0b00
+// #define X_HARDWARE_SERIAL               Serial2
+// #define X_SLAVE_ADDRESS                    0b00
+// #define Y_HARDWARE_SERIAL               Serial2
+// #define Y_SLAVE_ADDRESS                    0b00
+// #define Z_HARDWARE_SERIAL               Serial2
+// #define Z_SLAVE_ADDRESS                    0b00
+// #define Z2_HARDWARE_SERIAL              Serial2
+// #define Z2_SLAVE_ADDRESS                   0b00
 
-#define E0_HARDWARE_SERIAL              Serial2
-#define E0_SLAVE_ADDRESS                   0b00
+// #define E0_HARDWARE_SERIAL              Serial2
+// #define E0_SLAVE_ADDRESS                   0b00
 
 
 
