@@ -131,13 +131,23 @@
 
 #define FIL_RUNOUT_PIN                     PD10
 
+
+//
+// TFT LCD
+//
 #define TFT_A0_PIN                          PD9
 #define TFT_CS_PIN                   PIN_SPI_SS
 #define TFT_SCK_PIN                 PIN_SPI_SCK
 #define TFT_MOSI_PIN               PIN_SPI_MOSI
 #define TFT_MISO_PIN               PIN_SPI_MISO
 #define TFT_RESET_PIN                       PD8
-// #define TFT_COLOR 0x08
+
+// 
+// Rotary Encoder
+//
+#define BTN_ENC                            PE15
+#define BTN_EN1                            PE13
+#define BTN_EN2                            PE14
 
 // External I2C EEPROM
 #if false && NO_EEPROM_SELECTED
