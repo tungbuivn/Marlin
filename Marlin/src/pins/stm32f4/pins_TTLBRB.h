@@ -83,22 +83,27 @@
 #define E0_STEP_PIN                         PC4
 #define E0_DIR_PIN                          PC5
 #define E0_ENABLE_PIN                       PA7
+// default setting current for each motor is 800ma
+// Now if using small motor for extruder then need modify E0_CURRENT in configuration_adv.h (usually small motor has max current 0.6)
 
 
 //
-// All step motor setting micro step is 8, remove UART control, we dont need that, need 8 pin in software serial to control drive ?
+// All step motor using same setting about current, so we only need to 
 //
-// #define X_HARDWARE_SERIAL               Serial2
-// #define X_SLAVE_ADDRESS                    0b00
-// #define Y_HARDWARE_SERIAL               Serial2
-// #define Y_SLAVE_ADDRESS                    0b00
-// #define Z_HARDWARE_SERIAL               Serial2
-// #define Z_SLAVE_ADDRESS                    0b00
-// #define Z2_HARDWARE_SERIAL              Serial2
-// #define Z2_SLAVE_ADDRESS                   0b00
+#define TMC_BAUD_RATE                     19200
+#define X_HARDWARE_SERIAL               Serial2
+#define X_SLAVE_ADDRESS                    0b00
+#define Y_HARDWARE_SERIAL               Serial2
+#define Y_SLAVE_ADDRESS                    0b10
+#define E0_HARDWARE_SERIAL              Serial2
+#define E0_SLAVE_ADDRESS                   0b01
 
-// #define E0_HARDWARE_SERIAL              Serial2
-// #define E0_SLAVE_ADDRESS                   0b00
+#define Z_HARDWARE_SERIAL               Serial3
+#define Z_SLAVE_ADDRESS                    0b00
+#define Z2_HARDWARE_SERIAL              Serial3
+#define Z2_SLAVE_ADDRESS                   0b10
+
+
 
 
 
