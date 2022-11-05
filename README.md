@@ -10,13 +10,13 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 
 ## Schematic tests
 [x] LCD Display 2.8"
-[ ] Rotary Encoder
+[x] Rotary Encoder
 [x] SDCARD Connection
 [ ] Fan hot end
 [ ] Fan layer
 [ ] Fan electric
-[ ] Temp bed
-[ ] Temp hotend
+[x] Temp bed
+[x] Temp hotend
 [ ] EEProm
 [ ] TMC2209 UART
 [ ] Motor rotation (Voron style)
@@ -25,6 +25,8 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 [ ] Deploy/Stow Sensor (turn on/ off 24v sensor)
 
 Changes:
+04/11:
+ - test rotary & temp sensor
 31/10: 
 - Add support servo, bltouch, 24 sensor
 - Add invert input signal Z axis
