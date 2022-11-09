@@ -195,12 +195,12 @@
 // Steppers
 //
 #ifndef X_STEP_PIN
-  #define X_STEP_PIN                       PB13
+  #define X_STEP_PIN                       PE5
 #endif
 #ifndef X_DIR_PIN
-  #define X_DIR_PIN                        PA15
+  #define X_DIR_PIN                        PE4
 #endif
-#define X_ENABLE_PIN                 XYZ_ENABLE   // Shared
+#define X_ENABLE_PIN                 PE6   // Shared
 
 #ifndef Y_STEP_PIN
   #define Y_STEP_PIN                        PB2
