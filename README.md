@@ -19,6 +19,13 @@ Thí project intend to create custom pcb for the voron 2.4 which capacitive of:
 [x] Temp hotend
 [ ] EEProm
 [ ] TMC2209 UART
+    [ ] X UART
+    [ ] Y UART
+    [ ] Z UART
+        [ ] Z Front-Left
+        [ ] Z Front-Right
+        [ ] Z Back-Left
+        [ ] Z Back-Right
 [ ] Motor rotation (Voron style)
 [ ] Sensor LJC 18mm, Lj123A4 Z-bx
 [ ] Sensor Servo
