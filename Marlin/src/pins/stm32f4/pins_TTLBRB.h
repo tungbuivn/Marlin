@@ -118,7 +118,8 @@
 //
 // Sensor probe on/off
 //
-#define SOL1_PIN                            PE8 // turn on/off capacitive probe, using to deploy, stow probe
+// #define SOL1_PIN                            PE8 // turn on/off capacitive probe, using to deploy, stow probe
+#define PROBE_ENABLE_PIN                    PE8
 
 // servo pin
 #define SERVO0                              PA6
