@@ -88,19 +88,28 @@
 
 
 //
-// All step motor using same setting about current, so we only need to 
+// All step motor using same setting about current, so we only need to
 //
 #define TMC_BAUD_RATE                     19200
-#define X_HARDWARE_SERIAL               Serial2
-#define X_SLAVE_ADDRESS                    0b00
-#define Y_HARDWARE_SERIAL               Serial2
-#define Y_SLAVE_ADDRESS                    0b10
-#define E0_HARDWARE_SERIAL              Serial2
-#define E0_SLAVE_ADDRESS                   0b01
+// #define X_SERIAL_TX_PIN                  PD5
+  // #define X_SERIAL_RX_PIN                  PD6
 
-#define Z_HARDWARE_SERIAL               Serial3
+#define X_HARDWARE_SERIAL               MSerial2
+#define X_SLAVE_ADDRESS                    0b00  // ms2 | ms1
+#define Y_HARDWARE_SERIAL               MSerial2
+// #define Y_SERIAL_TX_PIN                  PD5
+  // #define Y_SERIAL_RX_PIN                  PD6
+
+#define Y_SLAVE_ADDRESS                    0b01
+#define E0_HARDWARE_SERIAL              MSerial2
+// #define E0_SERIAL_TX_PIN                  PD5
+  // #define E0_SERIAL_RX_PIN                  PD6
+
+#define E0_SLAVE_ADDRESS                   0b10
+
+#define Z_HARDWARE_SERIAL               MSerial3
 #define Z_SLAVE_ADDRESS                    0b00
-#define Z2_HARDWARE_SERIAL              Serial3
+#define Z2_HARDWARE_SERIAL              MSerial3
 #define Z2_SLAVE_ADDRESS                   0b10
 
 
@@ -148,7 +157,7 @@
 #define TFT_MISO_PIN               PIN_SPI_MISO
 #define TFT_RESET_PIN                       PD8
 
-// 
+//
 // Rotary Encoder
 //
 #define BTN_ENC                            PE15
@@ -156,7 +165,7 @@
 #define BTN_EN2                            PE14
 
 // External I2C EEPROM
-#if false && NO_EEPROM_SELECTED
+#if  NO_EEPROM_SELECTED
   #define I2C_EEPROM
   #define MARLIN_EEPROM_SIZE              0x80000  // 512K
   #define I2C_SCL_PIN                       PB8
