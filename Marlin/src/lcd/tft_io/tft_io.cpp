@@ -60,6 +60,8 @@ TFT_IO_DRIVER TFT_IO::io;
 uint32_t TFT_IO::lcd_id = 0xFFFFFFFF;
 
 void TFT_IO::InitTFT() {
+   lcd_id = TFT_DRIVER;
+  return;
 if (lcd_id != 0xFFFFFFFF) return;
 
   #if PIN_EXISTS(TFT_BACKLIGHT)
