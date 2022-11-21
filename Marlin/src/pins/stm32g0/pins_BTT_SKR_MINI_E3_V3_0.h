@@ -139,12 +139,15 @@
 #define TEMP_0_PIN                          PA0   // Analog Input "TH0"
 #define TEMP_BED_PIN                        PC4   // Analog Input "TB0"
 
+
+#define PROBE_ENABLE_DISABLE
+#define PROBE_ENABLE_PIN SERVO0_PIN   // Override the default pin here
 //
 // Heaters / Fans
 //
 #define HEATER_0_PIN                        PC8   // "HE"
 #define HEATER_BED_PIN                      PC9   // "HB"
-#define FAN_PIN                             PC6   // "FAN0"
+#define FAN_PIN                             PC6   // "FAN0", layer fan
 #define FAN1_PIN                            PC7   // "FAN1"
 #define FAN2_PIN                            PB15  // "FAN2"
 
