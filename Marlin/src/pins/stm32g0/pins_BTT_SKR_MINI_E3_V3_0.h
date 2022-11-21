@@ -94,6 +94,11 @@
 #define Z_STEP_PIN                          PB0
 #define Z_DIR_PIN                           PC5
 
+// need to define z2, a pcb for 2 other z steps
+#define Z2_ENABLE_PIN                       PD5
+#define Z2_STEP_PIN                         PD4
+#define Z2_DIR_PIN                          PD3
+
 #define E0_ENABLE_PIN                       PD1
 #define E0_STEP_PIN                         PB3
 #define E0_DIR_PIN                          PB4
@@ -107,6 +112,11 @@
   #define Y_HARDWARE_SERIAL  MSerial4
   #define Z_HARDWARE_SERIAL  MSerial4
   #define E0_HARDWARE_SERIAL MSerial4
+  
+  // find new pin for uart
+  #define Z2_SERIAL_RX_PIN  PD2
+  #define Z2_SERIAL_TX_PIN  PD0
+  #define Z2_SLAVE_ADDRESS   0
 
   // Default TMC slave addresses
   #ifndef X_SLAVE_ADDRESS
