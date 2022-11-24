@@ -62,7 +62,7 @@
 // @section info
 
 // Author info of this build printed to the host during boot and M115
-#define STRING_CONFIG_H_AUTHOR "(none, default config)" // Who made the changes.
+#define STRING_CONFIG_H_AUTHOR "(tungbt)" // Who made the changes.
 //#define CUSTOM_VERSION_FILE Version.h // Path from the root directory (no quotes)
 
 /**
@@ -1209,7 +1209,7 @@
 // 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
 #define DEFAULT_AXIS_STEPS_PER_UNIT   {80, \
                                       80, \
-                                      20, \
+                                      320, \
                                       415  \
                                       }
 
@@ -1221,7 +1221,7 @@
 #define DEFAULT_MAX_FEEDRATE          { \
   300, \
   300, \
-  5, \
+  300, \
   25 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2

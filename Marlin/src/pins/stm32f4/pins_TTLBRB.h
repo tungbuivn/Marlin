@@ -110,7 +110,7 @@
 #define Z_HARDWARE_SERIAL               MSerial3
 #define Z_SLAVE_ADDRESS                    0b00
 #define Z2_HARDWARE_SERIAL              MSerial3
-#define Z2_SLAVE_ADDRESS                   0b10
+#define Z2_SLAVE_ADDRESS                   0b01
 
 
 
