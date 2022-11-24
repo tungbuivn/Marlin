@@ -1207,10 +1207,10 @@
 // 415 is value from bondtech bgm document, this apply to motorStep x4 microstep
 // https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
 // 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {TTL_STEP_PER_UNIT_XY, \
-                                      TTL_STEP_PER_UNIT_XY, \
-                                      TTL_STEP_PER_UNIT_Z, \
-                                      TTL_STEP_PER_UNIT_E  \
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80, \
+                                      80, \
+                                      20, \
+                                      415  \
                                       }
 
 /**
@@ -1219,10 +1219,10 @@
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
 #define DEFAULT_MAX_FEEDRATE          { \
-  TTL_MAX_FEED_RATE_XYZE, \
-  TTL_MAX_FEED_RATE_XYZE, \
-  TTL_MAX_FEED_RATE_XYZE, \
-  TTL_MAX_FEED_RATE_XYZE }
+  300, \
+  300, \
+  5, \
+  25 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
