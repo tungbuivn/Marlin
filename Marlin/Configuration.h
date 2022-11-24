@@ -1170,14 +1170,14 @@
 // X,Y,Z: nema 48mm torque: https://en.nanotec.com/products/366-st4118l0804-a
 // E: nema 26mm torque https://en.nanotec.com/products/327-st4118x0404-a
 // this char is apply to no-micro step, so to keep high current then decrease speed
-#define TTL_MAX_MOTOR_RPM  60 
+#define TTL_MAX_MOTOR_RPM  30 
 #define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/ 
-#define TTL_MICROSTEP 8
+#define TTL_MICROSTEP 16
 #define TTL_XY_TEETH 20
 #define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/ 
 #define TTL_BELT_PITCH 2
 #define TTL_PULSE_PER_FULL_STEPS 4
-#define TTL_BASE_MOTOR_STEP (360/TTL_MOTOR_ANGLE)
+#define TTL_BASE_MOTOR_STEP (360/TTL_MOTOR_ANGLE) /*200*/
 #define TTL_E_GEAR_FACTOR (50/17)
 /* 7.71 is value capture from intruction assembly BMG for the ender 3, 415 step resolution 16*/
 #define TTL_BONDTECH_ENDER3 (200*16/415)
@@ -1185,16 +1185,20 @@
 
 #define TTL_Z_GEAR_FACTOR (80/TTL_Z_TEETH)
 
-#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*1600*/ 
-#define TTL_MAX_STEP_PER_SECOND (TTL_MAX_MOTOR_RPM*TTL_BASE_MOTOR_STEP*TTL_MICROSTEP/60) /*2000*/ 
+#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*3200*/ 
 
-#define TTL_STEP_PER_UNIT_XY (TTL_TOTAL_STEPS_PER_REV/(TTL_XY_TEETH*TTL_BELT_PITCH))
-#define TTL_STEP_PER_UNIT_Z (TTL_TOTAL_STEPS_PER_REV/(TTL_Z_TEETH*TTL_BELT_PITCH*TTL_Z_GEAR_FACTOR))
-#define TTL_STEP_PER_UNIT_E (TTL_TOTAL_STEPS_PER_REV/TTL_BONDTECH_MM_PER_REV*TTL_E_GEAR_FACTOR)
+// nema 48mm max step per second is 4 rev at 0.8a current 24v
+// https://en.nanotec.com/products/366-st4118l0804-a
+// https://www.allaboutcircuits.com/tools/stepper-motor-calculator/
+#define TTL_MAX_STEP_PER_SECOND (TTL_MAX_MOTOR_RPM*TTL_TOTAL_STEPS_PER_REV/60) /*1600*/ 
+
+#define TTL_STEP_PER_UNIT_XY (TTL_TOTAL_STEPS_PER_REV/(TTL_XY_TEETH*TTL_BELT_PITCH)) /*80*/
+#define TTL_STEP_PER_UNIT_Z (TTL_TOTAL_STEPS_PER_REV/(TTL_Z_TEETH*TTL_BELT_PITCH*TTL_Z_GEAR_FACTOR)) /*20*/
+#define TTL_STEP_PER_UNIT_E (TTL_TOTAL_STEPS_PER_REV/TTL_BONDTECH_MM_PER_REV*TTL_E_GEAR_FACTOR) /*415*/
 
 
 
-#define TTL_MAX_FEED_RATE_XY (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP/TTL_PULSE_PER_FULL_STEPS)
+#define TTL_MAX_FEED_RATE_XYZE (TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS) /*400*/
 /**
  * Default Axis Steps Per Unit (linear=steps/mm, rotational=steps/°)
  * Override with M92
@@ -1215,10 +1219,10 @@
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
 #define DEFAULT_MAX_FEEDRATE          { \
-  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
-  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
-  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
-  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS }
+  TTL_MAX_FEED_RATE_XYZE, \
+  TTL_MAX_FEED_RATE_XYZE, \
+  TTL_MAX_FEED_RATE_XYZE, \
+  TTL_MAX_FEED_RATE_XYZE }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
