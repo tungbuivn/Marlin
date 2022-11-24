@@ -546,7 +546,7 @@
 #define TEMP_SENSOR_5 0
 #define TEMP_SENSOR_6 0
 #define TEMP_SENSOR_7 0
-#define TEMP_SENSOR_BED 0
+#define TEMP_SENSOR_BED 1
 #define TEMP_SENSOR_PROBE 0
 #define TEMP_SENSOR_CHAMBER 0
 #define TEMP_SENSOR_COOLER 0
@@ -1032,8 +1032,8 @@
 // Specify here all the endstop connectors that are connected to any endstop or probe.
 // Almost all printers will be using one per axis. Probes will use one or more of the
 // extra connectors. Leave undefined any used for non-endstop and non-probe purposes.
-#define USE_XMIN_PLUG
-#define USE_YMIN_PLUG
+//#define USE_XMIN_PLUG
+//#define USE_YMIN_PLUG
 #define USE_ZMIN_PLUG
 //#define USE_IMIN_PLUG
 //#define USE_JMIN_PLUG
@@ -1041,8 +1041,8 @@
 //#define USE_UMIN_PLUG
 //#define USE_VMIN_PLUG
 //#define USE_WMIN_PLUG
-//#define USE_XMAX_PLUG
-//#define USE_YMAX_PLUG
+#define USE_XMAX_PLUG
+#define USE_YMAX_PLUG
 //#define USE_ZMAX_PLUG
 //#define USE_IMAX_PLUG
 //#define USE_JMAX_PLUG
@@ -1164,21 +1164,61 @@
 //#define DISTINCT_E_FACTORS
 
 /**
+ * belt definition
+*/
+
+// X,Y,Z: nema 48mm torque: https://en.nanotec.com/products/366-st4118l0804-a
+// E: nema 26mm torque https://en.nanotec.com/products/327-st4118x0404-a
+// this char is apply to no-micro step, so to keep high current then decrease speed
+#define TTL_MAX_MOTOR_RPM  60 
+#define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/ 
+#define TTL_MICROSTEP 8
+#define TTL_XY_TEETH 20
+#define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/ 
+#define TTL_BELT_PITCH 2
+#define TTL_PULSE_PER_FULL_STEPS 4
+#define TTL_BASE_MOTOR_STEP (360/TTL_MOTOR_ANGLE)
+#define TTL_E_GEAR_FACTOR (50/17)
+/* 7.71 is value capture from intruction assembly BMG for the ender 3, 415 step resolution 16*/
+#define TTL_BONDTECH_ENDER3 (200*16/415)
+#define TTL_BONDTECH_MM_PER_REV (TTL_BONDTECH_ENDER3/TTL_E_GEAR_FACTOR) /*2.6216867469879515*/ 
+
+#define TTL_Z_GEAR_FACTOR (80/TTL_Z_TEETH)
+
+#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*1600*/ 
+#define TTL_MAX_STEP_PER_SECOND (TTL_MAX_MOTOR_RPM*TTL_BASE_MOTOR_STEP*TTL_MICROSTEP/60) /*2000*/ 
+
+#define TTL_STEP_PER_UNIT_XY (TTL_TOTAL_STEPS_PER_REV/(TTL_XY_TEETH*TTL_BELT_PITCH))
+#define TTL_STEP_PER_UNIT_Z (TTL_TOTAL_STEPS_PER_REV/(TTL_Z_TEETH*TTL_BELT_PITCH*TTL_Z_GEAR_FACTOR))
+#define TTL_STEP_PER_UNIT_E (TTL_TOTAL_STEPS_PER_REV/TTL_BONDTECH_MM_PER_REV*TTL_E_GEAR_FACTOR)
+
+
+
+#define TTL_MAX_FEED_RATE_XY (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP/TTL_PULSE_PER_FULL_STEPS)
+/**
  * Default Axis Steps Per Unit (linear=steps/mm, rotational=steps/°)
  * Override with M92
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
 // 415 is value from bondtech bgm document, this apply to motorStep x4 microstep
 // https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
-// 80 is microstep x4
-#define DEFAULT_AXIS_STEPS_PER_UNIT   { 40, 40, 10, 415 }
+// 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {TTL_STEP_PER_UNIT_XY, \
+                                      TTL_STEP_PER_UNIT_XY, \
+                                      TTL_STEP_PER_UNIT_Z, \
+                                      TTL_STEP_PER_UNIT_E  \
+                                      }
 
 /**
  * Default Max Feed Rate (linear=mm/s, rotational=°/s)
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_FEEDRATE          { 300, 300, 5, 25 }
+#define DEFAULT_MAX_FEEDRATE          { \
+  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
+  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
+  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS, \
+  TTL_MAX_STEP_PER_SECOND/TTL_PULSE_PER_FULL_STEPS }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
@@ -1191,7 +1231,7 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_ACCELERATION      { 3000, 3000, 100, 10000 }
+#define DEFAULT_MAX_ACCELERATION      { 500, 500, 100, 1000 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -1206,9 +1246,9 @@
  *   M204 R    Retract Acceleration
  *   M204 T    Travel Acceleration
  */
-#define DEFAULT_ACCELERATION          2000    // X, Y, Z and E acceleration for printing moves
-#define DEFAULT_RETRACT_ACCELERATION  2000    // E acceleration for retracts
-#define DEFAULT_TRAVEL_ACCELERATION   2000    // X, Y, Z acceleration for travel (non printing) moves
+#define DEFAULT_ACCELERATION          500    // X, Y, Z and E acceleration for printing moves
+#define DEFAULT_RETRACT_ACCELERATION  500    // E acceleration for retracts
+#define DEFAULT_TRAVEL_ACCELERATION   1000    // X, Y, Z acceleration for travel (non printing) moves
 
 /**
  * Default Jerk limits (mm/s)
@@ -1704,8 +1744,8 @@
 #define X_MIN_POS 0
 #define Y_MIN_POS 0
 #define Z_MIN_POS 0
-#define X_MAX_POS X_BED_SIZE-50
-#define Y_MAX_POS Y_BED_SIZE-50
+#define X_MAX_POS X_BED_SIZE+50
+#define Y_MAX_POS Y_BED_SIZE+50
 #define Z_MAX_POS 200
 //#define I_MIN_POS 0
 //#define I_MAX_POS 50

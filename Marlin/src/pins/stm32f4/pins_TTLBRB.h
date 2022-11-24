@@ -57,9 +57,9 @@
   #define BOARD_WEBSITE_URL "https://oshwlab.com/tungbuivn/voron-3d-printer-board"
 #endif
 
-#define X_MIN_PIN                           PC13
+#define X_MAX_PIN                           PC13
 // #define X_MAX_PIN                           PA15
-#define Y_MIN_PIN                           PB3
+#define Y_MAX_PIN                           PB3
 // #define Y_MAX_PIN                           PD12
 #define Z_MIN_PIN                           PD14
 // #define Z_MAX_PIN                           PD15
