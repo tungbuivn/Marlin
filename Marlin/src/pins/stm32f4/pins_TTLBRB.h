@@ -57,11 +57,15 @@
   #define BOARD_WEBSITE_URL "https://oshwlab.com/tungbuivn/voron-3d-printer-board"
 #endif
 
-#define X_MAX_PIN                           PC13
-// #define X_MAX_PIN                           PA15
-#define Y_MAX_PIN                           PB3
-// #define Y_MAX_PIN                           PD12
-#define Z_MIN_PIN                           PD14
+#define X_MIN_PIN                           PC13
+#define Y_MIN_PIN                           PB3
+
+// #define X_MAX_PIN                           PC13
+// #define Y_MAX_PIN                           PB3
+
+
+#define Z_PROBE_PIN                         PD13
+#define Z_MIN_PIN                           Z_PROBE_PIN // pd 13 is probe pin, if using swith then PD14
 // #define Z_MAX_PIN                           PD15
 
 #define X_STEP_PIN                          PE5
@@ -112,10 +116,14 @@
 #define Z2_HARDWARE_SERIAL              MSerial3
 #define Z2_SLAVE_ADDRESS                   0b01
 
+// bed auto tune
+// #define DEFAULT_bedKp 56.58
+// #define DEFAULT_bedKi 8.95
+// #define DEFAULT_bedKd 238.37
 
-
-
-
+// #define DEFAULT_Kp 11.29
+// #define DEFAULT_Ki 0.88
+// #define DEFAULT_Kd 36.10
 
 //
 // Temperature Sensors
