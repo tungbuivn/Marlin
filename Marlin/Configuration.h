@@ -568,14 +568,14 @@
 #endif
 
 #if HAS_E_TEMP_SENSOR
-  #define TEMP_RESIDENCY_TIME          3  // (seconds) Time to wait for hotend to "settle" in M109
-  #define TEMP_WINDOW                  3  // (°C) Temperature proximity for the "temperature reached" timer
+  #define TEMP_RESIDENCY_TIME          5  // (seconds) Time to wait for hotend to "settle" in M109
+  #define TEMP_WINDOW                  2  // (°C) Temperature proximity for the "temperature reached" timer
   #define TEMP_HYSTERESIS              3  // (°C) Temperature proximity considered "close enough" to the target
 #endif
 
 #if TEMP_SENSOR_BED
   #define TEMP_BED_RESIDENCY_TIME      5  // (seconds) Time to wait for bed to "settle" in M190
-  #define TEMP_BED_WINDOW              3  // (°C) Temperature proximity for the "temperature reached" timer
+  #define TEMP_BED_WINDOW              1  // (°C) Temperature proximity for the "temperature reached" timer
   #define TEMP_BED_HYSTERESIS          3  // (°C) Temperature proximity considered "close enough" to the target
 #endif
 
@@ -666,9 +666,10 @@
     #define DEFAULT_Ki_LIST {   1.08,   1.08 }
     #define DEFAULT_Kd_LIST { 114.00, 114.00 }
   #else
-    #define DEFAULT_Kp 11.29
+    #define DEFAULT_Kp 11.81
     #define DEFAULT_Ki 0.88
-    #define DEFAULT_Kd 36.10
+    #define DEFAULT_Kd 39.65
+    //M301 D39.65 I0.88 P11.81
   #endif
 #endif
 
@@ -804,7 +805,7 @@
 #endif // PIDTEMPCHAMBER
 
 #if ANY(PIDTEMP, PIDTEMPBED, PIDTEMPCHAMBER)
-  #define PID_OPENLOOP            // Puts PID in open loop. M104/M140 sets the output power from 0 to PID_MAX
+  // #define PID_OPENLOOP            // Puts PID in open loop. M104/M140 sets the output power from 0 to PID_MAX
   //#define SLOW_PWM_HEATERS      // PWM with very low frequency (roughly 0.125Hz=8s) and minimum state time of approximately 1s useful for heaters driven by a relay
   #define PID_FUNCTIONAL_RANGE 10 // If the temperature difference between the target temperature and the actual temperature
                                   // is more than PID_FUNCTIONAL_RANGE then the PID will be shut off and the heater will be set to min/max.
@@ -1531,7 +1532,7 @@
  *     |    [-]    |
  *     O-- FRONT --+
  */
-#define NOZZLE_TO_PROBE_OFFSET { 0, -25, 1.6 }
+#define NOZZLE_TO_PROBE_OFFSET { 0, -25, -1.6 }
 
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.
