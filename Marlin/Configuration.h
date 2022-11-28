@@ -646,7 +646,7 @@
 
 // Enable PIDTEMP for PID control or MPCTEMP for Predictive Model.
 // temperature control. Disable both for bang-bang heating.
-#define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
+//#define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
 //#define MPCTEMP        // ** EXPERIMENTAL **
 
 // switch 80W to 40W power
