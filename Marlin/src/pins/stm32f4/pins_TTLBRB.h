@@ -80,9 +80,17 @@
 #define Z_DIR_PIN                           PC7
 #define Z_ENABLE_PIN                        PC6
 
-#define Z2_STEP_PIN                          PB1
-#define Z2_DIR_PIN                           PE7
-#define Z2_ENABLE_PIN                        Z_ENABLE_PIN
+#define Z3_STEP_PIN                         PA0 
+#define Z3_DIR_PIN                          PA3 
+#define Z3_ENABLE_PIN                       Z_ENABLE_PIN
+
+#define Z2_STEP_PIN                         PB1
+#define Z2_DIR_PIN                          PE7
+#define Z2_ENABLE_PIN                       Z_ENABLE_PIN
+
+#define Z4_STEP_PIN                         PA4 
+#define Z4_DIR_PIN                          PA5 
+#define Z4_ENABLE_PIN                       Z_ENABLE_PIN
 
 #define E0_STEP_PIN                         PC4
 #define E0_DIR_PIN                          PC5
@@ -111,10 +119,24 @@
 
 #define E0_SLAVE_ADDRESS                   0b10
 
+// Share uart between z and z3, z2 and z4
 #define Z_HARDWARE_SERIAL               MSerial3
+// #define Z_SERIAL_TX_PIN                  PB10
+// #define Z_SERIAL_RX_PIN                  PB11
 #define Z_SLAVE_ADDRESS                    0b00
+
+// #define Z3_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
+// #define Z3_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
+// #define Z3_SLAVE_ADDRESS                   0b00
+
 #define Z2_HARDWARE_SERIAL              MSerial3
+// #define Z2_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
+// #define Z2_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
 #define Z2_SLAVE_ADDRESS                   0b01
+
+// #define Z4_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
+// #define Z4_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
+// #define Z4_SLAVE_ADDRESS                   0b01
 
 // bed auto tune
 // #define DEFAULT_bedKp 56.58

@@ -166,8 +166,8 @@
 //#define X2_DRIVER_TYPE A4988
 //#define Y2_DRIVER_TYPE A4988
 #define Z2_DRIVER_TYPE TMC2209
-//#define Z3_DRIVER_TYPE A4988
-//#define Z4_DRIVER_TYPE A4988
+#define Z3_DRIVER_TYPE TMC2209_STANDALONE
+#define Z4_DRIVER_TYPE TMC2209_STANDALONE
 //#define I_DRIVER_TYPE  A4988
 //#define J_DRIVER_TYPE  A4988
 //#define K_DRIVER_TYPE  A4988
@@ -568,8 +568,8 @@
 #endif
 
 #if HAS_E_TEMP_SENSOR
-  #define TEMP_RESIDENCY_TIME          5  // (seconds) Time to wait for hotend to "settle" in M109
-  #define TEMP_WINDOW                  2  // (°C) Temperature proximity for the "temperature reached" timer
+  #define TEMP_RESIDENCY_TIME          10  // (seconds) Time to wait for hotend to "settle" in M109
+  #define TEMP_WINDOW                  1  // (°C) Temperature proximity for the "temperature reached" timer
   #define TEMP_HYSTERESIS              3  // (°C) Temperature proximity considered "close enough" to the target
 #endif
 
@@ -646,7 +646,7 @@
 
 // Enable PIDTEMP for PID control or MPCTEMP for Predictive Model.
 // temperature control. Disable both for bang-bang heating.
-//#define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
+#define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
 //#define MPCTEMP        // ** EXPERIMENTAL **
 
 // switch 80W to 40W power
@@ -666,10 +666,9 @@
     #define DEFAULT_Ki_LIST {   1.08,   1.08 }
     #define DEFAULT_Kd_LIST { 114.00, 114.00 }
   #else
-    #define DEFAULT_Kp 11.81
-    #define DEFAULT_Ki 0.88
-    #define DEFAULT_Kd 39.65
-    //M301 D39.65 I0.88 P11.81
+    #define DEFAULT_Kp 22
+    #define DEFAULT_Ki 1
+    #define DEFAULT_Kd 20
   #endif
 #endif
 
@@ -805,7 +804,7 @@
 #endif // PIDTEMPCHAMBER
 
 #if ANY(PIDTEMP, PIDTEMPBED, PIDTEMPCHAMBER)
-  // #define PID_OPENLOOP            // Puts PID in open loop. M104/M140 sets the output power from 0 to PID_MAX
+  //#define PID_OPENLOOP            // Puts PID in open loop. M104/M140 sets the output power from 0 to PID_MAX
   //#define SLOW_PWM_HEATERS      // PWM with very low frequency (roughly 0.125Hz=8s) and minimum state time of approximately 1s useful for heaters driven by a relay
   #define PID_FUNCTIONAL_RANGE 10 // If the temperature difference between the target temperature and the actual temperature
                                   // is more than PID_FUNCTIONAL_RANGE then the PID will be shut off and the heater will be set to min/max.
@@ -1172,27 +1171,27 @@
 // X,Y,Z: nema 48mm torque: https://en.nanotec.com/products/366-st4118l0804-a
 // E: nema 26mm torque https://en.nanotec.com/products/327-st4118x0404-a
 // this char is apply to no-micro step, so to keep high current then decrease speed
-#define TTL_MAX_MOTOR_RPM  30 
-#define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/ 
+#define TTL_MAX_MOTOR_RPM  30
+#define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/
 #define TTL_MICROSTEP 16
 #define TTL_XY_TEETH 20
-#define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/ 
+#define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/
 #define TTL_BELT_PITCH 2
 #define TTL_PULSE_PER_FULL_STEPS 4
 #define TTL_BASE_MOTOR_STEP (360/TTL_MOTOR_ANGLE) /*200*/
 #define TTL_E_GEAR_FACTOR (50/17)
 /* 7.71 is value capture from intruction assembly BMG for the ender 3, 415 step resolution 16*/
 #define TTL_BONDTECH_ENDER3 (200*16/415)
-#define TTL_BONDTECH_MM_PER_REV (TTL_BONDTECH_ENDER3/TTL_E_GEAR_FACTOR) /*2.6216867469879515*/ 
+#define TTL_BONDTECH_MM_PER_REV (TTL_BONDTECH_ENDER3/TTL_E_GEAR_FACTOR) /*2.6216867469879515*/
 
 #define TTL_Z_GEAR_FACTOR (80/TTL_Z_TEETH)
 
-#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*3200*/ 
+#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*3200*/
 
 // nema 48mm max step per second is 4 rev at 0.8a current 24v
 // https://en.nanotec.com/products/366-st4118l0804-a
 // https://www.allaboutcircuits.com/tools/stepper-motor-calculator/
-#define TTL_MAX_STEP_PER_SECOND (TTL_MAX_MOTOR_RPM*TTL_TOTAL_STEPS_PER_REV/60) /*1600*/ 
+#define TTL_MAX_STEP_PER_SECOND (TTL_MAX_MOTOR_RPM*TTL_TOTAL_STEPS_PER_REV/60) /*1600*/
 
 #define TTL_STEP_PER_UNIT_XY (TTL_TOTAL_STEPS_PER_REV/(TTL_XY_TEETH*TTL_BELT_PITCH)) /*80*/
 #define TTL_STEP_PER_UNIT_Z (TTL_TOTAL_STEPS_PER_REV/(TTL_Z_TEETH*TTL_BELT_PITCH*TTL_Z_GEAR_FACTOR)) /*20*/
@@ -1532,7 +1531,7 @@
  *     |    [-]    |
  *     O-- FRONT --+
  */
-#define NOZZLE_TO_PROBE_OFFSET { 0, -25, -1.6 }
+#define NOZZLE_TO_PROBE_OFFSET { 0, -25, -1.55 }
 
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.
@@ -2265,11 +2264,11 @@
 #define PREHEAT_1_TEMP_CHAMBER 35
 #define PREHEAT_1_FAN_SPEED     0 // Value from 0 to 255
 
-#define PREHEAT_2_LABEL       "ABS"
-#define PREHEAT_2_TEMP_HOTEND 240
-#define PREHEAT_2_TEMP_BED    110
-#define PREHEAT_2_TEMP_CHAMBER 35
-#define PREHEAT_2_FAN_SPEED     0 // Value from 0 to 255
+// #define PREHEAT_2_LABEL       "ABS"
+// #define PREHEAT_2_TEMP_HOTEND 240
+// #define PREHEAT_2_TEMP_BED    110
+// #define PREHEAT_2_TEMP_CHAMBER 35
+// #define PREHEAT_2_FAN_SPEED     0 // Value from 0 to 255
 
 // @section motion
 
