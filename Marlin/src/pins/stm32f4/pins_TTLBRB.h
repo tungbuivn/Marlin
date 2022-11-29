@@ -88,8 +88,8 @@
 #define Z2_DIR_PIN                          PE7
 #define Z2_ENABLE_PIN                       Z_ENABLE_PIN
 
-#define Z4_STEP_PIN                         PA4 
-#define Z4_DIR_PIN                          PA5 
+#define Z4_STEP_PIN                         PD11 
+#define Z4_DIR_PIN                          PD12 
 #define Z4_ENABLE_PIN                       Z_ENABLE_PIN
 
 #define E0_STEP_PIN                         PC4
