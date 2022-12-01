@@ -121,22 +121,16 @@
 
 // Share uart between z and z3, z2 and z4
 #define Z_HARDWARE_SERIAL               MSerial3
-// #define Z_SERIAL_TX_PIN                  PB10
-// #define Z_SERIAL_RX_PIN                  PB11
 #define Z_SLAVE_ADDRESS                    0b00
 
-// #define Z3_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
-// #define Z3_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
-// #define Z3_SLAVE_ADDRESS                   0b00
+#define Z3_HARDWARE_SERIAL               MSerial3
+#define Z3_SLAVE_ADDRESS                   0b11
 
 #define Z2_HARDWARE_SERIAL              MSerial3
-// #define Z2_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
-// #define Z2_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
 #define Z2_SLAVE_ADDRESS                   0b01
 
-// #define Z4_SERIAL_TX_PIN                  Z_SERIAL_TX_PIN
-// #define Z4_SERIAL_RX_PIN                  Z_SERIAL_RX_PIN
-// #define Z4_SLAVE_ADDRESS                   0b01
+#define Z4_HARDWARE_SERIAL              MSerial3
+#define Z4_SLAVE_ADDRESS                   0b10
 
 // bed auto tune
 // #define DEFAULT_bedKp 56.58
