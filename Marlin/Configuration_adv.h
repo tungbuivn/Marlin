@@ -2866,7 +2866,7 @@
   #endif
 
   #if AXIS_IS_TMC(Z3)
-    #define Z3_CURRENT      800
+    #define Z3_CURRENT      400
     #define Z3_CURRENT_HOME Z3_CURRENT
     #define Z3_MICROSTEPS    Z_MICROSTEPS
     #define Z3_RSENSE         0.11
@@ -2876,7 +2876,7 @@
   #endif
 
   #if AXIS_IS_TMC(Z4)
-    #define Z4_CURRENT      800
+    #define Z4_CURRENT      400
     #define Z4_CURRENT_HOME Z4_CURRENT
     #define Z4_MICROSTEPS    Z_MICROSTEPS
     #define Z4_RSENSE         0.11
