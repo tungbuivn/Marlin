@@ -31,7 +31,7 @@
 #endif
 
 #define HAS_OTG_USB_HOST_SUPPORT                  // USB Flash Drive support
-#define USES_DIAG_JUMPERS
+// #define USES_DIAG_JUMPERS
 
 //#define DISABLE_DEBUG
 
@@ -41,15 +41,18 @@
 // Use one of these or SDCard-based Emulation will be used
 //#define SRAM_EEPROM_EMULATION                   // Use BackSRAM-based EEPROM emulation
 //#define FLASH_EEPROM_EMULATION                  // Use Flash-based EEPROM emulation
-#define I2C_EEPROM                                // Need use jumpers set i2c for EEPROM
+#define I2C_EEPROM                                 // Need use jumpers set i2c for EEPROM
 #define MARLIN_EEPROM_SIZE                0x1000  // 4K
 #define I2C_SCL_PIN                         PB8   // I2C_SCL and CAN_RX
 #define I2C_SDA_PIN                         PB9   // I2C_SDA and CAN_TX
 
+#define PROBE_ENABLE_PIN                    PB2
+#define Z_PROBE_PIN                         PB13
+// #define Z_MIN_PIN                           Z_PROBE_PIN // pd 13 is probe pin, if using swith then PD14
 //
 // Servos
 //
-#define SERVO0_PIN                          PA8   // Enable BLTOUCH
+// #define SERVO0_PIN                          PA8   // Enable BLTOUCH
 
 //
 // Limit Switches for diag signals
@@ -100,25 +103,25 @@
   #define E0_CS_PIN                         PB3
 #endif
 
-#define E1_ENABLE_PIN                       PD7   // Driver4
-#define E1_STEP_PIN                         PD6
-#define E1_DIR_PIN                          PD5
-#ifndef E1_CS_PIN
-  #define E1_CS_PIN                         PD4
+#define Z2_ENABLE_PIN                       PD7   // Driver4
+#define Z2_STEP_PIN                         PD6
+#define Z2_DIR_PIN                          PD5
+#ifndef Z2_CS_PIN
+  #define Z2_CS_PIN                         PD4
 #endif
 
-#define E2_ENABLE_PIN                       PD3   // Driver5
-#define E2_STEP_PIN                         PD2
-#define E2_DIR_PIN                          PD1
-#ifndef E2_CS_PIN
-  #define E2_CS_PIN                         PD0
+#define Z3_ENABLE_PIN                       PD3   // Driver5
+#define Z3_STEP_PIN                         PD2
+#define Z3_DIR_PIN                          PD1
+#ifndef Z3_CS_PIN
+  #define Z3_CS_PIN                         PD0
 #endif
 
-#define E3_ENABLE_PIN                       PC8   // Driver6
-#define E3_STEP_PIN                         PC7
-#define E3_DIR_PIN                          PC6
-#ifndef E3_CS_PIN
-  #define E3_CS_PIN                         PD15
+#define Z4_ENABLE_PIN                       PC8   // Driver6
+#define Z4_STEP_PIN                         PC7
+#define Z4_DIR_PIN                          PC6
+#ifndef Z4_CS_PIN
+  #define Z4_CS_PIN                         PD15
 #endif
 
 #define E4_STEP_PIN                         PD13  // Driver7
@@ -163,17 +166,17 @@
   #define E0_SERIAL_TX_PIN                  PB3
   #define E0_SERIAL_RX_PIN      E0_SERIAL_TX_PIN
 
-  #define E1_SERIAL_TX_PIN                  PD4
-  #define E1_SERIAL_RX_PIN      E1_SERIAL_TX_PIN
+  #define Z2_SERIAL_TX_PIN                  PD4
+  #define Z2_SERIAL_RX_PIN      Z2_SERIAL_TX_PIN
 
-  #define E2_SERIAL_TX_PIN                  PD0
-  #define E2_SERIAL_RX_PIN      E2_SERIAL_TX_PIN
+  #define Z3_SERIAL_TX_PIN                  PD0
+  #define Z3_SERIAL_RX_PIN      Z3_SERIAL_TX_PIN
 
-  #define E3_SERIAL_TX_PIN                  PD15
-  #define E3_SERIAL_RX_PIN      E3_SERIAL_TX_PIN
+  #define Z4_SERIAL_TX_PIN                  PD15
+  #define Z4_SERIAL_RX_PIN      Z4_SERIAL_TX_PIN
 
-  #define E4_SERIAL_TX_PIN                  PD11
-  #define E4_SERIAL_RX_PIN      E4_SERIAL_TX_PIN
+   #define E4_SERIAL_TX_PIN                  PD11
+   #define E4_SERIAL_RX_PIN      E4_SERIAL_TX_PIN
 
   // Reduce baud rate to improve software serial reliability
   #define TMC_BAUD_RATE                    19200
@@ -244,9 +247,10 @@
     #define SDCARD_CONNECTION            ONBOARD
   #endif
   #if SD_CONNECTION_IS(ONBOARD)
-    #define ENABLE_SPI3
-    #define SD_SS_PIN                       -1
-    #define SDSS                            PC9
+    #define SOFTWARE_SPI  
+    // #define ENABLE_SPI3
+    #define SD_SS_PIN                       PC9
+    #define SDSS                            SD_SS_PIN
     #define SD_SCK_PIN                      PC10
     #define SD_MISO_PIN                     PC11
     #define SD_MOSI_PIN                     PC12
@@ -271,11 +275,13 @@
 
   #define TFT_RESET_PIN              EXP1_04_PIN
 
+
+
   #define LCD_BACKLIGHT_PIN          EXP1_03_PIN
   #define TFT_BACKLIGHT_PIN    LCD_BACKLIGHT_PIN
 
-  #define TOUCH_BUTTONS_HW_SPI
-  #define TOUCH_BUTTONS_HW_SPI_DEVICE          1
+  // #define TOUCH_BUTTONS_HW_SPI
+  // #define TOUCH_BUTTONS_HW_SPI_DEVICE          1
 
   #ifndef TFT_WIDTH
     #define TFT_WIDTH                        480
@@ -284,31 +290,31 @@
     #define TFT_HEIGHT                       320
   #endif
 
-  #define TOUCH_CS_PIN               EXP1_05_PIN  // SPI1_NSS
-  #define TOUCH_SCK_PIN              EXP2_02_PIN  // SPI1_SCK
-  #define TOUCH_MISO_PIN             EXP2_01_PIN  // SPI1_MISO
-  #define TOUCH_MOSI_PIN             EXP2_06_PIN  // SPI1_MOSI
+  // #define TOUCH_CS_PIN               EXP1_05_PIN  // SPI1_NSS
+  // #define TOUCH_SCK_PIN              EXP2_02_PIN  // SPI1_SCK
+  // #define TOUCH_MISO_PIN             EXP2_01_PIN  // SPI1_MISO
+  // #define TOUCH_MOSI_PIN             EXP2_06_PIN  // SPI1_MOSI
 
   #define LCD_READ_ID                       0xD3
   #define LCD_USE_DMA_SPI
 
-  #define TFT_BUFFER_SIZE                  14400
+  // #define TFT_BUFFER_SIZE                  14400
 
-  #ifndef TOUCH_CALIBRATION_X
-    #define TOUCH_CALIBRATION_X           -17253
-  #endif
-  #ifndef TOUCH_CALIBRATION_Y
-    #define TOUCH_CALIBRATION_Y            11579
-  #endif
-  #ifndef TOUCH_OFFSET_X
-    #define TOUCH_OFFSET_X                   514
-  #endif
-  #ifndef TOUCH_OFFSET_Y
-    #define TOUCH_OFFSET_Y                   -24
-  #endif
-  #ifndef TOUCH_ORIENTATION
-    #define TOUCH_ORIENTATION    TOUCH_LANDSCAPE
-  #endif
+  // #ifndef TOUCH_CALIBRATION_X
+  //   #define TOUCH_CALIBRATION_X           -17253
+  // #endif
+  // #ifndef TOUCH_CALIBRATION_Y
+  //   #define TOUCH_CALIBRATION_Y            11579
+  // #endif
+  // #ifndef TOUCH_OFFSET_X
+  //   #define TOUCH_OFFSET_X                   514
+  // #endif
+  // #ifndef TOUCH_OFFSET_Y
+  //   #define TOUCH_OFFSET_Y                   -24
+  // #endif
+  // #ifndef TOUCH_ORIENTATION
+  //   #define TOUCH_ORIENTATION    TOUCH_LANDSCAPE
+  // #endif
 
 #elif HAS_WIRED_LCD
 

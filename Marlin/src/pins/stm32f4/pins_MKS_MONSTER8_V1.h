@@ -22,7 +22,7 @@
 #pragma once
 
 #define BOARD_INFO_NAME "MKS Monster8 V1"
-
+#define DIAG_JUMPERS_REMOVED
 //
 // Limit Switches
 //
