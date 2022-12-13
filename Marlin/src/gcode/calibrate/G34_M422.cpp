@@ -66,6 +66,7 @@
  *   L                 Unlock all steppers
  *   Z<1-4>            Z stepper to lock / unlock
  *   S<state>          0=UNLOCKED 1=LOCKED. If omitted, assume LOCKED.
+ *   Q<nloop>          Quit only after nloop or success, default is 1 (int8_t)
  *
  *   Examples:
  *     G34 Z1     ; Lock Z1
@@ -78,7 +79,17 @@
  *   A<amplification>  Provide an Amplification value. If omitted, Z_STEPPER_ALIGN_AMP.
  *   R                 Flag to recalculate points based on current probe offsets
  */
+
+
 void GcodeSuite::G34() {
+  int8_t isInf=parser.intval('Q', 1);
+  // re-homing after every 3 time measure
+  while ((isInf-->0) && !InfiniteG34(3)) {
+
+  }
+}
+bool GcodeSuite::InfiniteG34(int nloop=0){
+   bool G34Result = false;
   DEBUG_SECTION(log_G34, "G34", DEBUGGING(LEVELING));
   if (DEBUGGING(LEVELING)) log_machine_info();
 
@@ -110,11 +121,12 @@ void GcodeSuite::G34() {
   #if ENABLED(Z_STEPPER_AUTO_ALIGN)
     do { // break out on error
 
-      const int8_t z_auto_align_iterations = parser.intval('I', Z_STEPPER_ALIGN_ITERATIONS);
+      const int8_t z_auto_align_iterations =nloop?nloop: parser.intval('I', Z_STEPPER_ALIGN_ITERATIONS);
       if (!WITHIN(z_auto_align_iterations, 1, 30)) {
         SERIAL_ECHOLNPGM("?(I)teration out of bounds (1-30).");
         break;
       }
+      
 
       const float z_auto_align_accuracy = parser.floatval('T', Z_STEPPER_ALIGN_ACC);
       if (!WITHIN(z_auto_align_accuracy, 0.01f, 1.0f)) {
@@ -429,6 +441,7 @@ void GcodeSuite::G34() {
       else {
         SERIAL_ECHOLNPGM("Did ", iteration + (iteration != z_auto_align_iterations), " of ", z_auto_align_iterations);
         SERIAL_ECHOLNPAIR_F("Accuracy: ", z_maxdiff);
+        G34Result=true;
       }
 
       // Stow the probe because the last call to probe.probe_at_point(...)
@@ -456,7 +469,9 @@ void GcodeSuite::G34() {
       #endif
 
     }while(0);
+    return G34Result;
   #endif // Z_STEPPER_AUTO_ALIGN
+   return false;
 }
 
 #endif // Z_MULTI_ENDSTOPS || Z_STEPPER_AUTO_ALIGN
@@ -564,6 +579,7 @@ void GcodeSuite::M422_report(const bool forReplay/*=true*/) {
       );
     }
   #endif
+ 
 }
 
 #endif // Z_STEPPER_AUTO_ALIGN
