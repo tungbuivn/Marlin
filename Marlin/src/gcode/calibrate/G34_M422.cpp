@@ -188,7 +188,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
           #endif
         #endif
       ));
-      if (isHardcode) {
+      if (false && isHardcode) {
         float  z_hardcode[NUM_Z_STEPPERS]={
               MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
               MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
@@ -211,6 +211,8 @@ bool GcodeSuite::InfiniteG34(int nloop){
           // release z-lock
           stepper.set_all_z_lock(false);
         }
+        // now z center has been changed, mark z to un-home
+        set_axis_never_homed(Z_AXIS);
       }
 
       // Home before the alignment procedure
