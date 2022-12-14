@@ -188,7 +188,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
           #endif
         #endif
       ));
-       if (isHardcode) {
+      if (isHardcode) {
         float  z_hardcode[NUM_Z_STEPPERS]={
               MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
               MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
