@@ -67,6 +67,7 @@
  *   Z<1-4>            Z stepper to lock / unlock
  *   S<state>          0=UNLOCKED 1=LOCKED. If omitted, assume LOCKED.
  *   Q<nloop>          Quit only after nloop or success, default is 1 (int8_t)
+ *   U                 Process hardcode balance     
  *
  *   Examples:
  *     G34 Z1     ; Lock Z1
@@ -83,12 +84,18 @@
 
 void GcodeSuite::G34() {
   int8_t isInf=parser.intval('Q', 1);
+  
   // re-homing after every 3 time measure
   while ((isInf-->0) && !InfiniteG34(3)) {
 
   }
 }
-bool GcodeSuite::InfiniteG34(int nloop=0){
+#define MEASURED_HARDCODE_Z_CENTER 1.54
+#define MEASURED_HARDCODE_Z1 1.27
+#define MEASURED_HARDCODE_Z2 1.33
+#define MEASURED_HARDCODE_Z3 1.35
+#define MEASURED_HARDCODE_Z4 1.31
+bool GcodeSuite::InfiniteG34(int nloop){
    bool G34Result = false;
   DEBUG_SECTION(log_G34, "G34", DEBUGGING(LEVELING));
   if (DEBUGGING(LEVELING)) log_machine_info();
@@ -97,7 +104,7 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
 
   const bool seenL = parser.seen('L');
   if (seenL) stepper.set_all_z_lock(false);
-
+  int8_t isHardcode=parser.intval('U', 0);
   const bool seenZ = parser.seenval('Z');
   if (seenZ) {
     const bool state = parser.boolval('S', true);
@@ -115,7 +122,7 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
 
   if (seenL || seenZ) {
     stepper.set_separate_multi_axis(seenZ);
-    return;
+    return true;
   }
 
   #if ENABLED(Z_STEPPER_AUTO_ALIGN)
@@ -181,6 +188,30 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
           #endif
         #endif
       ));
+       if (isHardcode) {
+        float  z_hardcode[NUM_Z_STEPPERS]={
+              MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
+              MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
+              MEASURED_HARDCODE_Z3 - MEASURED_HARDCODE_Z_CENTER,
+              MEASURED_HARDCODE_Z4 - MEASURED_HARDCODE_Z_CENTER};
+        set_axis_never_homed(Z_AXIS);
+        // Home Z after the alignment procedure
+        process_subcommands_now(F("G28Z"));
+       
+        LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
+          xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
+          
+          do_blocking_move_to_z(z_probe);
+          const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
+          float z_measured = z_probed_height + Z_CLEARANCE_BETWEEN_PROBES;
+           // Lock all steppers except one
+          stepper.set_all_z_lock(true, zhc_stepper);
+          // do moving up or down
+          do_blocking_move_to_z(z_hardcode[zhc_stepper] + z_measured);
+          // release z-lock
+          stepper.set_all_z_lock(false);
+        }
+      }
 
       // Home before the alignment procedure
       home_if_needed();
@@ -198,7 +229,8 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
       #endif
       float z_measured[NUM_Z_STEPPERS] = { 0 },
             z_maxdiff = 0.0f,
-            amplification = z_auto_align_amplification;
+            amplification = z_auto_align_amplification
+           ;
 
       #if !HAS_Z_STEPPER_ALIGN_STEPPER_XY
         bool adjustment_reverse = false;
@@ -208,8 +240,10 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
         PGM_P const msg_iteration = GET_TEXT(MSG_ITERATION);
         const uint8_t iter_str_len = strlen_P(msg_iteration);
       #endif
+     
 
       // Final z and iteration values will be used after breaking the loop
+      // const float z_measured_center = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
       float z_measured_min;
       uint8_t iteration = 0;
       bool err_break = false; // To break out of nested loops
@@ -416,9 +450,12 @@ bool GcodeSuite::InfiniteG34(int nloop=0){
               if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> Z", zstepper + 1, " correction reversed to ", z_align_move);
             }
           #endif
+         
+            // Do a move to correct part of the misalignment for the current stepper
+            do_blocking_move_to_z(amplification * z_align_move + current_position.z);
+         
 
-          // Do a move to correct part of the misalignment for the current stepper
-          do_blocking_move_to_z(amplification * z_align_move + current_position.z);
+          
         } // for (zstepper)
 
         // Back to normal stepper operations
