@@ -84,6 +84,27 @@
 
 void GcodeSuite::G34() {
   int8_t isInf=parser.intval('Q', 1);
+  const ProbePtRaise raise_after = parser.boolval('E') ? PROBE_PT_STOW : PROBE_PT_RAISE;
+  if (parser.intval('U', 0) ) {
+    planner.synchronize();  // Prevent damage
+    set_bed_leveling_enabled(false);
+    process_subcommands_now(F("M420S0"));
+    process_subcommands_now(F("G29D"));
+    process_subcommands_now(F("G28Z"));
+    //  stepper.set_separate_multi_axis(true);
+    LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
+      xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
+      do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
+      const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
+      SERIAL_ECHOLNPGM("\nProbe point: ",zhc_stepper);
+      SERIAL_ECHOLNPGM(" Z-Probed: ",z_probed_height);
+    }
+    // reset state
+    // stepper.set_separate_multi_axis(false);
+    // stepper.set_all_z_lock(false);
+    
+    return;
+  }
   
   // re-homing after every 3 time measure
   while ((isInf-->0) && !InfiniteG34(3)) {
