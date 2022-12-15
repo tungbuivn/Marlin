@@ -80,7 +80,11 @@
  *   A<amplification>  Provide an Amplification value. If omitted, Z_STEPPER_ALIGN_AMP.
  *   R                 Flag to recalculate points based on current probe offsets
  */
-
+#define MEASURED_HARDCODE_Z_CENTER 1.54
+#define MEASURED_HARDCODE_Z1 1.27
+#define MEASURED_HARDCODE_Z2 1.33
+#define MEASURED_HARDCODE_Z3 1.35
+#define MEASURED_HARDCODE_Z4 1.31
 
 void GcodeSuite::G34() {
   int8_t isInf=parser.intval('Q', 1);
@@ -91,6 +95,11 @@ void GcodeSuite::G34() {
     process_subcommands_now(F("M420S0"));
     process_subcommands_now(F("G29D"));
     process_subcommands_now(F("G28Z"));
+    float  z_hardcode[NUM_Z_STEPPERS]={
+      MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
+      MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
+      MEASURED_HARDCODE_Z3 - MEASURED_HARDCODE_Z_CENTER,
+      MEASURED_HARDCODE_Z4 - MEASURED_HARDCODE_Z_CENTER};
     //  stepper.set_separate_multi_axis(true);
     LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
       xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
@@ -111,11 +120,7 @@ void GcodeSuite::G34() {
 
   }
 }
-#define MEASURED_HARDCODE_Z_CENTER 1.54
-#define MEASURED_HARDCODE_Z1 1.27
-#define MEASURED_HARDCODE_Z2 1.33
-#define MEASURED_HARDCODE_Z3 1.35
-#define MEASURED_HARDCODE_Z4 1.31
+
 bool GcodeSuite::InfiniteG34(int nloop){
    bool G34Result = false;
   DEBUG_SECTION(log_G34, "G34", DEBUGGING(LEVELING));
@@ -125,7 +130,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
 
   const bool seenL = parser.seen('L');
   if (seenL) stepper.set_all_z_lock(false);
-  int8_t isHardcode=parser.intval('U', 0);
+
   const bool seenZ = parser.seenval('Z');
   if (seenZ) {
     const bool state = parser.boolval('S', true);
@@ -154,7 +159,6 @@ bool GcodeSuite::InfiniteG34(int nloop){
         SERIAL_ECHOLNPGM("?(I)teration out of bounds (1-30).");
         break;
       }
-      
 
       const float z_auto_align_accuracy = parser.floatval('T', Z_STEPPER_ALIGN_ACC);
       if (!WITHIN(z_auto_align_accuracy, 0.01f, 1.0f)) {
@@ -209,32 +213,6 @@ bool GcodeSuite::InfiniteG34(int nloop){
           #endif
         #endif
       ));
-      if (false && isHardcode) {
-        float  z_hardcode[NUM_Z_STEPPERS]={
-              MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
-              MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
-              MEASURED_HARDCODE_Z3 - MEASURED_HARDCODE_Z_CENTER,
-              MEASURED_HARDCODE_Z4 - MEASURED_HARDCODE_Z_CENTER};
-        set_axis_never_homed(Z_AXIS);
-        // Home Z after the alignment procedure
-        process_subcommands_now(F("G28Z"));
-       
-        LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
-          xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
-          
-          do_blocking_move_to_z(z_probe);
-          const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
-          float z_measured = z_probed_height + Z_CLEARANCE_BETWEEN_PROBES;
-           // Lock all steppers except one
-          stepper.set_all_z_lock(true, zhc_stepper);
-          // do moving up or down
-          do_blocking_move_to_z(z_hardcode[zhc_stepper] + z_measured);
-          // release z-lock
-          stepper.set_all_z_lock(false);
-        }
-        // now z center has been changed, mark z to un-home
-        set_axis_never_homed(Z_AXIS);
-      }
 
       // Home before the alignment procedure
       home_if_needed();
@@ -252,8 +230,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
       #endif
       float z_measured[NUM_Z_STEPPERS] = { 0 },
             z_maxdiff = 0.0f,
-            amplification = z_auto_align_amplification
-           ;
+            amplification = z_auto_align_amplification;
 
       #if !HAS_Z_STEPPER_ALIGN_STEPPER_XY
         bool adjustment_reverse = false;
@@ -263,10 +240,8 @@ bool GcodeSuite::InfiniteG34(int nloop){
         PGM_P const msg_iteration = GET_TEXT(MSG_ITERATION);
         const uint8_t iter_str_len = strlen_P(msg_iteration);
       #endif
-     
 
       // Final z and iteration values will be used after breaking the loop
-      // const float z_measured_center = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
       float z_measured_min;
       uint8_t iteration = 0;
       bool err_break = false; // To break out of nested loops
@@ -473,12 +448,9 @@ bool GcodeSuite::InfiniteG34(int nloop){
               if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> Z", zstepper + 1, " correction reversed to ", z_align_move);
             }
           #endif
-         
-            // Do a move to correct part of the misalignment for the current stepper
-            do_blocking_move_to_z(amplification * z_align_move + current_position.z);
-         
 
-          
+          // Do a move to correct part of the misalignment for the current stepper
+          do_blocking_move_to_z(amplification * z_align_move + current_position.z);
         } // for (zstepper)
 
         // Back to normal stepper operations
@@ -501,7 +473,6 @@ bool GcodeSuite::InfiniteG34(int nloop){
       else {
         SERIAL_ECHOLNPGM("Did ", iteration + (iteration != z_auto_align_iterations), " of ", z_auto_align_iterations);
         SERIAL_ECHOLNPAIR_F("Accuracy: ", z_maxdiff);
-        G34Result=true;
       }
 
       // Stow the probe because the last call to probe.probe_at_point(...)
@@ -639,7 +610,6 @@ void GcodeSuite::M422_report(const bool forReplay/*=true*/) {
       );
     }
   #endif
- 
 }
 
 #endif // Z_STEPPER_AUTO_ALIGN
