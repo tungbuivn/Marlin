@@ -105,8 +105,7 @@ void GcodeSuite::G34() {
       xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
       do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
       const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
-      SERIAL_ECHOLNPGM("\nProbe point: ",zhc_stepper);
-      SERIAL_ECHOLNPGM(" Z-Probed: ",z_probed_height);
+      SERIAL_ECHOLNPGM("\nProbe point: ",zhc_stepper," Z-Probed: ",z_probed_height);
     }
     // reset state
     // stepper.set_separate_multi_axis(false);
