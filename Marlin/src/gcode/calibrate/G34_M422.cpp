@@ -68,6 +68,7 @@
  *   S<state>          0=UNLOCKED 1=LOCKED. If omitted, assume LOCKED.
  *   Q<nloop>          Quit only after nloop or success, default is 1 (int8_t)
  *   U                 Process hardcode balance     
+ *   X                 Bed traming technique for labance bed
  *
  *   Examples:
  *     G34 Z1     ; Lock Z1
@@ -103,7 +104,7 @@ void GcodeSuite::G34() {
     //  stepper.set_separate_multi_axis(true);
     LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
       xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
-      do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
+      // do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
       const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), raise_after, 0, true, false);
       SERIAL_ECHOLNPGM("\nProbe point: ",zhc_stepper," Z-Probed: ",z_probed_height);
     }
@@ -112,6 +113,21 @@ void GcodeSuite::G34() {
     // stepper.set_all_z_lock(false);
     
     return;
+  }
+  // TODO: measure all z point, then lock z-min and moving other z util distance less than 1mm, apply bed tramming technique
+  if (parser.intval("X",0)) { 
+    // bool oldval=planner.abort_on_endstop_hit;
+    // planner.abort_on_endstop_hit = true;
+    LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
+      xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
+      constexpr float dpo[] = NOZZLE_TO_PROBE_OFFSET;
+      // do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES-dpo[2]);
+      do_blocking_move_to_xy(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)));
+      const float z_probed_height = probe.probe_at_point(DIFF_TERN(HAS_HOME_OFFSET, ppos, xy_pos_t(home_offset)), PROBE_PT_NONE, 0, true, false);
+      SERIAL_ECHOLNPGM("\nProbe point: ",zhc_stepper," Z-Probed: ",z_probed_height);
+      process_subcommands_now(F("G91\nG1 Z5\nG90"));
+    }
+    // planner.abort_on_endstop_hit = oldval;
   }
   
   // re-homing after every 3 time measure
