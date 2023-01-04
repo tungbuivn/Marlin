@@ -67,7 +67,7 @@
  *   Z<1-4>            Z stepper to lock / unlock
  *   S<state>          0=UNLOCKED 1=LOCKED. If omitted, assume LOCKED.
  *   Q<nloop>          Quit only after nloop or success, default is 1 (int8_t)
- *   U                 Process hardcode balance     
+ *   U                 Process hardcode balance
  *
  *   Examples:
  *     G34 Z1     ; Lock Z1
@@ -110,10 +110,10 @@ void GcodeSuite::G34() {
     // reset state
     // stepper.set_separate_multi_axis(false);
     // stepper.set_all_z_lock(false);
-    
+
     return;
   }
-  
+
   // re-homing after every 3 time measure
   while ((isInf-->0) && !InfiniteG34(3)) {
 
@@ -121,7 +121,7 @@ void GcodeSuite::G34() {
 }
 
 bool GcodeSuite::InfiniteG34(int nloop){
-   bool G34Result = false;
+  bool G34Result = false;
   DEBUG_SECTION(log_G34, "G34", DEBUGGING(LEVELING));
   if (DEBUGGING(LEVELING)) log_machine_info();
 
@@ -129,6 +129,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
 
   const bool seenL = parser.seen('L');
   if (seenL) stepper.set_all_z_lock(false);
+
 
   const bool seenZ = parser.seenval('Z');
   if (seenZ) {
@@ -459,6 +460,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
         if (err_break) break;
 
         if (success_break) {
+          G34Result=true;
           SERIAL_ECHOLNPGM("Target accuracy achieved.");
           LCD_MESSAGE(MSG_ACCURACY_ACHIEVED);
           break;
@@ -482,7 +484,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
         // After this operation the z position needs correction
         set_axis_never_homed(Z_AXIS);
         // Home Z after the alignment procedure
-        process_subcommands_now(F("G28Z"));
+        process_subcommands_now(F("G91\nG1 Z10\nG90\nG28Z"));
       #else
         // Use the probed height from the last iteration to determine the Z height.
         // z_measured_min is used, because all steppers are aligned to z_measured_min.
