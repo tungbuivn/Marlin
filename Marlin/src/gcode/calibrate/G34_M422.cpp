@@ -130,7 +130,6 @@ bool GcodeSuite::InfiniteG34(int nloop){
   const bool seenL = parser.seen('L');
   if (seenL) stepper.set_all_z_lock(false);
 
-
   const bool seenZ = parser.seenval('Z');
   if (seenZ) {
     const bool state = parser.boolval('S', true);
@@ -484,7 +483,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
         // After this operation the z position needs correction
         set_axis_never_homed(Z_AXIS);
         // Home Z after the alignment procedure
-        process_subcommands_now(F("G91\nG1 Z10\nG90\nG28Z"));
+        process_subcommands_now(F("G28Z"));
       #else
         // Use the probed height from the last iteration to determine the Z height.
         // z_measured_min is used, because all steppers are aligned to z_measured_min.
