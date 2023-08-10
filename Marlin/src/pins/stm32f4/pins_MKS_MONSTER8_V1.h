@@ -22,11 +22,13 @@
 #pragma once
 
 #define BOARD_INFO_NAME "MKS Monster8 V1"
-#define DIAG_JUMPERS_REMOVED
+
 //
 // Limit Switches
 //
+#define X_MIN_PIN                           PA14
 #define X_MAX_PIN                           PA13
+#define Y_MIN_PIN                           PA15
 #define Y_MAX_PIN                           PC5
 
 //
@@ -47,14 +49,5 @@
 #ifndef FIL_RUNOUT2_PIN
   #define FIL_RUNOUT2_PIN           MT_DET_2_PIN
 #endif
-//#define ESP_WIFI_MODULE_COM        SERIAL_PORT_2  // Must also set either SERIAL_PORT or SERIAL_PORT_2 to this
-//#define ESP_WIFI_MODULE_BAUDRATE        BAUDRATE  // Must use same BAUDRATE as SERIAL_PORT & SERIAL_PORT_2
-
-//#define ESP_WIFI_MODULE_GPIO0_PIN PD8
-//#define ESP_WIFI_MODULE_GPIO2_PIN PD9
-//#define MKS_WIFI_MODULE
- //#define WIFI_IO0_PIN PD8	// MKS ESP WIFI IO0 PIN
-  //#define WIFI_IO1_PIN PD9	// MKS ESP WIFI IO1 PIN
-  //#define WIFI_RESET_PIN xxx // MKS ESP WIFI RESET PIN
 
 #include "pins_MKS_MONSTER8_common.h"

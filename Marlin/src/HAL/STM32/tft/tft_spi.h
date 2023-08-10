@@ -22,125 +22,64 @@
 #pragma once
 
 #ifdef STM32F1xx
-#include "stm32f1xx_hal.h"
+  #include "stm32f1xx_hal.h"
 #elif defined(STM32F4xx)
-#include "stm32f4xx_hal.h"
+  #include "stm32f4xx_hal.h"
 #else
-#error SPI TFT is currently only supported on STM32F1 and STM32F4 hardware.
+  #error SPI TFT is currently only supported on STM32F1 and STM32F4 hardware.
 #endif
 
 #ifndef LCD_READ_ID
-#define LCD_READ_ID 0x04 // Read display identification information (0xD3 on ILI9341)
+  #define LCD_READ_ID 0x04   // Read display identification information (0xD3 on ILI9341)
 #endif
 #ifndef LCD_READ_ID4
-#define LCD_READ_ID4 0xD3 // Read display identification information (0xD3 on ILI9341)
+  #define LCD_READ_ID4 0xD3   // Read display identification information (0xD3 on ILI9341)
 #endif
 
-#define DATASIZE_8BIT SPI_DATASIZE_8BIT
+#define DATASIZE_8BIT  SPI_DATASIZE_8BIT
 #define DATASIZE_16BIT SPI_DATASIZE_16BIT
-#ifdef USE_ADAFRUIT_SPI
+#define TFT_IO_DRIVER  TFT_SPI
+#define DMA_MAX_SIZE   0xFFFF
 
-#include <Adafruit_ST7789.h>
-
-class TFT_ST7789_Adafruit
-{
-private:
-  
-  static void Transmit(uint16_t Data);
-  static void TransmitDMA(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Count);
-public:
-  static uint16_t dataWidth;
-  static Adafruit_ST7789 AdafruitSPI;
-  static void Init();
-  static void Abort() {}
-  static void DataTransferBegin(uint16_t DataWidth = DATASIZE_16BIT);
-  static void DataTransferEnd();
-  static void DataTransferAbort();
-  static void WriteData(uint16_t Data) { Transmit(Data); }
-  
-  static void WriteReg(uint16_t Reg)
-  {
-    WRITE(TFT_A0_PIN, LOW);
-    Transmit(Reg);
-    WRITE(TFT_A0_PIN, HIGH);
-  }
-  static bool isBusy();
-  static uint32_t GetID();
-
-  static void WriteSequence(uint16_t *Data, uint16_t Count) { TransmitDMA(DMA_MINC_ENABLE, Data, Count); }
-  
-  static void WriteMultiple(uint16_t Color, uint32_t Count)
-  {
-    static uint16_t Data;
-    Data = Color;
-    while (Count > 0)
-    {
-      TransmitDMA(DMA_MINC_DISABLE, &Data, Count > 0xFFFF ? 0xFFFF : Count);
-      Count = Count > 0xFFFF ? Count - 0xFFFF : 0;
-    }
-  }
-};
-
-#define TFT_IO_DRIVER TFT_ST7789_Adafruit
-#else
-#define TFT_IO_DRIVER TFT_SPI
-class TFT_SPI
-{
+class TFT_SPI {
 private:
   static SPI_HandleTypeDef SPIx;
+  static DMA_HandleTypeDef DMAtx;
 
   static uint32_t ReadID(uint16_t Reg);
   static void Transmit(uint16_t Data);
+  static void Transmit(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Count);
   static void TransmitDMA(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Count);
-#if ENABLED(USE_SPI_DMA_TC)
-  static void TransmitDMA_IT(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Count);
-#endif
+  #if ENABLED(USE_SPI_DMA_TC)
+    static void TransmitDMA_IT(uint32_t MemoryIncrease, uint16_t *Data, uint16_t Count);
+  #endif
 
 public:
-  static DMA_HandleTypeDef DMAtx;
-
   static void Init();
   static uint32_t GetID();
   static bool isBusy();
   static void Abort();
 
   static void DataTransferBegin(uint16_t DataWidth = DATASIZE_16BIT);
-  static void DataTransferEnd() { WRITE(TFT_CS_PIN, HIGH); };
+  static void DataTransferEnd() { WRITE(TFT_CS_PIN, HIGH); __HAL_SPI_DISABLE(&SPIx); };
   static void DataTransferAbort();
 
   static void WriteData(uint16_t Data) { Transmit(Data); }
-  static void WriteReg(uint16_t Reg)
-  {
-    WRITE(TFT_A0_PIN, LOW);
-    Transmit(Reg);
-    WRITE(TFT_A0_PIN, HIGH);
-  }
+  static void WriteReg(uint16_t Reg) { WRITE(TFT_A0_PIN, LOW); Transmit(Reg); WRITE(TFT_A0_PIN, HIGH); }
 
-  static void WriteSequence(uint16_t *Data, uint16_t Count) { TransmitDMA(DMA_MINC_ENABLE, Data, Count); }
+  static void WriteSequence_DMA(uint16_t *Data, uint16_t Count) { TransmitDMA(DMA_MINC_ENABLE, Data, Count); }
+  static void WriteMultiple_DMA(uint16_t Color, uint16_t Count) { static uint16_t Data; Data = Color; TransmitDMA(DMA_MINC_DISABLE, &Data, Count); }
 
-#if ENABLED(USE_SPI_DMA_TC)
-  static void WriteSequenceIT(uint16_t *Data, uint16_t Count)
-  {
-    TransmitDMA_IT(DMA_MINC_ENABLE, Data, Count);
-  }
-#endif
+  #if ENABLED(USE_SPI_DMA_TC)
+    static void WriteSequenceIT(uint16_t *Data, uint16_t Count) { TransmitDMA_IT(DMA_MINC_ENABLE, Data, Count); }
+    inline static void DMA_IRQHandler() { HAL_DMA_IRQHandler(&TFT_SPI::DMAtx); }
+  #endif
 
-  static void WriteMultiple(uint16_t Color, uint16_t Count)
-  {
-    static uint16_t Data;
-    Data = Color;
-    TransmitDMA(DMA_MINC_DISABLE, &Data, Count);
-  }
-  static void WriteMultiple(uint16_t Color, uint32_t Count)
-  {
-    static uint16_t Data;
-    Data = Color;
-    while (Count > 0)
-    {
-      TransmitDMA(DMA_MINC_DISABLE, &Data, Count > 0xFFFF ? 0xFFFF : Count);
-      Count = Count > 0xFFFF ? Count - 0xFFFF : 0;
+  static void WriteSequence(uint16_t *Data, uint16_t Count) { Transmit(DMA_MINC_ENABLE, Data, Count); }
+  static void WriteMultiple(uint16_t Color, uint32_t Count) {
+    while (Count > 0) {
+      Transmit(DMA_MINC_DISABLE, &Color, Count > DMA_MAX_SIZE ? DMA_MAX_SIZE : Count);
+      Count = Count > DMA_MAX_SIZE ? Count - DMA_MAX_SIZE : 0;
     }
   }
 };
-
-#endif

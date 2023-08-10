@@ -2,8 +2,9 @@
   "build": {
     "core": "stm32",
     "cpu": "cortex-m4",
-    "extra_flags": "-DSTM32F407xx -DARDUINO_BLACK_F407VE",
+    "extra_flags": "-DSTM32F4 -DSTM32F407xx",
     "f_cpu": "168000000L",
+    "offset": "0xC000",
     "hwids": [
       [
         "0x1EAF",
@@ -15,7 +16,8 @@
       ]
     ],
     "mcu": "stm32f407vet6",
-    "variant": "MARLIN_F407VE"
+    "product_line": "STM32F407xx",
+    "variant": "MARLIN_MKS_SKIPR_V1"
   },
   "debug": {
     "default_tools": [
@@ -30,12 +32,9 @@
     "svd_path": "STM32F40x.svd"
   },
   "frameworks": [
-    "arduino",
-    "cmsis",
-    "stm32cube",
-    "libopencm3"
+    "arduino"
   ],
-  "name": "STM32F407VE (192k RAM. 512k Flash)",
+  "name": "STM32F407VE (128k RAM, 64k CCM RAM, 512k Flash",
   "upload": {
     "disable_flushing": false,
     "maximum_ram_size": 131072,
@@ -46,10 +45,11 @@
       "dfu",
       "jlink"
     ],
-    "require_upload_port": true,
+    "offset_address": "0x0800C000",
+    "require_upload_port": false,
     "use_1200bps_touch": false,
     "wait_for_upload_port": false
   },
   "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32f407ve.html",
-  "vendor": "Generic"
+  "vendor": "ST"
 }
