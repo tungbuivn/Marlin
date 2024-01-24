@@ -553,6 +553,7 @@ private:
 
   #if ANY(Z_MULTI_ENDSTOPS, Z_STEPPER_AUTO_ALIGN, MECHANICAL_GANTRY_CALIBRATION)
     static void G34();
+    static bool InfiniteG34(int nloop);
   #endif
 
   #if ENABLED(Z_STEPPER_AUTO_ALIGN)

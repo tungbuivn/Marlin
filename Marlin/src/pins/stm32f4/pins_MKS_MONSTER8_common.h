@@ -41,12 +41,12 @@
 // Use one of these or SDCard-based Emulation will be used
 //#define SRAM_EEPROM_EMULATION                   // Use BackSRAM-based EEPROM emulation
 //#define FLASH_EEPROM_EMULATION                  // Use Flash-based EEPROM emulation
-#define I2C_EEPROM                                 // Need use jumpers set i2c for EEPROM
+#define I2C_EEPROM                                // Need use jumpers set i2c for EEPROM
 #define MARLIN_EEPROM_SIZE                0x1000  // 4K
 #define I2C_SCL_PIN                         PB8   // I2C_SCL and CAN_RX
 #define I2C_SDA_PIN                         PB9   // I2C_SDA and CAN_TX
 
-#define PROBE_ENABLE_PIN                    PB2
+#define PROBE_ENABLE_PIN                    PA8    // servo pin
 #define Z_PROBE_PIN                         PB13
 // #define Z_MIN_PIN                           Z_PROBE_PIN // pd 13 is probe pin, if using swith then PD14
 //
@@ -67,8 +67,6 @@
 #define E4_DIAG_PIN                         -1    // Driver7 diag signal is not connected
 
 // Limit Switches for endstops
-#define X_MIN_PIN                           PA14
-#define Y_MIN_PIN                           PA15
 #define Z_MIN_PIN                           PB13
 #define Z_MAX_PIN                           PB12
 
@@ -198,9 +196,9 @@
 #define HEATER_2_PIN                        PA3   // HE2
 #define HEATER_BED_PIN                      PB10  // H-BED
 
-#define FAN_PIN                             PA2   // FAN0
-#define FAN1_PIN                            PA1   // FAN1
-#define FAN2_PIN                            PA0   // FAN2
+#define FAN_PIN                             PA2   // FAN0 LA FAN
+#define FAN1_PIN                            PA1   // FAN1 HE FAN
+#define FAN2_PIN                            PA0   // FAN2 CONTROLLER FAN
 
 //
 // Power Supply Control
@@ -247,10 +245,9 @@
     #define SDCARD_CONNECTION            ONBOARD
   #endif
   #if SD_CONNECTION_IS(ONBOARD)
-    #define SOFTWARE_SPI  
-    // #define ENABLE_SPI3
-    #define SD_SS_PIN                       PC9
-    #define SDSS                            SD_SS_PIN
+    #define ENABLE_SPI3
+    #define SD_SS_PIN                       -1
+    #define SDSS                            PC9
     #define SD_SCK_PIN                      PC10
     #define SD_MISO_PIN                     PC11
     #define SD_MOSI_PIN                     PC12
@@ -274,8 +271,6 @@
   #define TFT_A0_PIN                  TFT_DC_PIN
 
   #define TFT_RESET_PIN              EXP1_04_PIN
-
-
 
   #define LCD_BACKLIGHT_PIN          EXP1_03_PIN
   #define TFT_BACKLIGHT_PIN    LCD_BACKLIGHT_PIN

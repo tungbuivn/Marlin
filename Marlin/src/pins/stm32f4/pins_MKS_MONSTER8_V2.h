@@ -22,12 +22,14 @@
 #pragma once
 
 #define BOARD_INFO_NAME "MKS Monster8 V2"
-
+#define DIAG_JUMPERS_REMOVED
 //
 // Limit Switches
 //
-#define X_STOP_PIN                          PA14
-#define Y_STOP_PIN                          PA15
+// #define X_STOP_PIN                          PA14
+// #define Y_STOP_PIN                          PA15
+#define X_MIN_PIN                           PA14
+#define Y_MIN_PIN                           PA15
 
 //
 // Steppers
@@ -58,6 +60,6 @@
   #define WIFI_RESET_PIN                    PD14  // MKS ESP WIFI RESET PIN
 #endif
 
-#define NEOPIXEL_PIN                        PC5
+#define NEOPIXEL2_PIN                        PC5 
 
 #include "pins_MKS_MONSTER8_common.h"

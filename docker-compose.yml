@@ -8,6 +8,7 @@ services:
       dockerfile: Dockerfile
       context: docker
     working_dir: /code
+    command: "sh -c 'while true;do sleep 2;done'"
     volumes:
     - .:/code
     - platformio-cache:/root/.platformio
@@ -16,4 +17,14 @@ volumes:
   # This volume holds installed libraries for PlatformIO. If this is deleted you
   # will have to download all the dependencies again, which can be a very slow
   # process
+  code:
   platformio-cache:
+x-mutagen:
+  sync:
+    defaults:
+      mode: "two-way-resolved"
+      ignore:
+        vcs: true
+    marlin:
+      alpha: "."
+      beta: "volume://code"

@@ -80,11 +80,11 @@
  *   A<amplification>  Provide an Amplification value. If omitted, Z_STEPPER_ALIGN_AMP.
  *   R                 Flag to recalculate points based on current probe offsets
  */
-#define MEASURED_HARDCODE_Z_CENTER 1.54
-#define MEASURED_HARDCODE_Z1 1.27
-#define MEASURED_HARDCODE_Z2 1.33
-#define MEASURED_HARDCODE_Z3 1.35
-#define MEASURED_HARDCODE_Z4 1.31
+// #define MEASURED_HARDCODE_Z_CENTER 1.54
+// #define MEASURED_HARDCODE_Z1 1.27
+// #define MEASURED_HARDCODE_Z2 1.33
+// #define MEASURED_HARDCODE_Z3 1.35
+// #define MEASURED_HARDCODE_Z4 1.31
 
 void GcodeSuite::G34() {
   int8_t isInf=parser.intval('Q', 1);
@@ -95,11 +95,11 @@ void GcodeSuite::G34() {
     process_subcommands_now(F("M420S0"));
     process_subcommands_now(F("G29D"));
     process_subcommands_now(F("G28Z"));
-    float  z_hardcode[NUM_Z_STEPPERS]={
-      MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
-      MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
-      MEASURED_HARDCODE_Z3 - MEASURED_HARDCODE_Z_CENTER,
-      MEASURED_HARDCODE_Z4 - MEASURED_HARDCODE_Z_CENTER};
+    // float  z_hardcode[NUM_Z_STEPPERS]={
+    //   MEASURED_HARDCODE_Z1 - MEASURED_HARDCODE_Z_CENTER,
+    //   MEASURED_HARDCODE_Z2 - MEASURED_HARDCODE_Z_CENTER,
+    //   MEASURED_HARDCODE_Z3 - MEASURED_HARDCODE_Z_CENTER,
+    //   MEASURED_HARDCODE_Z4 - MEASURED_HARDCODE_Z_CENTER};
     //  stepper.set_separate_multi_axis(true);
     LOOP_L_N(zhc_stepper, NUM_Z_STEPPERS) {
       xy_pos_t &ppos = z_stepper_align.xy[zhc_stepper];
