@@ -88,6 +88,7 @@
 // Choose the name from boards.h that matches your setup
 #ifndef MOTHERBOARD
   #define MOTHERBOARD BOARD_MKS_MONSTER8_V2
+  // #define MOTHERBOARD BOARD_BTT_SKR_MINI_E3_V3_0_1
 #endif
 
 /**
@@ -2271,11 +2272,17 @@
 #define PREHEAT_1_TEMP_CHAMBER 35
 #define PREHEAT_1_FAN_SPEED     0 // Value from 0 to 255
 
-// #define PREHEAT_2_LABEL       "ABS"
-// #define PREHEAT_2_TEMP_HOTEND 240
-// #define PREHEAT_2_TEMP_BED    110
-// #define PREHEAT_2_TEMP_CHAMBER 35
-// #define PREHEAT_2_FAN_SPEED     0 // Value from 0 to 255
+#define PREHEAT_2_LABEL       "PETG"
+#define PREHEAT_2_TEMP_HOTEND 230
+#define PREHEAT_2_TEMP_BED    60
+#define PREHEAT_2_TEMP_CHAMBER 35
+#define PREHEAT_2_FAN_SPEED     0 // Value from 0 to 255
+
+#define PREHEAT_3_LABEL       "ABS"
+#define PREHEAT_3_TEMP_HOTEND 240
+#define PREHEAT_3_TEMP_BED    60
+#define PREHEAT_3_TEMP_CHAMBER 35
+#define PREHEAT_3_FAN_SPEED     0 // Value from 0 to 255
 
 // @section motion
 

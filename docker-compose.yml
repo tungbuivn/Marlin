@@ -10,7 +10,7 @@ services:
     working_dir: /code
     command: "sh -c 'while true;do sleep 2;done'"
     volumes:
-    - .:/code
+    - code:/code
     - platformio-cache:/root/.platformio
 
 volumes:
