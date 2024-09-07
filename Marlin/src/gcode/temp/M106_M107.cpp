@@ -86,7 +86,7 @@ void GcodeSuite::M106() {
     speed = parser.value_ushort();
   
   // dont know why, but only work at 80%
-  if (speed>128) speed=128;
+  // if (speed>128) speed=128;
 
   TERN_(FOAMCUTTER_XYUV, speed *= 2.55); // Get command in % of max heat
 
