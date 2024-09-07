@@ -110,7 +110,10 @@ void menu_media_filelist() {
 
   #if HAS_MARLINUI_U8GLIB
     static uint16_t fileCnt;
-    if (ui.first_page) fileCnt = card.get_num_Files();
+    if (ui.first_page) {
+      card.mount();
+      fileCnt = card.get_num_Files();
+    }
   #else
     const uint16_t fileCnt = card.get_num_Files();
   #endif
@@ -121,6 +124,7 @@ void menu_media_filelist() {
   #else
     BACK_ITEM_F(TERN1(BROWSE_MEDIA_ON_INSERT, screen_history_depth) ? GET_TEXT_F(MSG_MAIN) : GET_TEXT_F(MSG_BACK));
   #endif
+
   if (card.flag.workDirIsRoot) {
     #if !HAS_SD_DETECT
       ACTION_ITEM(MSG_REFRESH, []{ encoderTopLine = 0; card.mount(); });
