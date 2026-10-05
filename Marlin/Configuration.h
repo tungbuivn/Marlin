@@ -1767,18 +1767,23 @@
 //   X: with X_MIN_POS -6 the nozzle sits exactly on the bed's X=0 edge, so X0 is correct.
 //   Y: jogging to the bed's Y=0 edge read -13 in the old frame, so the origin was 13mm off;
 //      shifting it puts the bed corner at Y=0 and the home position at -22.
-// The usable area is 305mm (X) by 306mm (Y).
+//
+// MIN_POS is a measured CALIBRATION, not a tuning knob: it says where the bed's front-left
+// corner sits relative to the home position. Moving it to shrink the print volume also moves
+// the origin, and every print then lands off by that amount. Trim the volume at MAX_POS.
+// The usable area is a square 305mm x 305mm.
 #define X_MIN_POS -6
 #define Y_MIN_POS -22
 #define Z_MIN_POS 0
 // Voron Tap: the probe sits at the nozzle and the X offset is 0, so the nozzle max equals the
-// printable X max. 305 (not 300) so the X volume matches the Y volume.
+// printable X max.
 #define X_MAX_POS 305
-// The frame physically allows Y=313 before the carriage reaches the extrusion; capping the
-// travel at 306 keeps a 7mm safety margin and matches the measured printable Y.
+// 305 to match X, so both axes of the build volume are identical. The frame allows Y=313, so
+// this keeps 8mm of margin - more than the 7mm the measured 306 would have left. The 1mm
+// given up is exactly what buys the square volume; nothing in Marlin requires 306.
 // Voron Tap: the probe sits at the nozzle, so this also caps what the probe can reach:
-// probe Y max = min(Y_BED_SIZE - PROBING_MARGIN, Y_MAX_POS) = min(290, 306) = 290.
-#define Y_MAX_POS 306
+// probe Y max = min(Y_BED_SIZE - PROBING_MARGIN, Y_MAX_POS) = min(290, 305) = 290.
+#define Y_MAX_POS 305
 #define Z_MAX_POS 310
 //#define I_MIN_POS 0
 //#define I_MAX_POS 50
