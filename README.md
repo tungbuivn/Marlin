@@ -37,15 +37,36 @@ Chân driver theo socket:
 
 ---
 
-## 2. Bàn in & cơ khí
+## 2. Bàn in, cơ khí & hệ toạ độ
 
 | | |
 |---|---|
-| Bàn | 310 × 310 mm, **4 lò xo + vít chỉnh M4** (bước ren 0.7 mm) |
-| `X_MIN_POS` / `Y_MIN_POS` | −6 / −35 |
-| `X_MAX_POS` / `Y_MAX_POS` | 324 / 324 |
-| `Z_MAX_POS` | 310 |
+| Tấm bàn | **310 × 310 mm**, **4 lò xo + vít chỉnh M4** (bước ren 0.7 mm) |
 | Trục Z | **3 motor** (Z / Z2 / Z3), vít me **SFU1204** — bước ren **4 mm/vòng** |
+
+### 2.1 Gốc toạ độ & vùng in được (đo thực tế)
+
+**Gốc `(0, 0)` nằm đúng góc trước-trái của bàn in.**
+
+| Trục | `MIN_POS` | `MAX_POS` | Hành trình | Cách xác định |
+|---|---|---|---|---|
+| X | **−6** | **300** | 306 | Jog nozzle tới mép trái bàn → toạ độ đọc `0` với `X_MIN_POS −6` → **đã đúng, giữ nguyên** |
+| Y | **−22** | **315** | 337 | Jog tới mép trước bàn → toạ độ đọc **`−13`** (không phải 0) → gốc lệch 13mm → `−35 + 13 = −22` |
+| Z | 0 | 310 | 310 | |
+
+> ⚠️ **Giới hạn in thực tế theo Y là `290`**, không phải 315. Vì probe lệch `Y−25`, nozzle
+> phải đi tới 315 mới đưa được **probe** tới mép sau `Y=290`. Phần `Y 290→310` của tấm bàn
+> **không đo được và không in được**.
+
+### 2.2 Vì sao `X_BED_SIZE` = 306 nhưng `Y_BED_SIZE` = 310
+
+Ba ràng buộc của Marlin buộc phải chọn như vậy — vi phạm là **build fail**, không phải lỗi im lặng:
+
+| Ràng buộc | Nguồn | Hệ quả |
+|---|---|---|
+| `MAX_POS − MIN_POS ≥ BED_SIZE` | `SanityCheck.h:839` | X: `300 − (−6) = 306` → `X_BED_SIZE` **buộc phải là 306**, không thể để 310 (dù tấm bàn là 310) |
+| Probe bị chặn bởi `BED_SIZE − PROBING_MARGIN` | `probe.h:217-235` | Nếu để `Y_BED_SIZE 290` thì probe tối đa = `290 − 15 = 275` → **điểm vít ở `Y=285` không tới được** → phải giữ `Y_BED_SIZE 310` |
+| Mọi điểm đo phải tới được | `tramming.h:36`, `z_stepper_align.cpp:57` (`static_assert`) | Đây là **lưới an toàn**: đổi giới hạn trục mà quên dời điểm đo → build báo lỗi ngay |
 
 ---
 
@@ -85,14 +106,16 @@ Cảm biến **hồng ngoại** + mạch enable tự thiết kế.
 | Tính năng | Cấu hình |
 |---|---|
 | Leveling | **UBL (Unified Bed Leveling)** |
-| Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 15` |
+| Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 25` |
 | Fade height | 10 mm |
 | Trạng thái | `M420 S0` — **leveling đang TẮT** cho tới khi tạo mesh |
 | Căn gantry | `Z_STEPPER_AUTO_ALIGN` (**G34**) — 3 điểm `{280,285} {25,285} {25,25}` |
 | Tram bàn | `ASSISTED_TRAMMING` (**G35**) + Tramming Wizard — 4 điểm góc |
 
-**Vì sao `MESH_INSET` phải là 15:** probe lệch **Y−25**, `Y_MAX_POS` = 324 → Y lớn nhất
-probe tới được là **299**. Với inset 1 thì hàng mesh trên cùng (Y=309) **không tới được**.
+**Vì sao `MESH_INSET` phải là 25:** tầm probe thực tế bị chặn bởi **hai** giới hạn —
+`Y_BED_SIZE − PROBING_MARGIN` = `310 − 15 = 295`, và `Y_MAX_POS + offset` = `315 − 25 = 290`.
+Nên probe chỉ tới được **`Y ≤ 290`**. `MESH_INSET 15` cho `MESH_MAX_Y = 295` → **vượt tầm**;
+`25` kéo mesh về đúng **290**, và mọi điểm mesh đều đo được thật (không phải nội suy `G29 P3`).
 
 ### Thứ tự vận hành
 

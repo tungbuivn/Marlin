@@ -1752,16 +1752,31 @@
 
 // @section geometry
 
-// The size of the printable area
-#define X_BED_SIZE 310
+// The size of the printable area. The physical plate is 310x310.
+// X uses the measured reachable 306mm (-6..300), because Marlin requires the travel limits to
+// be at least as wide as X_BED_SIZE, and the nozzle cannot physically go past X=300.
+// Y_BED_SIZE stays at the full plate: the probe bounds clamp to Y_BED_SIZE - PROBING_MARGIN,
+// so shrinking it here would push the corner probe points (tramming / G34 at Y=285) out of
+// reach and fail the build.
+#define X_BED_SIZE 306
 #define Y_BED_SIZE 310
 
 // Travel limits (linear=mm, rotational=°) after homing, corresponding to endstop positions.
+//
+// Measured on this machine:
+//   X: with X_MIN_POS -6 the nozzle sits exactly on the bed's X=0 edge, so X0 is correct.
+//   Y: jogging to the bed's Y=0 edge read -13 in the old frame, so the origin was 13mm off;
+//      shifting it puts the bed corner at Y=0 and the home position at -22.
+// The usable area measured 300mm (X) by 290mm (Y).
 #define X_MIN_POS -6
-#define Y_MIN_POS -35
+#define Y_MIN_POS -22
 #define Z_MIN_POS 0
-#define X_MAX_POS X_BED_SIZE+14
-#define Y_MAX_POS Y_BED_SIZE+14
+// The probe's X offset is 0, so the nozzle max equals the printable X max.
+#define X_MAX_POS 300
+// The measured 290 already includes the probe's 25mm Y offset: the probe reaches bed Y=290
+// while the nozzle has to reach 290+25=315. That also keeps the bed-corner probe points used
+// by tramming (G35) and G34 reachable, since they sit at Y=285.
+#define Y_MAX_POS 315
 #define Z_MAX_POS 310
 //#define I_MIN_POS 0
 //#define I_MAX_POS 50
@@ -2044,7 +2059,9 @@
   // The probe sits at Y-25 relative to the nozzle, and Y_MAX_POS is 324, so the highest
   // reachable probe Y is 324 - 25 = 299. With MESH_INSET 1 the whole top row (Y=309) was
   // unreachable and had to be filled in with 'G29 P3'. 15 keeps every point <= 295.
-  #define MESH_INSET 15             // Set Mesh bounds as an inset region of the bed
+  // The probe only reaches Y=290, so MESH_MAX_Y must stay under that: with the 15mm probing
+  // margin the mesh top edge would otherwise land at 295.
+  #define MESH_INSET 25             // Set Mesh bounds as an inset region of the bed
   // 7x7 = 49 points (~2.5 min per mesh) instead of 14x14 = 196 points (~10 min).
   // A flat bed only deviates at low frequency, and a denser mesh mainly samples more
   // probe noise. Raise this if the bed turns out to have small-scale warping.
