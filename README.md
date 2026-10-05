@@ -1,8 +1,8 @@
 # Marlin 2.1.2 — MKS Monster8 V2 / Voron 300
 
-Firmware Marlin cho máy in **Voron 300 (bàn 310×310)** dùng board **MKS Monster8 V2**,
-**3 motor trục Z** với vít me SFU1204, **đầu dò hồng ngoại** (mạch enable riêng) và
-**bàn 4 lò xo chỉnh vít**.
+Firmware Marlin cho máy in **Voron 300 (bàn 310×310, vùng in 305×305)** dùng board
+**MKS Monster8 V2**, **3 motor trục Z** với vít me SFU1204, **Voron Tap** (probe trùng
+vị trí nozzle) và **bàn 4 lò xo chỉnh vít**.
 
 | | |
 |---|---|
@@ -46,27 +46,34 @@ Chân driver theo socket:
 
 ### 2.1 Gốc toạ độ & vùng in được (đo thực tế)
 
-**Gốc `(0, 0)` nằm đúng góc trước-trái của bàn in.**
+**Gốc `(0, 0)` nằm đúng góc trước-trái của bàn in. Vùng in được là hình vuông `305 × 305`.**
 
 | Trục | `MIN_POS` | `MAX_POS` | Hành trình | Cách xác định |
 |---|---|---|---|---|
-| X | **−6** | **300** | 306 | Jog nozzle tới mép trái bàn → toạ độ đọc `0` với `X_MIN_POS −6` → **đã đúng, giữ nguyên** |
-| Y | **−22** | **315** | 337 | Jog tới mép trước bàn → toạ độ đọc **`−13`** (không phải 0) → gốc lệch 13mm → `−35 + 13 = −22` |
+| X | **−6** | **305** | 311 | Jog nozzle tới mép trái bàn → toạ độ đọc `0` với `X_MIN_POS −6` → gốc X đúng. `MAX_POS 305` để vùng in X bằng đúng vùng in Y |
+| Y | **−22** | **306** | 328 | Jog tới mép trước bàn → toạ độ đọc **`−13`** (không phải 0) → gốc lệch 13mm → `−35 + 13 = −22`. `MAX_POS 306` = mức đo được; khung chặn ở **313** nên còn dư 7mm |
 | Z | 0 | 310 | 310 | |
 
-> ⚠️ **Giới hạn in thực tế theo Y là `290`**, không phải 315. Vì probe lệch `Y−25`, nozzle
-> phải đi tới 315 mới đưa được **probe** tới mép sau `Y=290`. Phần `Y 290→310` của tấm bàn
-> **không đo được và không in được**.
+Kiểm chứng bằng `G1` vượt biên (soft endstop `M211 S1` đang bật):
 
-### 2.2 Vì sao `X_BED_SIZE` = 306 nhưng `Y_BED_SIZE` = 310
+```
+G1 X900   →  M114: X:305.00
+G1 Y900   →  M114: Y:306.00
+G1 Y-900  →  M114: Y:-22.00
+```
 
-Ba ràng buộc của Marlin buộc phải chọn như vậy — vi phạm là **build fail**, không phải lỗi im lặng:
+> Tấm bàn là **310×310** nhưng chỉ khai báo **305×305**: dải `X 305→310` và `Y 306→310`
+> nằm ngoài tầm với thật của đầu in.
+
+### 2.2 Vì sao `BED_SIZE` = 305 mà không phải 310
+
+Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải lỗi im lặng:
 
 | Ràng buộc | Nguồn | Hệ quả |
 |---|---|---|
-| `MAX_POS − MIN_POS ≥ BED_SIZE` | `SanityCheck.h:839` | X: `300 − (−6) = 306` → `X_BED_SIZE` **buộc phải là 306**, không thể để 310 (dù tấm bàn là 310) |
-| Probe bị chặn bởi `BED_SIZE − PROBING_MARGIN` | `probe.h:217-235` | Nếu để `Y_BED_SIZE 290` thì probe tối đa = `290 − 15 = 275` → **điểm vít ở `Y=285` không tới được** → phải giữ `Y_BED_SIZE 310` |
-| Mọi điểm đo phải tới được | `tramming.h:36`, `z_stepper_align.cpp:57` (`static_assert`) | Đây là **lưới an toàn**: đổi giới hạn trục mà quên dời điểm đo → build báo lỗi ngay |
+| `MAX_POS − MIN_POS ≥ BED_SIZE` | `SanityCheck.h:839` | X: `305 − (−6) = 311 ≥ 305` ✓ · Y: `306 − (−22) = 328 ≥ 305` ✓ |
+| Probe bị chặn bởi `BED_SIZE − PROBING_MARGIN` | `probe.h:220-236` | probe max = `min(305 − 15, MAX_POS)` = `min(290, 305/306)` = **290** → đây chính là lý do `MESH_INSET` phải bằng 15 |
+| Mọi điểm đo phải tới được | `tramming.h:36`, `z_stepper_align.cpp:57` (`static_assert`) | **Lưới an toàn**: đổi giới hạn trục mà quên dời điểm đo → build báo lỗi ngay |
 
 ---
 
@@ -86,16 +93,21 @@ Ba ràng buộc của Marlin buộc phải chọn như vậy — vi phạm là *
 
 ## 4. Đầu dò Z
 
-Cảm biến **hồng ngoại** + mạch enable tự thiết kế.
+Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable qua chân PA8.
 
 | | |
 |---|---|
 | Tín hiệu probe | **PB13** (header `Z-`), `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN` + `USE_PROBE_FOR_Z_HOMING` |
 | Enable probe | **PA8** (`PROBE_ENABLE_PIN`, header servo) — `1` = bật mạch cảm biến, `0` = tắt |
 | Điều khiển | **`M401`** = deploy (PA8 HIGH) · **`M402`** = stow (PA8 LOW) |
-| Offset nozzle→probe | `M851 X0.00 Y-25.00 Z-3.35` |
+| Offset nozzle→probe | `M851 X0.00 Y0.00 Z-3.35` — **XY = 0 vì probe là chính nozzle (Voron Tap)** |
 | `PROBING_MARGIN` | 15 mm |
 | Logic | `Z_MIN_ENDSTOP_INVERTING false` |
+
+> ⚠️ **Offset XY phải là 0.** Đây từng là `Y−25` và đó là gốc của một loạt sai số: mọi điểm
+> mesh / G34 / G35 đều bị dịch 25mm theo Y, tầm probe bị tính hụt còn `MAX_POS − 25`, và
+> `MESH_INSET` bị đẩy lên 25 để bù. Với Voron Tap thì `probe = nozzle`, nên XY = 0.
+> Giá trị này **nằm trong EEPROM** — sửa `Configuration.h` thôi không đủ, phải `M851 X0 Y0` + `M500`.
 
 > Probe chỉ có tín hiệu khi **đã deploy** (`M401`). Khi stow thì `z_min` không phản ánh bàn.
 
@@ -106,16 +118,18 @@ Cảm biến **hồng ngoại** + mạch enable tự thiết kế.
 | Tính năng | Cấu hình |
 |---|---|
 | Leveling | **UBL (Unified Bed Leveling)** |
-| Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 25` |
+| Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 15` → phủ **`(15,15)` … `(290,290)`** |
 | Fade height | 10 mm |
 | Trạng thái | `M420 S0` — **leveling đang TẮT** cho tới khi tạo mesh |
 | Căn gantry | `Z_STEPPER_AUTO_ALIGN` (**G34**) — 3 điểm `{280,285} {25,285} {25,25}` |
 | Tram bàn | `ASSISTED_TRAMMING` (**G35**) + Tramming Wizard — 4 điểm góc |
 
-**Vì sao `MESH_INSET` phải là 25:** tầm probe thực tế bị chặn bởi **hai** giới hạn —
-`Y_BED_SIZE − PROBING_MARGIN` = `310 − 15 = 295`, và `Y_MAX_POS + offset` = `315 − 25 = 290`.
-Nên probe chỉ tới được **`Y ≤ 290`**. `MESH_INSET 15` cho `MESH_MAX_Y = 295` → **vượt tầm**;
-`25` kéo mesh về đúng **290**, và mọi điểm mesh đều đo được thật (không phải nội suy `G29 P3`).
+**Vì sao `MESH_INSET` = 15:** `MESH_INSET` phải nằm trong tầm probe. Probe bị chặn bởi
+`BED_SIZE − PROBING_MARGIN = 305 − 15 = 290` (và trần trục là 305/306, cao hơn), nên probe
+tới được **`X 15…290`** và **`Y 15…290`**. `15` khớp đúng giới hạn đó → lưới 7×7 phủ trọn
+`(15,15)`–`(290,290)`, **mọi điểm đều đo thật**, không phải nội suy `G29 P3`.
+
+Kiểm chứng: `M420 V` in ra đúng góc `( 15, 15)` và `(290,290)`.
 
 ### Thứ tự vận hành
 
@@ -225,7 +239,7 @@ M115        ; phien ban firmware + timestamp build
 M503        ; M92 X80 Y80 Z800 E415 / M203 Z10.00
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
-M420 V      ; mesh 7x7, bien (15,295)
+M420 V      ; mesh 7x7, bien (15,15) .. (290,290)
 ```
 
 ---

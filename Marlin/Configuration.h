@@ -1540,7 +1540,9 @@
  *     |    [-]    |
  *     O-- FRONT --+
  */
-#define NOZZLE_TO_PROBE_OFFSET { 0, -25, -3.35 }
+// Voron Tap: the nozzle itself is the contact point, so the probe sits at the nozzle.
+// XY must stay at 0 — a non-zero Y here silently shifts every mesh and tramming point.
+#define NOZZLE_TO_PROBE_OFFSET { 0, 0, -3.35 }
 
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.
@@ -1752,14 +1754,12 @@
 
 // @section geometry
 
-// The size of the printable area. The physical plate is 310x310.
-// X uses the measured reachable 306mm (-6..300), because Marlin requires the travel limits to
-// be at least as wide as X_BED_SIZE, and the nozzle cannot physically go past X=300.
-// Y_BED_SIZE stays at the full plate: the probe bounds clamp to Y_BED_SIZE - PROBING_MARGIN,
-// so shrinking it here would push the corner probe points (tramming / G34 at Y=285) out of
-// reach and fail the build.
-#define X_BED_SIZE 306
-#define Y_BED_SIZE 310
+// The size of the printable area. The physical plate is 310x310, but both axes are declared
+// 305 so the usable volume is a true 305x305 square.
+// X travel is 311mm (-6..305) and Y travel is 328mm (-22..306), so both satisfy the
+// "travel >= BED_SIZE" rule in SanityCheck.h.
+#define X_BED_SIZE 305
+#define Y_BED_SIZE 305
 
 // Travel limits (linear=mm, rotational=°) after homing, corresponding to endstop positions.
 //
@@ -1767,16 +1767,18 @@
 //   X: with X_MIN_POS -6 the nozzle sits exactly on the bed's X=0 edge, so X0 is correct.
 //   Y: jogging to the bed's Y=0 edge read -13 in the old frame, so the origin was 13mm off;
 //      shifting it puts the bed corner at Y=0 and the home position at -22.
-// The usable area measured 300mm (X) by 290mm (Y).
+// The usable area is 305mm (X) by 306mm (Y).
 #define X_MIN_POS -6
 #define Y_MIN_POS -22
 #define Z_MIN_POS 0
-// The probe's X offset is 0, so the nozzle max equals the printable X max.
-#define X_MAX_POS 300
-// The measured 290 already includes the probe's 25mm Y offset: the probe reaches bed Y=290
-// while the nozzle has to reach 290+25=315. That also keeps the bed-corner probe points used
-// by tramming (G35) and G34 reachable, since they sit at Y=285.
-#define Y_MAX_POS 315
+// Voron Tap: the probe sits at the nozzle and the X offset is 0, so the nozzle max equals the
+// printable X max. 305 (not 300) so the X volume matches the Y volume.
+#define X_MAX_POS 305
+// The frame physically allows Y=313 before the carriage reaches the extrusion; capping the
+// travel at 306 keeps a 7mm safety margin and matches the measured printable Y.
+// Voron Tap: the probe sits at the nozzle, so this also caps what the probe can reach:
+// probe Y max = min(Y_BED_SIZE - PROBING_MARGIN, Y_MAX_POS) = min(290, 306) = 290.
+#define Y_MAX_POS 306
 #define Z_MAX_POS 310
 //#define I_MIN_POS 0
 //#define I_MAX_POS 50
@@ -2056,12 +2058,10 @@
   //#define MESH_EDIT_GFX_OVERLAY   // Display a graphics overlay while editing the mesh
 
   // MESH_INSET must keep every mesh point inside the area the probe can actually reach.
-  // The probe sits at Y-25 relative to the nozzle, and Y_MAX_POS is 324, so the highest
-  // reachable probe Y is 324 - 25 = 299. With MESH_INSET 1 the whole top row (Y=309) was
-  // unreachable and had to be filled in with 'G29 P3'. 15 keeps every point <= 295.
-  // The probe only reaches Y=290, so MESH_MAX_Y must stay under that: with the 15mm probing
-  // margin the mesh top edge would otherwise land at 295.
-  #define MESH_INSET 25             // Set Mesh bounds as an inset region of the bed
+  // Voron Tap: the probe is the nozzle, so with PROBING_MARGIN 15 the probe reaches
+  // X 15..290 and Y 15..290. MESH_INSET 15 matches that exactly, so the 7x7 grid covers
+  // 15..290 on both axes and every point is measured for real - no 'G29 P3' infill.
+  #define MESH_INSET 15             // Set Mesh bounds as an inset region of the bed
   // 7x7 = 49 points (~2.5 min per mesh) instead of 14x14 = 196 points (~10 min).
   // A flat bed only deviates at low frequency, and a denser mesh mainly samples more
   // probe noise. Raise this if the bed turns out to have small-scale warping.

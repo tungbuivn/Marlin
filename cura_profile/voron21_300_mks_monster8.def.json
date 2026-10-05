@@ -16,8 +16,8 @@
     },
     "overrides": {
         "machine_name": { "default_value": "Voron 2.1 300 (MKS Monster8)" },
-        "machine_width": { "default_value": 310 },
-        "machine_depth": { "default_value": 310 },
+        "machine_width": { "default_value": 305 },
+        "machine_depth": { "default_value": 305 },
         "machine_height": { "default_value": 310 },
         "machine_shape": { "default_value": "rectangular" },
         "machine_heated_bed": { "default_value": true },
@@ -28,7 +28,7 @@
         "material_diameter": { "default_value": 1.75 },
         "machine_gcode_flavor": { "default_value": "Marlin" },
         "machine_endstop_positive_direction_x": { "default_value": false },
-        "machine_endstop_positive_direction_y": { "default_value": true },
+        "machine_endstop_positive_direction_y": { "default_value": false },
         "machine_endstop_positive_direction_z": { "default_value": true },
 
         "machine_max_feedrate_x": { "default_value": 500 },
