@@ -157,11 +157,22 @@ bằng `probe.stow()` (`G35.cpp:167`) → PA8 về LOW.
 
 Khác nhau giữa hai cách:
 
+**Menu trên máy: `Motion` → `Tramming Wizard`.** (`LCD_LANGUAGE en` nên nhãn là tiếng Anh —
+`MSG_TRAMMING_WIZARD` = *"Tramming Wizard"*, khai báo ở `menu_motion.cpp:382`.)
+
 | | `G35` | Tramming Wizard (menu) |
 |---|---|---|
 | Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số vòng | Đo **từng góc một**, chọn 1 góc làm gốc so sánh |
 | Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm đo lại đúng góc đó, lặp tới khi ≈ 0 |
 | Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
+
+> **`G35` không có mục nào trong menu LCD** — nó chỉ là lệnh G-code, phải gửi qua console/host.
+> Trong `Motion` chỉ có **Tramming Wizard** là bản đồ hoạ của cùng thuật toán đó.
+> `Motion` cũng có **Auto Z Align** (= `G34`) và **Deploy/Stow Z-Probe** (= `M401`/`M402`).
+>
+> Trên máy này **không có** mục *"Bed Tramming"* (`_lcd_level_bed_corners`) vì `LCD_BED_TRAMMING`
+> không được bật — bản đó là tram **bằng tay**, không dùng probe, phải tự quay encoder để hạ
+> nozzle. Cũng chưa bật `PROBE_OFFSET_WIZARD` (đang comment ở `Configuration_adv.h:1381`).
 
 > ⚠️ **Với Voron Tap, nozzle chính là đầu đo.** Nên: lau sạch nozzle trước khi tram (một cục
 > nhựa dính ở đầu nozzle làm sai chiều cao trigger), và tram **khi bàn đã đủ nhiệt in** —
