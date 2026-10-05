@@ -168,7 +168,60 @@ extern "C" {
 }
 
 // Reset the system to initiate a firmware flash
-WEAK void flashFirmware(const int16_t) { hal.reboot(); }
+WEAK void flashFirmware(const int16_t) {
+  #if ENABLED(STM32_DFU_REBOOT)
+    reboot_to_dfu();
+  #else
+    hal.reboot();
+  #endif
+}
+
+#if ENABLED(STM32_DFU_REBOOT)
+
+  // System memory (ROM bootloader) base. Per AN2606: STM32F4 = 0x1FFF0000.
+  #define DFU_BOOT_ADDRESS 0x1FFF0000
+
+  //
+  // Reboot into the STM32 ROM DFU bootloader (firmware update over USB).
+  //
+  // VI SAO PHAI TAT HEATER/MOTOR TRUOC: nhay kieu nay KHONG reset GPIO, nen MOSFET
+  // heater dang bat se van bat sau khi vao bootloader. Nguoi goi phai tat truoc.
+  //
+  // LUU Y: ROM bootloader cua STM32F4 chi vao DFU duoc khoang ~50% so lan nhay kieu nay
+  // (gioi han cua F4, khong phai loi firmware). That bai thi board chi khoi dong lai
+  // binh thuong -> bam lai. Nen giu cap USB ket noi voi may tinh trong luc bam.
+  //
+  void reboot_to_dfu() {
+    void (* const SysMemBootJump)(void) = (void (*)(void))(*((uint32_t *)(DFU_BOOT_ADDRESS + 4)));
+
+    HAL_RCC_DeInit();   // Dua clock ve mac dinh (tuy chon)
+    HAL_DeInit();       // (BAT BUOC)
+    HAL_SuspendTick();
+
+    __disable_irq();
+    RCC->CIR = 0x00000000;                             // Tat interrupt lien quan clock
+    SysTick->CTRL = SysTick->LOAD = SysTick->VAL = 0;  // Tat SysTick (BAT BUOC)
+
+    // Xoa het Interrupt Enable Register & Interrupt Pending Register
+    for (uint32_t i = 0; i < sizeof(NVIC->ICER) / sizeof(NVIC->ICER[0]); i++) {
+      NVIC->ICER[i] = 0xFFFFFFFF;
+      NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+    __enable_irq();
+
+    __DSB();
+    __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH(); // Map system memory vao 0x00000000
+    __DSB();
+    __ISB();
+    SCB->VTOR = 0;                          // Reset vector table
+
+    __set_MSP(*(uint32_t *)DFU_BOOT_ADDRESS); // MSP theo bootloader
+    SysMemBootJump();
+
+    while (1) { }  // Khong bao gio toi day
+  }
+
+#endif // STM32_DFU_REBOOT
 
 // Maple Compatibility
 volatile uint32_t systick_uptime_millis = 0;

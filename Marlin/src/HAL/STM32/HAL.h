@@ -177,6 +177,12 @@ typedef libServo hal_servo_t;
 #define PLATFORM_M997_SUPPORT
 void flashFirmware(const int16_t);
 
+#if ENABLED(STM32_DFU_REBOOT)
+  // Jump to the STM32 ROM (system memory) DFU bootloader so the firmware can be
+  // flashed over USB without pressing BOOT0/RESET. This function never returns.
+  void reboot_to_dfu();
+#endif
+
 // Maple Compatibility
 typedef void (*systickCallback_t)(void);
 void systick_attach_callback(systickCallback_t cb);

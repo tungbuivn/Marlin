@@ -833,7 +833,10 @@
 // Multi-Z steppers
 //
 #ifdef Z2_DRIVER_TYPE
-  #define INVERT_Z2_VS_Z_DIR        // Z2 direction signal is the opposite of Z
+  // All 3 Z motors (Z/Z2/Z3, SFU1204 leadscrews) are mounted in the same orientation,
+  // so all must get the SAME DIR level to turn the same way. Do NOT re-enable this
+  // unless a Z motor is physically flipped/mirrored.
+  //#define INVERT_Z2_VS_Z_DIR      // Z2 direction signal is the opposite of Z
 
   //#define Z_MULTI_ENDSTOPS          // Other Z axes have their own endstops
   #if ENABLED(Z_MULTI_ENDSTOPS)
@@ -972,7 +975,7 @@
    * If not defined, probe limits will be used.
    * Override with 'M422 S<index> X<pos> Y<pos>'.
    */
-  #define Z_STEPPER_ALIGN_XY { {  280, 285 }, { 25,  285 }, { 25, 25 },{ 280, 25 } }
+  #define Z_STEPPER_ALIGN_XY { {  280, 285 }, { 25,  285 }, { 25, 25 } }
 
   /**
    * Orientation for the automatically-calculated probe positions.
@@ -1026,7 +1029,7 @@
 //
 // Add the G35 command to read bed corners to help adjust screws. Requires a bed probe.
 //
-//#define ASSISTED_TRAMMING
+#define ASSISTED_TRAMMING
 #if ENABLED(ASSISTED_TRAMMING)
 
   // Define positions for probe points.
@@ -1039,11 +1042,12 @@
   #define TRAMMING_POINT_NAME_4 "Back-Left"
 
   #define RESTORE_LEVELING_AFTER_G35    // Enable to restore leveling setup after operation
-  //#define REPORT_TRAMMING_MM          // Report Z deviation (mm) for each point relative to the first
+  #define REPORT_TRAMMING_MM          // Report Z deviation (mm) for each point relative to the first
 
-  //#define ASSISTED_TRAMMING_WIZARD    // Add a Tramming Wizard to the LCD menu
+  #define ASSISTED_TRAMMING_WIZARD    // Add a Tramming Wizard to the LCD menu
 
-  //#define ASSISTED_TRAMMING_WAIT_POSITION { X_CENTER, Y_CENTER, 30 } // Move the nozzle out of the way for adjustment
+  // Sau khi probe xong, chay nozzle ra giua ban (Z30) de ban van vít goc duoc.
+  #define ASSISTED_TRAMMING_WAIT_POSITION { X_CENTER, Y_CENTER, 30 } // Move the nozzle out of the way for adjustment
 
   /**
    * Screw thread:
@@ -1051,7 +1055,9 @@
    *   M4: 40 = Clockwise, 41 = Counter-Clockwise
    *   M5: 50 = Clockwise, 51 = Counter-Clockwise
    */
-  #define TRAMMING_SCREW_THREAD 30
+  // Vit ban cua may nay la M4 (buoc ren 0.7mm) -> 40.
+  // Neu G35 bao van sai chieu thi doi thanh 41.
+  #define TRAMMING_SCREW_THREAD 40
 
 #endif
 
@@ -4220,7 +4226,21 @@
 //
 // M43 - display pin status, toggle pins, watch pins, watch endstops & toggle LED, test servo probe
 //
-//#define PINS_DEBUGGING
+// Bat PINS_DEBUGGING de debug chan endstop X/Y/Z: M43, M43 W, M43 E1.
+// Nho TAT lai sau khi debug xong cho gon flash.
+#define PINS_DEBUGGING
+
+//
+// STM32: them muc "Reboot to DFU" vao menu Advanced Settings, va cho M997 nhay thang vao
+// ROM DFU bootloader thay vi chi reboot.
+//
+// Cho phep nap firmware qua USB ma KHONG can nhan BOOT0 + RESET.
+//
+// LUU Y: tren STM32F4 cach nay chi thanh cong khoang ~50% (gioi han cua ROM bootloader F4,
+// khong phai loi firmware). That bai thi board chi khoi dong lai binh thuong -> bam lai.
+// Giu cap USB ket noi voi may tinh trong luc bam.
+//
+#define STM32_DFU_REBOOT
 
 // Enable Tests that will run at startup and produce a report
 //#define MARLIN_TEST_BUILD

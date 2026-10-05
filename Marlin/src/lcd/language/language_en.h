@@ -676,6 +676,8 @@ namespace Language_en {
   LSTR MSG_LOCKSCREEN_LOCKED              = _UxGT("Printer is Locked,");
   LSTR MSG_LOCKSCREEN_UNLOCK              = _UxGT("Scroll to unlock.");
   LSTR MSG_PLEASE_WAIT_REBOOT             = _UxGT("Please wait until reboot.");
+  LSTR MSG_REBOOT_TO_DFU                  = _UxGT("Reboot to DFU");
+  LSTR MSG_PIN_TEST                       = _UxGT("Endstop Pins");
 
   #if LCD_WIDTH >= 20 || HAS_DWIN_E3V2
     LSTR MSG_MEDIA_NOT_INSERTED           = _UxGT("No media inserted.");

@@ -397,6 +397,16 @@ public:
   static void set_status(FSTR_P const fstr, const int8_t level=0);
   static void status_printf(int8_t level, FSTR_P const fmt, ...);
 
+  #if BOTH(HAS_MARLINUI_MENU, PINS_DEBUGGING)
+    /**
+     * Endstop pin test: show the RAW electrical level (0/1) of the X/Y/Z MIN pins on the
+     * status line, read straight with READ() so Marlin's endstop logic, inverting and
+     * debouncing are all bypassed. Toggle with Advanced Settings > Endstop Pins.
+     */
+    static bool pin_test_active;
+    static void pin_test_update();
+  #endif
+
   #if HAS_DISPLAY
 
     static void update();

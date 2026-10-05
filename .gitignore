@@ -170,3 +170,7 @@ __pycache__
 
 # IOLogger logs
 *_log.csv
+
+# Build / flash logs (transient)
+build_pio.log
+flash-dfu.log

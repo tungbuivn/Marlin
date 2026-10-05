@@ -30,8 +30,10 @@
 
 #include "menu_item.h"
 #include "../../MarlinCore.h"
+#include "../../HAL/HAL.h"
 #include "../../module/planner.h"
 #include "../../module/stepper.h"
+#include "../../module/temperature.h"
 
 #if DISABLED(NO_VOLUMETRICS)
   #include "../../gcode/parser.h"
@@ -764,6 +766,28 @@ void menu_advanced_settings() {
       ui.return_to_status();
       if (new_state) LCD_MESSAGE(MSG_RESET_PRINTER); else ui.reset_status();
     });
+  #endif
+
+  //
+  // Reboot into the STM32 ROM DFU bootloader so the firmware can be flashed over USB
+  // without pressing BOOT0 + RESET. Only offered when the machine is idle.
+  //
+  #if ENABLED(STM32_DFU_REBOOT)
+    if (!is_busy) ACTION_ITEM(MSG_REBOOT_TO_DFU, []{
+      thermalManager.disable_all_heaters(); // BAT BUOC: nhay kieu nay khong reset GPIO
+      planner.finish_and_disable();         // dung chuyen dong + nha motor
+      ui.return_to_status();
+      flashFirmware(0);                     // khong bao gio quay lai
+    });
+  #endif
+
+  #if ENABLED(PINS_DEBUGGING)
+    //
+    // Endstop pin test: show the RAW X/Y/Z MIN pin levels on the status line.
+    // Use this to check whether a switch actually delivers a signal, bypassing Marlin's
+    // endstop logic, inverting and debouncing. Exit the menu to watch the status line.
+    //
+    EDIT_ITEM(bool, MSG_PIN_TEST, &ui.pin_test_active);
   #endif
 
   #if ENABLED(PASSWORD_FEATURE)

@@ -166,7 +166,7 @@
 //#define Y2_DRIVER_TYPE A4988
 #define Z2_DRIVER_TYPE TMC2209
 #define Z3_DRIVER_TYPE TMC2209
-#define Z4_DRIVER_TYPE TMC2209
+//#define Z4_DRIVER_TYPE TMC2209
 //#define I_DRIVER_TYPE  A4988
 //#define J_DRIVER_TYPE  A4988
 //#define K_DRIVER_TYPE  A4988
@@ -1216,9 +1216,10 @@
 // 415 is value from bondtech bgm document, this apply to motorStep x4 microstep
 // https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
 // 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
+// Z: nema17 direct-drive, SFU1204 lead screw (4mm lead), 16 microsteps -> 200*16/4 = 800
 #define DEFAULT_AXIS_STEPS_PER_UNIT   {80, \
                                       80, \
-                                      320, \
+                                      800, \
                                       415  \
                                       }
 
@@ -1230,7 +1231,7 @@
 #define DEFAULT_MAX_FEEDRATE          { \
   500, \
   500, \
-  5, \
+  10, \
   25 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
@@ -1698,7 +1699,9 @@
 // Invert the stepper direction. Change (or reverse the motor connector) if an axis goes the wrong way.
 #define INVERT_X_DIR true
 #define INVERT_Y_DIR true
-#define INVERT_Z_DIR true
+// Z: 3 motor leadscrew SFU1204 (ren phai), motor gan o day may, truc huong len.
+// Da kiem tra thuc te tren may: voi `true` thi lenh Z+ lam gantry di XUONG.
+#define INVERT_Z_DIR false
 //#define INVERT_I_DIR false
 //#define INVERT_J_DIR false
 //#define INVERT_K_DIR false
@@ -2037,8 +2040,15 @@
 
   //#define MESH_EDIT_GFX_OVERLAY   // Display a graphics overlay while editing the mesh
 
-  #define MESH_INSET 1              // Set Mesh bounds as an inset region of the bed
-  #define GRID_MAX_POINTS_X 14      // Don't use more than 15 points per axis, implementation limited.
+  // MESH_INSET must keep every mesh point inside the area the probe can actually reach.
+  // The probe sits at Y-25 relative to the nozzle, and Y_MAX_POS is 324, so the highest
+  // reachable probe Y is 324 - 25 = 299. With MESH_INSET 1 the whole top row (Y=309) was
+  // unreachable and had to be filled in with 'G29 P3'. 15 keeps every point <= 295.
+  #define MESH_INSET 15             // Set Mesh bounds as an inset region of the bed
+  // 7x7 = 49 points (~2.5 min per mesh) instead of 14x14 = 196 points (~10 min).
+  // A flat bed only deviates at low frequency, and a denser mesh mainly samples more
+  // probe noise. Raise this if the bed turns out to have small-scale warping.
+  #define GRID_MAX_POINTS_X 7       // Don't use more than 15 points per axis, implementation limited.
   #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
 
   //#define UBL_HILBERT_CURVE       // Use Hilbert distribution for less travel when probing multiple points
@@ -2150,7 +2160,7 @@
 #endif
 
 // Homing speeds (linear=mm/min, rotational=°/min)
-#define HOMING_FEEDRATE_MM_M { (50*60), (50*60), (4*60) }
+#define HOMING_FEEDRATE_MM_M { (50*60), (50*60), (8*60) }
 
 // Validate that endstops are triggered on homing moves
 #define VALIDATE_HOMING_ENDSTOPS

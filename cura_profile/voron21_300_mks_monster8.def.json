@@ -1,0 +1,64 @@
+{
+    "version": 2,
+    "name": "Voron 2.1 300 (MKS Monster8 V2)",
+    "inherits": "fdmprinter",
+    "metadata": {
+        "visible": true,
+        "author": "tungbuivn",
+        "manufacturer": "Voron Design",
+        "file_formats": "text/x-gcode",
+        "has_materials": true,
+        "has_machine_quality": true,
+        "machine_extruder_trains": { "0": "fdmextruder" },
+        "preferred_material": "generic_pla",
+        "preferred_quality_type": "normal",
+        "exclude_materials": []
+    },
+    "overrides": {
+        "machine_name": { "default_value": "Voron 2.1 300 (MKS Monster8)" },
+        "machine_width": { "default_value": 310 },
+        "machine_depth": { "default_value": 310 },
+        "machine_height": { "default_value": 310 },
+        "machine_shape": { "default_value": "rectangular" },
+        "machine_heated_bed": { "default_value": true },
+        "machine_heated_build_volume": { "default_value": false },
+        "machine_center_is_zero": { "default_value": false },
+        "machine_extruder_count": { "default_value": 1 },
+        "machine_nozzle_size": { "default_value": 0.4 },
+        "material_diameter": { "default_value": 1.75 },
+        "machine_gcode_flavor": { "default_value": "Marlin" },
+        "machine_endstop_positive_direction_x": { "default_value": false },
+        "machine_endstop_positive_direction_y": { "default_value": true },
+        "machine_endstop_positive_direction_z": { "default_value": true },
+
+        "machine_max_feedrate_x": { "default_value": 500 },
+        "machine_max_feedrate_y": { "default_value": 500 },
+        "machine_max_feedrate_z": { "default_value": 10 },
+        "machine_max_feedrate_e": { "default_value": 25 },
+        "machine_max_acceleration_x": { "default_value": 500 },
+        "machine_max_acceleration_y": { "default_value": 500 },
+        "machine_max_acceleration_z": { "default_value": 100 },
+        "machine_max_acceleration_e": { "default_value": 1000 },
+        "machine_acceleration": { "default_value": 500 },
+        "machine_max_jerk_xy": { "default_value": 10 },
+        "machine_max_jerk_z": { "default_value": 0.4 },
+        "machine_max_jerk_e": { "default_value": 5 },
+
+        "gantry_height": { "default_value": 25 },
+        "machine_head_with_fans_polygon": {
+            "default_value": [
+                [-30, 30],
+                [-30, -30],
+                [30, -30],
+                [30, 30]
+            ]
+        },
+
+        "machine_start_gcode": {
+            "default_value": "; Voron 2.1 300 start gcode\nM104 S{material_print_temperature_layer_0} ; set hotend temp (no wait)\nM140 S{material_bed_temperature_layer_0} ; set bed temp (no wait)\nG28 ; home all axes (UBL mesh auto-restored from EEPROM)\nM190 S{material_bed_temperature_layer_0} ; wait for bed\nM109 S{material_print_temperature_layer_0} ; wait for hotend\nG92 E0\nG1 Z2.0 F3000\nG1 X2 Y10 Z0.3 F5000\nG1 X2 Y100 Z0.3 F1500 E15 ; prime line\nG92 E0\nG1 Z2.0 F3000"
+        },
+        "machine_end_gcode": {
+            "default_value": "; Voron 2.1 300 end gcode\nG91 ; relative positioning\nG1 E-2 F2700 ; retract\nG1 Z10 F600 ; raise Z\nG90 ; absolute positioning\nG27 ; park nozzle (NOZZLE_PARK_POINT)\nM140 S0 ; bed off\nM104 S0 ; hotend off\nM107 ; fan off\nM84 X Y E ; disable X Y E steppers (keep Z holding)"
+        }
+    }
+}

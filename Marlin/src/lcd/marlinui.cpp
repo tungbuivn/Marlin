@@ -936,6 +936,11 @@ void MarlinUI::init() {
     static uint16_t max_display_update_time = 0;
     millis_t ms = millis();
 
+    // Endstop pin test: keep the raw X/Y/Z MIN pin levels on the status line
+    #if BOTH(HAS_MARLINUI_MENU, PINS_DEBUGGING)
+      pin_test_update();
+    #endif
+
     #if LED_POWEROFF_TIMEOUT > 0
       leds.update_timeout(powerManager.psu_on);
     #endif
@@ -1427,6 +1432,60 @@ void MarlinUI::init() {
   #endif
 
   bool MarlinUI::has_status() { return (status_message[0] != '\0'); }
+
+  #if BOTH(HAS_MARLINUI_MENU, PINS_DEBUGGING)
+
+    bool MarlinUI::pin_test_active = false; // = false
+
+    //
+    // Endstop pin test: print the RAW pin levels of X/Y/Z MIN on the status line.
+    // READ() reads the port directly, so Marlin's endstop inverting / logical state /
+    // debouncing are all bypassed: 1 = HIGH, 0 = LOW. All we report is "is there a signal".
+    //
+    void MarlinUI::pin_test_update() {
+      static bool was_active = false;
+      static millis_t next_ms = 0;
+      static char last[24] = { 0 };
+
+      // Just switched off? Restore the normal status line.
+      if (!pin_test_active) {
+        if (was_active) { was_active = false; reset_status(); refresh(); }
+        return;
+      }
+      was_active = true;
+
+      // Refresh at ~4Hz, and only redraw when the text actually changes.
+      const millis_t ms = millis();
+      if (next_ms && !ELAPSED(ms, next_ms)) return;
+      next_ms = ms + 250;
+
+      char buf[24];
+      snprintf_P(buf, sizeof(buf), PSTR("Xmin%c Ymin%c Zmin%c"),
+        #if HAS_X_MIN
+          READ(X_MIN_PIN) ? '1' : '0',
+        #else
+          '-',
+        #endif
+        #if HAS_Y_MIN
+          READ(Y_MIN_PIN) ? '1' : '0',
+        #else
+          '-',
+        #endif
+        #if HAS_Z_MIN
+          READ(Z_MIN_PIN) ? '1' : '0'
+        #else
+          '-'
+        #endif
+      );
+
+      if (strcmp(buf, last)) {
+        strcpy(last, buf);
+        set_status(buf);
+        refresh();
+      }
+    }
+
+  #endif // HAS_MARLINUI_MENU && PINS_DEBUGGING
 
   void MarlinUI::set_status(const char * const cstr, const bool persist) {
     if (alert_level) return;
