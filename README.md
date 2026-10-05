@@ -137,6 +137,42 @@ tới được **`X 15…290`** và **`Y 15…290`**. `15` khớp đúng giới 
 
 Kiểm chứng: `M420 V` in ra đúng góc `( 15, 15)` và `(290,290)`.
 
+### G35 / Tramming Wizard đo bằng gì?
+
+**Bằng chính probe đó — mỗi lần đo tại mỗi góc là một lần probe thật.** Không phải đo bằng
+mắt hay bằng thước.
+
+| | |
+|---|---|
+| Đo tại đâu | 4 điểm `TRAMMING_POINT_XY` = `{280,285} {25,285} {25,25} {280,25}` — phải **nằm trên 4 vít** |
+| Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:112`, `menu_tramming.cpp:58` |
+| Tính gì | `diff = z_điểm_0 − z_điểm_i`, rồi `số_vòng = diff ÷ bước_ren` |
+| Bước ren | `TRAMMING_SCREW_THREAD 40` → M4 × **0.7 mm/vòng** (`threads_factor = {0.5 M3, 0.7 M4, 0.8 M5}`) |
+| Kết quả | `Turn <góc> CW/CCW by N turns and M minutes (x.xx mm)` |
+
+**Cảm biến được bật/tắt tự động** — không cần `M401` trước:
+`probe_at_point()` → `deploy()` → `Probe::set_deployed()` → `Endstops::enable_z_probe(true)`
+→ `WRITE(PROBE_ENABLE_PIN, on)` (`endstops.cpp:466`), tức chân **PA8 lên HIGH**. G35 kết thúc
+bằng `probe.stow()` (`G35.cpp:167`) → PA8 về LOW.
+
+Khác nhau giữa hai cách:
+
+| | `G35` | Tramming Wizard (menu) |
+|---|---|---|
+| Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số vòng | Đo **từng góc một**, chọn 1 góc làm gốc so sánh |
+| Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm đo lại đúng góc đó, lặp tới khi ≈ 0 |
+| Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
+
+> ⚠️ **Với Voron Tap, nozzle chính là đầu đo.** Nên: lau sạch nozzle trước khi tram (một cục
+> nhựa dính ở đầu nozzle làm sai chiều cao trigger), và tram **khi bàn đã đủ nhiệt in** —
+> bàn nóng giãn nở, tram lúc nguội rồi in nóng là lệch lại.
+>
+> `G35` **không** làm bàn phẳng — nó chỉ đưa 4 góc về **cùng một mặt phẳng**. Độ cong ở giữa
+> bàn là việc của mesh (`G29`).
+>
+> Cuối `G35` firmware gọi `set_axis_never_homed(Z_AXIS)` → **Z bị coi là chưa home**, phải
+> `G28 Z` trước khi in.
+
 ### Thứ tự vận hành
 
 ```
