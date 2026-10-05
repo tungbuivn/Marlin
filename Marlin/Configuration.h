@@ -1541,8 +1541,12 @@
  *     O-- FRONT --+
  */
 // Voron Tap: the nozzle itself is the contact point, so the probe sits at the nozzle.
-// XY must stay at 0 — a non-zero Y here silently shifts every mesh and tramming point.
-#define NOZZLE_TO_PROBE_OFFSET { 0, 0, -3.35 }
+// XY must stay at 0 - a non-zero Y here silently shifts every mesh and tramming point.
+// Z is 0 too: this is the compiled fallback used by M502, and the old -3.35 (which belonged
+// to the previous sensor) would make the firmware believe the nozzle is 3.35mm above the bed
+// at the trigger point, driving it into the bed on the first move below Z=3.35.
+// Calibrate the real value with the Probe Offset Wizard and save it with M500.
+#define NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }
 
 // Most probes should stay away from the edges of the bed, but
 // with NOZZLE_AS_PROBE this can be negative for a wider probing area.

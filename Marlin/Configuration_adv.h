@@ -1378,17 +1378,26 @@
 //#define LCD_BACKLIGHT_TIMEOUT_MINS 1  // (minutes) Timeout before turning off the backlight
 
 #if HAS_BED_PROBE && EITHER(HAS_MARLINUI_MENU, HAS_TFT_LVGL_UI)
-  //#define PROBE_OFFSET_WIZARD       // Add a Probe Z Offset calibration option to the LCD menu
+  // Adds "Probe Offset Wizard" to both Motion and Advanced Settings.
+  // Required on this machine: the Voron Tap triggers with the nozzle resting on the bed, so the
+  // real Z offset is ~0. The -3.35 still in EEPROM came from the old sensor, and
+  // motion.cpp:2349 does current_position.z -= probe.offset.z after homing - so with -3.35 the
+  // firmware believes the nozzle is 3.35mm ABOVE the bed at the trigger point, and any move
+  // below Z=3.35 drives the nozzle into the bed.
+  #define PROBE_OFFSET_WIZARD       // Add a Probe Z Offset calibration option to the LCD menu
   #if ENABLED(PROBE_OFFSET_WIZARD)
     /**
      * Enable to init the Probe Z-Offset when starting the Wizard.
      * Use a height slightly above the estimated nozzle-to-probe Z offset.
      * For example, with an offset of -5, consider a starting height of -4.
      */
-    //#define PROBE_OFFSET_WIZARD_START_Z -4.0
+    // Voron Tap: the nozzle IS the probe, so the offset is ~0. Starting from 0 makes the
+    // firmware read Z=0 exactly when the nozzle touches the bed, so no stale value can hide
+    // the nozzle below the bed during the wizard.
+    #define PROBE_OFFSET_WIZARD_START_Z 0
 
     // Set a convenient position to do the calibration (probing point and nozzle/bed-distance)
-    //#define PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }
+    #define PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }
   #endif
 #endif
 
