@@ -2371,6 +2371,43 @@ void MarlinSettings::postprocess() {
       }
 
       //
+      // Re-assert TMC microsteps (TMC2208/2209).
+      //
+      // Microsteps are compile-time only: EEPROM never stores them, they are written once by
+      // tmc_init() at boot. But refresh_stepping_mode() above rewrites GCONF from the library's
+      // cached register value, which can drop the mstep_reg_select bit and let the driver fall
+      // back to pin-selected microstepping. On this board MS1/MS2 are not driven, which selects
+      // 1/8, so the motors then run at half the resolution steps/mm assumes (observed: a
+      // commanded 10mm move travelled 20mm). Re-assert both the GCONF bit and the microstep
+      // count after the EEPROM load so the driver always matches the firmware.
+      //
+      #if HAS_TRINAMIC_CONFIG && (Z_DRIVER_TYPE == TMC2209)
+        if (!validating) {
+          #if X_HAS_STEALTHCHOP
+            stepperX.mstep_reg_select(true);   stepperX.microsteps(X_MICROSTEPS);
+          #endif
+          #if Y_HAS_STEALTHCHOP
+            stepperY.mstep_reg_select(true);   stepperY.microsteps(Y_MICROSTEPS);
+          #endif
+          #if Z_HAS_STEALTHCHOP
+            stepperZ.mstep_reg_select(true);   stepperZ.microsteps(Z_MICROSTEPS);
+          #endif
+          #if Z2_HAS_STEALTHCHOP
+            stepperZ2.mstep_reg_select(true);  stepperZ2.microsteps(Z2_MICROSTEPS);
+          #endif
+          #if Z3_HAS_STEALTHCHOP
+            stepperZ3.mstep_reg_select(true);  stepperZ3.microsteps(Z3_MICROSTEPS);
+          #endif
+          #if Z4_HAS_STEALTHCHOP
+            stepperZ4.mstep_reg_select(true);  stepperZ4.microsteps(Z4_MICROSTEPS);
+          #endif
+          #if E0_HAS_STEALTHCHOP
+            stepperE0.mstep_reg_select(true);  stepperE0.microsteps(E0_MICROSTEPS);
+          #endif
+        }
+      #endif
+
+      //
       // Linear Advance
       //
       {
