@@ -1626,7 +1626,10 @@
 #define Z_CLEARANCE_DEPLOY_PROBE    0 // Z Clearance for Deploy/Stow
 #define Z_CLEARANCE_BETWEEN_PROBES  5 // Z Clearance between probe points
 #define Z_CLEARANCE_MULTI_PROBE     5 // Z Clearance between multiple probes
-//#define Z_AFTER_PROBING           5 // Z position after probing is done
+// Voron Tap: the nozzle itself is what touches the plate, so G28 must lift it off when it is
+// done. With this left commented out, move_z_after_probing() is a no-op and G28 finishes with
+// the nozzle resting ON the plate - the next XY move then drags it across the surface.
+#define Z_AFTER_PROBING             5 // Z position after probing is done
 
 #define Z_PROBE_LOW_POINT          -2 // Farthest distance below the trigger-point to go before stopping
 

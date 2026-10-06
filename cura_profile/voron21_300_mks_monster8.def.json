@@ -15,10 +15,11 @@
         "exclude_materials": []
     },
     "overrides": {
-        "machine_name": { "default_value": "Voron 2.1 300 (MKS Monster8)" },
+        "machine_name": { "default_value": "Voron 2.1 300 (MKS Monster8 V2)" },
+
         "machine_width": { "default_value": 305 },
         "machine_depth": { "default_value": 305 },
-        "machine_height": { "default_value": 310 },
+        "machine_height": { "default_value": 300 },
         "machine_shape": { "default_value": "rectangular" },
         "machine_heated_bed": { "default_value": true },
         "machine_heated_build_volume": { "default_value": false },
@@ -27,9 +28,13 @@
         "machine_nozzle_size": { "default_value": 0.4 },
         "material_diameter": { "default_value": 1.75 },
         "machine_gcode_flavor": { "default_value": "Marlin" },
+
+        "machine_nozzle_offset_x": { "default_value": 0 },
+        "machine_nozzle_offset_y": { "default_value": 0 },
+
         "machine_endstop_positive_direction_x": { "default_value": false },
         "machine_endstop_positive_direction_y": { "default_value": false },
-        "machine_endstop_positive_direction_z": { "default_value": true },
+        "machine_endstop_positive_direction_z": { "default_value": false },
 
         "machine_max_feedrate_x": { "default_value": 500 },
         "machine_max_feedrate_y": { "default_value": 500 },
@@ -44,21 +49,30 @@
         "machine_max_jerk_z": { "default_value": 0.4 },
         "machine_max_jerk_e": { "default_value": 5 },
 
+        "acceleration_enabled": { "default_value": true },
+        "acceleration_print": { "default_value": 500 },
+        "acceleration_travel": { "default_value": 1000 },
+        "jerk_enabled": { "default_value": true },
+        "jerk_print": { "default_value": 10 },
+        "jerk_travel": { "default_value": 10 },
+
+        "retraction_amount": { "default_value": 0.5 },
+
         "gantry_height": { "default_value": 25 },
         "machine_head_with_fans_polygon": {
             "default_value": [
-                [-30, 30],
-                [-30, -30],
-                [30, -30],
-                [30, 30]
+                [-32, 38],
+                [-32, -32],
+                [32, -32],
+                [32, 38]
             ]
         },
 
         "machine_start_gcode": {
-            "default_value": "; Voron 2.1 300 start gcode\nM104 S{material_print_temperature_layer_0} ; set hotend temp (no wait)\nM140 S{material_bed_temperature_layer_0} ; set bed temp (no wait)\nG28 ; home all axes (UBL mesh auto-restored from EEPROM)\nM190 S{material_bed_temperature_layer_0} ; wait for bed\nM109 S{material_print_temperature_layer_0} ; wait for hotend\nG92 E0\nG1 Z2.0 F3000\nG1 X2 Y10 Z0.3 F5000\nG1 X2 Y100 Z0.3 F1500 E15 ; prime line\nG92 E0\nG1 Z2.0 F3000"
+            "default_value": "; ===== Voron 2.1 300 / MKS Monster8 V2 / Voron Tap =====\nM117 Dang chuan bi...\nM104 S{material_print_temperature_layer_0} ; hotend - khong cho\nM140 S{material_bed_temperature_layer_0} ; ban - khong cho\nM107 ; tat quat lam mat\nG28 ; home X Y, Z bang Voron Tap\nG34 ; can gantry 3 truc Z (quad gantry level)\nG28 Z ; home lai Z sau khi can\nM190 S{material_bed_temperature_layer_0} ; cho ban nong\nM109 S{material_print_temperature_layer_0} ; cho hotend nong\nM420 S1 ; bat UBL mesh da luu trong EEPROM\nG92 E0\nG1 Z2.0 F3000\nG1 X2 Y10 Z0.3 F5000\nG1 X2 Y100 Z0.3 F1500 E15 ; duong purge\nG92 E0\nG1 Z2.0 F3000\nM117 Dang in..."
         },
         "machine_end_gcode": {
-            "default_value": "; Voron 2.1 300 end gcode\nG91 ; relative positioning\nG1 E-2 F2700 ; retract\nG1 Z10 F600 ; raise Z\nG90 ; absolute positioning\nG27 ; park nozzle (NOZZLE_PARK_POINT)\nM140 S0 ; bed off\nM104 S0 ; hotend off\nM107 ; fan off\nM84 X Y E ; disable X Y E steppers (keep Z holding)"
+            "default_value": "; ===== Ket thuc =====\nM400 ; doi moi chuyen dong xong\nG91 ; toa do tuong doi\nG1 E-2 F2700 ; retract\nG1 Z10 F600 ; nang Z\nG90 ; toa do tuyet doi\nG27 ; park nozzle (NOZZLE_PARK_POINT)\nM140 S0 ; tat ban\nM104 S0 ; tat hotend\nM107 ; tat quat\nM84 X Y E ; nha X Y E - GIU Z de vit me khong tut"
         }
     }
 }
