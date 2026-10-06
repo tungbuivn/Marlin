@@ -975,7 +975,11 @@
    * If not defined, probe limits will be used.
    * Override with 'M422 S<index> X<pos> Y<pos>'.
    */
-  #define Z_STEPPER_ALIGN_XY { {  280, 285 }, { 25,  285 }, { 25, 25 } }
+  // Layout (2) in the diagram above: 1 = back-right, 2 = back-left, 3 = FRONT-CENTER.
+  // The third point was { 25, 25 } - front-LEFT - which is the tramming corner, not a Z
+  // leadscrew. Z3 sits halfway between X_MIN and X_MAX. These are the SCREW positions in
+  // driver order (Z, Z2, Z3), so each one has to be directly over its own motor.
+  #define Z_STEPPER_ALIGN_XY { { 280, 285 }, { 25, 285 }, { X_CENTER, 25 } }
 
   /**
    * Orientation for the automatically-calculated probe positions.
