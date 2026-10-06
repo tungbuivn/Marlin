@@ -308,6 +308,61 @@ rồi `M500` (trạng thái leveling **có** được lưu vào EEPROM, xem §11
 > (`set_bed_leveling_enabled(false)`) và `ubl_G29.cpp:1257` (khôi phục). Nên không cần `M420 S0`
 > thủ công trước khi `G29`.
 
+### G34 — số đo thực tế (đã kiểm chứng bằng log debug)
+
+#### 1. Probe lặp lại cực tốt — `M48 P20 V4` tại đúng 3 điểm G34
+
+| Điểm | Vị trí | Mean | σ | Range (20 lần) |
+|---|---|---|---|---|
+| S1 | (280, 285) | 0.0623 mm | 0.0024 mm | 0.009 mm |
+| S2 | (25, 285) | 0.0705 mm | 0.0016 mm | 0.007 mm |
+| S3 | (152.5, 25) | 0.0678 mm | 0.0022 mm | 0.010 mm |
+
+→ Nhiễu probe chỉ **~2 µm**, còn khoảng lệch **tĩnh** giữa 3 điểm là **8 µm**
+(`0.0705 − 0.0623`). **Nhiễu probe không phải thứ giới hạn G34.**
+
+#### 2. G34 tính và bù đúng
+
+Log debug một vòng (`G34 Q3 T0.01`):
+
+```
+DBG raw Z1 um=9807   Z2 um=9802   Z3 um=9798      <- khoang do that: 9 um
+DBG fix Z1 move_um=8  err_um=8
+DBG fix Z2 move_um=3  err_um=3                     <- lenh bu khop chinh xac
+DBG fix Z3 move_um=0  err_um=0                     <- diem thap nhat khong dung
+Target accuracy achieved.  Did 1 of 3
+```
+
+`move = z_đo − z_min` **đúng dấu, đúng độ lớn**. Cơ chế nghiêng gantry hoạt động thật:
+`set_all_z_lock(true, zstepper)` được tiêu thụ ở macro `TRIPLE_SEPARATE_APPLY_STEP`
+(`stepper.cpp:324-334`) qua `locked_##A##_motor`.
+*(Lưu ý khi đi tìm: grep chữ `locked_Z_motor` sẽ **không** thấy chỗ dùng, vì nó là macro nối token.)*
+
+#### 3. Thời gian & số vòng — đo được
+
+| Tình huống | Số vòng | Thời gian |
+|---|---|---|
+| Gantry đã căn (khoảng đo 5–15 µm) | **1 vòng** | ~35 s |
+| Chạy từ **Z=100** | **1 vòng** | **61.5 s** (phải hạ 100 mm mỗi lần probe) |
+| Máy vừa nằm không tải, gantry lệch ~20–30 µm | **2 vòng Q = 6 lượt probe** | **171.3 s** |
+
+→ **Z xuất phát KHÔNG ảnh hưởng kết quả**, chỉ ảnh hưởng thời gian. Lý do: `run_z_probe` tự hạ
+nhanh xuống `Z_CLEARANCE_DEPLOY_PROBE + 5 + |offset.z|` trước khi probe chậm (`probe.cpp:739-748`),
+nên probe chậm luôn bắt đầu từ cùng một khoảng cách tương đối so với điểm trigger.
+
+#### 4. Vì sao đôi khi phải chạy nhiều vòng
+
+Ngưỡng `Z_STEPPER_ALIGN_ACC 0.02` (20 µm) nằm **ngay trên** khoảng lệch thật của máy khi đã căn
+(5–15 µm), nên bình thường chỉ 1 vòng. Khi gantry còn lệch 20–30 µm thì cần thêm vòng — và trong
+lúc đó Marlin có thể in `Decreasing Accuracy Detected.`: đó là heuristic `adjustment_reverse`
+(`G34_M422.cpp`) **đảo chiều bù** khi sai số *tăng* thay vì giảm. Comment gốc của Marlin ngay cạnh
+đó nói rõ nó viết cho máy **2 trục Z**: *"Will match reversed Z steppers on dual steppers.
+Triple will need more work to map."* — máy này **3 trục Z**.
+
+**Không phải lỗi firmware, không phải nhiễu probe** — chỉ là trạng thái cơ khí lúc đo.
+Muốn chặn trần thời gian thì giới hạn số vòng (`G34 Q3` thay vì `G34 Q99`), hoặc nới ngưỡng bằng
+tham số chạy được, **không cần flash**: `G34 T0.05`.
+
 ---
 
 ## 6. Nhiệt độ
@@ -739,6 +794,9 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
 | 12 | **Dựng mesh UBL trước khi căn gantry (G34)** | G34 nghiêng lại gantry → mesh cũ hiệu chỉnh **thừa** đúng phần vừa sửa; probe gắn trên gantry nên mesh mã hoá luôn độ nghiêng lúc đo | Luôn **G34 trước, `G29` sau**; tháo/lắp gantry, đổi belt, đổi Z-stepper thì `G29` lại |
 | 13 | **Với UBL, `M420 S1` không kiểm tra mesh hợp lệ** (`bedlevel.cpp:62` chỉ check cho `AUTO_BED_LEVELING_BILINEAR`) | `M420 S1` bật leveling trên mesh hỏng → in ra rác mà **không báo lỗi gì** | Xem `M420 V` phải in `Mesh is valid` trước khi tin |
+| 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
+| 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
+| 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
