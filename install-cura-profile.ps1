@@ -42,6 +42,7 @@ param(
     [switch]$AddAsNewPrinter,
     [string]$CuraConfigRoot,
     [string]$Definition = "voron2_300",
+    [switch]$Force,
     [switch]$WhatIf
 )
 
@@ -52,16 +53,17 @@ Write-Host ""
 Write-Host "===== Ap profile Cura: Voron2 300 (MKS Monster8 V2) =====" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------------------
-# Canh bao neu Cura dang chay - Cura se ghi de file khi thoat
+# Cura phai DONG: no ghi de cac file nay khi thoat
 # ---------------------------------------------------------------------------
-$curaProcs = Get-Process -Name "Cura","UltiMaker Cura" -ErrorAction SilentlyContinue
+$curaProcs = Get-Process -Name "Cura","UltiMaker-Cura" -ErrorAction SilentlyContinue
+if ($curaProcs -and -not $Force) {
+    Write-Host "DUNG LAI: Cura dang chay (PID $($curaProcs.Id -join ', '))." -ForegroundColor Yellow
+    Write-Host "  Cura ghi de cac file cau hinh nay khi thoat, nen phai DONG CURA truoc." -ForegroundColor Yellow
+    Write-Host "  Dong Cura roi chay lai script, hoac dung -Force neu chac chan." -ForegroundColor Yellow
+    exit 2
+}
 if ($curaProcs) {
-    Write-Host "CANH BAO: Cura dang chay (PID $($curaProcs.Id -join ', '))." -ForegroundColor Yellow
-    Write-Host "         Hay DONG CURA hoan toan roi chay lai, neu khong thay doi se bi ghi de." -ForegroundColor Yellow
-    if (-not $WhatIf) {
-        $ans = Read-Host "Van tiep tuc? (y/n)"
-        if ($ans -ne 'y' -and $ans -ne 'Y') { Write-Host "Da huy."; exit 0 }
-    }
+    Write-Host "CANH BAO: Cura van dang chay - thay doi co the bi ghi de khi Cura thoat." -ForegroundColor Yellow
     Write-Host ""
 }
 
@@ -70,11 +72,11 @@ if ($curaProcs) {
 # ===========================================================================
 if (-not $AddAsNewPrinter) {
 
-    $template = Join-Path $repoRoot "cura_profile\machine_definition_changes.inst.cfg"
-    if (-not (Test-Path $template)) {
-        Write-Host "LOI: khong thay template: $template" -ForegroundColor Red
-        exit 1
-    }
+    # Moi file template ap cho mot nhom container, nhan dien qua dong "definition = ..."
+    $jobs = @(
+        @{ Template = "machine_definition_changes.inst.cfg";  Label = "May in";    Pattern = [regex]::Escape($Definition) },
+        @{ Template = "extruder_definition_changes.inst.cfg"; Label = "Extruder";  Pattern = 'voron2_extruder.*' }
+    )
 
     $root = if ($CuraConfigRoot) { $CuraConfigRoot } else { Join-Path $env:APPDATA "cura" }
     if (-not (Test-Path $root)) {
@@ -83,7 +85,6 @@ if (-not $AddAsNewPrinter) {
         exit 1
     }
     Write-Host "Config Cura: $root"
-    Write-Host "Definition:  $Definition"
     Write-Host ""
 
     $versions = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
@@ -94,57 +95,63 @@ if (-not $AddAsNewPrinter) {
     }
 
     $done = 0
-    foreach ($v in $versions) {
-        $dcDir = Join-Path $root "$v\definition_changes"
-        if (-not (Test-Path $dcDir)) { continue }
-
-        # Tim file cau hinh cua may in dung definition nay
-        $targets = Get-ChildItem "$dcDir\*.inst.cfg" -ErrorAction SilentlyContinue | Where-Object {
-            (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "(?m)^definition\s*=\s*$([regex]::Escape($Definition))\s*$"
-        }
-
-        if (-not $targets) {
-            Write-Host "[$v] khong co may in nao dung definition '$Definition' - bo qua" -ForegroundColor DarkGray
+    foreach ($job in $jobs) {
+        $template = Join-Path $repoRoot "cura_profile\$($job.Template)"
+        if (-not (Test-Path $template)) {
+            Write-Host "CANH BAO: khong thay template $($job.Template) - bo qua" -ForegroundColor Yellow
             continue
         }
+        $tplRaw = Get-Content $template -Raw
 
-        foreach ($t in $targets) {
-            # Giu nguyen 'name = ...' cua file goc: ten file dung dau '+' thay cho dau cach
-            # (Voron2+300_settings.inst.cfg) nhung gia tri name lai co dau cach
-            # (name = Voron2 300_settings). Suy tu ten file se sai.
-            $raw = Get-Content $t.FullName -Raw
-            $nameMatch = [regex]::Match($raw, '(?m)^name\s*=\s*(.+?)\s*$')
-            $machineName = if ($nameMatch.Success) { $nameMatch.Groups[1].Value } else { $t.Name -replace '\.inst\.cfg$', '' }
-            $content = (Get-Content $template -Raw).Replace('@NAME@', $machineName)
+        foreach ($v in $versions) {
+            $dcDir = Join-Path $root "$v\definition_changes"
+            if (-not (Test-Path $dcDir)) { continue }
 
-            if ($WhatIf) {
-                Write-Host "  [WhatIf] se ghi de -> $($t.FullName)" -ForegroundColor DarkGray
-                $done++
-                continue
+            $targets = Get-ChildItem "$dcDir\*.inst.cfg" -ErrorAction SilentlyContinue | Where-Object {
+                (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "(?m)^definition\s*=\s*$($job.Pattern)\s*$"
             }
+            if (-not $targets) { continue }
 
-            $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-            Copy-Item $t.FullName "$($t.FullName).bak-$stamp" -Force
-            [System.IO.File]::WriteAllText($t.FullName, $content, (New-Object System.Text.UTF8Encoding($false)))
-            Write-Host "  OK -> $($t.FullName)" -ForegroundColor Green
-            Write-Host "       (da backup: $($t.Name).bak-$stamp)" -ForegroundColor DarkGray
-            $done++
+            Write-Host "[$($job.Label)] $v : $($targets.Count) container" -ForegroundColor Cyan
+            foreach ($t in $targets) {
+                # Giu nguyen 'name' va 'definition' cua file goc: ten file dung dau '+' thay
+                # cho dau cach (Voron2+300_settings.inst.cfg) nhung gia tri name lai co dau cach.
+                $raw = Get-Content $t.FullName -Raw
+                $nameMatch = [regex]::Match($raw, '(?m)^name\s*=\s*(.+?)\s*$')
+                $defMatch  = [regex]::Match($raw, '(?m)^definition\s*=\s*(.+?)\s*$')
+                $machineName = if ($nameMatch.Success) { $nameMatch.Groups[1].Value } else { $t.Name -replace '\.inst\.cfg$', '' }
+                $machineDef  = if ($defMatch.Success)  { $defMatch.Groups[1].Value }  else { $Definition }
+                $content = $tplRaw.Replace('@NAME@', $machineName).Replace('@DEFINITION@', $machineDef)
+
+                if ($WhatIf) {
+                    Write-Host "  [WhatIf] se ghi de -> $($t.Name)" -ForegroundColor DarkGray
+                    $done++
+                    continue
+                }
+
+                $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+                Copy-Item $t.FullName "$($t.FullName).bak-$stamp" -Force
+                [System.IO.File]::WriteAllText($t.FullName, $content, (New-Object System.Text.UTF8Encoding($false)))
+                Write-Host "  OK -> $($t.Name)" -ForegroundColor Green
+                $done++
+            }
         }
     }
 
     Write-Host ""
     Write-Host "===== KET QUA =====" -ForegroundColor Cyan
     if ($done -gt 0) {
-        Write-Host "Da ap dung cho $done may in." -ForegroundColor Green
+        Write-Host "Da ap dung cho $done container." -ForegroundColor Green
         Write-Host ""
         Write-Host "Buoc tiep theo:" -ForegroundColor Cyan
         Write-Host "  1. MO CURA LAI."
-        Write-Host "  2. Che do Prepare: kiem tra khay in hien dung 305 x 305."
-        Write-Host "  3. Printer > Manage printers > Machine settings: kiem tra"
-        Write-Host "     'Origin at center' DA TAT, va Start/End G-code dung ban Marlin."
+        Write-Host "  2. Manage printers > Machine settings > tab Printer:"
+        Write-Host "     'Origin at center' TAT, ban 305x305, Start/End G-code la ban Marlin."
+        Write-Host "  3. tab Extruder 1: 'Extruder Start G-code' = duong purge,"
+        Write-Host "     'Extruder End G-code' = retract."
         exit 0
     } else {
-        Write-Host "Khong tim thay may in nao de sua." -ForegroundColor Yellow
+        Write-Host "Khong tim thay container nao de sua." -ForegroundColor Yellow
         Write-Host "Trong Cura: Settings > Printer > Add Printer > Non-Ultimaker > Voron2 300,"
         Write-Host "roi chay lai script nay." -ForegroundColor Yellow
         exit 1

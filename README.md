@@ -382,7 +382,8 @@ git diff up-2.1.2 HEAD --stat
 | `upload-dfu.ps1` | nạp qua DFU: tự tìm `dfu-util`, dùng `-t 512`, ghi đúng `0x0800C000`, in SHA256 |
 | `upload-firmware.ps1` | nạp qua ST-Link |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
-| `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura chính** — các thông số máy ghi đè lên `voron2_300` của Cura. Đây là file `install-cura-profile.ps1` áp vào Cura |
+| `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura — container của MÁY IN** (bàn, gốc, endstop, feedrate/accel/jerk, steps/mm, Start/End G-code) |
+| `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
 | `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
 | `install-cura-profile.ps1` | Áp profile vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
 | `README.md` | tài liệu máy (file này) |
@@ -406,7 +407,23 @@ cần quyền Admin và không cần đụng vào `Program Files`.
 .\install-cura-profile.ps1 -AddAsNewPrinter
 ```
 
-Phải **đóng Cura trước khi chạy** — Cura ghi đè file cấu hình khi thoát.
+Phải **đóng Cura trước khi chạy** — Cura ghi đè file cấu hình khi thoát. Script sẽ **tự từ chối
+chạy** nếu thấy tiến trình Cura (`-Force` để bỏ qua, không nên).
+
+### Bốn ô G-code trong Cura
+
+Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` — dễ tưởng là thiếu:
+
+| Tab | Ô | Key | Script điền gì |
+|---|---|---|---|
+| **Printer** | Start G-code | `machine_start_gcode` | hâm nóng → `G28` → `G34` → `G28 Z` → chờ nhiệt → `M420 S1` |
+| **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
+| **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | đường purge `X2 Y10 → Y100` |
+| **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
+
+`machine_extruder_*` nằm trong `fdmextruder.def.json` với `default_value = ""`, nên **mặc định
+Cura để trống** và chúng thuộc container của **extruder**, không phải của máy in — script ghi
+vào cả hai container.
 
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 
