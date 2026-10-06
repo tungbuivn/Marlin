@@ -151,8 +151,11 @@ pio run -d . -e mks_monster8 --target build
 # Cách 1: ST-Link (nhanh, đáng tin cậy)
 .\upload-firmware.ps1
 
-# Cách 2: DFU bootloader
+# Cách 2: DFU bootloader — 254 KB mất ~34 giây với mặc định -TransferSize 2048
 .\upload-dfu.ps1
+
+# Nếu cáp/hub chập chờn thì hạ gói xuống, đổi lại chậm hơn (512 -> ~117 giây)
+.\upload-dfu.ps1 -TransferSize 512
 ```
 
 ### 3️⃣ Xác minh
@@ -182,10 +185,30 @@ Get-PnpDevice | Where-Object {$_.Name -like "*STM32*"}
 dfu-util --list
 
 # Flash lại — DÙNG ĐÚNG ĐỊA CHỈ 0x0800C000 (xem mục "ĐỊA CHỈ FLASH" ở trên)
-dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -D .pio\build\mks_monster8\mks_monster8.bin
+dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 2048 -D .pio\build\mks_monster8\mks_monster8.bin
 
 # ⚠️ KHÔNG dùng 0x08000000 — sẽ xoá bootloader MKS và board không boot được
 ```
+
+### Flash chậm / rớt giữa chừng
+```powershell
+# Đo thực tế trên MKS Monster8 V2, cùng file 254 KB, cắm TRỰC TIẾP vào PC:
+#   -t 512   ->  117.3 giây  (2.2 KB/s)
+#   -t 2048  ->   34.3 giây  (7.4 KB/s)   <-- mặc định hiện tại
+#
+# 2048 là wTransferSize tối đa ROM DFU STM32F407 cho phép -> ~34 giây là sàn của DFU.
+
+# BƯỚC 1 luôn là BỎ USB HUB, không phải hạ -t:
+dfu-util --list
+#   path="2-4.4"  -> đang qua hub (2-4) rồi port 4  => cắm thẳng vào PC
+#   path="2-2"    -> đã cắm trực tiếp
+
+# BƯỚC 2 chỉ hạ -t khi đã cắm trực tiếp mà vẫn lỗi get_status:
+dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 512 -D .pio\build\mks_monster8\mks_monster8.bin
+```
+
+> Dòng `DFU state(10) = dfuERROR ... firmware is corrupt` hiện ở đầu mỗi lần flash là **bình thường**
+> (app đang chạy không phải DFU). Kết thúc vẫn là `Download done.` / `File downloaded successfully`.
 
 ### Build lỗi
 ```powershell

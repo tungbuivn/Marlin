@@ -27,6 +27,11 @@
     DFU device selector. Format: "index" or "vid:pid"
     Leave empty to auto-detect
 
+.PARAMETER TransferSize
+    So byte moi goi USB (-t cua dfu-util). Mac dinh 2048 = toc do toi da ma ROM DFU
+    STM32F407 cho phep (~34 giay cho 254 KB). Ha xuong 512 chi de chong loi get_status
+    khi cam qua USB hub - doi lai cham hon 3.4 lan. Xem khoi chu thich truoc $dfuArgs.
+
 .PARAMETER BuildOnly
     Only build, don't upload (default: false)
 
@@ -48,7 +53,7 @@
 param(
     [string]$Environment = "mks_monster8",
     [string]$DfuDevice,
-    [int]$TransferSize = 512,
+    [int]$TransferSize = 2048,
     [switch]$BuildOnly,
     [switch]$NoPrompt
 )
@@ -208,19 +213,29 @@ Write-Host "  Size:    $binSize KB"
 Write-Host "  Address: $flashAddress"
 Write-Host ""
 
-# -t la SO BYTE MOI GOI USB - day chinh la ly do flash cham.
+# -t la SO BYTE MOI GOI USB - day chinh la ly do flash cham hay nhanh.
 #
-# Mac dinh cua dfu-util la 2048. Da kiem chung tren MKS Monster8: voi 2048 thi viec ghi
-# flash hay bi rot ket noi USB giua chung ("Error during download get_status"), nen da ha
-# xuong 512 cho on dinh - doi lai CHAM HON KHOANG 4 LAN (258 KB can ~500 goi thay vi ~126).
+# DO THUC TE tren MKS Monster8 V2, cung mot file 254 KB (mks_monster8.bin), cam TRUC TIEP:
+#     -t 512   ->  117.3 giay  (2.2 KB/s)
+#     -t 2048  ->   34.3 giay  (7.4 KB/s)      <-- nhanh hon 3.4 lan
 #
-# Cach lam cho nhanh lai:
-#   1. Cam board TRUC TIEP vao may, khong qua USB hub. Hub lam moi goi USB cham hon, ma
-#      voi 512 byte/goi thi so goi rat nhieu. Kiem tra bang 'dfu-util --list': neu path la
-#      dang "2-4.4" nghia la dang qua hub (2-4) roi port 4.
-#   2. Cam truc tiep roi thu: .\upload-dfu.ps1 -TransferSize 2048
-#   3. 2048 ma van on dinh thi dung luon; neu khong thi thu 1024.
-#   4. Hoac dung ST-Link: .\upload-firmware.ps1  (nhanh hon nhieu, khong phu thuoc USB DFU)
+# 2048 chinh la wTransferSize TOI DA ma ROM DFU cua STM32F407 bao ra, nen ~34 giay la
+# SAN cua duong DFU: dat 4096 se bi tu choi, khong nhanh hon duoc nua.
+#
+# LICH SU (de khong lap lai sai lam):
+#   Truoc day tung ha xuong 512 vi gap loi "Error during download get_status" khi board
+#   cam qua USB HUB. Nhung 512 lam flash cham di 3.4 lan - do chinh la ly do "flash rat cham".
+#   Sau khi cam TRUC TIEP vao may thi 2048 chay sach, nen mac dinh da duoc tra ve 2048.
+#   => Gap loi get_status thi viec DAU TIEN phai lam la BO USB HUB, chu dung voi ha -t.
+#      Kiem tra 'dfu-util --list': path dang "2-4.4" = dang qua hub (2-4) roi port 4;
+#      path dang "2-2" = cam truc tiep.
+#
+# Muon nhanh hon nua:
+#   - ST-Link:          .\upload-firmware.ps1   (khong phu thuoc USB DFU)
+#   - The nho:          copy .bin vao the roi power-cycle, bootloader MKS tu nap (khong can PC)
+#
+# Luu y: dong 'DFU state(10) = dfuERROR ... firmware is corrupt' hien ra dau moi lan flash
+# la BINH THUONG - app dang chay khong phai DFU nen ROM bootloader bao vay. Cu de no chay.
 $dfuArgs = @("-a", "0", "-s", "${flashAddress}:leave", "-t", "$TransferSize")
 
 if ($DfuDevice) {

@@ -307,7 +307,7 @@ pio run -e mks_monster8
 .\upload-dfu.ps1
 
 # Hoặc thủ công
-dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 512 -D .pio\build\mks_monster8\mks_monster8.bin
+dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 2048 -D .pio\build\mks_monster8\mks_monster8.bin
 
 # Hoặc qua ST-Link
 .\upload-firmware.ps1
@@ -323,13 +323,31 @@ dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 512 -D .pio\build\mks_monster8
 > `board_build.offset = 0xC000` và `board_upload.offset_address = 0x0800C000` trong `ini/stm32f4.ini`.
 > Kiểm chứng bằng `dfu-util --list`: `@Internal Flash /0x08000000/04*016Kg,...` → 3 sector 16KB đầu = 48KB = `0xC000`.
 
+### Tốc độ nạp DFU — đo thực tế
+
+Cùng một file 254 KB (`mks_monster8.bin`), board cắm **trực tiếp** vào PC:
+
+| `-t` (byte mỗi gói) | Thời gian | Tốc độ |
+|---|---|---|
+| 512 | **117.3 s** | 2.2 KB/s |
+| **2048** | **34.3 s** | 7.4 KB/s |
+
+`2048` chính là `wTransferSize` tối đa mà ROM DFU của STM32F407 báo ra → **~34 s là sàn của đường DFU**, đặt 4096 sẽ bị từ chối.
+
+> ⚠️ **Bài học:** từng hạ `-t` xuống 512 để chống lỗi `get_status`, nhưng 512 làm flash chậm **3.4 lần** — đó chính là lý do "flash rất chậm". Lỗi `get_status` thật ra đến từ **USB hub**, không phải từ `-t`. **Gặp lỗi thì bỏ hub trước, đừng hạ `-t`.**
+> Kiểm tra đang qua hub hay không: `dfu-util --list` → `path="2-4.4"` là qua hub, `path="2-2"` là cắm trực tiếp.
+
+Dòng `DFU state(10) = dfuERROR ... firmware is corrupt` hiện ở đầu **mọi** lần flash là **bình thường** — app đang chạy không phải DFU nên ROM bootloader báo vậy. Cứ để nó chạy tiếp.
+
+Muốn nhanh hơn nữa thì rời khỏi DFU: **ST-Link** (`.\upload-firmware.ps1`) hoặc **thẻ nhớ** — copy `.bin` vào thẻ rồi power-cycle, bootloader MKS tự nạp, không cần PC.
+
 ### Xử lý sự cố DFU
 
 | Triệu chứng | Cách xử lý |
 |---|---|
 | `LIBUSB_ERROR_PIPE` / `get_status` fail | Endpoint USB bị stall → **reset MCU rồi vào DFU lại** (đừng retry vô hạn) |
 | Descriptor lệch (`UNKNOWN`, `Broken LANGID`, `alt=0` không phải `@Internal Flash`) | Cùng nguyên nhân trên — session DFU đã hỏng, cần reset MCU |
-| Flash rớt giữa chừng | Dùng `-t 512` (đã đặt sẵn trong `upload-dfu.ps1`) |
+| Flash rớt giữa chừng / `get_status` fail | **Bỏ USB hub, cắm trực tiếp** rồi thử lại ở `-t 2048`; chỉ hạ `-t` khi đã cắm trực tiếp mà vẫn lỗi |
 | Mất bootloader | Luôn khôi phục được: giữ BOOT0 + nhấn RESET → vào DFU → nạp lại đúng địa chỉ |
 
 Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
@@ -439,7 +457,7 @@ git diff up-2.1.2 HEAD --stat
 
 | File | Mục đích |
 |---|---|
-| `upload-dfu.ps1` | nạp qua DFU: tự tìm `dfu-util`, dùng `-t 512`, ghi đúng `0x0800C000`, in SHA256 |
+| `upload-dfu.ps1` | nạp qua DFU: tự tìm `dfu-util`, dùng `-t 2048`, ghi đúng `0x0800C000`, in SHA256 |
 | `upload-firmware.ps1` | nạp qua ST-Link |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
 | `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura — container của MÁY IN** (bàn, gốc, endstop, feedrate/accel/jerk, steps/mm, Start/End G-code) |
