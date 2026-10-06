@@ -48,6 +48,7 @@
 param(
     [string]$Environment = "mks_monster8",
     [string]$DfuDevice,
+    [int]$TransferSize = 512,
     [switch]$BuildOnly,
     [switch]$NoPrompt
 )
@@ -207,11 +208,20 @@ Write-Host "  Size:    $binSize KB"
 Write-Host "  Address: $flashAddress"
 Write-Host ""
 
-# -t 512: giam so byte moi goi USB.
-# Da kiem chung tren MKS Monster8: voi kich thuoc mac dinh (2048) viec ghi flash hay bi
-# rot ket noi USB giua chung ("Error during download get_status"), doi khi lam hong ca
-# bootloader neu ghi sai dia chi. Voi 512 thi on dinh, flash thanh cong lien tuc.
-$dfuArgs = @("-a", "0", "-s", "${flashAddress}:leave", "-t", "512")
+# -t la SO BYTE MOI GOI USB - day chinh la ly do flash cham.
+#
+# Mac dinh cua dfu-util la 2048. Da kiem chung tren MKS Monster8: voi 2048 thi viec ghi
+# flash hay bi rot ket noi USB giua chung ("Error during download get_status"), nen da ha
+# xuong 512 cho on dinh - doi lai CHAM HON KHOANG 4 LAN (258 KB can ~500 goi thay vi ~126).
+#
+# Cach lam cho nhanh lai:
+#   1. Cam board TRUC TIEP vao may, khong qua USB hub. Hub lam moi goi USB cham hon, ma
+#      voi 512 byte/goi thi so goi rat nhieu. Kiem tra bang 'dfu-util --list': neu path la
+#      dang "2-4.4" nghia la dang qua hub (2-4) roi port 4.
+#   2. Cam truc tiep roi thu: .\upload-dfu.ps1 -TransferSize 2048
+#   3. 2048 ma van on dinh thi dung luon; neu khong thi thu 1024.
+#   4. Hoac dung ST-Link: .\upload-firmware.ps1  (nhanh hon nhieu, khong phu thuoc USB DFU)
+$dfuArgs = @("-a", "0", "-s", "${flashAddress}:leave", "-t", "$TransferSize")
 
 if ($DfuDevice) {
     $dfuArgs += "-d", $DfuDevice
