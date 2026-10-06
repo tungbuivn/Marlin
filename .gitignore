@@ -174,3 +174,6 @@ __pycache__
 # Build / flash logs (transient)
 build_pio.log
 flash-dfu.log
+
+# Scratch files (commit messages, throwaway scripts)
+*.tmp
