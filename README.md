@@ -416,7 +416,7 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 
 | Tab | Ô | Key | Script điền gì |
 |---|---|---|---|
-| **Printer** | Start G-code | `machine_start_gcode` | hâm nóng → `G28` → `G34` → `G28 Z` → chờ nhiệt → `M420 S1` |
+| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `G34` → `G28 Z` → `M190 S60` → `M109 S230` → `M420 S1` |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
 | **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | đường purge `X2 Y10 → Y100` |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
@@ -424,6 +424,16 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 `machine_extruder_*` nằm trong `fdmextruder.def.json` với `default_value = ""`, nên **mặc định
 Cura để trống** và chúng thuộc container của **extruder**, không phải của máy in — script ghi
 vào cả hai container.
+
+> ⚠️ **Nhiệt độ đã cố định trong Start G-code** — `M104 S230` / `M140 S60` / `M190 S60` /
+> `M109 S230` là số cứng, **không còn placeholder `{material_print_temperature_layer_0}`**.
+> Nên đổi vật liệu trong Cura **không** làm đổi nhiệt độ in; muốn đổi thì sửa Start G-code.
+
+> ⚠️ **Tốc độ retract bị kẹp ở 15 mm/s.** `voron2_base` đặt
+> `maximum_value_warning = machine_max_feedrate_e − 10`. Firmware chạy `M203 E25` nên ngưỡng là
+> **15**; để 25 hay 30 (mặc định Cura) là **Cura chặn slice** với lỗi *"Retraction Prime Speed /
+> Retraction Speed / Retraction Retract Speed"*. Muốn retract nhanh hơn thì phải nâng `M203 E`
+> lên ≥ 40 trong firmware rồi đặt lại cho khớp.
 
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 
