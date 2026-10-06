@@ -245,6 +245,69 @@ Khác nhau giữa hai cách:
 6. G29 A -> M500                              ; bật leveling + lưu -> tự bật mỗi lần khởi động
 ```
 
+> Thứ tự **G34 trước, `G29` sau** ở bước 4–5 không phải tuỳ tiện — xem mục dưới.
+
+### UBL và G34 có đụng nhau không?
+
+**Không. Marlin tự tắt mesh trước khi G34 probe, rồi bật lại y như cũ.**
+
+```cpp
+// G34_M422.cpp:202-208 — comment gốc của Marlin: "Disable the leveling matrix before auto-aligning"
+#if HAS_LEVELING
+  #if ENABLED(RESTORE_LEVELING_AFTER_G34)
+    const bool leveling_was_active = planner.leveling_active;   // nhớ trạng thái
+  #endif
+  set_bed_leveling_enabled(false);                              // TẮT mesh
+#endif
+// ... probe 3 điểm ...
+#if BOTH(HAS_LEVELING, RESTORE_LEVELING_AFTER_G34)
+  set_bed_leveling_enabled(leveling_was_active);                // G34_M422.cpp:552-554 — BẬT LẠI
+#endif
+```
+
+| | |
+|---|---|
+| Máy này | `RESTORE_LEVELING_AFTER_G34` **đang bật** (`Configuration_adv.h:1027`) → vòng tắt/bật khép kín |
+| Tắt **thật**, không chỉ hạ cờ | `bedlevel.cpp:79-81`: `apply_modifiers` → lật `planner.leveling_active` → `unapply_modifiers` |
+| Hệ quả | Số đo G34 là **độ cao thô** của bàn — mesh không được cộng vào |
+| Vì sao **buộc** phải tắt | G34 dùng "dirty trick" `current_position.z += z_probe * 0.5f` (`G34_M422.cpp:244`). Mesh còn bật thì phép cộng đó bị bẻ cong → G34 tính sai |
+
+> ⚠️ **Chỗ thật sự đáng lo không phải "UBL trong lúc G34", mà là mesh đo TRƯỚC G34.**
+> G34 nghiêng lại gantry, mà probe gắn trên gantry — nên mesh UBL **mã hoá luôn cả độ nghiêng gantry
+> lúc đo**. G34 làm phẳng gantry xong thì mesh cũ hiệu chỉnh **thừa** đúng bằng phần nghiêng vừa sửa.
+>
+> G34 có tính lặp lại (`Z_STEPPER_ALIGN_ACC 0.02` → lệch tối đa 0.02 mm), nên quy tắc là:
+> **tạo mesh SAU khi đã G34** (đúng thứ tự bước 4 → 5 ở trên), và mỗi lần in đều G34 về đúng trạng
+> thái đó thì mesh giữ nguyên giá trị.
+> **Phải chạy lại `G29`** nếu: mới G34 lần đầu sau khi tạo mesh, vừa tháo/lắp gantry, đổi belt,
+> hoặc đổi/thay Z-stepper.
+
+> ⚠️ **Với UBL, `M420 S1` bật leveling kể cả khi mesh hỏng.** `bedlevel.cpp:62` chỉ kiểm tra mesh
+> hợp lệ cho `AUTO_BED_LEVELING_BILINEAR`:
+> ```cpp
+> const bool can_change = TERN1(AUTO_BED_LEVELING_BILINEAR, !enable || leveling_is_valid());
+> ```
+> UBL không nằm trong điều kiện đó → **đừng tin `M420 S1` là an toàn**; muốn chắc thì `M420 V`
+> phải in ra `Mesh is valid`.
+
+### `M420 S1` trong start G-code — thừa, nhưng nên giữ
+
+Start G-code hiện tại: `G28` → `G34 Q99` → `G28 Z` → `M420 S1`.
+
+Cả `G28` lẫn `G34` đều **tự khôi phục** trạng thái leveling, nên tới dòng `M420 S1` thì mesh đã bật sẵn:
+
+| Lệnh | Cơ chế tự bật lại |
+|---|---|
+| `G28` | `RESTORE_LEVELING_AFTER_G28` (`Configuration.h:1977`) → `CAN_SET_LEVELING_AFTER_G28 = 1` (`bedlevel.h:26-28`) → `G28.cpp:546` |
+| `G34` | `RESTORE_LEVELING_AFTER_G34` (`Configuration_adv.h:1027`) → `G34_M422.cpp:553` |
+
+`M420 S1` vì thế gần như no-op — **nhưng cứ giữ**, nó là lưới an toàn nếu sau này bạn lỡ `M420 S0`
+rồi `M500` (trạng thái leveling **có** được lưu vào EEPROM, xem §11.7 cạm bẫy 1).
+
+> ℹ️ `G29` (dựng mesh) cũng tự tắt leveling trong lúc đo rồi khôi phục — `ubl_G29.cpp:1244-1245`
+> (`set_bed_leveling_enabled(false)`) và `ubl_G29.cpp:1257` (khôi phục). Nên không cần `M420 S0`
+> thủ công trước khi `G29`.
+
 ---
 
 ## 6. Nhiệt độ
@@ -674,6 +737,8 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 9 | **Cura ghi đè file cấu hình khi thoát** | Ghi file lúc Cura đang mở → mất sạch khi đóng Cura | **Đóng Cura trước**; script đã tự từ chối nếu thấy tiến trình Cura |
 | 10 | **`microsteps` đọc ra 1/8 thay vì 16** | `refresh_stepping_mode()` ghi đè GCONF từ cache, chân MS1/MS2 không được điều khiển → **trục chạy gấp đôi** | Đã sửa trong `settings.cpp`, xem 11.4 |
 | 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
+| 12 | **Dựng mesh UBL trước khi căn gantry (G34)** | G34 nghiêng lại gantry → mesh cũ hiệu chỉnh **thừa** đúng phần vừa sửa; probe gắn trên gantry nên mesh mã hoá luôn độ nghiêng lúc đo | Luôn **G34 trước, `G29` sau**; tháo/lắp gantry, đổi belt, đổi Z-stepper thì `G29` lại |
+| 13 | **Với UBL, `M420 S1` không kiểm tra mesh hợp lệ** (`bedlevel.cpp:62` chỉ check cho `AUTO_BED_LEVELING_BILINEAR`) | `M420 S1` bật leveling trên mesh hỏng → in ra rác mà **không báo lỗi gì** | Xem `M420 V` phải in `Mesh is valid` trước khi tin |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
