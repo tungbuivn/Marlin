@@ -670,6 +670,32 @@ while ((isInf-- > 0) && !InfiniteG34(3)) { }   // lap, home lai sau moi 3 lan do
 > Thực tế `Q99` gần như tương đương "chạy tới khi xong": gần như không bao giờ chạm 99 lần, vì
 > mỗi vòng đã home lại nên sai số giảm dần. Đặt `Q` nhỏ (1–3) nếu muốn giới hạn thời gian chờ.
 
+#### Huỷ G34 bằng nút encoder
+
+Vì `Q99` có thể chạy lâu, **bấm nút encoder bất kỳ lúc nào là dừng G34** (dự án này thêm vào).
+
+```c
+// G34_M422.cpp — doc thang chan BTN_ENC, khong phu thuoc vong lap giao dien
+if (ui.button_pressed()) { g34_cancelled_by_user = true; err_break = true; break; }
+```
+
+| | |
+|---|---|
+| Đọc bằng gì | `ui.button_pressed()` → `hw_button_pressed()`, đọc **thẳng chân `BTN_ENC`** và có debounce (`ENCODER_SAMPLES`) — nên dùng được trong lúc G34 đang chặn |
+| Kiểm tra ở đâu | **Trước từng điểm probe** (`LOOP_L_N(i, NUM_Z_STEPPERS)`) → phản hồi trong khoảng **một lần probe (~2–5 s)**; và ở đầu mỗi vòng lặp iteration |
+| Thông báo | Serial: `G34 cancelled by encoder button.` · LCD: `G34 STOP` |
+| Sau khi huỷ | `HOME_AFTER_G34` đang bật → **Z được home lại**; probe được stow; leveling được khôi phục. Bản in **vẫn tiếp tục** bình thường |
+
+> **Cờ `g34_cancelled_by_user` phải ở phạm vi FILE.** `InfiniteG34()` trả về `true/false` để
+> vòng lặp `Q` biết "đã xong chưa" — mà **"bị huỷ" khác với "đã xong"**. Nếu chỉ dựa vào giá trị
+> trả về thì vòng `Q` sẽ **chạy lại tiếp** và nút bấm thành vô nghĩa. Vòng lặp ngoài vì vậy kiểm
+> tra thêm cờ: `while ((isInf-- > 0) && !g34_cancelled_by_user && !InfiniteG34(3))`.
+
+> **Guard khi `HOME_AFTER_G34` bị tắt:** nếu huỷ *trước khi probe được điểm nào*,
+> `z_measured_min` còn là giá trị rác `100000.0f`, và nhánh `#else` sẽ trừ nó vào
+> `current_position.z` → ra toạ độ vô lý. Script firmware nay kiểm tra cờ và **home lại Z** thay
+> vì trừ. Trên máy này `HOME_AFTER_G34` đang bật nên nhánh đó không chạy, nhưng guard vẫn giữ.
+
 ---
 
 ## Lịch sử dự án

@@ -41,6 +41,18 @@
   #include "../../module/tool_change.h"
 #endif
 
+// ---------------------------------------------------------------------------
+// Huy G34 bang nut encoder.
+//
+// ui.button_pressed() doc thang chan BTN_ENC qua hw_button_pressed() (co debounce)
+// nen dung duoc trong luc G34 dang chay, khong phu thuoc vong lap giao dien.
+//
+// Co nay phai o pham vi FILE, khong the la bien cuc bo: InfiniteG34() tra ve
+// true/false de vong lap Q trong G34() biet "da xong chua", ma "bi huy" KHAC voi
+// "da xong" - neu chi dua vao gia tri tra ve thi vong Q se chay lai tiep.
+// ---------------------------------------------------------------------------
+static bool g34_cancelled_by_user = false;
+
 #if HAS_Z_STEPPER_ALIGN_STEPPER_XY
   #include "../../libs/least_squares_fit.h"
 #endif
@@ -115,8 +127,20 @@ void GcodeSuite::G34() {
   }
 
   // re-homing after every 3 time measure
-  while ((isInf-->0) && !InfiniteG34(3)) {
-
+  // Bam nut encoder bat ky luc nao cung dung duoc: co se duoc kiem tra ben trong
+  // InfiniteG34() (truoc moi lan probe) va ngay tai day giua cac vong.
+  g34_cancelled_by_user = false;
+  while ((isInf-- > 0) && !g34_cancelled_by_user && !InfiniteG34(3)) {
+    if (ui.button_pressed()) {
+      g34_cancelled_by_user = true;
+      SERIAL_ECHOLNPGM("G34 cancelled by encoder button.");
+      LCD_MESSAGE_F("G34 STOP");
+      break;
+    }
+  }
+  if (g34_cancelled_by_user) {
+    SERIAL_ECHOLNPGM("G34 cancelled - chay lai bang G34 Q99 khi can.");
+    ui.set_status(F("G34 da huy"), true);
   }
 }
 
@@ -245,6 +269,16 @@ bool GcodeSuite::InfiniteG34(int nloop){
       uint8_t iteration = 0;
       bool err_break = false; // To break out of nested loops
       while (iteration < z_auto_align_iterations) {
+
+        // Huy bang nut encoder: kiem tra truoc moi vong lap
+        if (ui.button_pressed()) {
+          SERIAL_ECHOLNPGM("G34 cancelled by encoder button.");
+          LCD_MESSAGE_F("G34 STOP");
+          g34_cancelled_by_user = true;
+          err_break = true;
+          break;
+        }
+
         if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> probing all positions.");
 
         const int iter = iteration + 1;
@@ -261,6 +295,17 @@ bool GcodeSuite::InfiniteG34(int nloop){
 
         // Probe all positions (one per Z-Stepper)
         LOOP_L_N(i, NUM_Z_STEPPERS) {
+
+          // Huy bang nut encoder: kiem tra truoc TUNG diem probe, de phan hoi
+          // trong khoang mot lan probe (~2-5s) chu khong phai cho het ca vong.
+          if (!g34_cancelled_by_user && ui.button_pressed()) {
+            SERIAL_ECHOLNPGM("G34 cancelled by encoder button.");
+            LCD_MESSAGE_F("G34 STOP");
+            g34_cancelled_by_user = true;
+            err_break = true;
+            break;
+          }
+
           // iteration odd/even --> downward / upward stepper sequence
           const uint8_t iprobe = (iteration & 1) ? NUM_Z_STEPPERS - 1 - i : i;
 
@@ -485,11 +530,20 @@ bool GcodeSuite::InfiniteG34(int nloop){
         // Home Z after the alignment procedure
         process_subcommands_now(F("G28Z"));
       #else
-        // Use the probed height from the last iteration to determine the Z height.
-        // z_measured_min is used, because all steppers are aligned to z_measured_min.
-        // Ideally, this would be equal to the 'z_probe * 0.5f' which was added earlier.
-        current_position.z -= z_measured_min - (float)Z_CLEARANCE_BETWEEN_PROBES;
-        sync_plan_position();
+        // Binh thuong: dung chieu cao da do cua vong cuoi.
+        // NHUNG neu bi huy bang nut encoder thi z_measured_min co the chua duoc gan
+        // (con la gia tri rac 100000) -> tru vao current_position.z se ra so vo ly.
+        // Truong hop do home lai Z cho chac.
+        if (g34_cancelled_by_user) {
+          set_axis_never_homed(Z_AXIS);
+          process_subcommands_now(F("G28Z"));
+        }
+        else {
+          // z_measured_min is used, because all steppers are aligned to z_measured_min.
+          // Ideally, this would be equal to the 'z_probe * 0.5f' which was added earlier.
+          current_position.z -= z_measured_min - (float)Z_CLEARANCE_BETWEEN_PROBES;
+          sync_plan_position();
+        }
       #endif
 
       // Restore the active tool after homing
