@@ -538,16 +538,32 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 
 #### 2. In layer 0 hai lần — `double_first_layer`
 
-| Bước | Việc |
-|---|---|
-| **Pass 1** | In lại toàn bộ layer 0 với flow riêng (mặc định **20%**) |
-| **Giữa** | `M400` → `G90` → `G1 Z0.4 F600` (nâng Z) → **`G92 Z0.2`** (khai báo lại vị trí đó là Z của layer 0) |
-| **Pass 2** | In lại layer 0 với flow riêng (mặc định **80%**) |
-| Layer 1+ | **Không đụng tới** (100%) |
+Có **2 chế độ Z**, chọn bằng `z_mode`:
 
-`G92 Z0.2` là mấu chốt: sau khi nâng lên Z=0.4, firmware được bảo rằng "đây là Z=0.2",
-nên các bước `Z0.2` của pass 2 rơi xuống **cao hơn pass 1 đúng một lớp**. Layer 1
-(`Z0.4` trong G-code) tiếp tục ở 0.6, và cả bản in dịch lên 0.2.
+**`z_mode = "split"` (mặc định)** — chia layer 0 thành **2 lớp mỏng**, **KHÔNG đổi hệ toạ độ**:
+
+| Lượt | Z | Ví dụ (layer 0.2) |
+|---|---|---|
+| Pass 1 | `first_pass_z` | **0.1** |
+| Pass 2 | Z gốc của layer 0 | **0.2** |
+| Layer 1+ | không đụng | 0.4, 0.6… |
+
+Không có `G92` — chỉ **hạ Z của pass 1 xuống** rồi pass 2 in lại ở đúng Z gốc. Hệ toạ độ giữ
+nguyên nên **bản in cao đúng bằng mô hình** ✓. Nhựa vẫn 20% + 80% = **100%** trải trên 0.2 mm →
+**mật độ lớp đầu bình thường**, nhưng đường in được chạy 2 lượt nên đặc và phẳng hơn.
+
+Script tự đọc Z của layer 0 từ chính G-code, và **hạ Z bằng cách trừ một hằng số** khỏi mọi giá
+trị Z của pass 1 — nên **Z-hop (nếu bật) vẫn còn tác dụng**, không bị dẹp mất.
+
+> Nếu `first_pass_z` **không hợp lệ** (≤ 0, hoặc ≥ Z của layer 0) thì script **tự lùi về an toàn**:
+> hai pass cùng độ cao, không hạ Z, không `G92`, và ghi chú lý do vào G-code.
+
+**`z_mode = "shift"`** — cách cũ: `G1 Z<z_raise>` rồi `G92 Z<layer0_z>`, làm bản in **cao hơn
+mô hình đúng 0.2 mm**.
+
+> 🔴 **Guard:** nếu `layer0_z` > `z_raise` thì độ dịch hệ toạ độ là **âm**, mọi bước Z sau đó đi
+> **xuống** → **nozzle đâm vào bàn**. Script **tự bỏ qua lệnh `G92`** trong trường hợp này và ghi
+> cảnh báo vào G-code.
 
 **Toán lượng nhựa:** script giữ **hai bộ đếm** — `E gốc` (để tính delta) và `E mới` (để ghi ra).
 Dùng chung một biến là sai, vì delta sẽ bị tính trên giá trị đã nhân. Pass 2 chạy lại đúng body
@@ -559,8 +575,8 @@ pass 1 @ 20%:   0.1  0.1  0.1   -0.2           +0.2             0.14   -> E = 0.
 pass 2 @ 80%:   0.4  0.4  0.4   -0.2           +0.2             0.56   -> E = 2.20
                                                                         = đúng 1 lớp
 ```
-Tổng hai pass = **đúng bằng một lớp bình thường** (20% + 80% = 100%) — lớp đầu dày 2 lớp
-nhưng không thừa nhựa.
+Tổng hai pass = **đúng bằng một lớp bình thường** (20% + 80% = 100%) — hai lượt in nhưng không
+thừa nhựa.
 
 > **Chỉ nhân E của bước CÓ X hoặc Y.** Bước thuần E là retract/unretract — nhân chúng với
 > 20% sẽ biến lần retract thành vô nghĩa. Đây là lý do script phải phân biệt.
@@ -571,11 +587,12 @@ nhưng không thừa nhựa.
 | `hotend_temp` | 230 °C | `M104`/`M109` bị ép về số này |
 | `bed_temp` | 60 °C | `M140`/`M190` bị ép về số này |
 | `double_first_layer` | bật | In layer 0 hai lần |
+| `z_mode` | `split` | `split` = chia 2 lớp mỏng (không đổi Z) · `shift` = nâng Z + `G92` |
+| `first_pass_z` | 0.1 mm | Z của pass 1 (chế độ `split`) — phải **nhỏ hơn** chiều cao lớp đầu |
+| `z_raise` / `layer0_z` | 0.4 / 0.2 mm | Chỉ dùng ở chế độ `shift` |
 | `pass1_flow` | 20 % | Flow lần in đầu của layer 0 |
 | `pass2_flow` | 80 % | Flow lần in thứ hai của layer 0 |
-| `z_raise` | 0.4 mm | Z tuyệt đối nâng tới trước pass 2 |
-| `layer0_z` | 0.2 mm | `G92 Z<...>` sau khi nâng — điền **chiều cao lớp đầu** |
-| `z_feedrate` | 600 mm/min | Tốc độ nâng Z |
+| `z_feedrate` | 600 mm/min | Tốc độ di chuyển Z giữa hai pass |
 
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
 Script nằm ở `%APPDATA%\cura\<version>\scripts\FirstLayerTwice.py` và **chỉ được nạp lúc Cura
@@ -583,9 +600,6 @@ khởi động** — thêm file xong phải mở lại Cura.
 
 > Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
 > `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.
-
-> ⚠️ Bản in sẽ **cao hơn mô hình 0.2 mm** (lớp đầu dày gấp đôi). Muốn bù thì giảm Z offset
-> hoặc chấp nhận — với lớp đầu thì thường không ảnh hưởng gì.
 
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 

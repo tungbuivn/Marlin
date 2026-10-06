@@ -94,35 +94,58 @@ class FirstLayerTwice(Script):
                     "maximum_value": 200,
                     "enabled": "enabled and double_first_layer"
                 },
+                "z_mode":
+                {
+                    "label": "Cach xu ly Z",
+                    "description": "split = chia layer 0 thanh 2 lop mong, KHONG doi he toa do (ban in dung cao). shift = nang Z roi G92 (ban in cao hon 1 lop).",
+                    "type": "enum",
+                    "options":
+                    {
+                        "split": "Chia layer 0 thanh 2 lop (khong doi Z)",
+                        "shift": "Nang Z roi G92 (cao hon 1 lop)"
+                    },
+                    "default_value": "split",
+                    "enabled": "enabled and double_first_layer"
+                },
+                "first_pass_z":
+                {
+                    "label": "Z cua pass 1 (che do split)",
+                    "description": "In pass 1 o do cao nay, pass 2 tro ve Z goc cua layer 0. Phai NHO HON chieu cao lop dau; mac dinh 0.1 voi lop 0.2.",
+                    "unit": "mm",
+                    "type": "float",
+                    "default_value": 0.1,
+                    "minimum_value": 0.01,
+                    "enabled": "enabled and double_first_layer and z_mode == 'split'"
+                },
                 "z_raise":
                 {
-                    "label": "Z to raise to before pass 2",
+                    "label": "Z to raise to before pass 2 (che do shift)",
                     "description": "Z tuyet doi ma nozzle di toi truoc khi in lai layer 0.",
                     "unit": "mm",
                     "type": "float",
                     "default_value": 0.4,
                     "minimum_value": 0,
-                    "enabled": "enabled"
+                    "enabled": "enabled and double_first_layer and z_mode == 'shift'"
                 },
                 "layer0_z":
                 {
-                    "label": "Z to declare after the raise",
-                    "description": "G92 Z<so nay> sau khi nang, de pass 2 roi cao hon pass 1 dung mot lop. Dien chieu cao lop dau (thuong 0.2).",
+                    "label": "Z to declare after the raise (che do shift)",
+                    "description": "G92 Z<so nay> sau khi nang. PHAI <= Z nang, neu khong he toa do se dich XUONG va nozzle dam vao ban.",
                     "unit": "mm",
                     "type": "float",
                     "default_value": 0.2,
                     "minimum_value": 0,
-                    "enabled": "enabled"
+                    "enabled": "enabled and double_first_layer and z_mode == 'shift'"
                 },
                 "z_feedrate":
                 {
                     "label": "Z feedrate",
-                    "description": "Feedrate cho buoc nang Z giua hai pass.",
+                    "description": "Feedrate cho buoc di chuyen Z giua hai pass.",
                     "unit": "mm/min",
                     "type": "int",
                     "default_value": 600,
                     "minimum_value": 1,
-                    "enabled": "enabled"
+                    "enabled": "enabled and double_first_layer"
                 }
             }
         }"""
@@ -175,6 +198,34 @@ class FirstLayerTwice(Script):
             out.append(self.putValue(line, **kwargs))
 
         return "\n".join(out)
+
+    def _find_layer_z(self, body):
+        """Z cua layer 0: gia tri Z dau tien trong mot buoc G0/G1 cua body."""
+        for line in body:
+            code = line.split(";", 1)[0].strip()
+            if not code:
+                continue
+            if code.split()[0] not in ("G0", "G1"):
+                continue
+            value = self.getValue(line, "Z")
+            if value is not None:
+                return float(value)
+        return None
+
+    def _shift_z(self, lines, offset):
+        """Tru offset khoi MOI gia tri Z (giu nguyen Z-hop, vi cung tru mot hang so)."""
+        out = []
+        for line in lines:
+            code = line.split(";", 1)[0].strip()
+            if not code or code.split()[0] not in ("G0", "G1"):
+                out.append(line)
+                continue
+            value = self.getValue(line, "Z")
+            if value is None:
+                out.append(line)
+                continue
+            out.append(self.putValue(line, Z="{0:.5f}".format(float(value) - offset)))
+        return out
 
     def _find_layer(self, data, number):
         """Tim chunk chua ';LAYER:<number>'. Tra ve (index, offset dong) hoac (None, None)."""
@@ -294,8 +345,7 @@ class FirstLayerTwice(Script):
 
         factor1 = float(self.getSettingValueByKey("pass1_flow")) / 100.0
         factor2 = float(self.getSettingValueByKey("pass2_flow")) / 100.0
-        z_raise = float(self.getSettingValueByKey("z_raise"))
-        layer0_z = float(self.getSettingValueByKey("layer0_z"))
+        z_mode = self.getSettingValueByKey("z_mode")
         z_feedrate = int(self.getSettingValueByKey("z_feedrate"))
 
         lines = data[index].split("\n")
@@ -304,17 +354,51 @@ class FirstLayerTwice(Script):
 
         relative, e_at_layer0 = self._scan_mode_and_e(data[:index])
 
+        layer_z = self._find_layer_z(body)
+
+        # ---- pass 1 ----
         pass1, _e_orig, e_after_pass1 = self._rescale(body, e_at_layer0, e_at_layer0, factor1, relative)
 
-        jump = [
-            "",
-            "; --- First Layer Twice: ket thuc pass 1 ({0:.0f}%) ---".format(factor1 * 100),
-            "M400 ; doi in xong lop thu nhat",
-            "G90 ; toa do tuyet doi",
-            "G1 Z{0} F{1} ; nang Z truoc khi in lai layer 0".format(z_raise, z_feedrate),
-            "G92 Z{0} ; khai bao lai day la Z cua layer 0".format(layer0_z),
-            "; --- First Layer Twice: bat dau pass 2 ({0:.0f}%) ---".format(factor2 * 100),
-        ]
+        jump = [""]
+
+        if z_mode == "split":
+            # Chia layer 0 thanh 2 lop mong. KHONG dung G92: chi ha Z cua pass 1
+            # xuong, roi pass 2 in lai o dung Z goc. He toa do khong doi nen ban
+            # in khong cao hon mo hinh.
+            first_pass_z = float(self.getSettingValueByKey("first_pass_z"))
+            if layer_z is not None and 0 < first_pass_z < layer_z:
+                pass1 = self._shift_z(pass1, layer_z - first_pass_z)
+                jump += [
+                    "; --- First Layer Twice: ket thuc pass 1 (Z{0}) ---".format(first_pass_z),
+                    "M400 ; doi in xong lop thu nhat",
+                    "G90 ; toa do tuyet doi",
+                    "G1 Z{0} F{1} ; len lai Z goc cua layer 0".format(layer_z, z_feedrate),
+                    "; --- First Layer Twice: bat dau pass 2 (Z{0}, {1:.0f}%) ---".format(layer_z, factor2 * 100),
+                ]
+            else:
+                # Tham so khong hop le -> hai pass cung do cao, an toan (khong ha Z,
+                # khong dung G92).
+                jump += [
+                    "; --- First Layer Twice: first_pass_z khong hop le (Z layer 0 = {0}), hai pass cung do cao ---".format(layer_z),
+                    "M400",
+                    "G90",
+                    "; --- First Layer Twice: bat dau pass 2 ({0:.0f}%) ---".format(factor2 * 100),
+                ]
+        else:
+            z_raise = float(self.getSettingValueByKey("z_raise"))
+            layer0_z = float(self.getSettingValueByKey("layer0_z"))
+            jump += [
+                "; --- First Layer Twice: ket thuc pass 1 ({0:.0f}%) ---".format(factor1 * 100),
+                "M400 ; doi in xong lop thu nhat",
+                "G90 ; toa do tuyet doi",
+                "G1 Z{0} F{1} ; nang Z truoc khi in lai layer 0".format(z_raise, z_feedrate),
+            ]
+            if layer0_z <= z_raise:
+                jump.append("G92 Z{0} ; khai bao lai day la Z cua layer 0".format(layer0_z))
+            else:
+                # Dich he toa do XUONG se day nozzle vao ban -> bo qua G92.
+                jump.append("; CANH BAO: layer0_z ({0}) > z_raise ({1}) -> BO QUA G92 de an toan".format(layer0_z, z_raise))
+            jump.append("; --- First Layer Twice: bat dau pass 2 ({0:.0f}%) ---".format(factor2 * 100))
 
         pass2, _e_orig2, e_after_pass2 = self._rescale(body, e_at_layer0, e_after_pass1, factor2, relative)
 
