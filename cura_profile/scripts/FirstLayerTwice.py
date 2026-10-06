@@ -1,0 +1,235 @@
+# FirstLayerTwice.py
+#
+# Cura post-processing script: in layer 0 hai lan.
+#
+#   pass 1 - in lai toan bo layer 0 voi flow rieng (mac dinh 20%)
+#   giua   - nang Z len, roi G92 gan lai vi tri do thanh Z cua layer 0, de cac
+#            buoc cua pass 2 roi xuong cao hon pass 1 dung mot lop
+#   pass 2 - layer 0 voi flow rieng (mac dinh 80%)
+#
+# Layer 1 tro len KHONG bi dung toi (100%).
+#
+# Chi nhan E cua nhung buoc CO X hoac Y. Buoc retract / unretract la buoc thuan E
+# (khong co XY) nen duoc giu nguyen - nhan chung voi 20% se bien lan retract
+# thanh vo nghia.
+#
+# Cura nap script theo quy tac: TEN CLASS PHAI TRUNG TEN FILE.
+
+from ..Script import Script
+
+
+class FirstLayerTwice(Script):
+
+    def getSettingDataString(self):
+        return """{
+            "name": "First Layer Twice",
+            "key": "FirstLayerTwice",
+            "metadata": {},
+            "version": 2,
+            "settings":
+            {
+                "enabled":
+                {
+                    "label": "Enable this script",
+                    "description": "You must enable the script for it to run.",
+                    "type": "bool",
+                    "default_value": true,
+                    "enabled": true
+                },
+                "pass1_flow":
+                {
+                    "label": "Pass 1 flow",
+                    "description": "Luong nhua cho lan in dau cua layer 0, tinh theo % so voi binh thuong.",
+                    "unit": "%",
+                    "type": "float",
+                    "default_value": 20,
+                    "minimum_value": 0,
+                    "maximum_value": 200,
+                    "enabled": "enabled"
+                },
+                "pass2_flow":
+                {
+                    "label": "Pass 2 flow (layer 0)",
+                    "description": "Luong nhua cho lan in thu hai cua layer 0. Cac layer tren van 100%.",
+                    "unit": "%",
+                    "type": "float",
+                    "default_value": 80,
+                    "minimum_value": 0,
+                    "maximum_value": 200,
+                    "enabled": "enabled"
+                },
+                "z_raise":
+                {
+                    "label": "Z to raise to before pass 2",
+                    "description": "Z tuyet doi ma nozzle di toi truoc khi in lai layer 0.",
+                    "unit": "mm",
+                    "type": "float",
+                    "default_value": 0.4,
+                    "minimum_value": 0,
+                    "enabled": "enabled"
+                },
+                "layer0_z":
+                {
+                    "label": "Z to declare after the raise",
+                    "description": "G92 Z<so nay> sau khi nang, de pass 2 roi cao hon pass 1 dung mot lop. Dien chieu cao lop dau (thuong 0.2).",
+                    "unit": "mm",
+                    "type": "float",
+                    "default_value": 0.2,
+                    "minimum_value": 0,
+                    "enabled": "enabled"
+                },
+                "z_feedrate":
+                {
+                    "label": "Z feedrate",
+                    "description": "Feedrate cho buoc nang Z giua hai pass.",
+                    "unit": "mm/min",
+                    "type": "int",
+                    "default_value": 600,
+                    "minimum_value": 1,
+                    "enabled": "enabled"
+                }
+            }
+        }"""
+
+    # ------------------------------------------------------------------ #
+    # helpers
+    # ------------------------------------------------------------------ #
+
+    def _find_layer(self, data, number):
+        """Tim chunk chua ';LAYER:<number>'. Tra ve (index, offset dong) hoac (None, None)."""
+        want = ";LAYER:{0}".format(number)
+        for index, chunk in enumerate(data):
+            for offset, line in enumerate(chunk.split("\n")):
+                if line.strip() == want:
+                    return index, offset
+        return None, None
+
+    def _scan_mode_and_e(self, chunks):
+        """quet cac chunk truoc do -> (dang E tuong doi?, gia tri E cuoi cung)"""
+        relative = False
+        e = 0.0
+        for chunk in chunks:
+            for line in chunk.split("\n"):
+                code = line.split(";", 1)[0].strip()
+                if not code:
+                    continue
+                word = code.split()[0]
+                if word == "M83":
+                    relative = True
+                    continue
+                if word == "M82":
+                    relative = False
+                    continue
+                if word == "G92":
+                    value = self.getValue(line, "E")
+                    if value is not None:
+                        e = float(value)
+                    continue
+                if word in ("G0", "G1"):
+                    value = self.getValue(line, "E")
+                    if value is not None:
+                        e = float(value)
+        return relative, e
+
+    def _rescale(self, body, e_orig_start, e_new_start, factor, relative):
+        """Nhan luong nhua cua mot lan in.
+
+        Can HAI bo dem: E goc (gia tri trong file, dung de tinh delta) va E moi
+        (gia tri se ghi ra). Khong the dung chung mot bien, vi sau lan nhan dau
+        tien delta se duoc tinh tren gia tri da bi nhan.
+
+        Pass 2 chay lai dung body do, nen E goc xuat phat tu CUNG mot diem nhu
+        pass 1; chi E moi la tiep noi tu cuoi pass 1 (vi dau extruder dang o do).
+
+        Tra ve (danh sach dong moi, E goc cuoi, E moi cuoi).
+        """
+        out = []
+        e_orig = e_orig_start
+        e_new = e_new_start
+        for line in body:
+            code = line.split(";", 1)[0].strip()
+            if not code:
+                out.append(line)
+                continue
+
+            word = code.split()[0]
+
+            if word == "G92":
+                value = self.getValue(line, "E")
+                if value is not None:
+                    e_orig = float(value)
+                    e_new = float(value)
+                out.append(line)
+                continue
+
+            if word not in ("G0", "G1"):
+                out.append(line)
+                continue
+
+            value = self.getValue(line, "E")
+            if value is None:
+                out.append(line)
+                continue
+
+            value = float(value)
+            if relative:
+                delta = value
+                e_orig = value
+            else:
+                delta = value - e_orig
+                e_orig = value
+
+            # Chi nhan khi buoc co di chuyen XY (dang do nhua thuc su).
+            # Buoc thuan E la retract/unretract -> giu nguyen.
+            if delta > 0 and ("X" in code or "Y" in code):
+                delta *= factor
+
+            e_new += delta
+            out.append(self.putValue(line, E="{0:.5f}".format(e_new)))
+
+        return out, e_orig, e_new
+
+    # ------------------------------------------------------------------ #
+
+    def execute(self, data):
+        if not self.getSettingValueByKey("enabled"):
+            return data
+
+        index, offset = self._find_layer(data, 0)
+        if index is None:
+            return data
+
+        factor1 = float(self.getSettingValueByKey("pass1_flow")) / 100.0
+        factor2 = float(self.getSettingValueByKey("pass2_flow")) / 100.0
+        z_raise = float(self.getSettingValueByKey("z_raise"))
+        layer0_z = float(self.getSettingValueByKey("layer0_z"))
+        z_feedrate = int(self.getSettingValueByKey("z_feedrate"))
+
+        lines = data[index].split("\n")
+        prefix = lines[:offset + 1]          # ... dong ';LAYER:0'
+        body = lines[offset + 1:]
+
+        relative, e_at_layer0 = self._scan_mode_and_e(data[:index])
+
+        pass1, _e_orig, e_after_pass1 = self._rescale(body, e_at_layer0, e_at_layer0, factor1, relative)
+
+        jump = [
+            "",
+            "; --- First Layer Twice: ket thuc pass 1 ({0:.0f}%) ---".format(factor1 * 100),
+            "M400 ; doi in xong lop thu nhat",
+            "G90 ; toa do tuyet doi",
+            "G1 Z{0} F{1} ; nang Z truoc khi in lai layer 0".format(z_raise, z_feedrate),
+            "G92 Z{0} ; khai bao lai day la Z cua layer 0".format(layer0_z),
+            "; --- First Layer Twice: bat dau pass 2 ({0:.0f}%) ---".format(factor2 * 100),
+        ]
+
+        pass2, _e_orig2, e_after_pass2 = self._rescale(body, e_at_layer0, e_after_pass1, factor2, relative)
+
+        data[index] = "\n".join(
+            prefix
+            + ["; --- First Layer Twice: pass 1 ({0:.0f}%) ---".format(factor1 * 100)]
+            + pass1
+            + jump
+            + pass2
+        )
+        return data

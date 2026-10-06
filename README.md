@@ -510,6 +510,55 @@ vào cả hai container.
 > đủ chuỗi `voron2_300` → `voron2_base` → `fdmprinter`. Script ghi vào đó và **merge** — giữ lại
 > các giá trị anh đã đặt tay (ví dụ `infill_pattern`, `infill_sparse_density`).
 
+### Script hậu xử lý — `FirstLayerTwice.py`
+
+In **layer 0 hai lần** để lớp đầu bám chắc và phẳng hơn.
+
+| Bước | Việc |
+|---|---|
+| **Pass 1** | In lại toàn bộ layer 0 với flow riêng (mặc định **20%**) |
+| **Giữa** | `M400` → `G90` → `G1 Z0.4 F600` (nâng Z) → **`G92 Z0.2`** (khai báo lại vị trí đó là Z của layer 0) |
+| **Pass 2** | In lại layer 0 với flow riêng (mặc định **80%**) |
+| Layer 1+ | **Không đụng tới** (100%) |
+
+`G92 Z0.2` là mấu chốt: sau khi nâng lên Z=0.4, firmware được bảo rằng "đây là Z=0.2",
+nên các bước `Z0.2` của pass 2 rơi xuống **cao hơn pass 1 đúng một lớp**. Layer 1
+(`Z0.4` trong G-code) tiếp tục ở 0.6, và cả bản in dịch lên 0.2.
+
+**Toán lượng nhựa:** script giữ **hai bộ đếm** — `E gốc` (để tính delta) và `E mới` (để ghi ra).
+Dùng chung một biến là sai, vì delta sẽ bị tính trên giá trị đã nhân. Pass 2 chạy lại đúng body
+đó nên `E gốc` xuất phát từ **cùng điểm** như pass 1, chỉ `E mới` nối tiếp từ cuối pass 1.
+
+```
+delta gốc:      0.5  0.5  0.5  (-0.2 retract)  (+0.2 unretract)  0.7
+pass 1 @ 20%:   0.1  0.1  0.1   -0.2           +0.2             0.14   -> E = 0.44
+pass 2 @ 80%:   0.4  0.4  0.4   -0.2           +0.2             0.56   -> E = 2.20
+                                                                        = đúng 1 lớp
+```
+Tổng hai pass = **đúng bằng một lớp bình thường** (20% + 80% = 100%) — lớp đầu dày 2 lớp
+nhưng không thừa nhựa.
+
+> **Chỉ nhân E của bước CÓ X hoặc Y.** Bước thuần E là retract/unretract — nhân chúng với
+> 20% sẽ biến lần retract thành vô nghĩa. Đây là lý do script phải phân biệt.
+
+| Tham số | Mặc định | Ý nghĩa |
+|---|---|---|
+| `pass1_flow` | 20 % | Flow lần in đầu của layer 0 |
+| `pass2_flow` | 80 % | Flow lần in thứ hai của layer 0 |
+| `z_raise` | 0.4 mm | Z tuyệt đối nâng tới trước pass 2 |
+| `layer0_z` | 0.2 mm | `G92 Z<...>` sau khi nâng — điền **chiều cao lớp đầu** |
+| `z_feedrate` | 600 mm/min | Tốc độ nâng Z |
+
+**Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
+Script nằm ở `%APPDATA%\cura\<version>\scripts\FirstLayerTwice.py` và **chỉ được nạp lúc Cura
+khởi động** — thêm file xong phải mở lại Cura.
+
+> Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
+> `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.
+
+> ⚠️ Bản in sẽ **cao hơn mô hình 0.2 mm** (lớp đầu dày gấp đôi). Muốn bù thì giảm Z offset
+> hoặc chấp nhận — với lớp đầu thì thường không ảnh hưởng gì.
+
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 
 | Thiết lập | Bản gốc Cura | Máy này | Vì sao |

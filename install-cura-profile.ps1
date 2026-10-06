@@ -162,10 +162,34 @@ if (-not $AddAsNewPrinter) {
         }
     }
 
+    # ------------------------------------------------------------------ #
+    # Script hau xu ly (PostProcessingPlugin) -> <config>\<ver>\scripts\
+    # Cura chi doc thu muc nay luc khoi dong, nen phai MO LAI CURA moi thay.
+    # ------------------------------------------------------------------ #
+    $scriptSrc = Join-Path $repoRoot "cura_profile\scripts"
+    if (Test-Path $scriptSrc) {
+        $pyFiles = Get-ChildItem "$scriptSrc\*.py" -ErrorAction SilentlyContinue
+        foreach ($v in $versions) {
+            $dstDir = Join-Path $root "$v\scripts"
+            foreach ($src in $pyFiles) {
+                $dst = Join-Path $dstDir $src.Name
+                if ($WhatIf) {
+                    Write-Host "[Script] $v : [WhatIf] se copy -> $($src.Name)" -ForegroundColor DarkGray
+                    $done++
+                    continue
+                }
+                if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
+                Copy-Item $src.FullName $dst -Force
+                Write-Host "[Script] $v : OK -> scripts\$($src.Name)" -ForegroundColor Green
+                $done++
+            }
+        }
+    }
+
     Write-Host ""
     Write-Host "===== KET QUA =====" -ForegroundColor Cyan
     if ($done -gt 0) {
-        Write-Host "Da ap dung cho $done container." -ForegroundColor Green
+        Write-Host "Da ap dung cho $done muc." -ForegroundColor Green
         Write-Host ""
         Write-Host "Buoc tiep theo:" -ForegroundColor Cyan
         Write-Host "  1. MO CURA LAI."
