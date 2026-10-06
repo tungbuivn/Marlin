@@ -72,11 +72,31 @@ if ($curaProcs) {
 # ===========================================================================
 if (-not $AddAsNewPrinter) {
 
-    # Moi file template ap cho mot nhom container, nhan dien qua dong "definition = ..."
+    # Moi file template ap cho mot nhom container.
+    #   SubDir   : thu muc con trong config Cura
+    #   MatchKey : dong trong file dung de nhan dien container
+    #   Merge    : $true = giu lai cac gia tri nguoi dung da dat, chi them key con thieu
     $jobs = @(
-        @{ Template = "machine_definition_changes.inst.cfg";  Label = "May in";    Pattern = [regex]::Escape($Definition) },
-        @{ Template = "extruder_definition_changes.inst.cfg"; Label = "Extruder";  Pattern = 'voron2_extruder.*' }
+        @{ Template = "machine_definition_changes.inst.cfg";  Label = "May in";          SubDir = "definition_changes"; MatchKey = "definition"; Pattern = [regex]::Escape($Definition); Merge = $false },
+        @{ Template = "extruder_definition_changes.inst.cfg"; Label = "Extruder (gcode)"; SubDir = "definition_changes"; MatchKey = "definition"; Pattern = 'voron2_extruder.*';     Merge = $false },
+        @{ Template = "extruder_user.inst.cfg";               Label = "Extruder (user)";  SubDir = "user";               MatchKey = "extruder";   Pattern = 'voron2_extruder.*';     Merge = $true  }
     )
+
+    # Ghep gia tri: giu nguyen file goc, chi them cac key ma file goc chua co
+    function Merge-Values([string]$existingRaw, [string]$tplRaw) {
+        $tplVals = ($tplRaw -split '(?m)^\[values\]\s*$')[1]
+        if (-not $tplVals) { return $existingRaw }
+        $existingKeys = [regex]::Matches($existingRaw, '(?m)^([^=\n !]+)[ \t]*=') | ForEach-Object { $_.Groups[1].Value }
+        $out = $existingRaw.TrimEnd() + "`n"
+        foreach ($line in ($tplVals -split "`n")) {
+            if ($line -match '^\s*$') { continue }
+            if ($line -match '^\t') { $out += $line + "`n"; continue }   # dong noi cua gia tri nhieu dong
+            $k = ($line -split '=', 2)[0].Trim()
+            if ($existingKeys -contains $k) { continue }                 # nguoi dung da dat roi -> ton trong
+            $out += $line + "`n"
+        }
+        return $out
+    }
 
     $root = if ($CuraConfigRoot) { $CuraConfigRoot } else { Join-Path $env:APPDATA "cura" }
     if (-not (Test-Path $root)) {
@@ -104,27 +124,31 @@ if (-not $AddAsNewPrinter) {
         $tplRaw = Get-Content $template -Raw
 
         foreach ($v in $versions) {
-            $dcDir = Join-Path $root "$v\definition_changes"
+            $dcDir = Join-Path $root "$v\$($job.SubDir)"
             if (-not (Test-Path $dcDir)) { continue }
 
             $targets = Get-ChildItem "$dcDir\*.inst.cfg" -ErrorAction SilentlyContinue | Where-Object {
-                (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "(?m)^definition\s*=\s*$($job.Pattern)\s*$"
+                (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "(?m)^$($job.MatchKey)\s*=\s*$($job.Pattern)\s*$"
             }
             if (-not $targets) { continue }
 
             Write-Host "[$($job.Label)] $v : $($targets.Count) container" -ForegroundColor Cyan
             foreach ($t in $targets) {
-                # Giu nguyen 'name' va 'definition' cua file goc: ten file dung dau '+' thay
-                # cho dau cach (Voron2+300_settings.inst.cfg) nhung gia tri name lai co dau cach.
+                # Giu nguyen 'name' / 'definition' / 'extruder' cua file goc: ten file dung dau '+'
+                # thay cho dau cach (Voron2+300_settings.inst.cfg) nhung gia tri name lai co dau cach.
                 $raw = Get-Content $t.FullName -Raw
                 $nameMatch = [regex]::Match($raw, '(?m)^name\s*=\s*(.+?)\s*$')
                 $defMatch  = [regex]::Match($raw, '(?m)^definition\s*=\s*(.+?)\s*$')
+                $extMatch  = [regex]::Match($raw, '(?m)^extruder\s*=\s*(.+?)\s*$')
                 $machineName = if ($nameMatch.Success) { $nameMatch.Groups[1].Value } else { $t.Name -replace '\.inst\.cfg$', '' }
                 $machineDef  = if ($defMatch.Success)  { $defMatch.Groups[1].Value }  else { $Definition }
-                $content = $tplRaw.Replace('@NAME@', $machineName).Replace('@DEFINITION@', $machineDef)
+                $machineExt  = if ($extMatch.Success)  { $extMatch.Groups[1].Value }  else { '' }
+                $content = $tplRaw.Replace('@NAME@', $machineName).Replace('@DEFINITION@', $machineDef).Replace('@EXTRUDER@', $machineExt)
+
+                if ($job.Merge) { $content = Merge-Values $raw $content }
 
                 if ($WhatIf) {
-                    Write-Host "  [WhatIf] se ghi de -> $($t.Name)" -ForegroundColor DarkGray
+                    Write-Host "  [WhatIf] se ghi $(if ($job.Merge) {'(merge)'} else {'(de)'}) -> $($t.Name)" -ForegroundColor DarkGray
                     $done++
                     continue
                 }

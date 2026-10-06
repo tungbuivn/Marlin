@@ -435,6 +435,16 @@ vào cả hai container.
 > Retraction Speed / Retraction Retract Speed"*. Muốn retract nhanh hơn thì phải nâng `M203 E`
 > lên ≥ 40 trong firmware rồi đặt lại cho khớp.
 
+> ⚠️ **Tốc độ retract PHẢI nằm ở container `user`, không phải `definition_changes`.**
+> `fdmextruder.def.json` **không có dòng `inherits`** — nó đứng riêng, không kế thừa
+> `fdmprinter`. Nên definition `Toolhead` (= `voron2_extruder_0` → `fdmextruder`) **không chứa**
+> `retraction_speed` (setting này ở `fdmprinter.def.json` dòng 4702). Đặt vào container
+> `definition_changes` của extruder thì Cura **âm thầm bỏ qua** và ghi log:
+> `InstanceContainer.setProperty: ... has no SettingInstance ... SettingDefinition Toolhead`.
+> Container `user` của extruder khai `definition = voron2_300` (definition của **máy**), nên có
+> đủ chuỗi `voron2_300` → `voron2_base` → `fdmprinter`. Script ghi vào đó và **merge** — giữ lại
+> các giá trị anh đã đặt tay (ví dụ `infill_pattern`, `infill_sparse_density`).
+
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 
 | Thiết lập | Bản gốc Cura | Máy này | Vì sao |
