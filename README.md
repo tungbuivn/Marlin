@@ -89,11 +89,36 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X500 Y500 Z10 E25` | |
-| Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | |
-| Accel print/retract/travel | `M204 P500 R500 T1000` | |
-| Jerk | `M205 X10 Y10 Z0.40 E5` | |
+| Accel (mm/s²) | `M201 X1500 Y1500 Z100 E1000` | X/Y theo mức "an toàn" của Voron |
+| Accel print/retract/travel | `M204 P1500 R500 T2000` | |
+| Jerk | `M205 X8 Y8 Z0.40 E5` | |
 | Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
 | Soft endstop | `M211 S1` | |
+
+### 3.1 Vì sao X/Y = 1500 chứ không phải 3000 của Voron
+
+`printer.cfg` gốc của Voron Design đặt `max_accel: 3000` (kèm ghi chú `# Max 4000`), và profile
+Cura chính thức của Voron còn cao hơn (`acceleration_print 5000`). Nhưng **những con số đó là cho
+Klipper đã chạy input shaping**; Marlin **không có input shaping**, nên lấy nguyên 3000 sẽ thấy
+ghosting ở góc.
+
+Hiện tại: **1500** (một nửa mức gốc). Muốn nâng thì tăng dần 1500 → 2000 → 2500 và dừng ngay khi
+thấy vệt rung.
+
+> ⚠️ **Marlin lấy `min(M204 P, M201 của trục)`.** Nên profile Cura khai
+> `acceleration_print 5000` mà `M201 X/Y` chỉ 1500 thì bản in **vẫn chạy 1500** — Cura phát
+> `M204 P5000` nhưng firmware kẹp xuống. Muốn 5000 thật thì phải nâng `M201 X/Y` (cần flash).
+> Z và E giữ nguyên: `M201 Z100` / `E1000` là **trần cứng** cho hai trục đó, nâng `M204 P` không
+> làm chúng gia tốc mạnh hơn.
+
+### 3.2 `INVERT_E0_DIR` — hướng extruder
+
+```c
+#define INVERT_E0_DIR false   // Bondtech BMG la extruder CO HOP SO (E = 415 steps/mm)
+```
+Comment ngay trên option đó trong Marlin: *"for direct drive extruder v9 set to true, for **geared
+extruder** set to false"*. Để `true` thì `G1 E10` **rút** thay vì đẩy. Chiều quay **không** lưu
+trong EEPROM — chỉ có trong firmware, phải flash mới đổi được.
 
 ---
 
@@ -106,7 +131,7 @@ Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable q
 | Tín hiệu probe | **PB13** (header `Z-`), `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN` + `USE_PROBE_FOR_Z_HOMING` |
 | Enable probe | **PA8** (`PROBE_ENABLE_PIN`, header servo) — `1` = bật mạch cảm biến, `0` = tắt |
 | Điều khiển | **`M401`** = deploy (PA8 HIGH) · **`M402`** = stow (PA8 LOW) |
-| Offset nozzle→probe | `M851 X0.00 Y0.00 Z0.00` — **XY = 0 vì probe là chính nozzle (Voron Tap)** |
+| Offset nozzle→probe | `M851 X0.00 Y0.00 Z0.70` — **XY = 0 vì probe là chính nozzle (Voron Tap)**. Số Z là kết quả cân thực tế, có thể đổi mỗi lần cân lại |
 | Cân Z offset | **`Motion` → `Probe Offset Wizard`** (hoặc `Advanced Settings` → `Z Probe Offsets` → `Probe Offset Wizard`) |
 | `PROBING_MARGIN` | 15 mm |
 | Logic | `Z_MIN_ENDSTOP_INVERTING false` |
@@ -119,8 +144,11 @@ Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable q
 > 🔴 **Offset Z sai có thể đâm nozzle vào bàn.** `motion.cpp:2349` chạy
 > `current_position.z -= probe.offset.z` sau khi home. Với `Z-3.35` (số cũ của cảm biến trước),
 > lúc probe trigger — tức nozzle **đang chạm bàn** — firmware lại tưởng Z = **+3.35**, nên
-> `G1 Z0.2` sẽ đẩy nozzle **3.15 mm xuyên xuống bàn**. Đã đặt lại `M851 Z0` + `M500`;
-> **chạy `Probe Offset Wizard` để lấy số chính xác trước khi in.**
+> `G1 Z0.2` sẽ đẩy nozzle **3.15 mm xuyên xuống bàn**. Offset hiện tại **`Z0.70`** đã cân bằng
+> `Probe Offset Wizard` rồi; nếu đổi nozzle/toolhead thì phải cân lại.
+
+> **Quy trình cân Z offset:** `Motion → Probe Offset Wizard` → home → probe giữa bàn → hạ nozzle
+> từng bước 0.1 mm tới khi tờ giấy kẹt nhẹ → `DONE` → **`M500`**. Không có `M500` là mất khi tắt máy.
 
 > Probe chỉ có tín hiệu khi **đã deploy** (`M401`). Khi stow thì `z_min` không phản ánh bàn.
 > `G35` và các wizard tự deploy/stow, không cần `M401` tay.
@@ -134,7 +162,7 @@ Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable q
 | Leveling | **UBL (Unified Bed Leveling)** |
 | Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 15` → phủ **`(15,15)` … `(290,290)`** |
 | Fade height | 10 mm |
-| Trạng thái | `M420 S0` — **leveling đang TẮT** cho tới khi tạo mesh |
+| Trạng thái | **Đã có mesh ở slot 0** — `Mesh is valid`, `Storage slot: 0`, `Bed Leveling ON`. `M500` báo `Mesh saved in slot 0` |
 | Căn gantry | `Z_STEPPER_AUTO_ALIGN` (**G34**) — 3 điểm `{280,285} {25,285} {152.5,25}` = **sau-phải, sau-trái, trước-GIỮA** (layout 2, đúng vị trí 3 vít me) |
 | Tram bàn | `ASSISTED_TRAMMING` (**G35**) + Tramming Wizard — 4 điểm góc |
 
@@ -312,11 +340,27 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; M92 X80 Y80 Z800 E415 / M203 Z10.00
+M503        ; M92 X80 Y80 Z800 E415 / M203 Z10 E25
+            ; M201 X1500 Y1500 Z100 E1000 / M204 P1500 R500 T2000 / M205 X8 Y8 Z0.40 E5
+            ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
-M420 V      ; mesh 7x7, bien (15,15) .. (290,290)
+M422        ; 3 diem G34: S1 280/285, S2 25/285, S3 152.5/25
+M420 V      ; mesh 7x7, bien (15,15) .. (290,290), Storage slot: 0, Bed Leveling ON
 ```
+
+### Checklist sau mỗi lần nạp
+
+| Kiểm tra | Lệnh | Mong đợi |
+|---|---|---|
+| Firmware mới thật chưa | `M115` | timestamp khớp giờ build |
+| Sau `G28` nozzle có được nâng | `G28` → `M114` | **`Z:10.00`** (`Z_AFTER_PROBING 10`) |
+| Chiều extruder | `M83` · `G1 E10 F100` | **đẩy ra**, không phải rút vào |
+| Offset probe còn không | `M851` | Z ≈ 0.70 (số đã cân) |
+| Điểm G34 còn không | `M422` | `S3 X152.50 Y25` |
+| Mesh còn không | `M420 V` | `Mesh is valid`, `Storage slot: 0`, `Bed Leveling ON` |
+
+Nếu mục nào sai sau khi nạp → xem **11.7** trước khi sửa code.
 
 ---
 
@@ -347,13 +391,14 @@ git diff up-2.1.2 HEAD --stat
 | Board / màn hình | `MOTHERBOARD BOARD_MKS_MONSTER8_V2`, `MKS_MINI_12864_V3`, `SERIAL_PORT -1` (USB CDC), `BAUDRATE 250000` |
 | Gốc & vùng in | `X_MIN_POS −6`, `Y_MIN_POS −22`, `X_MAX_POS 305`, `Y_MAX_POS 305`, `Z_MAX_POS 310`, `X_BED_SIZE 305`, `Y_BED_SIZE 305` |
 | Hướng trục | `INVERT_Z_DIR false` (motor dựng đứng ở đáy, trục quay hướng lên) |
-| Đầu dò | **Voron Tap** — `FIX_MOUNTED_PROBE`, `NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }`, `PROBING_MARGIN 15`, `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN`, `USE_PROBE_FOR_Z_HOMING`, `PROBE_ENABLE_DISABLE` |
+| Đầu dò | **Voron Tap** — `FIX_MOUNTED_PROBE`, `NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }`, `PROBING_MARGIN 15`, `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN`, `USE_PROBE_FOR_Z_HOMING`, `PROBE_ENABLE_DISABLE`, **`Z_AFTER_PROBING 10`** |
 | Cân Z offset | `PROBE_OFFSET_WIZARD` + `PROBE_OFFSET_WIZARD_START_Z 0` + `PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }` (thêm mới) |
+| Hướng extruder | **`INVERT_E0_DIR false`** — Bondtech BMG là extruder có hộp số (từng để `true` → extruder quay ngược) |
 | Trục Z | `Z2_DRIVER_TYPE` + `Z3_DRIVER_TYPE` = TMC2209 → `NUM_Z_STEPPERS` **tự suy ra = 3** (`Conditionals_LCD.h:726-734`), `Z_STEPPER_AUTO_ALIGN` (**G34**) |
 | Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE TMC2209` chế độ UART, `*_MICROSTEPS 16`, `*_CURRENT 400`, `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
-| Chuyển động | `DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 800, 415 }`, `DEFAULT_MAX_FEEDRATE { 500, 500, 10, 25 }`, `DEFAULT_MAX_ACCELERATION { 500, 500, 100, 1000 }`, `DEFAULT_ACCELERATION 500`, **`CLASSIC_JERK`** (không dùng Junction Deviation) |
+| Chuyển động | `DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 800, 415 }`, `DEFAULT_MAX_FEEDRATE { 500, 500, 10, 25 }`, **`DEFAULT_MAX_ACCELERATION { 1500, 1500, 100, 1000 }`**, **`DEFAULT_ACCELERATION 1500`**, **`DEFAULT_TRAVEL_ACCELERATION 2000`** (`DEFAULT_RETRACT_ACCELERATION 500` giữ nguyên), **`DEFAULT_XJERK/DEFAULT_YJERK 8.0`** (`ZJERK 0.4`, `EJERK 5.0` giữ nguyên), **`CLASSIC_JERK`** (không dùng Junction Deviation) |
 | Khác | `EEPROM_SETTINGS`, `SDSUPPORT`, `FILAMENT_RUNOUT_SENSOR`, `HOST_ACTION_COMMANDS` |
 
 ### 11.2 `Marlin/Configuration_adv.h` — cấu hình nâng cao
@@ -397,18 +442,24 @@ git diff up-2.1.2 HEAD --stat
 | `upload-firmware.ps1` | nạp qua ST-Link |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
 | `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura — container của MÁY IN** (bàn, gốc, endstop, feedrate/accel/jerk, steps/mm, Start/End G-code) |
-| `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
+| `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
+| `cura_profile/extruder_user.inst.cfg` | **Profile Cura — container `user` của EXTRUDER** (tốc độ retract). Phải nằm ở đây, xem 11.6 |
 | `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
-| `install-cura-profile.ps1` | Áp profile vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
+| `install-cura-profile.ps1` | Áp cả 3 container vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
 | `README.md` | tài liệu máy (file này) |
 | `.vscode/extensions.json`, `.gitignore` | cấu hình môi trường phát triển |
 
 ### 11.6 Cài profile vào Cura
 
-Cura 5 lưu mọi thay đổi thông số máy vào
-`%APPDATA%\cura\<version>\definition_changes\<TênMáy>_settings.inst.cfg`. Script ghi đè file
-này, nên **giữ nguyên variant / quality / material / platform** mà máy in đang dùng — không
-cần quyền Admin và không cần đụng vào `Program Files`.
+Cura 5 lưu mọi thay đổi thông số máy vào `%APPDATA%\cura\<version>\definition_changes\` và
+`...\user\`. Script ghi vào **3 container**, nên **giữ nguyên variant / quality / material /
+platform** mà máy in đang dùng — không cần quyền Admin và không cần đụng vào `Program Files`.
+
+| Container | File | Ghi kiểu |
+|---|---|---|
+| `definition_changes` của **máy in** | `definition_changes\Voron2+300_settings.inst.cfg` | ghi đè |
+| `definition_changes` của **extruder** | `definition_changes\voron2_extruder_0+%232_settings.inst.cfg` | ghi đè |
+| `user` của **extruder** | `user\voron2_extruder_0+%232_user.inst.cfg` | **merge** — giữ lại `infill_pattern`, `infill_sparse_density`… anh đặt tay |
 
 ```powershell
 # Xem trước
@@ -466,12 +517,43 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_center_is_zero` | **True** | **False** | Firmware có gốc `(0,0)` ở **góc trước-trái** bàn. Để `True` là Cura dồn bản in lệch nửa bàn |
 | `machine_endstop_positive_direction_x/y` | `True` | **`False`** | `X/Y/Z_HOME_DIR -1` — máy home về **MIN**, Voron gốc home về MAX |
 | `machine_width/depth` | 300 | **305** | vùng in thật |
+| `machine_height` | 300 | 300 | |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
-| `machine_max_acceleration_x/y/z/e` | 20000/20000/500 | **500/500/100/1000** | `M201` |
-| `acceleration_print` / `_travel` | 5000 / (công thức) | **500 / 1000** | `M204 P500 T1000` |
-| `jerk_print` / `_travel` | (mặc định 20) | **10 / 10** | `M205 X10 Y10` — `CLASSIC_JERK` |
+| `machine_max_acceleration_x/y` | 20000 | 20000 | giữ nguyên bản Voron |
+| `machine_max_acceleration_z` | 500 | **100** | `M201 Z100` của firmware |
+| `machine_max_acceleration_e` | (mặc định 10000) | **500** | |
+| `acceleration_print` | 5000 | 5000 | giữ nguyên bản Voron — **nhưng xem cảnh báo bên dưới** |
+| `acceleration_travel` | (công thức) | **(công thức)** | bỏ khỏi file để công thức `voron2_base` tự tính → **7000** |
+| `machine_acceleration` | 5000 | 5000 | |
+| `jerk_print` / `_travel` | (mặc định 20 / 30) | **8 / 8** | `M205 X8 Y8` — `CLASSIC_JERK` |
+| `machine_max_jerk_xy` | (mặc định 20) | **8** | |
 | `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
+| `retraction_speed` / `_retract_speed` / `_prime_speed` | 30 / 25 / 25 | **15 / 15 / 15** | ngưỡng `machine_max_feedrate_e − 10 = 15`, xem cảnh báo bên trên |
 | Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
+
+> 🔴 **Cura khai `acceleration_print 5000` nhưng firmware sẽ kẹp xuống 1500.** Marlin tính
+> `accel_thực = min(M204 P, M201 của trục)`; `M201 X/Y` đang là **1500**, nên Cura có phát
+> `M204 P5000` thì bản in **vẫn chạy 1500**. Muốn 5000 thật thì phải nâng `M201 X/Y` trong
+> firmware (cần flash). Con số 5000 là mức của Voron cho **Klipper đã tune input shaper** —
+> Marlin không có input shaping nên rất dễ rung ở mức đó.
+
+### 11.7 Những chỗ dễ sai — đọc trước khi sửa
+
+Đây là các cạm bẫy đã **thực sự gặp** trên máy này, mỗi cái tốn ít nhất một lần build + flash vô ích.
+
+| # | Cạm bẫy | Hệ quả | Cách đúng |
+|---|---|---|---|
+| 1 | **EEPROM đè lên code.** `M851`, `M422`, `M92`, `M203`, `M201`, `M204`, `M205` đều lưu trong EEPROM | Sửa `Configuration.h` rồi flash mà giá trị vẫn cũ | Sửa cả hai: code **và** gửi lệnh tương ứng + `M500` |
+| 2 | **Đừng dùng `M502` để "nạp lại mặc định"** | Xoá luôn `M851 Z0.70` (offset đã cân), mesh, điểm G34 | Dùng `M422` / `M851` cho từng giá trị |
+| 3 | **Hướng extruder chỉ nằm trong firmware** (`INVERT_E0_DIR`) | Cura không có setting nào đảo chiều, sửa Cura vô ích | Sửa firmware + flash |
+| 4 | **`Z_AFTER_PROBING` bị comment → `move_z_after_probing()` rỗng** | `G28` kết thúc với nozzle **nằm trên bàn**, lệnh XY sau đó **kéo nozzle quét mặt bàn** | Bật `Z_AFTER_PROBING` |
+| 5 | **Marlin lấy `min(M204 P, M201 trục)`** | Cura khai 5000 mà `M201 X/Y` 1500 → chạy 1500 | Đặt `M201` ≥ mức muốn chạy |
+| 6 | **Cura lưu thông số ở 3 container khác nhau** | Ghi sai container → Cura **âm thầm bỏ qua** | Xem bảng ở 11.6 |
+| 7 | **`fdmextruder.def.json` không có `inherits`** | Setting của `fdmprinter` (vd `retraction_speed`) **không tồn tại** trong definition `Toolhead` | Đặt vào container `user` của extruder (khai `definition = voron2_300`) |
+| 8 | **`voron2_base` đặt `maximum_value_warning = machine_max_feedrate_e − 10`** cho 3 tốc độ retract | Hạ `machine_max_feedrate_e` xuống 25 → ngưỡng 15 → Cura **chặn slice** | Đặt retract ≤ ngưỡng, hoặc nâng `M203 E` |
+| 9 | **Cura ghi đè file cấu hình khi thoát** | Ghi file lúc Cura đang mở → mất sạch khi đóng Cura | **Đóng Cura trước**; script đã tự từ chối nếu thấy tiến trình Cura |
+| 10 | **`microsteps` đọc ra 1/8 thay vì 16** | `refresh_stepping_mode()` ghi đè GCONF từ cache, chân MS1/MS2 không được điều khiển → **trục chạy gấp đôi** | Đã sửa trong `settings.cpp`, xem 11.4 |
+| 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
 
 ---
 
