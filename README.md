@@ -240,7 +240,7 @@ Khác nhau giữa hai cách:
 1. Siết đều 4 vít lò xo (~50% hành trình)     ; bàn không xê dịch khi in
 2. G28                                        ; home
 3. G35  (hoặc Motion > Tramming Wizard)       ; vặn vít theo số vòng Marlin báo
-4. G34                                        ; căn gantry theo bàn vừa tram
+4. G34 Q99                                    ; căn gantry; lặp tới khi sai số <= 0.02
 5. G29 P1 -> G29 P3 -> G29 S0                 ; đo + lưu mesh vào slot 0
 6. G29 A -> M500                              ; bật leveling + lưu -> tự bật mỗi lần khởi động
 ```
@@ -429,6 +429,7 @@ git diff up-2.1.2 HEAD --stat
 | `src/module/settings.cpp` | **sửa bug**: sau khi nạp EEPROM, ép lại `mstep_reg_select(true)` + `microsteps()` cho TMC2209. Không có bước này, `refresh_stepping_mode()` ghi đè GCONF bằng cache → chân MS1/MS2 không được điều khiển → driver rơi về **1/8**, trục chạy **gấp đôi** (đã gặp thật: `G1 Z10` đi 20mm) |
 | `src/inc/Conditionals_LCD.h` | thêm `PROBE_ENABLE_DISABLE` vào `ANY(...)` của `HAS_STOWABLE_PROBE` → menu *Deploy/Stow Z-Probe* hoạt động cả với `FIX_MOUNTED_PROBE` |
 | `src/gcode/calibrate/G34_M422.cpp`, `src/gcode/gcode.h` | thêm tham số `Q<nloop>` (lặp G34, home lại sau mỗi 3 lần đo), `U` (chế độ hardcode balance), hàm `InfiniteG34()` |
+| Start G-code Cura | dùng **`G34 Q99`** — lặp tối đa 99 lần, **dừng ngay khi sai số ≤ `Z_STEPPER_ALIGN_ACC` (0.02)**. Xem mục 11.8 |
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
@@ -481,7 +482,7 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 
 | Tab | Ô | Key | Script điền gì |
 |---|---|---|---|
-| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `G34` → `G28 Z` → `M190 S60` → `M109 S230` → `M420 S1` |
+| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → **`G34 Q99`** → `G28 Z` → `M190 S60` → `M109 S230` → `M420 S1` |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
 | **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | đường purge `X2 Y10 → Y100` |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
@@ -645,6 +646,29 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 9 | **Cura ghi đè file cấu hình khi thoát** | Ghi file lúc Cura đang mở → mất sạch khi đóng Cura | **Đóng Cura trước**; script đã tự từ chối nếu thấy tiến trình Cura |
 | 10 | **`microsteps` đọc ra 1/8 thay vì 16** | `refresh_stepping_mode()` ghi đè GCONF từ cache, chân MS1/MS2 không được điều khiển → **trục chạy gấp đôi** | Đã sửa trong `settings.cpp`, xem 11.4 |
 | 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
+
+### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
+
+Tham số do dự án này thêm vào (`G34_M422.cpp:90`):
+
+```c
+int8_t isInf = parser.intval('Q', 1);          // mac dinh 1 = chay nhu G34 goc
+...
+while ((isInf-- > 0) && !InfiniteG34(3)) { }   // lap, home lai sau moi 3 lan do
+```
+
+`InfiniteG34()` trả về `true` khi căn xong trong ngưỡng, và vòng `while` **dừng ngay** khi đó
+(điều kiện `!InfiniteG34(3)` thành false) hoặc khi hết `Q` lần.
+
+| | |
+|---|---|
+| `G34` | 1 lần, như Marlin gốc |
+| **`G34 Q99`** | lặp tối đa 99 lần, **dừng ngay khi đạt** |
+| Ngưỡng dừng | `Z_STEPPER_ALIGN_ACC` = **0.02** (`Configuration_adv.h:1026`), đổi bằng `T<acc>` |
+| Mỗi vòng | 3 iteration (tham số `nloop` truyền vào `InfiniteG34`), **home lại Z ở giữa** |
+
+> Thực tế `Q99` gần như tương đương "chạy tới khi xong": gần như không bao giờ chạm 99 lần, vì
+> mỗi vòng đã home lại nên sai số giảm dần. Đặt `Q` nhỏ (1–3) nếu muốn giới hạn thời gian chờ.
 
 ---
 
