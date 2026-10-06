@@ -1629,7 +1629,7 @@
 // Voron Tap: the nozzle itself is what touches the plate, so G28 must lift it off when it is
 // done. With this left commented out, move_z_after_probing() is a no-op and G28 finishes with
 // the nozzle resting ON the plate - the next XY move then drags it across the surface.
-#define Z_AFTER_PROBING             5 // Z position after probing is done
+#define Z_AFTER_PROBING            10 // Z position after probing is done
 
 #define Z_PROBE_LOW_POINT          -2 // Farthest distance below the trigger-point to go before stopping
 

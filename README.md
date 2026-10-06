@@ -382,9 +382,45 @@ git diff up-2.1.2 HEAD --stat
 | `upload-dfu.ps1` | nạp qua DFU: tự tìm `dfu-util`, dùng `-t 512`, ghi đúng `0x0800C000`, in SHA256 |
 | `upload-firmware.ps1` | nạp qua ST-Link |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
-| `cura_profile/voron21_300_mks_monster8.def.json` | profile Cura: bàn 305×305, feedrate/accel/jerk khớp firmware |
+| `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura chính** — các thông số máy ghi đè lên `voron2_300` của Cura. Đây là file `install-cura-profile.ps1` áp vào Cura |
+| `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
+| `install-cura-profile.ps1` | Áp profile vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
 | `README.md` | tài liệu máy (file này) |
 | `.vscode/extensions.json`, `.gitignore` | cấu hình môi trường phát triển |
+
+### 11.6 Cài profile vào Cura
+
+Cura 5 lưu mọi thay đổi thông số máy vào
+`%APPDATA%\cura\<version>\definition_changes\<TênMáy>_settings.inst.cfg`. Script ghi đè file
+này, nên **giữ nguyên variant / quality / material / platform** mà máy in đang dùng — không
+cần quyền Admin và không cần đụng vào `Program Files`.
+
+```powershell
+# Xem trước
+.\install-cura-profile.ps1 -WhatIf
+
+# Áp dụng (ĐÓNG CURA TRƯỚC)
+.\install-cura-profile.ps1
+
+# Hoặc thêm máy in mới (cần Admin cho Program Files)
+.\install-cura-profile.ps1 -AddAsNewPrinter
+```
+
+Phải **đóng Cura trước khi chạy** — Cura ghi đè file cấu hình khi thoát.
+
+Những chỗ profile sửa so với bản Voron gốc của Cura:
+
+| Thiết lập | Bản gốc Cura | Máy này | Vì sao |
+|---|---|---|---|
+| `machine_center_is_zero` | **True** | **False** | Firmware có gốc `(0,0)` ở **góc trước-trái** bàn. Để `True` là Cura dồn bản in lệch nửa bàn |
+| `machine_endstop_positive_direction_x/y` | `True` | **`False`** | `X/Y/Z_HOME_DIR -1` — máy home về **MIN**, Voron gốc home về MAX |
+| `machine_width/depth` | 300 | **305** | vùng in thật |
+| `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
+| `machine_max_acceleration_x/y/z/e` | 20000/20000/500 | **500/500/100/1000** | `M201` |
+| `acceleration_print` / `_travel` | 5000 / (công thức) | **500 / 1000** | `M204 P500 T1000` |
+| `jerk_print` / `_travel` | (mặc định 20) | **10 / 10** | `M205 X10 Y10` — `CLASSIC_JERK` |
+| `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
+| Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
 
 ---
 
