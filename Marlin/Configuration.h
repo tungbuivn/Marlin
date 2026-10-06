@@ -1721,7 +1721,9 @@
 // @section extruder
 
 // For direct drive extruder v9 set to true, for geared extruder set to false.
-#define INVERT_E0_DIR true
+// Bondtech BMG (gear ratio 3:1, E = 415 steps/mm): geared -> false.
+// Was true, which made the extruder turn backwards (G1 E10 retracted instead of extruding).
+#define INVERT_E0_DIR false
 #define INVERT_E1_DIR false
 #define INVERT_E2_DIR false
 #define INVERT_E3_DIR false
