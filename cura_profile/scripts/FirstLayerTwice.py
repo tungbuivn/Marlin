@@ -36,6 +36,42 @@ class FirstLayerTwice(Script):
                     "default_value": true,
                     "enabled": true
                 },
+                "force_temperatures":
+                {
+                    "label": "Force temperatures",
+                    "description": "Ep nhiet do cho TOAN BO file, ke ca cac lenh init. Lenh tat nhiet (S0) duoc giu nguyen.",
+                    "type": "bool",
+                    "default_value": true,
+                    "enabled": "enabled"
+                },
+                "hotend_temp":
+                {
+                    "label": "Hotend temperature",
+                    "description": "M104 / M109 se bi ep ve so nay, bo qua vat lieu.",
+                    "unit": "C",
+                    "type": "int",
+                    "default_value": 230,
+                    "minimum_value": 0,
+                    "enabled": "enabled and force_temperatures"
+                },
+                "bed_temp":
+                {
+                    "label": "Bed temperature",
+                    "description": "M140 / M190 se bi ep ve so nay, bo qua vat lieu.",
+                    "unit": "C",
+                    "type": "int",
+                    "default_value": 60,
+                    "minimum_value": 0,
+                    "enabled": "enabled and force_temperatures"
+                },
+                "double_first_layer":
+                {
+                    "label": "Print layer 0 twice",
+                    "description": "Bat phan in layer 0 hai lan. Tat thi script chi ep nhiet do.",
+                    "type": "bool",
+                    "default_value": true,
+                    "enabled": "enabled"
+                },
                 "pass1_flow":
                 {
                     "label": "Pass 1 flow",
@@ -45,7 +81,7 @@ class FirstLayerTwice(Script):
                     "default_value": 20,
                     "minimum_value": 0,
                     "maximum_value": 200,
-                    "enabled": "enabled"
+                    "enabled": "enabled and double_first_layer"
                 },
                 "pass2_flow":
                 {
@@ -56,7 +92,7 @@ class FirstLayerTwice(Script):
                     "default_value": 80,
                     "minimum_value": 0,
                     "maximum_value": 200,
-                    "enabled": "enabled"
+                    "enabled": "enabled and double_first_layer"
                 },
                 "z_raise":
                 {
@@ -94,6 +130,51 @@ class FirstLayerTwice(Script):
     # ------------------------------------------------------------------ #
     # helpers
     # ------------------------------------------------------------------ #
+
+    # Cac lenh dat nhiet do. 'S' la gia tri dich, 'R' la ban "cho nguoi" cua M109/M190.
+    TEMP_COMMANDS = {
+        "M104": "hotend",
+        "M109": "hotend",
+        "M140": "bed",
+        "M190": "bed",
+    }
+
+    def _force_temperatures(self, chunk, hotend, bed):
+        """Ep nhiet do trong mot chunk.
+
+        Quy tac quan trong: lenh TAT nhiet (S0 / R0) duoc giu nguyen. Ep chung ve
+        230 se bat lai hotend ngay tai buoc ket thuc in.
+        """
+        out = []
+        for line in chunk.split("\n"):
+            code = line.split(";", 1)[0].strip()
+            if not code:
+                out.append(line)
+                continue
+
+            which = self.TEMP_COMMANDS.get(code.split()[0])
+            if which is None:
+                out.append(line)
+                continue
+
+            key = "S"
+            value = self.getValue(line, "S")
+            if value is None:
+                key = "R"
+                value = self.getValue(line, "R")
+            if value is None:
+                out.append(line)
+                continue
+
+            if float(value) <= 0:
+                out.append(line)       # tat nhiet -> KHONG bat lai
+                continue
+
+            target = hotend if which == "hotend" else bed
+            kwargs = {key: target}
+            out.append(self.putValue(line, **kwargs))
+
+        return "\n".join(out)
 
     def _find_layer(self, data, number):
         """Tim chunk chua ';LAYER:<number>'. Tra ve (index, offset dong) hoac (None, None)."""
@@ -193,6 +274,18 @@ class FirstLayerTwice(Script):
 
     def execute(self, data):
         if not self.getSettingValueByKey("enabled"):
+            return data
+
+        # --- 1) Ep nhiet do cho TOAN BO file, ke ca khoi init va khoi ket thuc ---
+        # Lam truoc va doc lap voi phan layer 0: Cura van phat M104/M140 rieng khi
+        # nhiet do layer 0 khac cac layer sau (theo vat lieu), nen Start G-code
+        # thoi khong du de giu 230/60.
+        if self.getSettingValueByKey("force_temperatures"):
+            hotend = int(self.getSettingValueByKey("hotend_temp"))
+            bed = int(self.getSettingValueByKey("bed_temp"))
+            data = [self._force_temperatures(chunk, hotend, bed) for chunk in data]
+
+        if not self.getSettingValueByKey("double_first_layer"):
             return data
 
         index, offset = self._find_layer(data, 0)

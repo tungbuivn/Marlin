@@ -512,7 +512,31 @@ vào cả hai container.
 
 ### Script hậu xử lý — `FirstLayerTwice.py`
 
-In **layer 0 hai lần** để lớp đầu bám chắc và phẳng hơn.
+Script làm **hai việc độc lập**, bật/tắt riêng:
+
+1. **Ép nhiệt độ toàn file** (kể cả khối init)
+2. **In layer 0 hai lần**
+
+#### 1. Ép nhiệt độ — `force_temperatures`
+
+**Vì sao cần, dù Start G-code đã hardcode:** Cura **vẫn tự phát `M104`/`M140` riêng** khi
+`material_print_temperature_layer_0` khác `material_print_temperature` (vật liệu đang là ABS:
+250/100). Lệnh đó nằm **sau** Start G-code nên **ghi đè 230/60**.
+
+Script quét **mọi chunk** và ép lại:
+
+| Lệnh | Ép về |
+|---|---|
+| `M104`, `M109` | **`hotend_temp`** (230) |
+| `M140`, `M190` | **`bed_temp`** (60) |
+
+Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
+
+> 🔴 **Lệnh TẮT nhiệt (`S0` / `R0`) được giữ nguyên.** Nếu ép `M104 S0` thành `M104 S230`
+> thì **hotend bật lại ngay tại bước kết thúc in**. Đây là quy tắc an toàn quan trọng nhất
+> của phần này: chỉ ép khi giá trị **> 0**.
+
+#### 2. In layer 0 hai lần — `double_first_layer`
 
 | Bước | Việc |
 |---|---|
@@ -543,6 +567,10 @@ nhưng không thừa nhựa.
 
 | Tham số | Mặc định | Ý nghĩa |
 |---|---|---|
+| `force_temperatures` | bật | Ép nhiệt độ toàn file |
+| `hotend_temp` | 230 °C | `M104`/`M109` bị ép về số này |
+| `bed_temp` | 60 °C | `M140`/`M190` bị ép về số này |
+| `double_first_layer` | bật | In layer 0 hai lần |
 | `pass1_flow` | 20 % | Flow lần in đầu của layer 0 |
 | `pass2_flow` | 80 % | Flow lần in thứ hai của layer 0 |
 | `z_raise` | 0.4 mm | Z tuyệt đối nâng tới trước pass 2 |
