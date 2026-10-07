@@ -665,6 +665,56 @@ vào cả hai container.
 > đủ chuỗi `voron2_300` → `voron2_base` → `fdmprinter`. Script ghi vào đó và **merge** — giữ lại
 > các giá trị anh đã đặt tay (ví dụ `infill_pattern`, `infill_sparse_density`).
 
+### Script hậu xử lý — `ClampFeeds.py`
+
+**Đây là script quan trọng nhất, và là cơ chế DUY NHẤT đã chứng minh chạy được trên máy này.**
+
+Làm 4 việc, mỗi việc có setting riêng:
+
+| Việc | Setting | Mặc định |
+|---|---|---|
+| Ép mọi `F` về **trần từng trục** | `max_feedrate_xy` / `_z` / `_e` | 300 / 10 / 25 mm/s |
+| Ép `M204 S` về trần | `clamp_acceleration`, `max_acceleration` | bật, 500 mm/s² |
+| **Tách mọi bước XY+Z** thành 2 bước | `split_xyz_moves` | bật |
+| Chèn bước **về tâm** sau purge | `after_purge_xy`, `after_purge_f` | `152.5,152.5`, 6000 |
+
+Kết quả đo trên `V300_Part3.gcode`:
+
+| | Trước | Sau |
+|---|---|---|
+| Bước vượt trần | 5 | **0** |
+| `M204 S` lớn nhất | 5000 | **500** |
+| Bước có cả XY lẫn Z | 1 | **0** |
+
+Purge sau khi qua script:
+
+```gcode
+; ----- Duong purge (chay sau Start G-code cua may) -----
+G1 F5000 X2.0 Y10.0          ; di NGANG o Z cao (2.0)
+G1 F600 Z0.3                 ; toi noi roi MOI ha
+G1 F1500 X2.0 Y100.0 E15.0   ; purge doc theo Y
+G92 E0
+G1 Z2.0 F600                 ; nhac Z len
+G92 E0
+G1 F900 E-0.75
+; --- ClampFeeds: ve tam sau purge ---
+G1 F6000 X152.5 Y152.5
+;LAYER_COUNT:5
+```
+
+**Bật:** `Extensions` → `Post Processing` → `Add a script` → **Clamp Feeds** → `Close`.
+Cura chỉ nạp script lúc khởi động nên phải **mở lại Cura**. Bật một lần là các lần slice sau tự chạy.
+
+> 🔵 **Vì sao dùng script mà không sửa profile Cura.** Đã đo bằng `cura.log` — log ghi **chính xác** setting gửi cho CuraEngine. Sau **ba** lần thử đặt vào `definition_changes`, container `user` của máy in, và container `user` của extruder, Cura **vẫn** gửi `acceleration_print = 5000` và purge cũ. Cura không đọc các file cấu hình ghi từ bên ngoài (nó ghi lại bằng trạng thái trong bộ nhớ).
+> Post-processing script thì luôn chạy — `FirstLayerTwice` đã đúng suốt từ đầu.
+> ⇒ **Mọi thứ cần sửa G-code thì làm trong script**, Cura chỉ giữ phần dữ liệu in.
+
+> ⚠️ **Hai lỗi bắt được khi test script này** (đừng lặp lại):
+> - **Làm tròn LÊN khi kẹp sẽ vượt trần**: trần Z 10 mm/s → `F3648.9` làm tròn thành `F3649` = 10.0014 mm/s. Phải làm tròn **xuống**.
+> - **Z không đổi thì đừng phát bước Z**: nếu không sẽ sinh `G1 F1500 Z0.3` dài 0 mm — vô nghĩa và bị audit bắt lỗi.
+
+Test: `tests/test_clamp_feeds.py` — chạy trên file gcode thật, kiểm chứng lại từng trục sau khi sửa, và fail nếu còn bước vượt trần hoặc còn bước XY+Z.
+
 ### Script hậu xử lý — `FirstLayerTwice.py`
 
 Script làm **hai việc độc lập**, bật/tắt riêng:
