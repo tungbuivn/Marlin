@@ -107,10 +107,11 @@ class FirstLayerTwice(Script):
                 },
                 "first_pass_z":
                 {
-                    "label": "first_pass_z (khong dung nua)",
-                    "description": "Giu lai chi de config cu khong loi.",
+                    "label": "Z cua pass 1 (mm)",
+                    "description": "pass 1 in o Z nay (mac dinh 0.1). pass 2 in o Z = so nay + chieu cao lop dau (vd 0.1 + 0.2 = 0.3).",
                     "type": "float",
-                    "default_value": 0.1
+                    "default_value": 0.1,
+                    "minimum_value": 0.01
                 },
                 "z_raise":
                 {
@@ -199,6 +200,25 @@ class FirstLayerTwice(Script):
                 zs.append(float(value))
         return min(zs) if zs else None
 
+    def _shift_z(self, lines, offset):
+        """Tru offset khoi MOI gia tri Z.
+
+        Cung tru mot hang so cho moi Z nen do cao tuong doi giua chung duoc giu
+        nguyen: Z-hop van cao hon chieu cao layer dung nhu cu.
+        """
+        out = []
+        for line in lines:
+            code = line.split(";", 1)[0].strip()
+            if not code or code.split()[0] not in ("G0", "G1"):
+                out.append(line)
+                continue
+            value = self.getValue(line, "Z")
+            if value is None:
+                out.append(line)
+                continue
+            out.append(self.putValue(line, Z="{0:.5f}".format(float(value) - offset)))
+        return out
+
     def _find_layer(self, data, number):
         """Tim chunk chua ';LAYER:<number>'. Tra ve (index, offset dong) hoac (None, None)."""
         want = ";LAYER:{0}".format(number)
@@ -260,6 +280,7 @@ class FirstLayerTwice(Script):
         flow1 = int(self.getSettingValueByKey("pass1_flow"))
         flow2 = int(self.getSettingValueByKey("pass2_flow"))
         z_feedrate = int(self.getSettingValueByKey("z_feedrate"))
+        first_pass_z = float(self.getSettingValueByKey("first_pass_z"))
 
         lines = data[index].split("\n")
         prefix = lines[:offset + 1]          # ... dong ';LAYER:0'
@@ -272,8 +293,11 @@ class FirstLayerTwice(Script):
         relative, e_at_layer0 = self._scan_mode_and_e(data[:index] + ["\n".join(prefix)])
         layer_z = self._find_layer_z(body)
 
-        # --- pass 1: GIU NGUYEN body, chi doi flow bang M221 ---
+        # --- pass 1: ha Z cua body xuong first_pass_z, KHONG doi E ---
         # Khong nhan lai E: M221 lo viec do o firmware.
+        do_shift = layer_z is not None and 0 < first_pass_z < layer_z
+        pass1 = self._shift_z(body, layer_z - first_pass_z) if do_shift else body
+
         head = ["; --- First Layer Twice: bat dau pass 1 ({0}%) ---".format(flow1),
                 "M221 S{0} ; flow pass 1".format(flow1)]
 
@@ -281,17 +305,18 @@ class FirstLayerTwice(Script):
         jump = ["", "; --- First Layer Twice: ket thuc pass 1 ---", "M400 ; doi in xong lop thu nhat",
                 "G90 ; toa do tuyet doi"]
 
-        if layer_z is not None:
-            # Nhac Z len DUNG mot chieu cao lop dau, roi khai bao lai day la Z cua
-            # layer 0. He toa do dich len -> pass 2 in cao hon pass 1 dung mot lop,
-            # va ca ban in cao hon mo hinh dung mot lop.
+        if do_shift:
+            # pass 1 in o first_pass_z (mac dinh 0.1). pass 2 phai in o
+            # first_pass_z + chieu cao lop dau (0.1 + 0.2 = 0.3), nen nang Z THAT len
+            # dung do, roi G92 khai bao lai la first_pass_z -> he toa do dich len dung
+            # mot chieu cao lop dau.
             jump += [
-                "G1 Z{0} F{1} ; nhac Z len 1 chieu cao lop dau ({2})".format(
-                    layer_z + layer_z, z_feedrate, layer_z),
-                "G92 Z{0} ; khai bao lai day la Z cua layer 0".format(layer_z),
+                "G1 Z{0} F{1} ; nang Z len first_pass_z + 1 chieu cao lop dau".format(
+                    self._fmt_num(first_pass_z + layer_z), z_feedrate),
+                "G92 Z{0} ; khai bao lai day la Z cua pass 1".format(self._fmt_num(first_pass_z)),
             ]
         else:
-            jump.append("; CANH BAO: khong doc duoc Z cua layer 0 -> hai pass cung do cao")
+            jump.append("; CANH BAO: first_pass_z khong hop le -> hai pass cung do cao")
 
         # Reset extruder ve DUNG gia tri E luc bat dau layer 0, de moi buoc cua
         # pass 2 co delta E y het pass 1 -> khong phai tinh lai E.
@@ -308,8 +333,14 @@ class FirstLayerTwice(Script):
         tail = ["", "; --- First Layer Twice: ket thuc layer 0 -> tra flow ve 100% ---",
                 "M221 S100 ; flow 100% cho layer 1 tro len", ""]
 
-        data[index] = "\n".join(prefix + head + body + jump + body + tail)
+        data[index] = "\n".join(prefix + head + pass1 + jump + pass1 + tail)
         return data
+
+    @staticmethod
+    def _fmt_num(value):
+        """Ghi so gon: 0.1 + 0.2 = 0.30000000000000004 -> '0.3'."""
+        s = "{0:.5f}".format(value).rstrip("0").rstrip(".")
+        return s if s else "0"
 
     @staticmethod
     def _fmt_e(value):

@@ -87,6 +87,7 @@ SETTINGS = {
     "pass1_flow": 20,
     "pass2_flow": 80,
     "z_feedrate": 600,
+    "first_pass_z": 0.1,
 }
 
 PKG = os.path.join(tempfile.gettempdir(), "flt_test_pkg")
@@ -176,10 +177,10 @@ def main():
     print("  E pass 1            : {0}".format(e1))
     print("  E pass 2            : {0}".format(e2))
 
-    # pass 1 GIU NGUYEN: Z cua body goc (hop 0.4, lop 0.2)
-    assert z1 == [0.2, 0.4], "FAIL pass 1: mong doi [0.2, 0.4], dang la {0}".format(z1)
-    # pass 2 y nguyen body do
-    assert z2 == [0.2, 0.4], "FAIL pass 2: mong doi [0.2, 0.4], dang la {0}".format(z2)
+    # pass 1 ha xuong first_pass_z = 0.1 (Z-hop 0.4 - 0.1 = 0.3)
+    assert z1 == [0.1, 0.3], "FAIL pass 1: mong doi [0.1, 0.3], dang la {0}".format(z1)
+    # pass 2 chay CUNG body da dich do
+    assert z2 == [0.1, 0.3], "FAIL pass 2: mong doi [0.1, 0.3], dang la {0}".format(z2)
 
     # DIEM MAU CHOT: E cua hai pass GIONG HET NHAU -> khong nhan lai E
     assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
@@ -189,9 +190,9 @@ def main():
     assert any("M221 S80" in l for l in lines[i2:i3]), "FAIL: thieu M221 S80 truoc pass 2"
     assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
 
-    # nhac Z len dung MOT chieu cao lop dau (0.2 + 0.2 = 0.4) roi G92 ve 0.2
-    assert any("G1 Z0.4 F600" in l for l in lines[i2:i3]), "FAIL: buoc nhac Z sai"
-    assert any("G92 Z0.2" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.2"
+    # nang Z THAT len first_pass_z + chieu cao lop dau = 0.1 + 0.2 = 0.3, roi G92 ve 0.1
+    assert any("G1 Z0.3 F600" in l for l in lines[i2:i3]), "FAIL: buoc nang Z sai"
+    assert any("G92 Z0.1" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.1"
     # reset extruder ve E dau layer 0 (trong gcode nay la -0.75, sau lenh retract)
     assert any("G92 E-0.75" in l for l in lines[i2:i3]), "FAIL: thieu G92 E dau layer 0"
 
@@ -206,18 +207,16 @@ def main():
     for n, chunk in ((0, out[0]), (1, out[1])):
         assert chunk.endswith("\n"), "FAIL: chunk {0} khong ket thuc bang newline".format(n)
 
-    # --- 4) DOI CHUNG: lay nham Z-hop lam chieu cao layer -> nang sai gap doi
+    # --- 4) DOI CHUNG: lay nham Z-hop (0.4) lam chieu cao layer -> dich 0.3 -> Z am
     broken = mod.FirstLayerTwice()
     broken._settings = dict(SETTINGS)
     broken._find_layer_z = old_find_layer_z.__get__(broken, mod.FirstLayerTwice)
     out_old = broken.execute([CHUNK0, CHUNK1, CHUNK2, CHUNK3])
-    j = [l for l in out_old[1].split("\n") if "nhac Z len" in l or l.strip().startswith("G92 Z")]
+    zs_old = axis_values(out_old[1].split("\n"), "Z")
     print("")
-    print("  [doi chung] code CU (lay Z dau tien):")
-    for l in j:
-        print("    " + l)
-    assert any("G1 Z0.8 F600" in l for l in j), "FAIL: doi chung khong the hien loi (mong doi G1 Z0.8)"
-    assert any("G92 Z0.4" in l for l in j), "FAIL: doi chung khong the hien loi (mong doi G92 Z0.4)"
+    print("  [doi chung] code CU (lay Z dau tien = 0.4):")
+    print("    Z nho nhat = {0}   (danh sach {1})".format(min(zs_old), sorted(set(zs_old))))
+    assert min(zs_old) < 0, "FAIL: doi chung khong the hien loi (mong doi co Z am)"
 
     print("")
     print("  TAT CA ASSERTION PASS")
