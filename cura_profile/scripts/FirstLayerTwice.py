@@ -302,8 +302,11 @@ class FirstLayerTwice(Script):
         ]
 
         # --- pass 2: cung body do, y nguyen ---
+        # Phan tu CUOI phai la chuoi rong: moi chunk cua Cura ket thuc bang '\n', ma
+        # "\n".join() khong tu them dau phan cach o cuoi. Thieu dong rong nay thi
+        # chunk sau (bat dau bang ';LAYER:1') se bi dinh lien vao dong cuoi.
         tail = ["", "; --- First Layer Twice: ket thuc layer 0 -> tra flow ve 100% ---",
-                "M221 S100 ; flow 100% cho layer 1 tro len"]
+                "M221 S100 ; flow 100% cho layer 1 tro len", ""]
 
         data[index] = "\n".join(prefix + head + body + jump + body + tail)
         return data

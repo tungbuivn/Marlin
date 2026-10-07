@@ -199,6 +199,13 @@ def main():
     assert out[2] == CHUNK2, "FAIL: chunk layer 1 bi thay doi"
     assert out[3] == CHUNK3, "FAIL: chunk layer 2 bi thay doi"
 
+    # --- 3b) chunk phai KET THUC bang '\n' ---
+    # Moi chunk cua Cura ket thuc bang newline va Cura noi chung truc tiep (khong
+    # tu them dau phan cach). Thieu newline cuoi -> chunk sau bi dinh lien vao dong
+    # cuoi (da gap that: ';LAYER:1' dinh vao dong 'M221 S100').
+    for n, chunk in ((0, out[0]), (1, out[1])):
+        assert chunk.endswith("\n"), "FAIL: chunk {0} khong ket thuc bang newline".format(n)
+
     # --- 4) DOI CHUNG: lay nham Z-hop lam chieu cao layer -> nang sai gap doi
     broken = mod.FirstLayerTwice()
     broken._settings = dict(SETTINGS)
