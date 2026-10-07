@@ -745,35 +745,44 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 
 **Cách làm — dùng `M221` (flow của firmware), KHÔNG nhân lại E:**
 
-| Lượt | Z thực | Flow |
-|---|---|---|
-| Pass 1 | **`first_pass_z` = 0.1** (cố định) | `M221 S20` → 20% |
-| ↕ giữa hai pass | nhấc lên **0.3** = 0.1 + **1 chiều cao lớp đầu** (0.2), rồi `G92 Z0.1` → hệ toạ độ dịch lên 0.2 | — |
-| Pass 2 | **0.3** (0.1 trong hệ đã dịch) | `M221 S80` → 80% |
-| Layer 1 trở lên | không đụng | `M221 S100` → 100% |
+| Lượt | Body dùng | Z thực | Flow |
+|---|---|---|---|
+| Pass 1 | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) | `M221 S20` → 20% |
+| ↕ giữa hai pass | — | `G1 Z0.3` = `first_pass_z` + `layer_z` (0.1 + 0.2), rồi `G92 Z0.2` → khai báo lại **Z gốc của layer 0** | — |
+| Pass 2 | body **GỐC**, không hạ | **0.3** (0.2 trong hệ đã lệch 0.1) | `M221 S80` → 80% |
+| Layer 1 trở lên | không đụng | 0.4 → **0.5** | `M221 S100` → 100% |
 
 ```gcode
 ; --- First Layer Twice: ket thuc pass 1 ---
 M400                        ; doi in xong lop thu nhat
 G90                         ; toa do tuyet doi
-G1 Z0.3 F600                ; nang Z len first_pass_z + 1 chieu cao lop dau (0.1 + 0.2)
-G92 Z0.1                    ; khai bao lai day la Z cua pass 1
+G1 Z0.3 F600                ; nang Z len first_pass_z + Z goc cua layer 0 (0.1 + 0.2)
+G92 Z0.2                    ; khai bao lai day la Z goc cua layer 0
 G92 E-0.75                  ; reset extruder ve E dau layer 0
 M221 S80                    ; flow pass 2
 ; --- First Layer Twice: bat dau pass 2 (80%) ---
 ```
 
-> 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1, pass 2 ở `first_pass_z + chiều cao layer 0`.**
-> `first_pass_z` **không** phụ thuộc chiều cao layer — đổi `layer_height` thì mặc định pass 1
-> vẫn là 0.1, chỉ pass 2 dịch theo. Script **dịch cả body của layer 0 xuống** bằng
-> `_shift_z(body, layer_z - first_pass_z)` trước khi in pass 1, nên toàn bộ đường in (kể cả
-> Z-hop) tụt đúng `layer_z - first_pass_z`.
->
-> ⚠️ **Hệ quả: cả bản in cao thêm `layer_z`.** Sau `G92 Z0.1`, mọi Z từ layer 1 trở đi vẫn là
-> giá trị gốc của Cura, nhưng gốc toạ độ đã bị đẩy lên 0.2 mm so với mặt bàn. Nghĩa là bản in
-> in ra **cao hơn model đúng một chiều cao layer 0**. Đây là đánh đổi cố ý của cách "in layer 0
-> hai lần" — chấp nhận được với chi tiết không cần dung sai Z, nhưng **đừng dùng cho chi tiết
-> lắp khít theo Z**.
+> 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1; pass 2 ở `first_pass_z + <Z gốc của layer 0>`.**
+> `first_pass_z` **không** phụ thuộc `layer_height`. Script **dịch body của layer 0 xuống**
+> bằng `_shift_z(body, layer_z - first_pass_z)` cho **pass 1**, còn **pass 2 dùng lại body GỐC**
+> — đây là điểm mấu chốt, xem cảnh báo ngay dưới.
+
+> 🔴 **Pass 2 PHẢI dùng body GỐC, không được dùng body đã hạ.** Nếu pass 2 dùng lại body đã hạ
+> thì toạ độ Z của nó là `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ
+> layer 0 lên layer 1 thành **0.3**, tức **hở 0.1 mm không khí** giữa hai layer. Đã đo được trên
+> file sạch bằng `tests/_z_report.py`:
+> ```
+> pass 2 dung body DA HA :  pass1 0.1 -> pass2 0.3 (0.2 ✓) -> layer1 0.6 (0.30 ✗)
+> pass 2 dung body GOC   :  pass1 0.1 -> pass2 0.3 (0.2 ✓) -> layer1 0.5 (0.20 ✓) -> layer2 0.7 (0.20 ✓)
+> ```
+> Chỉ đổi `G92` **không** sửa được lỗi này — phải đổi cả body. Test hồi quy có phép thử đối
+> chứng cho đúng trường hợp sai (`tests/test_first_layer_twice.py`, mục 2b).
+
+> ⚠️ **Hệ quả: cả bản in cao hơn model đúng `first_pass_z` (0.1 mm).** Pass 2 dùng lại body gốc
+> với `G92 Z0.2`, nên từ đó về sau chương trình là **y hệt bản in bình thường** — mọi bước layer
+> đều đúng `layer_height`. Nhưng gốc toạ độ đã bị đẩy lên 0.1 mm, và điều đó là **đúng vật lý**:
+> pass 1 đã in ra nhựa thật. Nếu cần chi tiết lắp khít theo Z thì đừng dùng cách này.
 
 **Pass 1 và pass 2 ghi ra CÙNG một giá trị E** — không có phép nhân nào. Marlin tự nhân E với
 `flow_percentage`, nên 20% + 80% = **100%** = đúng một lớp bình thường.
@@ -826,7 +835,7 @@ của **cùng một bộ giá trị E** → tổng đúng 100% = một lớp bì
 | `pass1_flow` | 20 % | `M221 S<so nay>` trước pass 1 |
 | `pass2_flow` | 80 % | `M221 S<so nay>` trước pass 2. Nên `pass1_flow + pass2_flow = 100` |
 | `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
-| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 tự động ở `first_pass_z + <chiều cao layer 0>` |
+| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` |
 | `z_mode` / `z_raise` / `layer0_z` | — | **Không dùng nữa.** Giữ lại trong khai báo để config cũ trong Cura không báo lỗi; script bỏ qua |
 
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
@@ -872,7 +881,9 @@ Hai file dùng chung (`test_first_layer_twice.py`, `run_first_layer_twice.py`, `
 | File | Việc |
 |---|---|
 | `tests/_cura_stub.py` | Dựng lại cây plugin của Cura (`<pkg>/Script.py` + `<pkg>/scripts/<tên>.py`) vì `FirstLayerTwice` dùng `from ..Script import Script` — **không** import thẳng file được. Kèm hàm đọc setting từ `global.cfg` và chia chunk giống Cura |
-| `tests/_make_raw_fixture.py` | One-off: dựng lại file "raw" từ một gcode đã qua `FirstLayerTwice`, để thử harness trên dữ liệu thật. Body của pass 2 **chính là** body gốc của layer 0 nên chỉ cần bỏ pass 1 + khối nhảy |
+| `tests/_make_raw_fixture.py` | One-off: dựng lại file "raw" từ một gcode đã qua `FirstLayerTwice`, để thử harness trên dữ liệu thật. Body của pass 2 **chính là** body gốc của layer 0 nên chỉ cần bỏ pass 1 + khối nhảy. ⚠️ File dựng theo cách này vẫn có thể dính di chứng của lỗi cũ (marker `;LAYER:1` bị dán vào dòng trước) — muốn số liệu sạch thì dùng `_make_clean_fixture.py` |
+| `tests/_make_clean_fixture.py` | Dựng file "raw" **sạch** 3 layer (Z 0.2 / 0.4 / 0.6) để đo bước Z. Đây là file đã phát hiện lỗi hở 0.1 mm |
+| `tests/_z_report.py` | In **Z vật lý** của từng layer (đọc `G92 Z` để tính độ lệch hệ toạ độ) và **bước** giữa các layer. Dùng để bắt lỗi lệch bước |
 
 > 🔴 **Cura escape newline trong `global.cfg` bằng BA dấu `\` + `n`**, không phải hai:
 > `[FirstLayerTwice]\\\nenabled = True\\\n...`. Khớp cứng hai dấu `\` sẽ để lại một `\` lụng ở đầu
@@ -967,6 +978,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 21 | **Cộng số thực ra `0.30000000000000004` trong G-code** | `first_pass_z + layer_z` = `0.1 + 0.2` → Python ghi `G1 Z0.30000000000000004 F600`. Marlin vẫn hiểu đúng nên **máy không sai**, nhưng test hồi quy so khớp chuỗi `"G1 Z0.3 F600"` **fail**, và G-code đọc rất khó chịu | Dùng `_fmt_num()` (`"{0:.5f}".format(v).rstrip("0").rstrip(".")`) cho mọi giá trị Z ghi ra, đừng dùng `str()`/`format()` trần |
 | 22 | **Đọc setting từ `global.cfg` ra rỗng** | Cura escape newline bằng **ba** dấu `\` + `n`, không phải hai. Khớp cứng hai dấu `\` để lại một `\` lụng ở đầu mỗi dòng → tiêu đề `[FirstLayerTwice]` thành `[FirstLayerTwice]\` → không nhận ra → dict rỗng, tool im lặng bỏ qua mọi phép kiểm phụ thuộc setting | Khớp **cả cụm** bằng regex: `re.sub(r"\\+n", "\n", raw)` (`tests/_cura_stub.py`) |
 | 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
+| 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.3 ✓ → layer1 0.6 ✗`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: mọi bước phải đúng `layer_height`. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 

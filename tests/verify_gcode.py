@@ -108,13 +108,14 @@ def main():
         print("  E hai pass GIONG  : {0}".format(e1 == e2))
         if e1 != e2:
             problems.append("E cua hai pass KHAC nhau")
-        if z1 != z2:
-            problems.append("Z cua hai pass KHAC nhau (body phai y nguyen)")
 
-        # --- co che: pass 1 o first_pass_z; giua hai pass nang Z THAT len
-        #     first_pass_z + <Z goc cua layer 0>, roi G92 khai bao lai la first_pass_z.
-        #     Nho vay body dich cua pass 2 nam dung o cao do.
+        # --- co che: pass 1 o first_pass_z (body da ha); giua hai pass nang Z THAT
+        #     len first_pass_z + <Z goc layer 0>, roi G92 khai bao lai day la <Z goc
+        #     layer 0>; pass 2 dung BODY GOC (Z = Z goc layer 0).
+        #     Nho vay moi buoc layer deu dung bang chieu cao layer.
         want1 = st.get("first_pass_z") if st else 0.1
+        minz = next((float(l.split(":")[1]) for l in lines
+                     if l.startswith(";MINZ:")), None)
         jump = lines[i2 + 1:i3] if i2 is not None and i3 is not None else []
         j_z = next((vals_of(l).get("Z") for l in jump
                     if l.split(";")[0].strip().startswith("G1") and "Z" in vals_of(l)), None)
@@ -123,24 +124,54 @@ def main():
 
         if z1 and want1 is not None and abs(min(z1) - want1) > 1e-6:
             problems.append("Z pass 1 = {0}, mong doi first_pass_z = {1}".format(min(z1), want1))
-        if want1 is not None and j_g92 != want1:
-            problems.append("G92 Z giua hai pass = {0}, mong doi {1}".format(j_g92, want1))
         if j_z is None:
             problems.append("khong thay buoc nang Z giua hai pass")
         elif want1 is not None:
-            # Z goc cua layer 0: uu tien doc tu header Cura, khong thi suy tu chinh buoc nhay
-            minz = next((float(l.split(":")[1]) for l in lines
-                         if l.startswith(";MINZ:")), None)
-            print("  buoc nhay: G1 Z{0} + G92 Z{1} -> pass 2 in o Z vat ly {0}".format(j_z, j_g92))
+            print("  buoc nhay: G1 Z{0} + G92 Z{1}".format(j_z, j_g92))
             if minz is not None:
                 print("  header ;MINZ:{0} (Z goc cua layer 0)".format(minz))
+                if abs(j_g92 - minz) > 1e-6:
+                    problems.append("G92 Z{0} != Z goc layer 0 ({1})".format(j_g92, minz))
                 if abs((j_z - want1) - minz) > 1e-6:
                     problems.append("buoc nhay {0} != first_pass_z {1} + MINZ {2}".format(
                         j_z, want1, minz))
+                if z2 and abs(min(z2) - minz) > 1e-6:
+                    problems.append("Z pass 2 = {0}, phai la Z goc layer 0 ({1})".format(
+                        min(z2), minz))
             if j_z <= want1:
                 problems.append("buoc nhay Z {0} khong cao hon pass 1 ({1})".format(j_z, want1))
-        if max(z1 or [0]) > min(z1 or [0]) + 1e-6:
-            print("  (Z cao nhat pass 1 = {0} -- la Z-hop, khong phai loi)".format(max(z1)))
+
+        # --- buoc Z VAT LY giua cac layer phai dung bang chieu cao layer ---
+        if None not in (i1, i2, i3, i4) and j_z is not None and j_g92 is not None and minz:
+            offset = j_z - j_g92
+            layer_h = next((float(l.split(":")[1]) for l in lines
+                            if l.startswith(";Layer height:")), None)
+            phys = [("pass 1", min(z1)), ("pass 2", min(z2) + offset)]
+            # chunk layer 1: tu dong ';LAYER:1' den moc ';LAYER:' ke tiep
+            i_l1 = next((k for k, l in enumerate(lines) if l.strip() == ";LAYER:1"), None)
+            i_l2 = next((k for k, l in enumerate(lines)
+                         if l.strip().startswith(";LAYER:") and k > (i_l1 or 0)), None) \
+                if i_l1 is not None else None
+            if i_l1 is not None:
+                end = i_l2 if i_l2 is not None else len(lines)
+                z_next = [v for v in (vals_of(l).get("Z") for l in lines[i_l1:end])
+                          if v is not None]
+                if z_next:
+                    phys.append(("layer 1", min(z_next) + offset))
+            print("  Z VAT LY (offset sau buoc nhay = {0}):".format(round(offset, 4)))
+            for k, (name, z) in enumerate(phys):
+                step = "" if k == 0 else "   buoc {0:.2f}".format(z - phys[k - 1][1])
+                print("    {0:8s} Z = {1:.2f}{2}".format(name, z, step))
+            for k in range(1, len(phys)):
+                step = phys[k][1] - phys[k - 1][1]
+                if layer_h and abs(step - layer_h) > 1e-6:
+                    problems.append("buoc {0} -> {1} = {2:.2f}, phai la {3}".format(
+                        phys[k - 1][0], phys[k][0], step, layer_h))
+            if abs(offset - want1) > 1e-6:
+                print("  (canh bao: ban in cao hon model {0} mm)".format(round(offset, 3)))
+            else:
+                print("  (ban in cao hon model {0} mm -- do pass 1 in ra nhua that)".format(
+                    round(offset, 3)))
 
         # M221 phai dung thu tu pass1 -> pass2 -> 100
         want_flows = ["M221 S{0} ;".format(st["pass1_flow"]),

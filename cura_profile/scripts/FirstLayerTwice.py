@@ -2,13 +2,24 @@
 #
 # Cura post-processing script: in layer 0 hai lan.
 #
-#   pass 1 - in layer 0 o DUNG do cao goc, flow rieng (mac dinh 20%)
-#   giua   - nhac Z len MOT chieu cao lop dau, roi G92 khai bao lai day la Z cua
-#            layer 0 -> pass 2 roi xuong cao hon pass 1 dung mot lop
-#   pass 2 - chay lai DUNG body do, flow rieng (mac dinh 80%)
+#   pass 1 - body da HA xuong first_pass_z (mac dinh 0.1), flow rieng (20%)
+#   giua   - nhac Z len first_pass_z + <Z goc cua layer 0>, roi G92 khai bao lai
+#            day la <Z goc cua layer 0>
+#   pass 2 - body GOC, KHONG ha, flow rieng (80%)
 #   ket thuc layer 0 - tra flow ve 100%
 #
 # Layer 1 tro len KHONG bi dung toi.
+#
+# VI SAO PASS 2 DUNG BODY GOC, KHONG DUNG BODY DA HA:
+#   Neu pass 2 dung lai body da ha thi toa do Z cua no la first_pass_z (0.1) trong
+#   khi layer 1 cua Cura la 0.4 -> buoc nhay tu layer 0 len layer 1 thanh 0.3, tuc
+#   ho 0.1 mm khong khi. Do bang tests/_z_report.py tren file sach:
+#       pass1 0.1 -> pass2 0.3 (buoc 0.2 OK) -> layer1 0.6 (buoc 0.30 SAI)
+#   Dung body goc (Z = 0.2) + G92 Z0.2 thi toa do tro ve dung he goc, moi buoc sau
+#   deu 0.2 nhu binh thuong:
+#       pass1 0.1 -> pass2 0.3 (0.2) -> layer1 0.5 (0.2) -> layer2 0.7 (0.2)
+#   Doi lai: ca ban in cao hon model dung first_pass_z (0.1) vi pass 1 da in ra
+#   nhua that. Khoang cach giua cac layer VAN dung.
 #
 # FLOW dung bang M221 (flow percentage cua Marlin) thay vi nhan lai tung gia tri E.
 # Nho vay KHONG phai tinh toan E: pass 1 va pass 2 ghi ra CUNG mot gia tri E, va
@@ -108,7 +119,7 @@ class FirstLayerTwice(Script):
                 "first_pass_z":
                 {
                     "label": "Z cua pass 1 (mm)",
-                    "description": "pass 1 in o Z nay (mac dinh 0.1). pass 2 in o Z = so nay + chieu cao lop dau (vd 0.1 + 0.2 = 0.3).",
+                    "description": "pass 1 in o Z nay (mac dinh 0.1). pass 2 dung lai body GOC nen in o Z = so nay + Z goc cua layer 0 (vd 0.1 + 0.2 = 0.3).",
                     "type": "float",
                     "default_value": 0.1,
                     "minimum_value": 0.01
@@ -306,14 +317,15 @@ class FirstLayerTwice(Script):
                 "G90 ; toa do tuyet doi"]
 
         if do_shift:
-            # pass 1 in o first_pass_z (mac dinh 0.1). pass 2 phai in o
-            # first_pass_z + chieu cao lop dau (0.1 + 0.2 = 0.3), nen nang Z THAT len
-            # dung do, roi G92 khai bao lai la first_pass_z -> he toa do dich len dung
-            # mot chieu cao lop dau.
+            # pass 1 in o first_pass_z (0.1). pass 2 dung lai BODY GOC (Z = layer_z,
+            # vd 0.2), nen phai nhac Z THAT len first_pass_z + layer_z (0.1 + 0.2 =
+            # 0.3) roi G92 khai bao lai day la layer_z -> body goc roi ve dung cho
+            # cua no, va toa do tu day ve sau y het ban in binh thuong.
             jump += [
-                "G1 Z{0} F{1} ; nang Z len first_pass_z + 1 chieu cao lop dau".format(
+                "G1 Z{0} F{1} ; nang Z len first_pass_z + Z goc cua layer 0".format(
                     self._fmt_num(first_pass_z + layer_z), z_feedrate),
-                "G92 Z{0} ; khai bao lai day la Z cua pass 1".format(self._fmt_num(first_pass_z)),
+                "G92 Z{0} ; khai bao lai day la Z goc cua layer 0".format(
+                    self._fmt_num(layer_z)),
             ]
         else:
             jump.append("; CANH BAO: first_pass_z khong hop le -> hai pass cung do cao")
@@ -326,14 +338,14 @@ class FirstLayerTwice(Script):
             "; --- First Layer Twice: bat dau pass 2 ({0}%) ---".format(flow2),
         ]
 
-        # --- pass 2: cung body do, y nguyen ---
+        # --- pass 2: BODY GOC, khong ha. Xem giai thich o dau file. ---
         # Phan tu CUOI phai la chuoi rong: moi chunk cua Cura ket thuc bang '\n', ma
         # "\n".join() khong tu them dau phan cach o cuoi. Thieu dong rong nay thi
         # chunk sau (bat dau bang ';LAYER:1') se bi dinh lien vao dong cuoi.
         tail = ["", "; --- First Layer Twice: ket thuc layer 0 -> tra flow ve 100% ---",
                 "M221 S100 ; flow 100% cho layer 1 tro len", ""]
 
-        data[index] = "\n".join(prefix + head + pass1 + jump + pass1 + tail)
+        data[index] = "\n".join(prefix + head + pass1 + jump + body + tail)
         return data
 
     @staticmethod

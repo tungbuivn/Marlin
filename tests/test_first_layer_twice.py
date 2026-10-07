@@ -1,16 +1,19 @@
 """Test hoi quy cho FirstLayerTwice.
 
-Kiem tra co che MOI (dung M221 flow thay vi nhan lai E):
+Kiem tra co che dung M221 flow thay vi nhan lai E:
 
-  pass 1  - body Y NGUYEN, chi doi flow bang M221 S20
-  giua    - nhac Z len DUNG mot chieu cao lop dau, G92 khai bao lai Z cua layer 0,
-            reset extruder ve E dau layer 0, M221 S80
-  pass 2  - cung body do, Y NGUYEN  ->  E cua 2 pass phai GIONG HET NHAU
+  pass 1  - body da HA xuong first_pass_z (0.1), chi doi flow bang M221 S20
+  giua    - nhac Z THAT len first_pass_z + <Z goc layer 0> (0.1 + 0.2 = 0.3),
+            roi G92 khai bao lai day la <Z goc layer 0> (0.2), reset extruder ve
+            E dau layer 0, M221 S80
+  pass 2  - BODY GOC, khong ha -> E cua 2 pass phai GIONG HET NHAU
   ket thuc- M221 S100
 
-Boi canh hai loi da gap:
- 1) _find_layer_z() doi cu lay Z dau tien -> vuong Z-hop 0.4 -> sinh ra Z am.
- 2) phai lay Z NHO NHAT trong body (moi Z-hop deu cao hon chieu cao layer).
+Boi canh ba loi da gap:
+  1) _find_layer_z() doi cu lay Z dau tien -> vuong Z-hop 0.4 -> sinh ra Z am.
+  2) phai lay Z NHO NHAT trong body (moi Z-hop deu cao hon chieu cao layer).
+  3) pass 2 dung lai body DA HA -> buoc tu layer 0 len layer 1 thanh 0.3, tuc ho
+     0.1 mm khong khi. Phai dung body GOC thi moi buoc moi dung 0.20.
 
 Chay: python tests/test_first_layer_twice.py
 """
@@ -50,8 +53,8 @@ CHUNK1 = "\n".join([
     "",
 ])
 
-CHUNK2 = ";LAYER:1\nM106 S85\n;TYPE:SKIRT\nG1 F900 E2\nG1 F1800 X40 Y40 E3\n;MESH:NONMESH\nG0 F600 Z0.6\n;TIME_ELAPSED:20\n"
-CHUNK3 = ";LAYER:2\nM106 S85\n;TYPE:SKIRT\nG1 F900 E3\nG1 F1800 X50 Y50 E4\n;TIME_ELAPSED:30\n"
+CHUNK2 = ";LAYER:1\nM106 S85\nG1 F600 Z0.6\n;TYPE:SKIRT\nG1 F600 Z0.4\nG1 F900 E2\nG1 F1800 X40 Y40 E3\n;MESH:NONMESH\nG0 F600 Z0.6\n;TIME_ELAPSED:20\n"
+CHUNK3 = ";LAYER:2\nM106 S85\nG1 F600 Z0.8\n;TYPE:SKIRT\nG1 F600 Z0.6\nG1 F900 E3\nG1 F1800 X50 Y50 E4\n;TIME_ELAPSED:30\n"
 
 SETTINGS = {
     "enabled": True,
@@ -132,8 +135,8 @@ def main():
 
     # pass 1 ha xuong first_pass_z = 0.1 (Z-hop 0.4 - 0.1 = 0.3)
     assert z1 == [0.1, 0.3], "FAIL pass 1: mong doi [0.1, 0.3], dang la {0}".format(z1)
-    # pass 2 chay CUNG body da dich do
-    assert z2 == [0.1, 0.3], "FAIL pass 2: mong doi [0.1, 0.3], dang la {0}".format(z2)
+    # pass 2 chay BODY GOC -> Z goc cua layer 0 la 0.2 (Z-hop 0.4)
+    assert z2 == [0.2, 0.4], "FAIL pass 2: mong doi [0.2, 0.4], dang la {0}".format(z2)
 
     # DIEM MAU CHOT: E cua hai pass GIONG HET NHAU -> khong nhan lai E
     assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
@@ -143,11 +146,44 @@ def main():
     assert any("M221 S80" in l for l in lines[i2:i3]), "FAIL: thieu M221 S80 truoc pass 2"
     assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
 
-    # nang Z THAT len first_pass_z + chieu cao lop dau = 0.1 + 0.2 = 0.3, roi G92 ve 0.1
+    # nang Z THAT len first_pass_z + Z goc layer 0 = 0.1 + 0.2 = 0.3, roi G92 ve 0.2
+    # (ve Z GOC cua layer 0, de body goc roi dung cho va moi layer sau giu dung buoc 0.2)
     assert any("G1 Z0.3 F600" in l for l in lines[i2:i3]), "FAIL: buoc nang Z sai"
-    assert any("G92 Z0.1" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.1"
+    assert any("G92 Z0.2" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.2 (Z goc layer 0)"
     # reset extruder ve E dau layer 0 (trong gcode nay la -0.75, sau lenh retract)
     assert any("G92 E-0.75" in l for l in lines[i2:i3]), "FAIL: thieu G92 E dau layer 0"
+
+    # --- 2b) BUOC Z VAT LY giua cac layer phai dung bang chieu cao layer ---
+    # Day la phep kiem hoi quy cho loi THAT da gap: neu pass 2 dung lai body da ha
+    # (Z = 0.1) thi buoc tu layer 0 len layer 1 thanh 0.3 -> ho 0.1 mm khong khi.
+    # Do tren file sach: pass1 0.1 -> pass2 0.3 (0.2 OK) -> layer1 0.6 (0.30 SAI).
+    jump_lines = lines[i2:i3]
+    j_z = next(float(l.split("Z", 1)[1].split(" ")[0]) for l in jump_lines
+               if l.split(";")[0].strip().startswith("G1") and "Z" in l)
+    j_g92 = next(float(l.split("Z", 1)[1].split(" ")[0]) for l in jump_lines
+                 if l.split(";")[0].strip().startswith("G92") and "Z" in l)
+    offset = j_z - j_g92                      # vat ly = toa do + offset
+    press = [("pass 1", min(z1)),              # truoc buoc nhay: offset = 0
+             ("pass 2", min(z2) + offset),
+             ("layer 1", min(axis_values(CHUNK2.split("\n"), "Z")) + offset),
+             ("layer 2", min(axis_values(CHUNK3.split("\n"), "Z")) + offset)]
+    print("")
+    print("  Z VAT LY tung luot (offset sau buoc nhay = {0}):".format(round(offset, 4)))
+    for k, (name, z) in enumerate(press):
+        step = "" if k == 0 else "   buoc {0:.2f}".format(z - press[k - 1][1])
+        print("    {0:8s} Z = {1:.2f}{2}".format(name, z, step))
+    for k in range(1, len(press)):
+        step = press[k][1] - press[k - 1][1]
+        assert abs(step - 0.2) < 1e-9, (
+            "FAIL: buoc {0} -> {1} = {2:.2f}, phai la 0.20 (chieu cao layer)".format(
+                press[k - 1][0], press[k][0], step))
+
+    # doi chung: pass 2 dung lai body DA HA (Z = 0.1) thi buoc nay thanh 0.30
+    old_step = (min(axis_values(CHUNK2.split("\n"), "Z")) + offset) - (min(z1) + offset)
+    print("")
+    print("  [doi chung] neu pass 2 dung lai body DA HA (Z = 0.1):")
+    print("    buoc layer 0 -> layer 1 = {0:.2f}  (phai la 0.20)".format(old_step))
+    assert abs(old_step - 0.3) < 1e-9, "FAIL: doi chung khong the hien duoc loi"
 
     # --- 3) layer 1 tro len khong bi dung toi
     assert out[2] == CHUNK2, "FAIL: chunk layer 1 bi thay doi"
