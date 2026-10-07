@@ -200,7 +200,27 @@ class FirstLayerTwice(Script):
         return "\n".join(out)
 
     def _find_layer_z(self, body):
-        """Z cua layer 0: gia tri Z dau tien trong mot buoc G0/G1 cua body."""
+        """Z cua layer 0: gia tri Z NHO NHAT trong body.
+
+        KHONG duoc lay Z dau tien. Profile Voron cua Ultimaker bat Z-hop
+        (voron2_base.def.json: retraction_hop_enabled = true, retraction_hop = 0.2),
+        nen buoc G0/G1 co Z dau tien cua layer 0 la buoc NANG len (chieu cao layer
+        + hop), khong phai chieu cao layer. Layer 0 cao 0.2 thi body mo dau bang:
+
+            G1 F600 Z0.4     <- Z-hop (0.2 + 0.2)
+            G0 ... X.. Y..   <- di chuyen o do cao hop
+            ;TYPE:SKIRT
+            G1 F600 Z0.2     <- ha ve dung chieu cao layer 0
+
+        Lay Z dau tien se ra 0.4 -> offset = 0.4 - first_pass_z = 0.3 (dung phai
+        la 0.1), va khi tru 0.3 vao MOI Z thi chieu cao that 0.2 thanh -0.1. Marlin
+        co Z_MIN_POS = 0 nen kep ve 0 (motion.cpp: NOLESS(target.z, soft_endstop.min.z))
+        -> pass 1 in ngay tren mat ban.
+
+        Trong mot layer, moi Z-hop deu CAO HON chieu cao layer, nen min() luon tra
+        ve dung chieu cao layer.
+        """
+        zs = []
         for line in body:
             code = line.split(";", 1)[0].strip()
             if not code:
@@ -209,8 +229,8 @@ class FirstLayerTwice(Script):
                 continue
             value = self.getValue(line, "Z")
             if value is not None:
-                return float(value)
-        return None
+                zs.append(float(value))
+        return min(zs) if zs else None
 
     def _shift_z(self, lines, offset):
         """Tru offset khoi MOI gia tri Z (giu nguyen Z-hop, vi cung tru mot hang so)."""

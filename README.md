@@ -89,27 +89,31 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X500 Y500 Z10 E25` | |
-| Accel (mm/s²) | `M201 X1500 Y1500 Z100 E1000` | X/Y theo mức "an toàn" của Voron |
-| Accel print/retract/travel | `M204 P1500 R500 T2000` | |
+| Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | **Trần cứng 500** cho X/Y — Marlin lấy `min(M204 P, M201)` |
+| Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in, luôn ≤ 500 |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | |
 | Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
 | Soft endstop | `M211 S1` | |
 
-### 3.1 Vì sao X/Y = 1500 chứ không phải 3000 của Voron
+### 3.1 Vì sao X/Y = 500 chứ không phải 3000 của Voron
 
 `printer.cfg` gốc của Voron Design đặt `max_accel: 3000` (kèm ghi chú `# Max 4000`), và profile
 Cura chính thức của Voron còn cao hơn (`acceleration_print 5000`). Nhưng **những con số đó là cho
 Klipper đã chạy input shaping**; Marlin **không có input shaping**, nên lấy nguyên 3000 sẽ thấy
 ghosting ở góc.
 
-Hiện tại: **1500** (một nửa mức gốc). Muốn nâng thì tăng dần 1500 → 2000 → 2500 và dừng ngay khi
-thấy vệt rung.
+Hiện tại: **500**. Trước đó từng để 1500 rồi hạ tiếp xuống 500. Muốn nâng lại thì tăng dần và dừng
+ngay khi thấy vệt rung — nhớ phải nâng **cả `M201` lẫn Cura**.
 
-> ⚠️ **Marlin lấy `min(M204 P, M201 của trục)`.** Vì `M201 X/Y` chỉ 1500, profile Cura đã được hạ
-> `acceleration_print` / `_travel` / `machine_acceleration` **về 1500** cho khớp — để nguyên 5000 thì
-> Cura phát `M204 P5000` mà máy vẫn chạy 1500, con số trong Cura thành vô nghĩa. Chi tiết ở §11.6.
-> Z và E giữ nguyên: `M201 Z100` / `E1000` là **trần cứng** cho hai trục đó, nâng `M204 P` không
-> làm chúng gia tốc mạnh hơn.
+> ⚠️ **Marlin lấy `min(M204 P, M201 của trục)`.** `M201 X/Y` là **trần cứng 500**, nên Cura có khai
+> gì thì máy cũng không vượt 500. Profile Cura đã được đặt khớp ở 500 (`acceleration_print` /
+> `_travel` / `machine_acceleration` / `machine_max_acceleration_x/y`) để con số trong Cura không còn
+> "nói dối". Chi tiết ở §11.6.
+> Z giữ `M201 Z100` (đã dưới 500) và E `M201 E1000`, nhưng Cura khai `machine_max_acceleration_e = 500`
+> nên **E thực tế cũng bị chặn ở 500**.
+>
+> ℹ️ `Configuration.h` vẫn ghi `DEFAULT_MAX_ACCELERATION { 1500, 1500, 100, 1000 }` — giá trị **biên
+> dịch** đó chỉ có tác dụng nếu chạy `M502` (đừng chạy). EEPROM đang là 500 và **EEPROM thắng**.
 
 ### 3.2 `INVERT_E0_DIR` — hướng extruder
 
@@ -477,7 +481,7 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 ```
 M115        ; phien ban firmware + timestamp build
 M503        ; M92 X80 Y80 Z800 E415 / M203 Z10 E25
-            ; M201 X1500 Y1500 Z100 E1000 / M204 P1500 R500 T2000 / M205 X8 Y8 Z0.40 E5
+            ; M201 X500 Y500 Z100 E1000 / M204 P500 R500 T500 / M205 X8 Y8 Z0.40 E5
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
@@ -692,6 +696,19 @@ nguyên nên **bản in cao đúng bằng mô hình** ✓. Nhựa vẫn 20% + 80
 Script tự đọc Z của layer 0 từ chính G-code, và **hạ Z bằng cách trừ một hằng số** khỏi mọi giá
 trị Z của pass 1 — nên **Z-hop (nếu bật) vẫn còn tác dụng**, không bị dẹp mất.
 
+> ⚠️ **Đọc Z của layer 0 phải lấy MIN, không được lấy giá trị đầu tiên.** `voron2_base` của UltiMaker
+> bật Z-hop (`retraction_hop_enabled = true`, `retraction_hop = 0.2`), nên bước `G0/G1` đầu tiên của
+> layer 0 là bước **nâng lên** `0.2 + 0.2 = 0.4`:
+> ```gcode
+> G1 F600 Z0.4     ; Z-hop, KHONG phai chieu cao layer
+> G0 F11250 X.. Y..
+> ;TYPE:SKIRT
+> G1 F600 Z0.2     ; day moi la chieu cao layer 0
+> ```
+> Lấy nhầm `0.4` làm `layer_z` thì `offset = 0.4 − 0.1 = 0.3` (đúng phải là `0.1`) và chiều cao thật
+> `0.2` biến thành **`Z-0.1`**; Marlin có `Z_MIN_POS 0` nên kẹp về 0 → pass 1 in ngay trên mặt bàn.
+> Xem cạm bẫy 17 và test hồi quy `tests/test_first_layer_twice.py`.
+
 > Nếu `first_pass_z` **không hợp lệ** (≤ 0, hoặc ≥ Z của layer 0) thì script **tự lùi về an toàn**:
 > hai pass cùng độ cao, không hạ Z, không `G92`, và ghi chú lý do vào G-code.
 
@@ -747,33 +764,36 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_width/depth` | 300 | **305** | vùng in thật |
 | `machine_height` | 300 | 300 | |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
-| `machine_max_acceleration_x/y` | 20000 | 20000 | giữ nguyên bản Voron — đây là **giới hạn cơ khí**, không phải mức chạy |
+| `machine_max_acceleration_x/y` | 20000 | **500** | **trần cứng** — khớp `M201 X500 Y500` của firmware |
 | `machine_max_acceleration_z` | 500 | **100** | `M201 Z100` của firmware |
 | `machine_max_acceleration_e` | (mặc định 10000) | **500** | |
-| `acceleration_print` | 5000 | **1500** | hạ cho khớp `M201 X1500 Y1500` — xem giải thích bên dưới |
-| `acceleration_travel` | (công thức → 7000) | **1500** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
-| `machine_acceleration` | 5000 | **1500** | |
+| `acceleration_print` | 5000 | **500** | khớp trần `M201 X500 Y500` — xem giải thích bên dưới |
+| `acceleration_travel` | (công thức → 7000) | **500** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
+| `machine_acceleration` | 5000 | **500** | |
 | `jerk_print` / `_travel` | (mặc định 20 / 30) | **8 / 8** | `M205 X8 Y8` — `CLASSIC_JERK` |
 | `machine_max_jerk_xy` | (mặc định 20) | **8** | |
 | `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
 | `retraction_speed` / `_retract_speed` / `_prime_speed` | 30 / 25 / 25 | **15 / 15 / 15** | ngưỡng `machine_max_feedrate_e − 10 = 15`, xem cảnh báo bên trên |
 | Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
 
-> 🔵 **Vì sao hạ Cura xuống 1500 (đã chốt).** Marlin tính `accel_thực = min(M204 P, M201 trục)`, mà
-> `M201 X/Y` của firmware là **1500**. Để nguyên `acceleration_print 5000` thì Cura phát `M204 P5000`
-> nhưng máy vẫn chạy 1500 — con số trong Cura thành **nói dối**. Có hai cách khớp: nâng `M201 X/Y`
-> lên 5000 (phải flash lại, và Marlin **không có input shaping** nên mức đó rất dễ rung), hoặc hạ
-> Cura xuống 1500. **Đã chọn hạ Cura** — không phải flash lại, và 1500 là mức an toàn cho Voron 2.1
-> chạy Marlin. Muốn nhanh hơn về sau thì phải nâng **cả hai** cùng lúc.
+> 🔵 **Vì sao chặn ở 500 (đã chốt).** Marlin tính `accel_thực = min(M204 P, M201 trục)`. `M201 X/Y`
+> của firmware là **trần cứng 500**, nên để Cura khai 1500 hay 5000 thì máy vẫn chỉ chạy 500 — con số
+> trong Cura thành **nói dối**. Đã hạ **cả hai bên về 500**: `M201` trong EEPROM (không cần flash, chỉ
+> cần `M201 X500 Y500` + `M500`) và toàn bộ `acceleration_*` của Cura — kể cả
+> `machine_max_acceleration_x/y` để Cura không cho đặt cao hơn. Muốn nhanh hơn về sau thì phải nâng
+> **cả hai** cùng lúc.
 
 > 📐 **Các mức còn lại tự suy ra, không cần đặt tay.** Mọi `acceleration_*` khác của Cura đều tính từ
-> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 1500` thì:
-> `acceleration_wall` / `_topbottom` / `_infill` = **1500**, `acceleration_support` = **750**,
-> `acceleration_roofing` = `acceleration_wall_0` = **900**, `acceleration_layer_0` = **150**
-> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **1500**.
-> Tất cả đều ≤ 1500 nên firmware **không kẹp chỗ nào nữa**. `machine_max_acceleration_x/y = 20000`
-> vẫn để nguyên vì đó là **giới hạn cơ khí** (UltiMaker cũng khai 20000 trong `voron2_base`), không
-> phải mức chạy — firmware mới là bên giới hạn thực tế.
+> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 500` thì:
+> `acceleration_wall` / `_topbottom` / `_infill` = **500**, `acceleration_support` = **250**,
+> `acceleration_roofing` = `acceleration_wall_0` = **300**, `acceleration_layer_0` = **50**
+> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **500**.
+> Tất cả đều ≤ 500 nên firmware **không kẹp chỗ nào nữa**.
+
+> ⚠️ **Cura KHÔNG phát `M204 T`** — nó chỉ phát `M204 S<n>` (acceleration in). Kiểm chứng trên
+> `V300_Part3.gcode`: chỉ có `M204 S150`, `S488`, `S825`, `S1162`… và **không có lệnh `M204 T` nào**.
+> Nên `acceleration_travel` của Cura **chỉ ảnh hưởng phần ước lượng thời gian in**, còn travel
+> acceleration thật của máy là `M204 T` lưu trong EEPROM.
 
 ### 11.7 Những chỗ dễ sai — đọc trước khi sửa
 
@@ -785,7 +805,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 2 | **Đừng dùng `M502` để "nạp lại mặc định"** | Xoá luôn `M851 Z0.70` (offset đã cân), mesh, điểm G34 | Dùng `M422` / `M851` cho từng giá trị |
 | 3 | **Hướng extruder chỉ nằm trong firmware** (`INVERT_E0_DIR`) | Cura không có setting nào đảo chiều, sửa Cura vô ích | Sửa firmware + flash |
 | 4 | **`Z_AFTER_PROBING` bị comment → `move_z_after_probing()` rỗng** | `G28` kết thúc với nozzle **nằm trên bàn**, lệnh XY sau đó **kéo nozzle quét mặt bàn** | Bật `Z_AFTER_PROBING` |
-| 5 | **Marlin lấy `min(M204 P, M201 trục)`** | Cura khai 5000 mà `M201 X/Y` 1500 → chạy 1500 | Cho **hai bên bằng nhau**: hoặc nâng `M201` (phải flash), hoặc hạ `acceleration_print` của Cura. Máy này đã chọn **hạ Cura về 1500** |
+| 5 | **Marlin lấy `min(M204 P, M201 trục)`** | Cura khai 5000 mà `M201 X/Y` = 500 → máy vẫn chỉ chạy 500, con số trong Cura thành vô nghĩa | Cho **hai bên bằng nhau**. Máy này chặn ở **500**: `M201 X500 Y500` + `M500` (không cần flash) và hạ toàn bộ `acceleration_*` của Cura về 500 |
 | 6 | **Cura lưu thông số ở 3 container khác nhau** | Ghi sai container → Cura **âm thầm bỏ qua** | Xem bảng ở 11.6 |
 | 7 | **`fdmextruder.def.json` không có `inherits`** | Setting của `fdmprinter` (vd `retraction_speed`) **không tồn tại** trong definition `Toolhead` | Đặt vào container `user` của extruder (khai `definition = voron2_300`) |
 | 8 | **`voron2_base` đặt `maximum_value_warning = machine_max_feedrate_e − 10`** cho 3 tốc độ retract | Hạ `machine_max_feedrate_e` xuống 25 → ngưỡng 15 → Cura **chặn slice** | Đặt retract ≤ ngưỡng, hoặc nâng `M203 E` |
@@ -797,6 +817,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
+| 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2` → `offset = 0.4 − 0.1 = 0.3` → chiều cao thật thành **`Z-0.1`**; Marlin có `Z_MIN_POS 0` nên kẹp về 0 → **pass 1 in ngay trên mặt bàn** | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
