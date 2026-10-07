@@ -1,12 +1,16 @@
-"""Test hoi quy cho FirstLayerTwice._find_layer_z.
+"""Test hoi quy cho FirstLayerTwice.
 
-Boi canh loi (da gap that trong D:\\0in\\V300_Part3.gcode):
-  voron2_base.def.json cua Ultimaker bat Z-hop (retraction_hop_enabled = true,
-  retraction_hop = 0.2), nen buoc G0/G1 co Z DAU TIEN cua layer 0 la buoc NANG
-  len (0.2 + 0.2 = 0.4), khong phai chieu cao layer (0.2).
-  _find_layer_z() doi cu lay Z dau tien -> 0.4 -> offset = 0.4 - first_pass_z
-  = 0.3 (dung phai 0.1) -> chieu cao that 0.2 - 0.3 = -0.1.
-  Marlin co Z_MIN_POS = 0 nen kep ve 0 -> pass 1 in ngay tren mat ban.
+Kiem tra co che MOI (dung M221 flow thay vi nhan lai E):
+
+  pass 1  - body Y NGUYEN, chi doi flow bang M221 S20
+  giua    - nhac Z len DUNG mot chieu cao lop dau, G92 khai bao lai Z cua layer 0,
+            reset extruder ve E dau layer 0, M221 S80
+  pass 2  - cung body do, Y NGUYEN  ->  E cua 2 pass phai GIONG HET NHAU
+  ket thuc- M221 S100
+
+Boi canh hai loi da gap:
+ 1) _find_layer_z() doi cu lay Z dau tien -> vuong Z-hop 0.4 -> sinh ra Z am.
+ 2) phai lay Z NHO NHAT trong body (moi Z-hop deu cao hon chieu cao layer).
 
 Chay: python tests/test_first_layer_twice.py
 """
@@ -16,8 +20,8 @@ import shutil
 import sys
 import tempfile
 
-SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   "cura_profile", "scripts", "FirstLayerTwice.py")
+HERE = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(os.path.dirname(HERE), "cura_profile", "scripts", "FirstLayerTwice.py")
 
 STUB = '''\
 class Script:
@@ -44,7 +48,6 @@ class Script:
 '''
 
 # --- gcode gia lap, mo phong dung cau truc Cura sinh ra -------------------
-# Cura chia gcode_list theo layer; dong ';LAYER:n' nam trong chunk cua no.
 CHUNK0 = ";FLAVOR:Marlin\n;Layer height: 0.2\n;MINZ:0.2\n;MAXZ:1\n"
 
 CHUNK1 = "\n".join([
@@ -68,7 +71,7 @@ CHUNK1 = "\n".join([
     "G1 F1800 X20 Y20 E1",
     "G1 X30 Y30 E2",
     ";MESH:NONMESH",
-    "G0 F600 Z0.4",          # Z-hop cuoi layer (trung chieu cao layer 1)
+    "G0 F600 Z0.4",          # Z-hop cuoi layer
     "G0 F11250 X30 Y30",
     ";TIME_ELAPSED:10",
     "",
@@ -81,11 +84,9 @@ SETTINGS = {
     "enabled": True,
     "force_temperatures": False,
     "double_first_layer": True,
-    "z_mode": "split",
-    "first_pass_z": 0.1,
-    "z_feedrate": 600,
     "pass1_flow": 20,
     "pass2_flow": 80,
+    "z_feedrate": 600,
 }
 
 PKG = os.path.join(tempfile.gettempdir(), "flt_test_pkg")
@@ -108,22 +109,22 @@ def build_module():
     return importlib.import_module(os.path.basename(PKG) + ".scripts.FirstLayerTwice")
 
 
-def z_values(lines):
+def axis_values(lines, axis):
     out = []
     for line in lines:
         code = line.split(";", 1)[0].strip()
         if not code or code.split()[0] not in ("G0", "G1"):
             continue
-        if "Z" in code:
+        if axis in code:
             try:
-                out.append(float(code.split("Z", 1)[1].split(" ")[0]))
+                out.append(float(code.split(axis, 1)[1].split(" ")[0]))
             except ValueError:
                 pass
     return out
 
 
 def old_find_layer_z(self, body):
-    """Ban CU: lay gia tri Z dau tien trong body (chinh la loi)."""
+    """Ban CU: lay gia tri Z dau tien trong body (chinh la loi - vuong Z-hop)."""
     for line in body:
         code = line.split(";", 1)[0].strip()
         if not code or code.split()[0] not in ("G0", "G1"):
@@ -144,38 +145,72 @@ def main():
     print("  _find_layer_z tren body layer 0 : {0}".format(detected))
     assert detected == 0.2, "FAIL: phai la 0.2 (chieu cao layer), dang la {0}".format(detected)
 
-    # --- 2) chay that voi ban da sua
+    # --- 2) chay that
     fixed = mod.FirstLayerTwice()
     fixed._settings = dict(SETTINGS)
     out = fixed.execute([CHUNK0, CHUNK1, CHUNK2, CHUNK3])
     lines = out[1].split("\n")
-    all_z = z_values(lines)
-    print("  Z trong chunk layer 0          : {0}".format(all_z))
-    print("  Z nho nhat                     : {0}".format(min(all_z)))
-    assert min(all_z) >= 0, "FAIL: van con Z am -> {0}".format(min(all_z))
 
-    i1 = next(i for i, l in enumerate(lines) if "First Layer Twice: pass 1" in l)
+    i1 = next(i for i, l in enumerate(lines) if "bat dau pass 1" in l)
     i2 = next(i for i, l in enumerate(lines) if "ket thuc pass 1" in l)
     i3 = next(i for i, l in enumerate(lines) if "bat dau pass 2" in l)
-    z_pass1 = sorted(set(z_values(lines[i1:i2])))
-    z_pass2 = sorted(set(z_values(lines[i3:])))
-    print("  Z cua pass 1                   : {0}".format(z_pass1))
-    print("  Z cua pass 2                   : {0}".format(z_pass2))
-    assert z_pass1 == [0.1, 0.3], "FAIL pass 1: mong doi [0.1, 0.3], dang la {0}".format(z_pass1)
-    assert z_pass2 == [0.2, 0.4], "FAIL pass 2: mong doi [0.2, 0.4], dang la {0}".format(z_pass2)
+    i4 = next(i for i, l in enumerate(lines) if "ket thuc layer 0" in l)
+    print("  moc: pass1 dong {0} | giua {1}-{2} | pass2 tu {3} | ket thuc {4}".format(
+        i1 + 1, i2 + 1, i3 + 1, i3 + 1, i4 + 1))
+
+    print("")
+    print("=== khoi giua hai pass ===")
+    for l in lines[i2:i3 + 1]:
+        print("    " + l)
+
+    z1 = sorted(set(axis_values(lines[i1:i2], "Z")))
+    z2 = sorted(set(axis_values(lines[i3:i4], "Z")))
+    e1 = axis_values(lines[i1:i2], "E")
+    e2 = axis_values(lines[i3:i4], "E")
+
+    print("")
+    print("  Z pass 1            : {0}".format(z1))
+    print("  Z pass 2            : {0}".format(z2))
+    print("  so gia tri E pass 1 : {0}".format(len(e1)))
+    print("  so gia tri E pass 2 : {0}".format(len(e2)))
+    print("  E pass 1            : {0}".format(e1))
+    print("  E pass 2            : {0}".format(e2))
+
+    # pass 1 GIU NGUYEN: Z cua body goc (hop 0.4, lop 0.2)
+    assert z1 == [0.2, 0.4], "FAIL pass 1: mong doi [0.2, 0.4], dang la {0}".format(z1)
+    # pass 2 y nguyen body do
+    assert z2 == [0.2, 0.4], "FAIL pass 2: mong doi [0.2, 0.4], dang la {0}".format(z2)
+
+    # DIEM MAU CHOT: E cua hai pass GIONG HET NHAU -> khong nhan lai E
+    assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
+
+    # moc M221
+    assert any("M221 S20" in l for l in lines[i1:i2]), "FAIL: thieu M221 S20 truoc pass 1"
+    assert any("M221 S80" in l for l in lines[i2:i3]), "FAIL: thieu M221 S80 truoc pass 2"
+    assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
+
+    # nhac Z len dung MOT chieu cao lop dau (0.2 + 0.2 = 0.4) roi G92 ve 0.2
+    assert any("G1 Z0.4 F600" in l for l in lines[i2:i3]), "FAIL: buoc nhac Z sai"
+    assert any("G92 Z0.2" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.2"
+    # reset extruder ve E dau layer 0 (trong gcode nay la -0.75, sau lenh retract)
+    assert any("G92 E-0.75" in l for l in lines[i2:i3]), "FAIL: thieu G92 E dau layer 0"
 
     # --- 3) layer 1 tro len khong bi dung toi
     assert out[2] == CHUNK2, "FAIL: chunk layer 1 bi thay doi"
     assert out[3] == CHUNK3, "FAIL: chunk layer 2 bi thay doi"
 
-    # --- 4) DOI CHUNG: code CU phai FAIL, neu khong thi test nay vo nghia
+    # --- 4) DOI CHUNG: lay nham Z-hop lam chieu cao layer -> nang sai gap doi
     broken = mod.FirstLayerTwice()
     broken._settings = dict(SETTINGS)
     broken._find_layer_z = old_find_layer_z.__get__(broken, mod.FirstLayerTwice)
     out_old = broken.execute([CHUNK0, CHUNK1, CHUNK2, CHUNK3])
-    zmin_old = min(z_values(out_old[1].split("\n")))
-    print("  [doi chung] code CU, Z nho nhat: {0}".format(zmin_old))
-    assert zmin_old < 0, "FAIL: test khong bat duoc loi cu (Z nho nhat = {0})".format(zmin_old)
+    j = [l for l in out_old[1].split("\n") if "nhac Z len" in l or l.strip().startswith("G92 Z")]
+    print("")
+    print("  [doi chung] code CU (lay Z dau tien):")
+    for l in j:
+        print("    " + l)
+    assert any("G1 Z0.8 F600" in l for l in j), "FAIL: doi chung khong the hien loi (mong doi G1 Z0.8)"
+    assert any("G92 Z0.4" in l for l in j), "FAIL: doi chung khong the hien loi (mong doi G92 Z0.4)"
 
     print("")
     print("  TAT CA ASSERTION PASS")

@@ -743,22 +743,34 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 
 #### 2. In layer 0 hai lần — `double_first_layer`
 
-Có **2 chế độ Z**, chọn bằng `z_mode`:
+**Cách làm — dùng `M221` (flow của firmware), KHÔNG nhân lại E:**
 
-**`z_mode = "split"` (mặc định)** — chia layer 0 thành **2 lớp mỏng**, **KHÔNG đổi hệ toạ độ**:
-
-| Lượt | Z | Ví dụ (layer 0.2) |
+| Lượt | Z thực | Flow |
 |---|---|---|
-| Pass 1 | `first_pass_z` | **0.1** |
-| Pass 2 | Z gốc của layer 0 | **0.2** |
-| Layer 1+ | không đụng | 0.4, 0.6… |
+| Pass 1 | **0.2** (Z gốc của layer 0) | `M221 S20` → 20% |
+| ↕ giữa hai pass | nhấc lên **0.4** = 0.2 + **1 chiều cao lớp đầu**, rồi `G92 Z0.2` → hệ toạ độ dịch lên 0.2 | — |
+| Pass 2 | **0.4** (Z gốc 0.2 trong hệ đã dịch) | `M221 S80` → 80% |
+| Layer 1 trở lên | không đụng | `M221 S100` → 100% |
 
-Không có `G92` — chỉ **hạ Z của pass 1 xuống** rồi pass 2 in lại ở đúng Z gốc. Hệ toạ độ giữ
-nguyên nên **bản in cao đúng bằng mô hình** ✓. Nhựa vẫn 20% + 80% = **100%** trải trên 0.2 mm →
-**mật độ lớp đầu bình thường**, nhưng đường in được chạy 2 lượt nên đặc và phẳng hơn.
+```gcode
+; --- First Layer Twice: ket thuc pass 1 ---
+M400                        ; doi in xong lop thu nhat
+G90                         ; toa do tuyet doi
+G1 Z0.4 F600                ; nhac Z len 1 chieu cao lop dau (0.2)
+G92 Z0.2                    ; khai bao lai day la Z cua layer 0
+G92 E-0.75                  ; reset extruder ve E dau layer 0
+M221 S80                    ; flow pass 2
+; --- First Layer Twice: bat dau pass 2 (80%) ---
+```
 
-Script tự đọc Z của layer 0 từ chính G-code, và **hạ Z bằng cách trừ một hằng số** khỏi mọi giá
-trị Z của pass 1 — nên **Z-hop (nếu bật) vẫn còn tác dụng**, không bị dẹp mất.
+**Pass 1 và pass 2 ghi ra CÙNG một giá trị E** — không có phép nhân nào. Marlin tự nhân E với
+`flow_percentage`, nên 20% + 80% = **100%** = đúng một lớp bình thường.
+
+> **Vì sao `G92 E<e đầu layer 0>` là bắt buộc.** Trước layer 0 có thể có retract (đường purge kết
+> thúc bằng `G1 F900 E-0.75`), nên E lúc bắt đầu layer 0 **không phải 0**. Reset về 0 thì bước
+> unretract đầu tiên của pass 2 thành delta 0 → **mất 0.75 mm nhựa**. Script quét E qua **cả phần đầu
+> của chính chunk layer 0** (start G-code và đường purge nằm cùng chunk với `;LAYER:0` trong file
+> thật), không chỉ các chunk trước đó. Đây là lỗi đã bị test bắt.
 
 > ⚠️ **Đọc Z của layer 0 phải lấy MIN, không được lấy giá trị đầu tiên.** `voron2_base` của UltiMaker
 > bật Z-hop (`retraction_hop_enabled = true`, `retraction_hop = 0.2`), nên bước `G0/G1` đầu tiên của
@@ -769,35 +781,22 @@ trị Z của pass 1 — nên **Z-hop (nếu bật) vẫn còn tác dụng**, kh
 > ;TYPE:SKIRT
 > G1 F600 Z0.2     ; day moi la chieu cao layer 0
 > ```
-> Lấy nhầm `0.4` làm `layer_z` thì `offset = 0.4 − 0.1 = 0.3` (đúng phải là `0.1`) và chiều cao thật
-> `0.2` biến thành **`Z-0.1`**; Marlin có `Z_MIN_POS 0` nên kẹp về 0 → pass 1 in ngay trên mặt bàn.
+> Lấy nhầm `0.4` làm `layer_z` thì bước nhấc Z thành `G1 Z0.8` và `G92 Z0.4` → **sai gấp đôi**. Trong
+> một layer, mọi Z-hop đều **cao hơn** chiều cao layer, nên `min()` luôn đúng.
 > Xem cạm bẫy 17 và test hồi quy `tests/test_first_layer_twice.py`.
 
-> Nếu `first_pass_z` **không hợp lệ** (≤ 0, hoặc ≥ Z của layer 0) thì script **tự lùi về an toàn**:
-> hai pass cùng độ cao, không hạ Z, không `G92`, và ghi chú lý do vào G-code.
+> 🔵 **Vì sao pass 1 in ở 0.2 chứ không phải 0.1.** Cách cũ (`z_mode = split`) hạ pass 1 xuống
+> **0.1 mm** với 20% nhựa — đầu in quá sát bàn nên **cọ vào bàn/nhựa, kêu tạch tạch như bị va**.
+> Cách mới giữ pass 1 ở đúng chiều cao lớp và đẩy pass 2 lên cao hơn, nên không còn cọ.
 
-**`z_mode = "shift"`** — cách cũ: `G1 Z<z_raise>` rồi `G92 Z<layer0_z>`, làm bản in **cao hơn
-mô hình đúng 0.2 mm**.
+**Lượng nhựa:** không cần tính gì cả. `M221` nhân ở firmware, nên pass 1 đùn 20% và pass 2 đùn 80%
+của **cùng một bộ giá trị E** → tổng đúng 100% = một lớp bình thường.
 
-> 🔴 **Guard:** nếu `layer0_z` > `z_raise` thì độ dịch hệ toạ độ là **âm**, mọi bước Z sau đó đi
-> **xuống** → **nozzle đâm vào bàn**. Script **tự bỏ qua lệnh `G92`** trong trường hợp này và ghi
-> cảnh báo vào G-code.
-
-**Toán lượng nhựa:** script giữ **hai bộ đếm** — `E gốc` (để tính delta) và `E mới` (để ghi ra).
-Dùng chung một biến là sai, vì delta sẽ bị tính trên giá trị đã nhân. Pass 2 chạy lại đúng body
-đó nên `E gốc` xuất phát từ **cùng điểm** như pass 1, chỉ `E mới` nối tiếp từ cuối pass 1.
-
-```
-delta gốc:      0.5  0.5  0.5  (-0.2 retract)  (+0.2 unretract)  0.7
-pass 1 @ 20%:   0.1  0.1  0.1   -0.2           +0.2             0.14   -> E = 0.44
-pass 2 @ 80%:   0.4  0.4  0.4   -0.2           +0.2             0.56   -> E = 2.20
-                                                                        = đúng 1 lớp
-```
-Tổng hai pass = **đúng bằng một lớp bình thường** (20% + 80% = 100%) — hai lượt in nhưng không
-thừa nhựa.
-
-> **Chỉ nhân E của bước CÓ X hoặc Y.** Bước thuần E là retract/unretract — nhân chúng với
-> 20% sẽ biến lần retract thành vô nghĩa. Đây là lý do script phải phân biệt.
+> ℹ️ **Điểm hay của cách này so với cách cũ.** Cách cũ phải nhân lại từng giá trị E và phải phân biệt
+> bước có XY (nhân) với bước thuần E như retract (không nhân) — vì nhân retract với 20% sẽ biến nó
+> thành vô nghĩa. Dùng `M221` thì firmware lo hết, code đơn giản hơn nhiều. Nhược điểm duy nhất:
+> **retract trong layer 0 cũng bị nhân theo flow** (retract 0.75 mm ở 20% chỉ còn 0.15 mm) — với
+> layer 0 thì không đáng kể.
 
 | Tham số | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -805,12 +804,10 @@ thừa nhựa.
 | `hotend_temp` | 230 °C | `M104`/`M109` bị ép về số này |
 | `bed_temp` | 60 °C | `M140`/`M190` bị ép về số này |
 | `double_first_layer` | bật | In layer 0 hai lần |
-| `z_mode` | `split` | `split` = chia 2 lớp mỏng (không đổi Z) · `shift` = nâng Z + `G92` |
-| `first_pass_z` | 0.1 mm | Z của pass 1 (chế độ `split`) — phải **nhỏ hơn** chiều cao lớp đầu |
-| `z_raise` / `layer0_z` | 0.4 / 0.2 mm | Chỉ dùng ở chế độ `shift` |
-| `pass1_flow` | 20 % | Flow lần in đầu của layer 0 |
-| `pass2_flow` | 80 % | Flow lần in thứ hai của layer 0 |
-| `z_feedrate` | 600 mm/min | Tốc độ di chuyển Z giữa hai pass |
+| `pass1_flow` | 20 % | `M221 S<so nay>` trước pass 1 |
+| `pass2_flow` | 80 % | `M221 S<so nay>` trước pass 2. Nên `pass1_flow + pass2_flow = 100` |
+| `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
+| `z_mode` / `first_pass_z` / `z_raise` / `layer0_z` | — | **Không dùng nữa.** Giữ lại trong khai báo để config cũ trong Cura không báo lỗi; script bỏ qua |
 
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
 Script nằm ở `%APPDATA%\cura\<version>\scripts\FirstLayerTwice.py` và **chỉ được nạp lúc Cura
@@ -900,7 +897,8 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
-| 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2` → `offset = 0.4 − 0.1 = 0.3` → chiều cao thật thành **`Z-0.1`**; Marlin có `Z_MIN_POS 0` nên kẹp về 0 → **pass 1 in ngay trên mặt bàn** | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` |
+| 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2`. Hậu quả tuỳ cách dùng: cách cũ sinh `Z-0.1` (Marlin kẹp về 0 → pass 1 in trên mặt bàn); cách hiện tại nhấc Z **sai gấp đôi** (`G1 Z0.8` / `G92 Z0.4`) | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` |
+| 20 | **`FirstLayerTwice` quét E thiếu phần đầu của chính chunk layer 0** | Start G-code và đường purge nằm **cùng chunk** với `;LAYER:0`, nên quét `data[:index]` sẽ bỏ sót retract `E-0.75` cuối cùng. `G92 E0` khi đó sai → pass 2 **mất một lần unretract** | Quét E qua **cả `prefix`** của chunk layer 0: `_scan_mode_and_e(data[:index] + [prefix])`. Test đã bắt được lỗi này |
 | 18 | **Thấy `G0 F30000` tưởng vượt trần máy** | G-code `F` là **mm/phút** còn `M203`/Cura là **mm/giây** — `F30000` = 500 mm/s, đúng bằng trần chứ không vượt. Và `speed_travel` của Cura **suy ra từ `machine_max_feedrate_x/y`** nên đổi trần là đổi luôn con số này | Đổi đơn vị trước khi kết luận (`mm/s × 60`). Marlin **kẹp** feedrate chứ không báo lỗi (`planner.cpp:2419`) |
 | 19 | **Đặt setting sai container → Cura XOÁ ÂM THẦM khi ghi lại** | 11 key bị xoá khỏi `definition_changes` (container cấp **MÁY**): `acceleration_print`, `acceleration_travel`, `jerk_print`, `jerk_travel`, `machine_steps_per_mm_x/y/z/e`, `machine_endstop_positive_direction_x/y/z`. Chúng **chỉ có tác dụng cho lần slice ĐẦU** sau khi cài, rồi biến mất. Hệ quả thật: `acceleration_print` rơi về mặc định **5000** của `voron2_base` → G-code chứa `M204 S5000`; `machine_endstop_positive_direction_*` mất nên Cura tưởng máy home về MAX | Đặt đúng container: `settable_per_mesh: true` (print setting) → container `user` của máy in; `settable_per_extruder: true` → container **extruder**. Cura cũng tự làm đúng như vậy (`cura/Settings/MachineManager.py:976-992`). Xem §11.6 |
 
