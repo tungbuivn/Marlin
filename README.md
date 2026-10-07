@@ -88,7 +88,7 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 | Thông số | Giá trị | Nguồn |
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
-| Max feedrate (mm/s) | `M203 X500 Y500 Z10 E25` | |
+| Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | 300 mm/s = `F18000` trong G-code (trước là 500) |
 | Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | **Trần cứng 500** cho X/Y — Marlin lấy `min(M204 P, M201)` |
 | Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in, luôn ≤ 500 |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | |
@@ -480,7 +480,7 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; M92 X80 Y80 Z800 E415 / M203 Z10 E25
+M503        ; M92 X80 Y80 Z800 E415 / M203 X300 Y300 Z10 E25
             ; M201 X500 Y500 Z100 E1000 / M204 P500 R500 T500 / M205 X8 Y8 Z0.40 E5
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
@@ -763,6 +763,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_endstop_positive_direction_x/y` | `True` | **`False`** | `X/Y/Z_HOME_DIR -1` — máy home về **MIN**, Voron gốc home về MAX |
 | `machine_width/depth` | 300 | **305** | vùng in thật |
 | `machine_height` | 300 | 300 | |
+| `machine_max_feedrate_x/y` | 500 | **300** | khớp `M203 X300 Y300`; **`speed_travel` bắt nguồn từ đây** — xem cảnh báo bên dưới |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
 | `machine_max_acceleration_x/y` | 20000 | **500** | **trần cứng** — khớp `M201 X500 Y500` của firmware |
 | `machine_max_acceleration_z` | 500 | **100** | `M201 Z100` của firmware |
@@ -795,6 +796,24 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 > Nên `acceleration_travel` của Cura **chỉ ảnh hưởng phần ước lượng thời gian in**, còn travel
 > acceleration thật của máy là `M204 T` lưu trong EEPROM.
 
+> ⚠️ **`G0 F30000` không phải lỗi — nó là hệ quả của `machine_max_feedrate_x/y`.** `voron2_base` tính
+> `speed_travel` bằng:
+> ```
+> speed_travel = max(speed_print, round((machine_max_feedrate_x + machine_max_feedrate_y) / 2, -2))
+> ```
+> Với `machine_max_feedrate_x/y = 500` → `round(500, -2) = 500` mm/s → Cura phát **`G0 F30000`**.
+> Với **300** → `speed_travel = 300` mm/s → **`G0 F18000`**.
+>
+> **Đừng nhầm đơn vị:** g-code `F` là **mm/phút**, còn `M203` và Cura là **mm/giây**
+> (`fdmprinter.def.json` ghi `"unit": "mm/s"`). `30000 ÷ 60 = 500` — tức `F30000` **bằng đúng trần**,
+> không phải vượt. Và kể cả vượt thì Marlin cũng **kẹp** chứ không báo lỗi (`planner.cpp:2415-2419`:
+> `if (cs > max_fr) NOMORE(speed_factor, max_fr / cs);`).
+>
+> ℹ️ `voron2_base` đặt `speed_travel.maximum_value_warning = max(500, round((mx+my)/2, -2)) + 1` nên
+> giá trị suy ra luôn nằm dưới ngưỡng cảnh báo — hạ `machine_max_feedrate_x/y` **không** làm Cura
+> báo lỗi. Ngưỡng cứng `maximum_value` của mọi `speed_*` là `√(mx²+my²)` = 424 mm/s khi mx=my=300,
+> còn giá trị thật chỉ 30–120 mm/s.
+
 ### 11.7 Những chỗ dễ sai — đọc trước khi sửa
 
 Đây là các cạm bẫy đã **thực sự gặp** trên máy này, mỗi cái tốn ít nhất một lần build + flash vô ích.
@@ -818,6 +837,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
 | 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2` → `offset = 0.4 − 0.1 = 0.3` → chiều cao thật thành **`Z-0.1`**; Marlin có `Z_MIN_POS 0` nên kẹp về 0 → **pass 1 in ngay trên mặt bàn** | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` |
+| 18 | **Thấy `G0 F30000` tưởng vượt trần máy** | G-code `F` là **mm/phút** còn `M203`/Cura là **mm/giây** — `F30000` = 500 mm/s, đúng bằng trần chứ không vượt. Và `speed_travel` của Cura **suy ra từ `machine_max_feedrate_x/y`** nên đổi trần là đổi luôn con số này | Đổi đơn vị trước khi kết luận (`mm/s × 60`). Marlin **kẹp** feedrate chứ không báo lỗi (`planner.cpp:2419`) |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
