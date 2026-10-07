@@ -78,6 +78,7 @@ if (-not $AddAsNewPrinter) {
     #   Merge    : $true = giu lai cac gia tri nguoi dung da dat, chi them key con thieu
     $jobs = @(
         @{ Template = "machine_definition_changes.inst.cfg";  Label = "May in";          SubDir = "definition_changes"; MatchKey = "definition"; Pattern = [regex]::Escape($Definition); Merge = $false },
+        @{ Template = "machine_user.inst.cfg";                Label = "May in (user)";   SubDir = "user";               MatchKey = "name";       Pattern = 'Voron2 300_user';       Merge = $true  },
         @{ Template = "extruder_definition_changes.inst.cfg"; Label = "Extruder (gcode)"; SubDir = "definition_changes"; MatchKey = "definition"; Pattern = 'voron2_extruder.*';     Merge = $false },
         @{ Template = "extruder_user.inst.cfg";               Label = "Extruder (user)";  SubDir = "user";               MatchKey = "extruder";   Pattern = 'voron2_extruder.*';     Merge = $true  }
     )
