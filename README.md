@@ -624,7 +624,7 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 |---|---|---|---|
 | **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → **`G34 Q99`** → `G28 Z` → `M190 S60` → `M109 S230` → `M420 S1` |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
-| **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | đường purge `X2 Y10 → Y100` |
+| **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | `G1 Z2.0` → **đi ngang** tới `X2 Y10` → **rồi mới** hạ `Z0.3` → purge `Y10 → Y100` → `G92 E0` → nhấc `Z2.0` → về tâm `X152.5 Y152.5` |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
 
 `machine_extruder_*` nằm trong `fdmextruder.def.json` với `default_value = ""`, nên **mặc định
@@ -640,6 +640,20 @@ vào cả hai container.
 > **15**; để 25 hay 30 (mặc định Cura) là **Cura chặn slice** với lỗi *"Retraction Prime Speed /
 > Retraction Speed / Retraction Retract Speed"*. Muốn retract nhanh hơn thì phải nâng `M203 E`
 > lên ≥ 40 trong firmware rồi đặt lại cho khớp.
+
+> ⚠️ **Đừng gộp XY và Z trong một lệnh purge.** `G1 X2 Y10 Z0.3 F5000` là **một bước di chuyển đồng
+> thời 3 trục** — Marlin nội suy nên đầu in vừa chạy ngang vừa hạ dần, tạo một **đường dốc cắt qua
+> mặt bàn** từ `(152, 152, 2.0)` xuống `(2, 10, 0.3)`. Đúng thứ tự phải là tách ra:
+> ```gcode
+> G1 Z2.0 F3000       ; giu Z cao
+> G1 X2 Y10 F5000     ; di NGANG toi diem purge, chua ha
+> G1 Z0.3 F600        ; toi noi roi MOI ha dau in
+> G1 X2 Y100 F1500 E15
+> G92 E0
+> G1 Z2.0 F3000       ; purge xong NHAC Z len
+> G1 X152.5 Y152.5 F6000   ; roi moi di tiep, ve tam ban
+> ```
+> Quên nhấc Z sau khi purge thì mọi travel sau đó đều **kéo nozzle quét mặt bàn** ở `Z0.3`.
 
 > ⚠️ **Tốc độ retract PHẢI nằm ở container `user`, không phải `definition_changes`.**
 > `fdmextruder.def.json` **không có dòng `inherits`** — nó đứng riêng, không kế thừa
