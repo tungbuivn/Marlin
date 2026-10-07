@@ -14,38 +14,11 @@ Boi canh hai loi da gap:
 
 Chay: python tests/test_first_layer_twice.py
 """
-import importlib
 import os
-import shutil
 import sys
-import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(os.path.dirname(HERE), "cura_profile", "scripts", "FirstLayerTwice.py")
-
-STUB = '''\
-class Script:
-    """Stub toi thieu cua cura.Script: chi nhung gi FirstLayerTwice dung."""
-
-    def getSettingValueByKey(self, key):
-        return self._settings.get(key)
-
-    def getValue(self, line, key, default=None):
-        if key in line:
-            try:
-                return line.split(key)[1].split(" ")[0]
-            except IndexError:
-                return default
-        return default
-
-    def putValue(self, line, **kwargs):
-        for key, value in kwargs.items():
-            if key in line:
-                line = line.replace(key + self.getValue(line, key), key + str(value))
-            else:
-                line += " " + key + str(value)
-        return line
-'''
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _cura_stub import build_module
 
 # --- gcode gia lap, mo phong dung cau truc Cura sinh ra -------------------
 CHUNK0 = ";FLAVOR:Marlin\n;Layer height: 0.2\n;MINZ:0.2\n;MAXZ:1\n"
@@ -90,26 +63,6 @@ SETTINGS = {
     "first_pass_z": 0.1,
 }
 
-PKG = os.path.join(tempfile.gettempdir(), "flt_test_pkg")
-
-
-def build_module():
-    if os.path.isdir(PKG):
-        shutil.rmtree(PKG)
-    # Cau truc giong Cura: <plugin>/Script.py + <plugin>/scripts/<ten script>.py
-    # (FirstLayerTwice dung relative import "from ..Script import Script")
-    scripts = os.path.join(PKG, "scripts")
-    os.makedirs(scripts)
-    for d, name in ((PKG, "__init__.py"), (PKG, "Script.py"), (scripts, "__init__.py")):
-        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
-            f.write(STUB if name == "Script.py" else "")
-    shutil.copyfile(SRC, os.path.join(scripts, "FirstLayerTwice.py"))
-    parent = os.path.dirname(PKG)
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
-    return importlib.import_module(os.path.basename(PKG) + ".scripts.FirstLayerTwice")
-
-
 def axis_values(lines, axis):
     out = []
     for line in lines:
@@ -137,7 +90,7 @@ def old_find_layer_z(self, body):
 
 
 def main():
-    mod = build_module()
+    mod = build_module("FirstLayerTwice")
 
     # --- 1) _find_layer_z phai tra ve chieu cao layer (0.2), khong phai hop (0.4)
     body = CHUNK1.split("\n")

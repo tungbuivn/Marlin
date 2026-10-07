@@ -836,6 +836,49 @@ khởi động** — thêm file xong phải mở lại Cura.
 > Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
 > `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.
 
+#### Bộ công cụ kiểm tra ngoài Cura
+
+Cả hai script đều **không cần mở Cura** để kiểm tra. Ba lệnh:
+
+| Lệnh | Việc |
+|---|---|
+| `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 |
+| `python tests\test_clamp_feeds.py` | Chạy `ClampFeeds` trên **file gcode thật** rồi audit lại từng trục |
+| `python tests\verify_gcode.py <file.gcode>` | Soi một file đã xuất: mốc `FirstLayerTwice` + audit feed/accel của `ClampFeeds` |
+
+Thêm một harness để **xem trước kết quả** mà không phải slice qua giao diện:
+
+```
+python tests\run_first_layer_twice.py <file-vao> [file-ra]
+```
+
+Nó nạp **đúng** `cura_profile/scripts/FirstLayerTwice.py`, đọc **setting thật** từ machine instance
+của Cura (`%APPDATA%\cura\<ver>\machine_instances\*.global.cfg`), chia gcode theo kiểu Cura rồi gọi
+`execute()` — nên kết quả giống hệt Cura sẽ sinh ra.
+
+> ⚠️ **Gcode Cura lưu ra đĩa LUÔN là gcode đã qua hậu xử lý** (có `;POSTPROCESSED` + tên script
+> trong header), nên file đã slice vẫn còn marker trong đó. Harness **từ chối chạy** nếu file đã
+> có marker `; --- First Layer Twice:` — chạy lại lần hai sẽ chèn chồng hai khối lên nhau.
+> Muốn xem trước: **tắt** `FirstLayerTwice` trong Cura → slice → chạy harness trên file vừa sinh
+> (file đó chỉ còn `ClampFeeds`).
+
+> ℹ️ **Thứ tự script quan trọng.** Header ghi `;  [FirstLayerTwice]` rồi `;  [ClampFeeds]`, tức
+> `ClampFeeds` chạy **sau**, nên nó nhìn thấy cả bước nhấc Z do `FirstLayerTwice` chèn vào và kẹp
+> luôn (`G1 Z0.3 F600` = 600/60 = **10 mm/s**, đúng bằng trần Z nên hợp lệ). Nếu đảo thứ tự thì
+> bước nhấc đó **thoát** khỏi audit. `verify_gcode.py` cũng kiểm luôn điều kiện này.
+
+Hai file dùng chung (`test_first_layer_twice.py`, `run_first_layer_twice.py`, `verify_gcode.py`):
+
+| File | Việc |
+|---|---|
+| `tests/_cura_stub.py` | Dựng lại cây plugin của Cura (`<pkg>/Script.py` + `<pkg>/scripts/<tên>.py`) vì `FirstLayerTwice` dùng `from ..Script import Script` — **không** import thẳng file được. Kèm hàm đọc setting từ `global.cfg` và chia chunk giống Cura |
+| `tests/_make_raw_fixture.py` | One-off: dựng lại file "raw" từ một gcode đã qua `FirstLayerTwice`, để thử harness trên dữ liệu thật. Body của pass 2 **chính là** body gốc của layer 0 nên chỉ cần bỏ pass 1 + khối nhảy |
+
+> 🔴 **Cura escape newline trong `global.cfg` bằng BA dấu `\` + `n`**, không phải hai:
+> `[FirstLayerTwice]\\\nenabled = True\\\n...`. Khớp cứng hai dấu `\` sẽ để lại một `\` lụng ở đầu
+> mỗi dòng, dòng tiêu đề `[FirstLayerTwice]` thành `[FirstLayerTwice]\` → **không nhận ra được** →
+> đọc ra setting rỗng. Phải khớp cả cụm bằng regex: `re.sub(r"\\+n", "\n", raw)`.
+
 Những chỗ profile sửa so với bản Voron gốc của Cura:
 
 | Thiết lập | Bản gốc Cura | Máy này | Vì sao |
@@ -922,6 +965,8 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 18 | **Thấy `G0 F30000` tưởng vượt trần máy** | G-code `F` là **mm/phút** còn `M203`/Cura là **mm/giây** — `F30000` = 500 mm/s, đúng bằng trần chứ không vượt. Và `speed_travel` của Cura **suy ra từ `machine_max_feedrate_x/y`** nên đổi trần là đổi luôn con số này | Đổi đơn vị trước khi kết luận (`mm/s × 60`). Marlin **kẹp** feedrate chứ không báo lỗi (`planner.cpp:2419`) |
 | 19 | **Đặt setting sai container → Cura XOÁ ÂM THẦM khi ghi lại** | 11 key bị xoá khỏi `definition_changes` (container cấp **MÁY**): `acceleration_print`, `acceleration_travel`, `jerk_print`, `jerk_travel`, `machine_steps_per_mm_x/y/z/e`, `machine_endstop_positive_direction_x/y/z`. Chúng **chỉ có tác dụng cho lần slice ĐẦU** sau khi cài, rồi biến mất. Hệ quả thật: `acceleration_print` rơi về mặc định **5000** của `voron2_base` → G-code chứa `M204 S5000`; `machine_endstop_positive_direction_*` mất nên Cura tưởng máy home về MAX | Đặt đúng container: `settable_per_mesh: true` (print setting) → container `user` của máy in; `settable_per_extruder: true` → container **extruder**. Cura cũng tự làm đúng như vậy (`cura/Settings/MachineManager.py:976-992`). Xem §11.6 |
 | 21 | **Cộng số thực ra `0.30000000000000004` trong G-code** | `first_pass_z + layer_z` = `0.1 + 0.2` → Python ghi `G1 Z0.30000000000000004 F600`. Marlin vẫn hiểu đúng nên **máy không sai**, nhưng test hồi quy so khớp chuỗi `"G1 Z0.3 F600"` **fail**, và G-code đọc rất khó chịu | Dùng `_fmt_num()` (`"{0:.5f}".format(v).rstrip("0").rstrip(".")`) cho mọi giá trị Z ghi ra, đừng dùng `str()`/`format()` trần |
+| 22 | **Đọc setting từ `global.cfg` ra rỗng** | Cura escape newline bằng **ba** dấu `\` + `n`, không phải hai. Khớp cứng hai dấu `\` để lại một `\` lụng ở đầu mỗi dòng → tiêu đề `[FirstLayerTwice]` thành `[FirstLayerTwice]\` → không nhận ra → dict rỗng, tool im lặng bỏ qua mọi phép kiểm phụ thuộc setting | Khớp **cả cụm** bằng regex: `re.sub(r"\\+n", "\n", raw)` (`tests/_cura_stub.py`) |
+| 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
