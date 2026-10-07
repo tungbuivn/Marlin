@@ -152,6 +152,7 @@ def main():
         "enabled": True,
         "max_feedrate_xy": 300, "max_feedrate_z": 10, "max_feedrate_e": 25,
         "clamp_acceleration": True, "max_acceleration": 500,
+        "split_xyz_moves": True, "after_purge_xy": "152.5,152.5", "after_purge_f": 6000,
     }
 
     print("File : {0}".format(GCODE))
@@ -178,14 +179,45 @@ def main():
     if bad1:
         for b in bad1[:8]:
             print("    dong {0}: {1} F{2:.0f} -> truc {3} {4:.1f} > {5}".format(*b))
+        print("")
+        print("=== vung output quanh dong 30-50 ===")
+        for i in range(29, min(50, len(out_lines))):
+            print("  {0:5}: {1}".format(i + 1, out_lines[i]))
 
     n_changed = sum(1 for a, b in zip(lines, out_lines) if a != b)
     print("")
-    print("  so dong bi sua: {0} / {1}".format(n_changed, len(lines)))
+    print("  so dong doi: {0} (truoc {1} -> sau {2})".format(
+        abs(len(out_lines) - len(lines)), len(lines), len(out_lines)))
+
+    # --- khong con buoc nao co CA XY lan Z ---
+    mixed = []
+    for ln, raw in enumerate(out_lines, 1):
+        code = raw.split(";", 1)[0].strip()
+        if not code:
+            continue
+        w = code.split()[0].upper()
+        if w not in ("G0", "G1"):
+            continue
+        v = {m.group(1) for m in NUM.finditer(code)}
+        if (("X" in v) or ("Y" in v)) and ("Z" in v):
+            mixed.append((ln, code))
+    print("  buoc co CA XY lan Z con lai: {0}".format(len(mixed)))
+    for m in mixed[:5]:
+        print("    dong {0}: {1}".format(*m))
+
+    # --- buoc ve tam duoc chen truoc moc layer ---
+    i_move = next((i for i, l in enumerate(out_lines) if "ve tam sau purge" in l), None)
+    i_layer = next((i for i, l in enumerate(out_lines) if l.strip().startswith(";LAYER_COUNT")), None)
+    print("  buoc ve tam: dong {0} | moc ;LAYER_COUNT: dong {1}".format(
+        "?" if i_move is None else i_move + 1, "?" if i_layer is None else i_layer + 1))
+    if i_move is not None:
+        print("    {0}".format(out_lines[i_move + 1].strip()))
 
     assert not bad1, "FAIL: van con {0} buoc vuot tran".format(len(bad1))
     assert a1 <= MAX_A + 1e-6, "FAIL: M204 S{0} > {1}".format(a1, MAX_A)
-    assert len(out_lines) == len(lines), "FAIL: so dong thay doi"
+    assert not mixed, "FAIL: con {0} buoc co ca XY lan Z".format(len(mixed))
+    assert i_move is not None and i_layer is not None and i_move < i_layer, \
+        "FAIL: buoc ve tam khong nam truoc moc layer"
 
     # cac buoc truoc day vuot tran phai duoc sua
     print("")

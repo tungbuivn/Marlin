@@ -1,22 +1,27 @@
 """ClampFeeds.py
 
-Cura post-processing script: ep MOI lenh feed (F) trong G-code ve trong gioi han
-tung truc cua may.
+Cura post-processing script, lam 3 viec tren G-code:
 
-Vi sao can: profile Cura khong phai luc nao cung toi duoc slicer (xem README muc
-11.7 cam bay 19), nen G-code co the chua F vuot tran cua may. Firmware Marlin
-KHONG bao loi - no tu kep toc do tung truc xuong tran (planner.cpp:2419), nhung
-con so trong file thi sai va khong ai biet.
+1) EP MOI LENH FEED (F) ve trong tran tung truc cua may.
+   Marlin gioi han theo TUNG TRUC, khong theo F don thuan:
+       current_speed[i] = steps_dist_mm[i] * inverse_secs;
+       if (current_speed[i] > max_feedrate_mm_s[i]) -> giam toc do ca block
+   (planner.cpp:2415-2419). Nen mot buoc chi hop le khi MOI truc co mat trong
+   buoc do deu <= tran cua truc ay. Firmware khong bao loi - no tu kep - nhung
+   con so trong file thi sai.
 
-Marlin gioi han THEO TUNG TRUC, khong theo F don thuan:
-    current_speed[i] = steps_dist_mm[i] * inverse_secs;
-    if (current_speed[i] > max_feedrate_mm_s[i]) -> giam toc do ca block
+2) TACH MOI BUOC CO CA XY LAN Z thanh hai buoc.
+   Mot lenh nhu  G1 X2 Y10 Z0.3 F5000  lam dau in VUA chay ngang VUA ha dan,
+   tao mot duong doc cat qua mat ban. Tach ra: di ngang o Z hien tai truoc, roi
+   moi ha Z. Day la loi that da gap trong duong purge cu.
 
-Nen mot buoc di chuyen chi hop le khi MOI truc co mat trong buoc do deu <= tran
-cua truc ay. Script tinh lai F lon nhat con hop le cho tung buoc va ghi lai.
+3) VE TAM sau khi purge (tuy chon).
+   Chen mot buoc di ngang toi `after_purge_xy` ngay truoc `;LAYER_COUNT`, tuc la
+   sau khi purge da nhac Z len.
 
-Vi du: G1 Z2.0 F3000 la buoc thuan Z -> F3000 = 50 mm/s > tran Z 10 mm/s
-       -> ghi lai thanh F600.
+Vi sao dung post-processing script: profile Cura khong phai luc nao cung toi duoc
+slicer (xem README cam bay 19 - Cura xoa setting khi ghi lai container), trong khi
+post-processing script la co che da chung minh chay duoc tren may nay.
 
 Cura nap script theo quy tac: TEN CLASS PHAI TRUNG TEN FILE.
 """
@@ -81,6 +86,28 @@ class ClampFeeds(Script):
                     "type": "float",
                     "default_value": 500,
                     "minimum_value": 1
+                },
+                "split_xyz_moves":
+                {
+                    "label": "Tach buoc XY+Z",
+                    "description": "Tach moi buoc co ca XY lan Z thanh 2 buoc: di ngang truoc, roi moi ha Z. Tranh dau in ha dan trong luc dang di ngang.",
+                    "type": "bool",
+                    "default_value": true
+                },
+                "after_purge_xy":
+                {
+                    "label": "Ve tam sau purge (X,Y)",
+                    "description": "Chen mot buoc di ngang toi toa do nay ngay truoc ;LAYER_COUNT (tuc sau khi purge da nhac Z len). De trong de tat.",
+                    "type": "str",
+                    "default_value": "152.5,152.5"
+                },
+                "after_purge_f":
+                {
+                    "label": "Toc do ve tam (mm/phut)",
+                    "description": "Feedrate cho buoc ve tam.",
+                    "type": "float",
+                    "default_value": 6000,
+                    "minimum_value": 1
                 }
             }
         }"""
@@ -114,9 +141,25 @@ class ClampFeeds(Script):
             "E": float(self.getSettingValueByKey("max_feedrate_e")),
         }
 
+    @staticmethod
+    def _axis_text(axis, value):
+        return "{0}{1}".format(axis, repr(float(value)))
+
+    def _max_feed_mm_per_min(self, d, limits):
+        """F lon nhat con hop le cho mot buoc (mm/phut)."""
+        dxyz = math.sqrt(d["X"] ** 2 + d["Y"] ** 2 + d["Z"] ** 2)
+        if dxyz > 0:
+            cap = min(limits[a] * dxyz / abs(d[a])
+                      for a in ("X", "Y", "Z") if abs(d[a]) > 1e-9)
+            if abs(d["E"]) > 1e-9:
+                cap = min(cap, limits["E"] * dxyz / abs(d["E"]))
+        else:
+            cap = limits["E"]
+        return cap * 60.0
+
     # ------------------------------------------------------------------ #
 
-    def _clamp_chunk(self, chunk, state, limits, cap_a, do_acc):
+    def _clamp_chunk(self, chunk, state, limits, cap_a, do_acc, do_split, purge_xy, purge_f):
         lines = chunk.split("\n")
         out = []
 
@@ -130,14 +173,28 @@ class ClampFeeds(Script):
         cur_f = state["cur_f"]
 
         for line in lines:
-            code = line.split(";", 1)[0].strip()
-            if not code:
+            raw_code = line.split(";", 1)[0].strip()
+
+            # --- chen buoc ve tam ngay truoc moc layer dau tien ---
+            # Phai kiem tra tren DONG GOC: dong ';LAYER_COUNT' la comment nen sau khi
+            # cat comment thi raw_code rong.
+            stripped = line.strip()
+            if (purge_xy and not state["purge_done"]
+                    and (stripped.startswith(";LAYER_COUNT") or stripped.startswith(";LAYER:"))):
+                if abs_pos:
+                    out.append("; --- ClampFeeds: ve tam sau purge ---")
+                    out.append("G1 F{0} X{1} Y{2}".format(self._fmt(purge_f), purge_xy[0], purge_xy[1]))
+                    pos["X"] = purge_xy[0]
+                    pos["Y"] = purge_xy[1]
+                state["purge_done"] = True
+
+            if not raw_code:
                 out.append(line)
                 continue
 
-            word = code.split()[0].upper()
+            word = raw_code.split()[0].upper()
             vals = {}
-            for tok in code.split()[1:]:
+            for tok in raw_code.split()[1:]:
                 if tok and tok[0] in "XYZEF" and len(tok) > 1:
                     try:
                         vals[tok[0]] = float(tok[1:])
@@ -169,11 +226,10 @@ class ClampFeeds(Script):
                 continue
 
             # --- ep M204 S ---
-            if do_acc and word == "M204" and "S" in code:
+            if do_acc and word == "M204" and "S" in raw_code:
                 head = line.split(";", 1)[0]
                 tail = line[len(head):]
-                body = head.strip()
-                parts = body.split()
+                parts = head.strip().split()
                 changed = False
                 for i, p in enumerate(parts):
                     if p.startswith("S") and len(p) > 1:
@@ -183,10 +239,7 @@ class ClampFeeds(Script):
                                 changed = True
                         except ValueError:
                             pass
-                if changed:
-                    out.append(" ".join(parts) + tail)
-                    continue
-                out.append(line)
+                out.append((" ".join(parts) + tail) if changed else line)
                 continue
 
             if word not in ("G0", "G1"):
@@ -196,7 +249,55 @@ class ClampFeeds(Script):
             if "F" in vals:
                 req_f = vals["F"]
 
-            # --- di chuyen ---
+            has_xy = ("X" in vals) or ("Y" in vals)
+            has_z = "Z" in vals
+
+            # --- TACH BUOC XY+Z ---
+            if do_split and has_xy and has_z:
+                # phan XY (va E) di o Z hien tai truoc
+                d_xy = {"X": 0.0, "Y": 0.0, "Z": 0.0, "E": 0.0}
+                for a in ("X", "Y"):
+                    if a in vals:
+                        d_xy[a] = (vals[a] - pos[a]) if abs_pos else vals[a]
+                if "E" in vals:
+                    d_xy["E"] = (vals["E"] - pos["E"]) if abs_e else vals["E"]
+
+                f_xy = req_f
+                if req_f is not None and (abs(d_xy["X"]) > 1e-9 or abs(d_xy["Y"]) > 1e-9
+                                          or abs(d_xy["E"]) > 1e-9):
+                    cap_xy = self._max_feed_mm_per_min(d_xy, limits)
+                    if f_xy > cap_xy:
+                        f_xy = cap_xy
+
+                t = [word]
+                if f_xy is not None:
+                    t.append("F" + self._fmt_down(f_xy))
+                for a in ("X", "Y", "E"):
+                    if a in vals:
+                        t.append(self._axis_text(a, vals[a]))
+                out.append(" ".join(t) + " ; ClampFeeds: tach XY")
+                for a in ("X", "Y"):
+                    if a in vals:
+                        pos[a] = vals[a] if abs_pos else pos[a] + vals[a]
+                if "E" in vals:
+                    pos["E"] = vals["E"] if abs_e else pos["E"] + vals["E"]
+                cur_f = f_xy
+
+                # roi moi ha Z (chi phat neu Z thuc su doi)
+                d_z = {"X": 0.0, "Y": 0.0, "Z": (vals["Z"] - pos["Z"]) if abs_pos else vals["Z"], "E": 0.0}
+                if abs(d_z["Z"]) > 1e-9:
+                    f_z = req_f
+                    if req_f is not None:
+                        cap_z = self._max_feed_mm_per_min(d_z, limits)
+                        if f_z > cap_z:
+                            f_z = cap_z
+                    out.append(" ".join([word] + (["F" + self._fmt_down(f_z)] if f_z is not None else [])
+                                        + [self._axis_text("Z", vals["Z"])]) + " ; ClampFeeds: ha Z sau")
+                    pos["Z"] = vals["Z"] if abs_pos else pos["Z"] + vals["Z"]
+                    cur_f = f_z
+                continue
+
+            # --- di chuyen binh thuong ---
             d = {}
             for a in ("X", "Y", "Z"):
                 if a in vals:
@@ -210,32 +311,22 @@ class ClampFeeds(Script):
             else:
                 d["E"] = 0.0
 
-            dxyz = math.sqrt(d["X"] ** 2 + d["Y"] ** 2 + d["Z"] ** 2)
-
-            if req_f is None or (dxyz <= 0 and abs(d["E"]) <= 0):
+            if req_f is None or (math.sqrt(d["X"] ** 2 + d["Y"] ** 2 + d["Z"] ** 2) <= 0 and abs(d["E"]) <= 0):
                 out.append(line)
                 continue
 
-            # --- F lon nhat con hop le cho buoc nay (mm/phut) ---
-            if dxyz > 0:
-                cap_mms = min(limits[a] * dxyz / abs(d[a])
-                              for a in ("X", "Y", "Z") if abs(d[a]) > 1e-9)
-                if abs(d["E"]) > 1e-9:
-                    cap_mms = min(cap_mms, limits["E"] * dxyz / abs(d["E"]))
-            else:
-                cap_mms = limits["E"]
-            cap_f = cap_mms * 60.0
-
+            cap_f = self._max_feed_mm_per_min(d, limits)
             eff_f = req_f if req_f <= cap_f else cap_f
             if eff_f < 1.0:
                 eff_f = 1.0
             writing_down = eff_f < req_f      # dang kep -> phai lam tron xuong
+            txt = self._fmt_down(eff_f) if writing_down else self._fmt(eff_f)
 
             if "F" in vals:
-                out.append(self.putValue(line, F=(self._fmt_down(eff_f) if writing_down else self._fmt(eff_f))))
+                out.append(self.putValue(line, F=txt))
                 cur_f = eff_f
             elif cur_f is None or abs(cur_f - eff_f) > 0.05:
-                out.append(line + " F" + (self._fmt_down(eff_f) if writing_down else self._fmt(eff_f)))
+                out.append(line + " F" + txt)
                 cur_f = eff_f
             else:
                 out.append(line)
@@ -255,13 +346,27 @@ class ClampFeeds(Script):
         limits = self._limits()
         cap_a = float(self.getSettingValueByKey("max_acceleration"))
         do_acc = self.getSettingValueByKey("clamp_acceleration")
+        do_split = self.getSettingValueByKey("split_xyz_moves")
+        purge_f = float(self.getSettingValueByKey("after_purge_f"))
+
+        purge_xy = None
+        txt = (self.getSettingValueByKey("after_purge_xy") or "").strip()
+        if txt:
+            parts = [p.strip() for p in txt.replace(" ", "").split(",")]
+            if len(parts) == 2:
+                try:
+                    purge_xy = (float(parts[0]), float(parts[1]))
+                except ValueError:
+                    purge_xy = None
 
         state = {
             "pos": {"X": 0.0, "Y": 0.0, "Z": 0.0, "E": 0.0},
-            "abs_pos": True,   # G90 / G91
-            "abs_e": True,     # M82 / M83
-            "req_f": None,     # mm/phut, F doc tu file (modal)
-            "cur_f": None,     # mm/phut, F dang co hieu luc trong file xuat ra
+            "abs_pos": True,     # G90 / G91
+            "abs_e": True,       # M82 / M83
+            "req_f": None,       # mm/phut, F doc tu file (modal)
+            "cur_f": None,       # mm/phut, F dang co hieu luc trong file xuat ra
+            "purge_done": False,
         }
 
-        return [self._clamp_chunk(chunk, state, limits, cap_a, do_acc) for chunk in data]
+        return [self._clamp_chunk(chunk, state, limits, cap_a, do_acc, do_split, purge_xy, purge_f)
+                for chunk in data]
