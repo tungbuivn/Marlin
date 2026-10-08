@@ -88,17 +88,20 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 | Thông số | Giá trị | Nguồn |
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
-| Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | 300 mm/s = `F18000` trong G-code (trước là 500) |
+| Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | giá trị **thiết kế** — xem cảnh báo bên dưới |
+| Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | Marlin lấy `min(M204 P, M201)` |
+| Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in |
+| Jerk | `M205 X8 Y8 Z0.40 E5` | `CLASSIC_JERK` + `S_CURVE_ACCELERATION` |
+| Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
+| Soft endstop | `M211 S1` | |
 
 > ⚠️ **Máy đang chạy chậm hơn thiết kế: EEPROM hiện giữ `M203 X100 Y100`.** Giá trị **100 mm/s**
 > (không phải 300) — Marlin kẹp mọi feedrate theo con số này, nên mọi lệnh nhanh hơn 100 mm/s đều
-> bị hạ xuống. Cần in nhanh thì gửi `M203 X300 Y300 Z10 E25` + `M500`. Lưu ý profile Cura và
-> `ClampFeeds` vẫn khai trần **300**, nên hai bên đang lệch nhau.
-| Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | **Trần cứng 500** cho X/Y — Marlin lấy `min(M204 P, M201)` |
-| Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in, luôn ≤ 500 |
-| Jerk | `M205 X8 Y8 Z0.40 E5` | |
-| Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
-| Soft endstop | `M211 S1` | |
+> bị hạ xuống. Lưu ý profile Cura và `ClampFeeds` khai trần **300**, nên hai bên đang lệch nhau.
+
+> 📐 **Tối ưu vận tốc & gia tốc: xem §3.3.** Ở đó có trần **điện cảm** của motor (mốc thật là
+> ~210–225 mm/s ở 24 V với `17 mH`), tải quy đổi `m_eff ≈ 1,2 kg`, và bảng giá trị đề xuất kèm
+> quy trình tinh chỉnh. Đừng chọn số theo cảm tính — bảng đó giải thích vì sao.
 
 ### 3.1 Vì sao X/Y = 500 chứ không phải 3000 của Voron
 
@@ -128,6 +131,115 @@ ngay khi thấy vệt rung — nhớ phải nâng **cả `M201` lẫn Cura**.
 Comment ngay trên option đó trong Marlin: *"for direct drive extruder v9 set to true, for **geared
 extruder** set to false"*. Để `true` thì `G1 E10` **rút** thay vì đẩy. Chiều quay **không** lưu
 trong EEPROM — chỉ có trong firmware, phải flash mới đổi được.
+
+### 3.3 Tối ưu vận tốc & gia tốc cho X/Y (NEMA17 + GT2 20 răng)
+
+**Dữ kiện**
+
+| | |
+|---|---|
+| Motor | NEMA17 1,8° — Nanotec **ST4118L0804-A**: `0,8 A` · `9,3 Ω` · **`17 mH`** · rotor `83 g·cm²` · `0,34 kg` |
+| Pulley | GT2, **20 răng**, bước răng **2 mm** → chu vi **40 mm/vòng** |
+| Microstep | **16** → `steps/mm = 200 × 16 ÷ 40 = 80` |
+| Bước nhỏ nhất | `1/80 = 0,0125 mm` (mỗi microstep) |
+| Bán kính hiệu dụng pully | `40 ÷ 2π = 6,366 mm` |
+| Gia tốc trọng trường quy đổi | rotor `83 g·cm²` → `J/r² ≈ 0,205 kg` mỗi motor → **`m_eff ≈ 1,2 kg`** (đầu in + belt + 2 rotor) |
+
+**Tốc độ ↔ vòng tua ↔ tần số xung**
+
+| Tốc độ | vòng/s | RPM | Xung/s mỗi motor | Tần số điện |
+|---|---|---|---|---|
+| 100 mm/s | 2,5 | 150 | 8 000 | 125 Hz |
+| 150 mm/s | 3,75 | 225 | 12 000 | 188 Hz |
+| **200 mm/s** | 5,0 | 300 | 16 000 | 250 Hz |
+| 250 mm/s | 6,25 | 375 | 20 000 | 313 Hz |
+| 300 mm/s | 7,5 | 450 | 24 000 | 375 Hz |
+
+> ℹ️ **STM32F407 không phải giới hạn.** Marlin sinh được ~150–200 k xung/s; ở 300 mm/s mới cần
+> 24 k (đường chéo CoreXY: `80 × v × √2` → 34 k mỗi motor, 68 k tổng). Còn rất xa trần.
+
+**Trần do ĐIỆN CẢM — đây mới là giới hạn thật của motor này**
+
+Cuộn dây `17 mH` ở `24 V` chỉ còn kéo đủ dòng định mức khi:
+
+```
+|Z| = √(R² + (2πfL)²) ≤ V / I   →   f ≤ ~281 Hz   →   v ≤ ~225 mm/s
+```
+
+| Tốc độ | Dòng tối đa driver còn bơm được | Mô-men còn lại (ước tính) |
+|---|---|---|
+| ≤ 210 mm/s | đủ `0,8 A` | ~100 % → giảm dần theo `R-L` |
+| 300 mm/s | ~`0,60 A` | ~⅓ định mức |
+| 500 mm/s | ~`0,36 A` | rất thấp, dễ mất bước |
+
+> 🔴 **`~210–225 mm/s` là mốc vật lý của motor này ở 24 V** với `17 mH`. Vượt qua đó không phải
+> "không chạy được" mà là **mô-men tụt nhanh** — tăng tốc kém và dễ mất bước khi in. Máy nào chạy
+> 300–500 mm/s là nhờ motor điện cảm thấp hơn (5–8 mH), không phải nhờ firmware.
+
+**Mô-men → lực → gia tốc**
+
+Cân bằng công suất cho CoreXY (belt đi 1:1 với đầu in ở chuyển động thuần trục):
+`F_đầu in ≈ 2 × τ / r`. Với `τ ≈ 0,4 N·m` (giá trị danh định dải ST4118 48 mm — **cần đối chiếu
+datasheet**), `F ≈ 126 N` → `a = F/m_eff ≈ 100 000 mm/s²`. Kể cả chỉ còn 10 % mô-men ở tốc độ cao
+thì vẫn `~10 000 mm/s²`.
+
+> 🔵 **Kết luận quan trọng: mô-men KHÔNG phải giới hạn của gia tốc.** Dư địa gấp 10–50 lần con số
+> đang đặt. Giới hạn thật là **chất lượng in** (ringing/ghosting), **độ cứng khung–belt**, và
+> **chế độ cắt của driver** (bên dưới) — không phải motor.
+
+**Đối chiếu hiện tại và đề xuất**
+
+| Lệnh | Hiện tại (EEPROM) | Đề xuất | Vì sao |
+|---|---|---|---|
+| `M203 X/Y` | **100** | **200** | 200 nằm dưới mốc điện cảm 225; 100 đang quá thấp |
+| `M203 Z` | 10 | 10 | vít me 4 mm → 150 RPM ở 10 mm/s, đủ |
+| `M203 E` | 25 | 25 | BMG, giữ |
+| `M201 X/Y` | **500** | **2500** | dư địa rất lớn; bắt đầu 2000 rồi tăng |
+| `M201 Z` | 100 | **200** | gantry nặng, tăng từ từ |
+| `M201 E` | 1000 | 1000 | giữ |
+| `M204 P` (in) | **500** | **2000** | phải `≤ M201 X/Y` |
+| `M204 R` (retract) | 500 | **1500** | |
+| `M204 T` (travel) | **500** | **2500** | = `M201 X/Y` để không bị kẹp lệch |
+| `M205 X/Y` (jerk) | **8** | **8–10** | ⚠️ không có input shaping → tăng là tăng ringing |
+| `M205 Z / E` | 0,4 / 5 | giữ | |
+| `M906 X/Y` (dòng) | **500 mA** | **600 → 700 mA** | motor định mức 0,8 A → còn dư địa; kiểm nhiệt độ motor `≤ 80 °C` |
+
+> 🔴 **Đổi EEPROM thôi KHÔNG làm bản in nhanh hơn.** Cura phát `M204 S<acceleration_print>` mỗi
+> lần in, và script `ClampFeeds` đang **kẹp `M204 S` về 500**. Muốn nhanh thật phải sửa **cả ba**:
+> 1. **EEPROM** (bảng trên) — nâng cái *trần*
+> 2. **Cura**: `acceleration_print` / `acceleration_travel` / `machine_max_acceleration_x/y` — đặt
+>    **trong giao diện Cura** (Cura bỏ qua giá trị ghi từ ngoài, xem §11.6)
+> 3. **`ClampFeeds.max_acceleration`**: 500 → 2000, rồi **cài lại** script
+
+> 🔴 **`stealthChop` đang bật ở MỌI tốc độ — đây là nút thắt lớn nhất.** `HYBRID_THRESHOLD` bị
+> comment (`Configuration_adv.h:3123`) trong khi các ngưỡng `X/Y_HYBRID_THRESHOLD 100` **đã khai**.
+> Nghĩa là driver không bao giờ chuyển sang **spreadCycle** ở tốc độ cao — mà stealthChop là
+> chopper kiểu **điện áp**, rất kém ở tốc độ cao, nhất là với motor **điện cảm cao 17 mH**. Đây là
+> lý do số 1 gây mất bước khi vượt ~100–150 mm/s.
+>
+> | Cách | Việc | Đánh đổi |
+> |---|---|---|
+> | **Tốt nhất — cần flash** | Bỏ comment `#define HYBRID_THRESHOLD`, clean rebuild + flash | Tự chuyển chế độ ở 100 mm/s: êm khi in chậm, khỏe khi travel nhanh |
+> | **Chỉ EEPROM** | `M569 S0 X Y` + `M500` → X/Y chạy **spreadCycle thường trực** | Khỏe và ổn định ở tốc độ cao, nhưng **ồn hơn rõ rệt**. Marlin lưu chế độ này **trong EEPROM** (`settings.cpp` dùng `tmc_stealth_enabled`) |
+>
+> ℹ️ **Input shaping KHÔNG dùng được trên máy này.** `SanityCheck.h:4332-4334` chặn thẳng:
+> `"INPUT_SHAPING_X is not supported with COREXY, COREYX, COREXZ, COREZX, or MARKFORGED_*."`
+> Nên muốn tăng gia tốc mà không bị ringing thì chỉ còn cách làm cứng khung/gantry — không có
+> đường phần mềm.
+
+**Quy trình tìm giới hạn thật (đừng lấy số trong bảng làm điểm dừng)**
+
+1. Đặt bộ đề xuất vào EEPROM (`M201`/`M203`/`M204`/`M906` + **`M500`**), chạy `M503` đối chiếu.
+2. In **tháp gia tốc** (acceleration tower) hoặc in một khối có góc nhọn ở 2000 → 2500 → 3000 mm/s².
+3. Nhìn **ghosting sau góc** và **layer shift**. Có ghosting → giảm gia tốc. Có **layer shift** →
+   đó là **mất bước**, phải giảm gia tốc **hoặc** tăng `M906`, **hoặc** bật hybrid threshold.
+4. Nghe tiếng máy: spreadCycle kêu rít/ồn hơn stealthChop là bình thường.
+5. Kiểm nhiệt độ motor sau 30 phút in: `≤ 80 °C` là an toàn; nóng hơn thì hạ `M906`.
+
+> ⚠️ **Số `0,4 N·m` là giá trị danh định của dải ST4118 48 mm, KHÔNG lấy được từ datasheet gốc**
+> (trang Nanotec là JS, file PDF trả 404). Nếu datasheet thật khác thì thay vào công thức
+> `F = 2τ/r` là ra lại toàn bộ bảng — kết luận "mô-men không phải giới hạn" chỉ sai nếu mô-men
+> thật **nhỏ hơn ~20 lần**.
 
 ---
 
