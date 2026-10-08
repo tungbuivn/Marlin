@@ -21,7 +21,7 @@ vị trí nozzle) và **bàn 4 lò xo chỉnh vít**.
 | Màn hình | MKS Mini 12864 V3 (LCD đồ hoạ DOGM/U8glib) + rotary encoder + khe SD |
 | Driver | **TMC2209 ×6 — chế độ UART** (X, Y, Z, Z2, Z3, E) |
 | Dòng driver | **400 mA RMS** mỗi driver |
-| Microstep | **X/Y = 8, Z/Z2/Z3/E = 16** (xem §11.4b), có nội suy (interpolation) + stealthChop |
+| Microstep | **16** cho cả 6 driver, có nội suy (interpolation) + stealthChop. Xem §11.4b — đã thử 1/8 cho X/Y và **phải hoàn tác** |
 | Nguồn | PSU máy in nuôi motor/logic, USB chỉ để giao tiếp |
 
 Chân driver theo socket:
@@ -87,7 +87,7 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 
 | Thông số | Giá trị | Nguồn |
 |---|---|---|
-| Steps/mm | `M92 X40 Y40 Z800 E415` | X/Y: 200 bước/vòng × **8** microstep ÷ 40 mm/vòng = 40. Z: 200×16 ÷ 4 mm = 800 |
+| Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | 300 mm/s = `F18000` trong G-code (trước là 500) |
 | Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | **Trần cứng 500** cho X/Y — Marlin lấy `min(M204 P, M201)` |
 | Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in, luôn ≤ 500 |
@@ -480,8 +480,8 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; M92 X40 Y40 Z800 E415 / M203 X300 Y300 Z10 E25
-            ; M201 X300 Y300 Z100 E1000 / M204 P300 R300 T300 / M205 X8 Y8 Z0.40 E5
+M503        ; M92 X80 Y80 Z800 E415 / M203 X300 Y300 Z10 E25
+            ; M201 X500 Y500 Z100 E1000 / M204 P500 R500 T500 / M205 X8 Y8 Z0.40 E5
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
@@ -535,7 +535,7 @@ git diff up-2.1.2 HEAD --stat
 | Cân Z offset | `PROBE_OFFSET_WIZARD` + `PROBE_OFFSET_WIZARD_START_Z 0` + `PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }` (thêm mới) |
 | Hướng extruder | **`INVERT_E0_DIR false`** — Bondtech BMG là extruder có hộp số (từng để `true` → extruder quay ngược) |
 | Trục Z | `Z2_DRIVER_TYPE` + `Z3_DRIVER_TYPE` = TMC2209 → `NUM_Z_STEPPERS` **tự suy ra = 3** (`Conditionals_LCD.h:726-734`), `Z_STEPPER_AUTO_ALIGN` (**G34**) |
-| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE TMC2209` chế độ UART, `*_MICROSTEPS` = **8 cho X/Y, 16 cho Z/Z2/Z3/E0**, `*_CURRENT 400`, `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
+| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE TMC2209` chế độ UART, `*_MICROSTEPS 16`, `*_CURRENT 400`, `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
 | Chuyển động | `DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 800, 415 }`, `DEFAULT_MAX_FEEDRATE { 500, 500, 10, 25 }`, **`DEFAULT_MAX_ACCELERATION { 1500, 1500, 100, 1000 }`**, **`DEFAULT_ACCELERATION 1500`**, **`DEFAULT_TRAVEL_ACCELERATION 2000`** (`DEFAULT_RETRACT_ACCELERATION 500` giữ nguyên), **`DEFAULT_XJERK/DEFAULT_YJERK 8.0`** (`ZJERK 0.4`, `EJERK 5.0` giữ nguyên), **`CLASSIC_JERK`** (không dùng Junction Deviation) |
@@ -566,7 +566,7 @@ git diff up-2.1.2 HEAD --stat
 | File | Thay đổi |
 |---|---|
 | `src/HAL/STM32/HAL.cpp`, `HAL.h` | thêm `reboot_to_dfu()` (theo AN2606: `HAL_RCC_DeInit`, remap system flash, `SCB->VTOR`, `__set_MSP`) và cho `flashFirmware()` gọi nó khi bật `STM32_DFU_REBOOT` |
-| `src/module/settings.cpp` | **sửa bug**: sau khi nạp EEPROM, ép lại `mstep_reg_select(true)` + `microsteps()` cho TMC2209. Không có bước này, `refresh_stepping_mode()` ghi đè GCONF bằng cache → chân MS1/MS2 không được điều khiển → driver rơi về **1/8**, trục chạy **gấp đôi** (đã gặp thật: `G1 Z10` đi 20mm). Từ khi X/Y **cố ý** đặt 1/8 (§11.4b) thì đúng cái bug này là thứ giữ cho **Z và E vẫn 1/16** — bỏ nó đi là Z/E tụt về 1/8 và chạy sai gấp đôi |
+| `src/module/settings.cpp` | **sửa bug**: sau khi nạp EEPROM, ép lại `mstep_reg_select(true)` + `microsteps()` cho TMC2209. Không có bước này, `refresh_stepping_mode()` ghi đè GCONF bằng cache → chân MS1/MS2 không được điều khiển → driver rơi về **1/8**, trục chạy **gấp đôi** (đã gặp thật: `G1 Z10` đi 20mm). Lưu ý: hàm này **không** xử lý `Y2` — xem §11.4b |
 | `src/inc/Conditionals_LCD.h` | thêm `PROBE_ENABLE_DISABLE` vào `ANY(...)` của `HAS_STOWABLE_PROBE` → menu *Deploy/Stow Z-Probe* hoạt động cả với `FIX_MOUNTED_PROBE` |
 | `src/gcode/calibrate/G34_M422.cpp`, `src/gcode/gcode.h` | thêm tham số `Q<nloop>` (lặp G34, home lại sau mỗi 3 lần đo), `U` (chế độ hardcode balance), hàm `InfiniteG34()` |
 | Start G-code Cura | dùng **`G34 Q99`** — lặp tối đa 99 lần, **dừng ngay khi sai số ≤ `Z_STEPPER_ALIGN_ACC` (0.02)**. Xem mục 11.8 |
@@ -575,48 +575,76 @@ git diff up-2.1.2 HEAD --stat
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
 | `src/inc/Conditionals_adv.h`, `Conditionals_post.h` | guard nhỏ: bỏ `BABYSTEP_ZPROBE_OFFSET` khi không có probe, bỏ `PREHEAT_BEFORE_LEVELING` khi không bật `PIDTEMPBED` |
 
-### 11.4b X/Y chạy 1/8 microstep (Z và E vẫn 1/16)
+### 11.4b Đã THỬ cho X/Y chạy 1/8 microstep — và **đã hoàn tác**
+
+> 🔴 **Kết luận: giữ nguyên 1/16 và `M92 X80 Y80`.** Đã flash thử 1/8 (X/Y = 8, Z/Z2/Z3/E = 16,
+> `M92 X40 Y40`), và **trục Y di chuyển sai** → hoàn tác toàn bộ về 1/16 + `M92 X80 Y80`.
+> **Đừng thử lại** trừ khi tìm ra nguyên nhân; xem phần "Vì sao có thể hỏng" bên dưới.
+
+> 🔴🔴 **HOÀN TÁC XONG THÌ BẮT BUỘC PHẢI CLEAN REBUILD — build tăng dần cho ra firmware STALE.**
+> Lần hoàn tác đầu tiên (`git checkout` rồi `pio run`) báo `SUCCESS` và relink, `M115` ra timestamp
+> **mới**, và kiểm tra nhị phân thấy `DEFAULT_AXIS_STEPS_PER_UNIT` **đã** về `{80,80,800,415}` — nhưng
+> `X_MICROSTEPS` thì **vẫn là 8**. Lý do: `DEFAULT_AXIS_STEPS_PER_UNIT` nằm ở translation unit khác
+> với `X_MICROSTEPS` (`trinamic.cpp` / `settings.cpp`), và các object đó **không** được biên dịch lại.
+> Hậu quả: driver 1/8 trong khi `M92` là 80 → **trục chạy gấp đôi**, mà nhìn bề ngoài mọi thứ "có vẻ
+> đúng". Cách phát hiện: xem `blank time` của `M122` — `tmc_init()` đặt **24**; nếu thấy **36**
+> (giá trị reset của CHOPCONF) nghĩa là `tmc_init()` **chưa hề ghi được** vào driver.
+> **Luôn `Remove-Item -Recurse .pio\build\mks_monster8` rồi build lại** sau khi sửa
+> `Configuration.h` / `Configuration_adv.h`. Xem cạm bẫy 25.
+
+> ℹ️ **Cách đọc microstep THẬT từ driver.** `M122` in dòng `msteps` qua `st.microsteps()`, mà
+> `TMCStepper::microsteps()` gọi `mres()`, và `TMC2208Stepper::mres()` viết là
+> `CHOPCONF_t r{0}; r.sr = CHOPCONF();` — **có ngoặc = đọc thanh ghi qua UART**, không phải cache.
+> Nên `msteps` là số **thật** của driver. Đo được trên máy này: `msteps 16 …` ⇔ `blank time 24`;
+> `msteps 8 …` ⇔ `blank time 36` + `hysteresis -end -3` (= trạng thái reset, `GCONF.mstep_reg_select
+> = 0` → microstep lấy theo chân MS1/MS2 → 1/8).
 
 **Vì sao phải flash, không làm được qua USB.** `M350` (đổi microstep bằng G-code) **không tồn tại**
 trên board này — `M350` chỉ được biên dịch khi có `HAS_MICROSTEPS`, mà cái đó đòi chân **MS1/MS2**
 (`Conditionals_post.h:2814-2822`); MKS Monster8 V2 chạy TMC2209 **UART**, không nối MS1/MS2.
-Gửi `M350 S8` chỉ nhận `echo:Unknown command: "M350"`. Microstep vì vậy là **hằng số lúc biên dịch**.
+Gửi `M350` chỉ nhận `echo:Unknown command: "M350"`. Microstep vì vậy là **hằng số lúc biên dịch**.
 
-**Ba chỗ phải sửa cùng lúc, thiếu một chỗ là trục chạy sai:**
+**Bốn chỗ phải sửa cùng lúc** (đây là bản đã thử, nay đã hoàn tác — giữ lại để khỏi mò lại):
 
-| Chỗ | Trước | Sau | Ghi chú |
-|---|---|---|---|
-| `Configuration.h` → `TTL_XY_MICROSTEP` | *(không có)* | **8** | macro mới, tách khỏi `TTL_MICROSTEP` (vẫn 16) |
-| `Configuration_adv.h` → `X_MICROSTEPS`, `Y_MICROSTEPS` | `TTL_MICROSTEP` | **`TTL_XY_MICROSTEP`** | |
-| `Configuration_adv.h` → `Z_MICROSTEPS`, `E0_MICROSTEPS` | `X_MICROSTEPS` | **`TTL_MICROSTEP`** | 🔴 **bắt buộc** — hai dòng này *thừa hưởng* `X_MICROSTEPS`, để nguyên là Z/E tụt xuống 1/8 |
-| `Configuration.h` → `DEFAULT_AXIS_STEPS_PER_UNIT` | `{80, 80, …}` | **`{40, 40, …}`** | `200 × 8 ÷ (20 răng × 2 mm) = 40` |
+| Chỗ | Giá trị đã thử | Ghi chú |
+|---|---|---|
+| `Configuration.h` → `TTL_XY_MICROSTEP` | thêm mới `8` | tách khỏi `TTL_MICROSTEP` (vẫn 16) |
+| `Configuration_adv.h` → `X_MICROSTEPS`, `Y_MICROSTEPS` | `TTL_XY_MICROSTEP` | |
+| `Configuration_adv.h` → `Z_MICROSTEPS`, `E0_MICROSTEPS` | `TTL_MICROSTEP` | 🔴 **bắt buộc** — hai dòng này *thừa hưởng* `X_MICROSTEPS`, để nguyên là Z/E tụt xuống 1/8 |
+| `Configuration.h` → `DEFAULT_AXIS_STEPS_PER_UNIT` | `{40, 40, 800, 415}` | `200 × 8 ÷ (20 răng × 2 mm) = 40` |
 
-`Z2/Z3/Z4_MICROSTEPS` thừa hưởng `Z_MICROSTEPS` nên tự đúng; `X2/Y2` thừa hưởng `X/Y` (board không dùng).
+> ⚠️ **EEPROM đè lên mặc định mới — đây là chỗ dễ tự bắn vào chân nhất.** `M92` nằm trong EEPROM
+> nên sau khi flash, `M92` **vẫn báo `X80 Y80`** trong khi driver đã ở 1/8 → trục chạy **gấp đôi**.
+> Phải `M92 X40 Y40` + `M500` **ngay sau khi flash, trước khi cho máy chạy**. Đây là cạm bẫy 1 ở
+> §11.7. Chiều ngược lại cũng đúng: hoàn tác về 1/16 thì phải `M92 X80 Y80` + `M500`.
 
-> ⚠️ **EEPROM đè lên mặc định mới.** `M92` nằm trong EEPROM nên sau khi flash, `M92` **vẫn báo
-> `X80 Y80`** — và lúc đó driver đã ở 1/8 nên trục chạy **gấp đôi** (80 bước/mm × 8 microstep =
-> thực tế 2 mm cho mỗi 1 mm yêu cầu). **Phải gửi `M92 X40 Y40` + `M500` NGAY, trước khi cho máy
-> chạy.** Đây là cạm bẫy 1 ở §11.7, và là lý do thứ tự thao tác quan trọng.
-
-**Kiểm chứng bằng USB** (`.\send-gcode.ps1`, xem §11.5):
+**Trạng thái khi đã chạy 1/8** (số liệu thật, để đối chiếu nếu có lần thử sau):
 
 ```
-M115  ->  FIRMWARE_NAME:Marlin 2.1.2 (Oct  7 2026 23:57:19)     <- timestamp build moi
+M115  ->  FIRMWARE_NAME:Marlin 2.1.2 (Oct  7 2026 23:57:19)
 M122  ->  msteps   8   8   16   16   16   16                    <- X Y Z Z2 Z3 E
           interp   true true true true true true
 M92   ->  X40.00 Y40.00 Z800.00 E415.00
 ```
 
-`M122` đọc thanh ghi MRES **từ driver qua UART**, nên `msteps 8 8 …` là bằng chứng driver đã nhận
-đúng — không phải chỉ là con số trong firmware.
+Tức là **driver ĐÃ nhận đúng 1/8** và **steps/mm đã khớp** — vậy lỗi trục Y **không** phải do
+quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver qua UART nên đây là số thật.
 
-> ℹ️ **Flash KHÔNG xoá EEPROM.** Sau khi nạp, `M851 Z0.70`, `M205 X8 Y8 Z0.40 E5` và **mesh UBL**
-> vẫn còn (`M420 V` → `Mesh is valid`). Marlin chỉ xoá EEPROM khi `EEPROM_VERSION` đổi, mà việc này
-> không đổi cấu trúc EEPROM. Đổi lại: các giá trị `M92`/`M201`/`M203` cũ **vẫn đè** mặc định mới.
+**Vì sao có thể hỏng — giả thuyết còn để ngỏ:**
 
-**Đánh đổi.** 1/8 làm bước nhỏ nhất trên X/Y từ `1/80 = 0,0125 mm` thành **`1/40 = 0,025 mm`**, đổi
-lại tần số xung **giảm một nửa** (300 mm/s: 24 000 → **12 000 xung/s**). Driver vẫn nội suy lên 256
-nên độ mượt in gần như không đổi.
+1. **`settings.cpp` không xử lý `Y2`.** Đoạn ép lại microstep sau khi nạp EEPROM
+   (`settings.cpp:2384-2408`) chỉ phủ `X, Y, Z, Z2, Z3, Z4, E0` — **thiếu `Y2`**. Board này không
+   khai `Y2`, nhưng nếu có thì `Y2_MICROSTEPS` thừa hưởng `Y_MICROSTEPS` mà driver lại không được
+   ghi lại → hai bên lệch.
+2. **Máy chạy CoreXY** (`Configuration.h:873` `#define COREXY`), nên X và Y là hai motor A/B **dùng
+   chung một chuyển động**. Trong CoreXY, bất kỳ sai lệch nào giữa hai driver X và Y đều biểu hiện
+   thành **lệch trục/kẹt** chứ không phải "một trục chạy sai quãng đường" — nên triệu chứng "Y hỏng"
+   là **hợp lý** với một sai lệch giữa X và Y, dù cả hai đều khai 8.
+3. Khác biệt hành vi của TMC2209 ở MRES=8 khi có `INTERPOLATE true`.
+
+> ℹ️ **Flash KHÔNG xoá EEPROM** (đã kiểm chứng hai lần): sau khi nạp, `M851 Z0.70`,
+> `M205 X8 Y8 Z0.40 E5` và **mesh UBL** vẫn còn (`M420 V` → `Mesh is valid`). Marlin chỉ xoá EEPROM
+> khi `EEPROM_VERSION` đổi. Đổi lại: `M92`/`M201`/`M203` cũ **vẫn đè** mặc định mới.
 
 ### 11.5 File mới của dự án
 
@@ -953,7 +981,6 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `jerk_print` / `_travel` | (mặc định 20 / 30) | **8 / 8** | `M205 X8 Y8` — `CLASSIC_JERK` |
 | `machine_max_jerk_xy` | (mặc định 20) | **8** | |
 | `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
-| `machine_steps_per_mm_x/y` | 80 | **40** | `M92` — X/Y chạy 1/8 microstep (§11.4b) |
 | `retraction_speed` / `_retract_speed` / `_prime_speed` | 30 / 25 / 25 | **15 / 15 / 15** | ngưỡng `machine_max_feedrate_e − 10 = 15`, xem cảnh báo bên trên |
 | Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
 
@@ -1010,12 +1037,15 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 8 | **`voron2_base` đặt `maximum_value_warning = machine_max_feedrate_e − 10`** cho 3 tốc độ retract | Hạ `machine_max_feedrate_e` xuống 25 → ngưỡng 15 → Cura **chặn slice** | Đặt retract ≤ ngưỡng, hoặc nâng `M203 E` |
 | 9 | **Cura ghi đè file cấu hình khi thoát** | Ghi file lúc Cura đang mở → mất sạch khi đóng Cura | **Đóng Cura trước**; script đã tự từ chối nếu thấy tiến trình Cura |
 | 10 | **`microsteps` đọc ra 1/8 thay vì 16** | `refresh_stepping_mode()` ghi đè GCONF từ cache, chân MS1/MS2 không được điều khiển → **trục chạy gấp đôi** | Đã sửa trong `settings.cpp`, xem 11.4. Từ 11.4b, X/Y **cố ý** là 1/8 nên bug này là thứ giữ Z/E ở 1/16 |
-| 10b | **Đổi microstep mà quên `M92`** | EEPROM giữ `M92` cũ → driver 1/8 nhưng firmware tính 80 bước/mm → trục chạy **gấp đôi**. Nguy hiểm nhất là lúc **home**: trục lao vào endstop với tốc độ gấp đôi | Sau khi flash **gửi `M92 X40 Y40` + `M500` TRƯỚC khi cho máy chạy**. `M350` không có trên board này nên không thể đổi microstep qua USB — xem 11.4b |
+| 10b | **Đổi microstep mà quên `M92`** | EEPROM giữ `M92` cũ → driver 1/8 nhưng firmware tính 80 bước/mm → trục chạy **gấp đôi** (và ngược lại: về 1/16 mà quên `M92 X80 Y80` thì chạy **nửa**). Nguy hiểm nhất là lúc **home**: trục lao vào endstop với tốc độ sai | Sau khi flash **gửi `M92` khớp với microstep + `M500` TRƯỚC khi cho máy chạy**. `M350` không có trên board này nên không thể đổi microstep qua USB — xem 11.4b |
+| 10c | **Đổi X/Y sang 1/8 microstep** | Trục **Y di chuyển sai** dù `M122` báo driver nhận đúng `msteps 8 8 …` và `M92` đã khớp. Máy chạy **CoreXY** nên X/Y là hai motor A/B dùng chung chuyển động → lệch giữa hai driver biểu hiện thành lỗi trục Y. Đã hoàn tác về 1/16 | **Đừng thử lại** nếu chưa tìm ra nguyên nhân. Xem 11.4b |
+| 10d | **Hoàn tác microstep mà không clean rebuild** | Firmware "nửa cũ nửa mới": `DEFAULT_AXIS_STEPS_PER_UNIT` kịp về 80 nhưng `X_MICROSTEPS` vẫn 8 → **trục chạy gấp đôi** trong khi `M92`/`M115` trông hợp lệ | `Remove-Item -Recurse -Force .pio\build\mks_monster8` rồi build lại. Kiểm chứng: `M122` phải in `msteps 16 …` **và** `blank time 24`. Xem cạm bẫy 15b |
 | 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
 | 12 | **Dựng mesh UBL trước khi căn gantry (G34)** | G34 nghiêng lại gantry → mesh cũ hiệu chỉnh **thừa** đúng phần vừa sửa; probe gắn trên gantry nên mesh mã hoá luôn độ nghiêng lúc đo | Luôn **G34 trước, `G29` sau**; tháo/lắp gantry, đổi belt, đổi Z-stepper thì `G29` lại |
 | 13 | **Với UBL, `M420 S1` không kiểm tra mesh hợp lệ** (`bedlevel.cpp:62` chỉ check cho `AUTO_BED_LEVELING_BILINEAR`) | `M420 S1` bật leveling trên mesh hỏng → in ra rác mà **không báo lỗi gì** | Xem `M420 V` phải in `Mesh is valid` trước khi tin |
 | 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
+| 15b | **Build TĂNG DẦN sau khi sửa `Configuration*.h` cho ra firmware STALE** | `pio run` báo `SUCCESS`, `M115` ra timestamp mới, và một phần cấu hình mới **có** vào (nếu nó nằm ở translation unit được biên dịch lại) — nhưng phần khác thì **không**, nên firmware là "nửa cũ nửa mới". Đã gặp thật khi hoàn tác microstep: `DEFAULT_AXIS_STEPS_PER_UNIT` về 80 nhưng `X_MICROSTEPS` vẫn 8 → trục chạy **gấp đôi** mà trông như đã đúng | Sau khi sửa `Configuration.h` / `Configuration_adv.h`: **`Remove-Item -Recurse -Force .pio\build\mks_monster8`** rồi `pio run`. Đừng tin `SUCCESS` + timestamp. Kiểm chứng bằng `M122` (xem `blank time` = 24 hay 36) và bằng cách tìm mảng hằng số trong `.bin` |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
 | 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2`. Lấy nhầm `layer_z = 0.4` thì độ dịch thành `0.4 − first_pass_z = 0.3`, đường in thật của pass 1 rơi xuống **`Z-0.1`** (Marlin kẹp về 0 → **đầu in cày trên mặt bàn**), và bước nhấc thành `G1 Z0.5` | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` (có cả phép thử đối chứng mô phỏng lại cách sai này) |
 | 20 | **`FirstLayerTwice` quét E thiếu phần đầu của chính chunk layer 0** | Start G-code và đường purge nằm **cùng chunk** với `;LAYER:0`, nên quét `data[:index]` sẽ bỏ sót retract `E-0.75` cuối cùng. `G92 E0` khi đó sai → pass 2 **mất một lần unretract** | Quét E qua **cả `prefix`** của chunk layer 0: `_scan_mode_and_e(data[:index] + [prefix])`. Test đã bắt được lỗi này |
@@ -1094,6 +1124,8 @@ Các mốc cũ (giữ lại để tham khảo):
 Mốc gần đây:
 
 ```
-07/10/2026: X/Y chay 1/8 microstep (TTL_XY_MICROSTEP=8), Z/E ghim 1/16,
-            M92 X40 Y40 + M500; them send-gcode.ps1. Xem 11.4b
+08/10/2026: THU cho X/Y chay 1/8 microstep (TTL_XY_MICROSTEP=8, M92 X40 Y40)
+            -> truc Y di chuyen sai => DA HOAN TAC ve 1/16 + M92 X80 Y80.
+            Phat hien build tang dan cho ra firmware stale (phai clean rebuild).
+            Them send-gcode.ps1. Xem 11.4b + cam bay 15b/10c/10d
 ```

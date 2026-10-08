@@ -23,6 +23,8 @@ param(
     [Parameter(Mandatory = $true)][string[]]$Command,
     # Thoi gian lang coi nhu da doc het phan hoi (ms)
     [int]$QuietMs = 1200,
+    # Tran cho MOI lenh. G28 (home ca 3 truc) co the mat 30-60s nen phai nang len.
+    [int]$TimeoutMs = 8000,
     [switch]$Show   # in ca lenh gui di
 )
 
@@ -69,7 +71,7 @@ foreach ($cmd in $Command) {
     }
     # doc cho toi khi lang
     $last = Get-Date
-    $deadline = (Get-Date).AddMilliseconds(8000)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
     while ($true) {
         $chunk = $sp.ReadExisting()
         if ($chunk.Length -gt 0) {

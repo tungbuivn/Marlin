@@ -1182,7 +1182,6 @@
 #define TTL_MAX_MOTOR_RPM  30
 #define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/
 #define TTL_MICROSTEP 16
-#define TTL_XY_MICROSTEP 8 /* X/Y chay 1/8 -> 200*8/(20*2) = 40 steps/mm */
 #define TTL_XY_TEETH 20
 #define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/
 #define TTL_BELT_PITCH 2
@@ -1214,13 +1213,12 @@
  * Override with M92
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// X/Y: GT2 belt, pulley 20 rang, microstep 1/8 (TTL_XY_MICROSTEP) -> 200*8/(20*2) = 40 steps/mm
-//      Truoc day la 1/16 -> 80 steps/mm. Doi microstep thi PHAI doi so nay theo,
-//      neu khong truc se chay dung gap doi (hoac nua) quang duong.
-// Z: nema17 direct-drive, SFU1204 lead screw (4mm lead), 1/16 -> 200*16/4 = 800
-// E: Bondtech BMG -> 415 (theo tai lieu Bondtech)
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {40, \
-                                      40, \
+// 415 is value from bondtech bgm document, this apply to motorStep x4 microstep
+// https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
+// 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
+// Z: nema17 direct-drive, SFU1204 lead screw (4mm lead), 16 microsteps -> 200*16/4 = 800
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80, \
+                                      80, \
                                       800, \
                                       415  \
                                       }
