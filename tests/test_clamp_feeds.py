@@ -2,8 +2,10 @@
 
 Chay: python tests/test_clamp_feeds.py [duong_dan_gcode]
 
-Khong truyen duong dan thi lay file .gcode MOI NHAT trong D:\\0in -- de test khong
-vo khi file duoc dat ten khac di.
+Khong truyen duong dan thi dung FIXTURE trong repo (`tests/fixtures/clean_raw.gcode`)
+de test tu chua. Fixture do sinh bang: python tests/_make_clean_fixture.py
+Neu fixture khong co thi lay file .gcode moi nhat trong D:\\0in -- nhung BO QUA file
+da qua ClampFeeds, vi chay lai len file da xu ly se hong phep dem vi tri.
 """
 import glob
 import importlib
@@ -16,22 +18,42 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(os.path.dirname(HERE), "cura_profile", "scripts", "ClampFeeds.py")
+FIXTURE = os.path.join(HERE, "fixtures", "clean_raw.gcode")
+
+
+def _has_clampfeeds(path):
+    """File da qua ClampFeeds chua? (doc 400 KB dau la du - marker nam o layer 0)"""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return "ClampFeeds:" in f.read(400000)
+    except OSError:
+        return False
 
 
 def pick_gcode(explicit=None):
-    """Tra ve duong dan gcode: uu tien tham so, roi file .gcode moi nhat trong D:\\0in."""
+    """Tra ve duong dan gcode: uu tien tham so, roi FIXTURE trong repo (de test tu
+    chua, khong phu thuoc file ngoai), roi file .gcode moi nhat trong D:\\0in
+    NHUNG BO QUA file da qua ClampFeeds - chay lai len file da xu ly se hong phep
+    dem vi tri va bao hang nghin loi gia."""
     if explicit:
         return explicit
-    cands = glob.glob(r"D:\0in\*.gcode")
-    if not cands:
-        return None
-    return max(cands, key=os.path.getmtime)
+    if os.path.isfile(FIXTURE) and not _has_clampfeeds(FIXTURE):
+        return FIXTURE
+    cands = sorted(glob.glob(r"D:\0in\*.gcode"), key=os.path.getmtime, reverse=True)
+    for p in cands:
+        if not _has_clampfeeds(p):
+            return p
+    return cands[0] if cands else None
 
 
 GCODE = pick_gcode(sys.argv[1] if len(sys.argv) > 1 else None)
 
 LIMIT = {"X": 150.0, "Y": 150.0, "Z": 10.0, "E": 25.0}
-MAX_A = 2000.0
+MAX_A = 300.0
+# Dung sai khi so voi tran - xem ghi chu trong tests/verify_gcode.py.
+# 1e-6 qua chat: mot buoc F9000 (dung bang tran) co the ra 150.0000x do sai so
+# dau phay dong tich luy -> bao loi OAN.
+TOL = 0.05
 
 STUB = '''\
 class Script:
@@ -152,7 +174,7 @@ def audit(lines):
         for a in LIMIT:
             sp = abs(d[a]) / t
             axis_max[a] = max(axis_max[a], sp)
-            if sp > LIMIT[a] + 1e-6:
+            if sp > LIMIT[a] + TOL:
                 bad.append((ln, word, feed * 60, a, sp, LIMIT[a]))
     return bad, axis_max, max_a
 
@@ -166,6 +188,20 @@ def main():
     print("Gcode test: {0}".format(GCODE))
     with open(GCODE, "r", encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
+
+    # Gcode Cura luu ra dia LUON da qua hau xu ly. Chay ClampFeeds lan hai len mot
+    # file da xu ly lam hong phep dem vi tri (buoc XY+Z bi tach hai lan, buoc
+    # "ve tam" bi chen hai lan) -> audit bao hang nghin loi GIA.
+    # Da gap that: file 2,2 MB da xu ly -> 2481 "buoc vuot tran" gia, trong khi
+    # chinh file do chi co 6 dong lech bien (va do la sai so dau phay dong).
+    if "ClampFeeds:" in "\n".join(lines[:200]) or any("ClampFeeds:" in l for l in lines):
+        print("TU CHOI: file nay DA qua ClampFeeds (con marker trong file).")
+        print("  Chay lai lan hai se lam hong phep dem vi tri -> bao loi gia.")
+        print("  Muon kiem mot file DA xu ly thi dung:")
+        print("    python tests/verify_gcode.py <file.gcode>")
+        print("  Test nay can file CHUA qua ClampFeeds (tat ClampFeeds trong Cura roi slice).")
+        return 1
+
     chunks = split_chunks(lines)
 
     mod = build_module()
@@ -173,7 +209,7 @@ def main():
     script._settings = {
         "enabled": True,
         "max_feedrate_xy": 150, "max_feedrate_z": 10, "max_feedrate_e": 25,
-        "clamp_acceleration": True, "max_acceleration": 2000,
+        "clamp_acceleration": True, "max_acceleration": 300,
         "split_xyz_moves": True, "after_purge_xy": "152.5,152.5", "after_purge_f": 6000,
     }
 

@@ -30,7 +30,13 @@ _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 GCODE = pick_gcode(_args[0] if _args else None)
 FULL = "--full" in sys.argv
 LIMIT = {"X": 150.0, "Y": 150.0, "Z": 10.0, "E": 25.0}
-MAX_ACCEL = 2000.0
+MAX_ACCEL = 300.0
+# Dung sai khi so voi tran. KHONG dung 1e-6: ClampFeeds lam tron xuong 2 chu so
+# thap phan, va phep tinh lai o day tich luy sai so dau phay dong, nen mot buoc
+# F9000 (dung bang tran 150 mm/s) co the ra 150.0000x -> bi bao loi OAN.
+# Da gap that: 6 dong "F9000 -> 150.0 > 150.0" tren file that 2,2 MB.
+# 0,05 mm/s van bat duoc moi vi pham that (200 mm/s lech 50 mm/s).
+TOL = 0.05
 NUM = re.compile(r"([XYZEF])\s*(-?\d*\.?\d+)")
 
 
@@ -266,7 +272,7 @@ def main():
         for a in LIMIT:
             sp = abs(d[a]) / t
             axis_max[a] = max(axis_max[a], sp)
-            if sp > LIMIT[a] + 1e-6:
+            if sp > LIMIT[a] + TOL:
                 bad.append((ln, word, feed * 60, a, sp))
 
     print("")

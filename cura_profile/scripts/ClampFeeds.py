@@ -82,9 +82,9 @@ class ClampFeeds(Script):
                 "max_acceleration":
                 {
                     "label": "Tran acceleration (mm/s2)",
-                    "description": "Phai khop M201 X/Y cua firmware. May nay la 2000. LUU Y: day chi la KEP XUONG - neu M204 S trong file nho hon 2000 thi no giu nguyen, nen Cura van phai phat ra dung so (xem README 3.3: machine_max_acceleration_x/y quyet dinh con so Cura phat).",
+                    "description": "Phai khop M201 X/Y cua firmware. May nay la 300 (M201 X300 Y300 trong EEPROM). LUU Y: day chi la KEP XUONG - neu M204 S trong file nho hon 300 thi no giu nguyen.",
                     "type": "float",
-                    "default_value": 2000,
+                    "default_value": 300,
                     "minimum_value": 1
                 },
                 "split_xyz_moves":

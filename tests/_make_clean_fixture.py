@@ -1,5 +1,8 @@
 """One-off: dung file gcode 'raw' SACH (3 layer) de do buoc Z giua cac layer."""
 import io
+import os
+
+DST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "clean_raw.gcode")
 
 L = [";FLAVOR:Marlin", ";Layer height: 0.2", ";MINZ:0.2", ";MAXZ:0.6",
      ";POSTPROCESSED", ";Generated with Cura_SteamEngine 5.13.0",
@@ -38,5 +41,6 @@ L = [";FLAVOR:Marlin", ";Layer height: 0.2", ";MINZ:0.2", ";MAXZ:0.6",
      ";End of Gcode",
      ""]
 
-io.open(r"D:\0in\clean_raw.gcode", "w", encoding="utf-8", newline="\n").write("\n".join(L))
-print("ghi D:\\0in\\clean_raw.gcode ({0} dong)".format(len(L)))
+os.makedirs(os.path.dirname(DST), exist_ok=True)
+io.open(DST, "w", encoding="utf-8", newline="\n").write("\n".join(L))
+print("ghi {0} ({1} dong)".format(DST, len(L)))

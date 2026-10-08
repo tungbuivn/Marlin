@@ -34,7 +34,7 @@ import time
 OVERRIDES = {
     "ClampFeeds": {
         "max_feedrate_xy": "150",   # = M203 X/Y
-        "max_acceleration": "2000",  # = M201 X/Y
+        "max_acceleration": "300",  # = M201 X/Y
     },
 }
 

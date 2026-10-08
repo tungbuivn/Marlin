@@ -89,10 +89,10 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X150 Y150 Z10 E25` | đã tối ưu — xem §3.3 (trước là 100, thiết kế cũ ghi 300) |
-| Accel (mm/s²) | `M201 X2000 Y2000 Z200 E1000` | Marlin lấy `min(M204 P, M201)` |
-| Accel print/retract/travel | `M204 P1500 R1500 T2000` | Cura đặt lại `M204 S…` mỗi lần in |
+| Accel (mm/s²) | `M201 X300 Y300 Z200 E1000` | Marlin lấy `min(M204 P, M201)` |
+| Accel print/retract/travel | `M204 P500 R300 T500` | Cura đặt lại `M204 S…` mỗi lần in |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | `CLASSIC_JERK` + `S_CURVE_ACCELERATION` |
-| Dòng driver X/Y | `M906 X600 Y600` | motor định mức 0,8 A → còn dư địa; kiểm nhiệt `≤ 80 °C` |
+| Dòng driver X/Y | `M906 X800 Y800` | ⚠️ **100 % định mức** của motor 0,8 A — kiểm nhiệt `≤ 80 °C` |
 | Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
 | Soft endstop | `M211 S1` | |
 
@@ -194,27 +194,38 @@ Bộ dưới đây **đã được ghi vào EEPROM** (`M500`, crc 48295) với l
 dải**. Vì giữ stealthChop nên `M203` dừng ở **150** chứ không lên 200 — trần thực tế của chế độ đó
 là ~100–150 mm/s.
 
-| Lệnh | Trước | **Đã áp dụng** | Trần nên dùng | Vì sao |
+| Lệnh | Trước | **Máy đang là** | Trần nên dùng | Vì sao |
 |---|---|---|---|---|
 | `M203 X/Y` | 100 | **150** | 225 | mốc điện cảm; chỉ lên 200–225 nếu **bật hybrid threshold** |
 | `M203 Z` | 10 | **10** | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
 | `M203 E` | 25 | **25** | 25 | BMG |
-| `M201 X/Y` | 500 | **2000** | 5000+ | mô-men dư 10–50×; trần thật là ringing |
+| `M201 X/Y` | 500 | **300** | 5000+ | mô-men dư 10–50×; trần thật là ringing. **Người dùng đã hạ về 300** — ClampFeeds và Cura nay khớp theo |
 | `M201 Z` | 100 | **200** | 500 | gantry nặng — tăng từ từ |
 | `M201 E` | 1000 | **1000** | 1000 | |
-| `M204 P` (in) | 500 | **1500** | 3000 | phải `≤ M201 X/Y` |
-| `M204 R` (retract) | 500 | **1500** | 1500 | |
-| `M204 T` (travel) | 500 | **2000** | 2500 | `= M201 X/Y` để không bị kẹp lệch |
+| `M204 P` (in) | 500 | **500** | 3000 | Marlin lấy `min(P, M201)` → thực tế **300** |
+| `M204 R` (retract) | 500 | **300** | 1500 | |
+| `M204 T` (travel) | 500 | **500** | 2500 | thực tế `min(T, M201)` → **300** |
 | `M205 X/Y` (jerk) | 8 | **8** | 10–12 | ⚠️ **không có input shaping** → tăng là tăng ringing |
 | `M205 Z / E` | 0,4 / 5 | giữ | | |
-| `M906 X/Y` (dòng) | 500 mA | **600 mA** | 700–800 mA | motor định mức 0,8 A; kiểm nhiệt `≤ 80 °C` |
+| `M906 X/Y` (dòng) | 500 mA | **800 mA** | 800 mA | 🔴 **= 100 % định mức** của motor 0,8 A — **bắt buộc kiểm nhiệt `≤ 80 °C`** |
 
-**Hai chỗ phía Cura — ✅ ĐÃ SỬA (commit cùng đợt):**
+> 🔴 **`M204 P` và `M204 T` đang lớn hơn `M201 X/Y`, nên nó nói dối.** `M204 P500` và `M204 T500`
+> trong khi `M201 X300` → Marlin lấy `min()` nên **acceleration in thật là 300**, không phải 500.
+> Muốn con số trong firmware khớp thực tế thì đặt `M204 P300 R300 T300`. (Không sai về hành vi —
+> chỉ gây hiểu nhầm khi đọc `M503`.)
+
+> 🔴 **`M906 X800 Y800` là 100 % dòng định mức.** Motor Nanotec ST4118L0804-A định mức **0,8 A**;
+> 800 mA RMS là chạy hết công suất → motor sẽ **rất nóng** (bình thường với stepper 3D printer, nhưng
+> phải kiểm). Sau 30 phút in, sờ motor: `≤ 80 °C` là được; nóng hơn thì hạ về 600–700 mA.
+> Đây là đánh đổi lấy mô-men để tăng gia tốc — nhưng với `M201` chỉ 300 thì **chưa dùng hết** phần
+> mô-men đó.
+
+**Hai chỗ phía Cura — ✅ ĐÃ SỬA (khớp với máy):**
 
 | Chỗ | Việc đã làm |
 |---|---|
-| **Container máy của Cura** | `machine_max_acceleration_x/y` 500 → **2000**, `machine_acceleration` 500 → **2000**, `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_z` 100 → **200**, `_e` 500 → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y = 500` **kẹp giá trị mặc định 5000** của Cura xuống 500. Nâng trần là Cura phát `M204 S2000` |
-| **`ClampFeeds`** | `max_feedrate_xy` 300 → **150**, `max_acceleration` 500 → **2000** — sửa ở **cả** `ClampFeeds.py` **và** khối setting đang lưu trong Cura (xem cạm bẫy 26). Đã cài lại bằng `install-cura-profile.ps1` |
+| **Container máy của Cura** | `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_x/y` → **300**, `machine_acceleration` → **300**, `machine_max_acceleration_z` → **200**, `_e` → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y` **kẹp giá trị mặc định 5000** của Cura xuống |
+| **`ClampFeeds`** | `max_feedrate_xy` **150**, `max_acceleration` **300** — sửa ở **cả** `ClampFeeds.py` **và** khối setting đang lưu trong Cura (xem cạm bẫy 26). Đã cài lại bằng `install-cura-profile.ps1` |
 
 > ✅ **Đã kiểm chứng sau khi cài**: container máy trong `%APPDATA%\cura\5.13\definition_changes\` giữ
 > `machine_max_feedrate_x/y = 150`, `machine_max_acceleration_x/y = 2000`; khối đang lưu của
@@ -712,8 +723,8 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 ```
 M115        ; phien ban firmware + timestamp build
 M503        ; M92 X80 Y80 Z800 E415 / M203 X150 Y150 Z10 E25
-            ; M201 X2000 Y2000 Z200 E1000 / M204 P1500 R1500 T2000 / M205 X8 Y8 Z0.40 E5
-            ; M906 X600 Y600 Z500 (I1/I2 Z500) / T0 E400
+            ; M201 X300 Y300 Z200 E1000 / M204 P500 R300 T500 / M205 X8 Y8 Z0.40 E5
+            ; M906 X800 Y800 Z500 (I1/I2 Z500) / T0 E400
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
@@ -986,7 +997,7 @@ Làm 4 việc, mỗi việc có setting riêng:
 | Việc | Setting | Mặc định |
 |---|---|---|
 | Ép mọi `F` về **trần từng trục** | `max_feedrate_xy` / `_z` / `_e` | **150** / 10 / 25 mm/s |
-| Ép `M204 S` về trần | `clamp_acceleration`, `max_acceleration` | bật, **2000** mm/s² |
+| Ép `M204 S` về trần | `clamp_acceleration`, `max_acceleration` | bật, **300** mm/s² |
 | **Tách mọi bước XY+Z** thành 2 bước | `split_xyz_moves` | bật |
 | Chèn bước **về tâm** sau purge | `after_purge_xy`, `after_purge_f` | `152.5,152.5`, 6000 |
 
@@ -1212,35 +1223,36 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_height` | 300 | 300 | |
 | `machine_max_feedrate_x/y` | 500 | **150** | khớp `M203 X150 Y150`; **`speed_travel` bắt nguồn từ đây** — xem cảnh báo bên dưới |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
-| `machine_max_acceleration_x/y` | 20000 | **2000** | **trần cứng** — khớp `M201 X2000 Y2000`, **và là thứ quyết định `M204 S` Cura phát ra** |
+| `machine_max_acceleration_x/y` | 20000 | **300** | **trần cứng** — khớp `M201 X300 Y300`, **và là thứ quyết định `M204 S` Cura phát ra** |
 | `machine_max_acceleration_z` | 500 | **200** | `M201 Z200` của firmware |
 | `machine_max_acceleration_e` | (mặc định 10000) | **1000** | `M201 E1000` |
-| `acceleration_print` | 5000 | **2000** | khớp trần `M201 X2000 Y2000` — xem giải thích bên dưới |
-| `acceleration_travel` | (công thức → 7000) | **2000** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
-| `machine_acceleration` | 5000 | **2000** | |
+| `acceleration_print` | 5000 | **300** | khớp trần `M201 X300 Y300` — xem giải thích bên dưới |
+| `acceleration_travel` | (công thức → 7000) | **300** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
+| `machine_acceleration` | 5000 | **300** | |
 | `jerk_print` / `_travel` | (mặc định 20 / 30) | **8 / 8** | `M205 X8 Y8` — `CLASSIC_JERK` |
 | `machine_max_jerk_xy` | (mặc định 20) | **8** | |
 | `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
 | `retraction_speed` / `_retract_speed` / `_prime_speed` | 30 / 25 / 25 | **15 / 15 / 15** | ngưỡng `machine_max_feedrate_e − 10 = 15`, xem cảnh báo bên trên |
 | Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
 
-> 🔵 **Vì sao `machine_max_acceleration_x/y` là chỗ QUAN TRỌNG NHẤT bên Cura (đã chốt ở 2000).**
+> 🔵 **Vì sao `machine_max_acceleration_x/y` là chỗ QUAN TRỌNG NHẤT bên Cura (nay khớp ở 300).**
 > Marlin tính `accel_thực = min(M204 P, M201 trục)`. Nhưng trước khi tới Marlin, **Cura đã kẹp rồi**:
 > `acceleration_print` có `maximum_value` lấy từ `machine_max_acceleration_x/y`. Vì thế khi trần đó là
 > **500**, Cura nhận `acceleration_print = 5000` (mặc định của `voron2_base`) rồi **hạ xuống 500** và
 > phát `M204 S500` — đó chính là nguồn gốc con số 500, **không phải** profile ghi 500.
-> Đã nâng **cả hai bên cùng lúc lên 2000**: `M201 X2000 Y2000` trong EEPROM **và**
-> `machine_max_acceleration_x/y = 2000` + `machine_acceleration = 2000` trong container máy của Cura.
-> Muốn nhanh hơn nữa thì lại phải nâng **cả hai** cùng lúc.
+> Nay cả hai bên cùng ở **300**: `M201 X300 Y300` trong EEPROM **và**
+> `machine_max_acceleration_x/y = 300` + `machine_acceleration = 300` trong container máy của Cura.
+> Muốn nhanh hơn thì phải nâng **cả hai** cùng lúc, và **sửa cả `ClampFeeds.max_acceleration`** —
+> xem §3.3.
 
 > 📐 **Các mức còn lại tự suy ra, không cần đặt tay.** Mọi `acceleration_*` khác của Cura đều tính từ
-> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 2000` thì:
-> `acceleration_wall` / `_topbottom` / `_infill` = **2000**, `acceleration_support` = **1000**,
-> `acceleration_roofing` = `acceleration_wall_0` = **1200**, `acceleration_layer_0` = **200**
-> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **2000**.
-> Tất cả đều ≤ 2000 nên firmware **không kẹp chỗ nào nữa**.
-> Quan sát được trên `V300_Part3_proj.gcode` (bản cũ, trần 500): Cura phát `M204 S275`, `S388`, `S500`
-> — đúng các bậc suy ra ở trần 500.
+> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 300` thì:
+> `acceleration_wall` / `_topbottom` / `_infill` = **300**, `acceleration_support` = **150**,
+> `acceleration_roofing` = `acceleration_wall_0` = **180**, `acceleration_layer_0` = **30**
+> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **300**.
+> Tất cả đều ≤ 300 nên firmware **không kẹp chỗ nào nữa**.
+> Đối chứng: trên `V300_Part3_proj.gcode` (bản cũ, trần Cura còn **500**) Cura phát `M204 S275`,
+> `S388`, `S500` — đúng các bậc suy ra ở trần 500. Với trần 300 thì các bậc đó sẽ thấp hơn tương ứng.
 
 > ⚠️ **Cura KHÔNG phát `M204 T`** — nó chỉ phát `M204 S<n>` (acceleration in). Kiểm chứng trên
 > `V300_Part3_proj.gcode`: chỉ có `M204 S50`, `S162`, `S275`, `S388`, `S500` và **không có lệnh `M204 T` nào**.
@@ -1311,6 +1323,9 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 28 | **🔴 `R` âm trong model MPC của EEPROM** | Số hiển thị **giảm** khi đang hâm nóng trong khi heater vẫn cấp điện; nhiệt độ **nhảy −10 °C**; "restart thì đúng lại". Nguy cơ **quá nhiệt/cháy**: MPC điều khiển theo **mô hình**, nên model hỏng làm bộ điều khiển ra lệnh sai và **che mất** lỗi cảm biến — bảo vệ nhiệt không cứu được kiểu này | Xem đầy đủ ở **§6.1**. `M306` phải có `R` **dương**; sửa bằng `M306 ... R0.1284 ...` + `M500` + **reset vật lý** (`M999` **không** đủ) |
 | 29 | **Tưởng `M999` là "khởi động lại"** | `M999.cpp:38-45` chỉ đặt `marlin_state = MF_RUNNING`, xả buffer serial, `ui.reset_alert_level()`. **RAM không bị đụng** → mọi trạng thái trong RAM (model MPC `modeled_*`, vị trí) **giữ nguyên**. Dùng `M999` để "làm mới" model MPC là **vô ích mà tưởng là xong** | Cần reset thật: nút RESET hoặc tắt/bật PSU |
 | 30 | **Bật heater trước khi xác nhận mọi thứ chạy được** | Một lỗi định dạng chuỗi trong script theo dõi (`"{3,+6:F2}"` — dấu `+` trong phần canh lề là **không hợp lệ** trong .NET) nổ ra **sau khi** `M104 S100` đã gửi → script chết, heater chạy một mình tới 73,9 °C | **Đọc và in `M105` phải xảy ra TRƯỚC khi gửi `M104`** — `monitor-temp.ps1` nay làm đúng vậy, và có `-ProbeOnly`. Tổng quát: đừng bao giờ gửi lệnh gia nhiệt từ một code path chưa chạy sạch |
+| 31 | **Chạy `test_clamp_feeds.py` lên file ĐÃ qua ClampFeeds** | Chạy ClampFeeds lần hai lên file đã xử lý làm **hỏng phép đếm vị trí** (bước XY+Z bị tách hai lần, bước "về tâm" bị chèn hai lần) → audit báo **hàng nghìn lỗi GIẢ**. Đã gặp thật: file 2,2 MB đã xử lý → **2481** "bước vượt trần", trong khi chính file đó chỉ có 6 dòng lệch biên | `test_clamp_feeds.py` nay **TỪ CHỐI** file có marker `ClampFeeds:` và trỏ sang `verify_gcode.py`. **File ĐÃ xử lý → dùng `verify_gcode.py`; file CHƯA xử lý → dùng `test_clamp_feeds.py`.** Mặc định test dùng fixture `tests/fixtures/clean_raw.gcode` |
+| 32 | **Ngưỡng so trần quá chặt gây lỗi oan** | Dùng `> LIMIT + 1e-6` cho feedrate: một bước `F9000` (= **đúng** trần 150 mm/s) tính lại ra `150,0000x` do sai số dấu phẩy động tích lũy → bị báo vượt trần **oan** (đã gặp: 6 dòng trên file 2,2 MB, tất cả đều `F9000`) | Dùng `TOL = 0,05 mm/s`. Vẫn bắt được mọi vi phạm thật (200 mm/s lệch 50 mm/s) |
+| 33 | **Thay thế chuỗi bằng PowerShell trên file có tiếng Việt** | `Get-Content -Raw` **không có `-Encoding`** đọc UTF-8 bằng ANSI → `WriteAllText` ghi lại thành UTF-8 **hỏng**: **916 dòng** tiếng Việt trong README nát thành mojibake (`trần cứng` → `tráº§n cá»©ng`). `Set-Content` không `-Encoding` còn ghi **CRLF** vào file vốn LF | **Sửa text bằng công cụ `edit`, không bằng `-replace` của PowerShell.** Nếu buộc phải dùng Python/PowerShell thì chỉ định encoding rõ ràng và `newline`. Khôi phục: `git checkout -- <file>` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
