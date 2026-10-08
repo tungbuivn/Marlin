@@ -1228,9 +1228,12 @@
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
+// X/Y = 150 mm/s: tran do DIEN CAM cua motor (17 mH @ 24 V -> ~225 mm/s), va vi
+// stealthChop dang bat toan dai (HYBRID_THRESHOLD bi comment) nen tran thuc dung
+// chi con ~100-150 mm/s. Xem README 3.3. EEPROM dang giu dung bo nay.
 #define DEFAULT_MAX_FEEDRATE          { \
-  500, \
-  500, \
+  150, \
+  150, \
   10, \
   25 }
 
@@ -1245,9 +1248,11 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// X/Y raised to the Voron "safe" value (1500, from the official printer.cfg's max_accel 3000
-// halved, since Marlin has no input shaping). Z and E left exactly as they were.
-#define DEFAULT_MAX_ACCELERATION      { 1500, 1500, 100, 1000 }
+// X/Y 2000 mm/s2: mo-men con du 10-50 lan (F = 2*tau/r ~ 126 N tren tai quy doi
+// 1,2 kg), nen gioi han that la RINGING chu khong phai mo-men. May KHONG co input
+// shaping (SanityCheck.h:4332 chan tren COREXY) nen day la diem khoi dau, tang dan
+// bang thap gia toc. Z 100 -> 200 (gantry nang, tang tu tu). Xem README 3.3.
+#define DEFAULT_MAX_ACCELERATION      { 2000, 2000, 200, 1000 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -1263,7 +1268,7 @@
  *   M204 T    Travel Acceleration
  */
 #define DEFAULT_ACCELERATION          1500    // X, Y, Z and E acceleration for printing moves
-#define DEFAULT_RETRACT_ACCELERATION  500    // E acceleration for retracts (unchanged - E stays as it was)
+#define DEFAULT_RETRACT_ACCELERATION  1500    // E acceleration for retracts (M204 R) - dong bo voi EEPROM
 #define DEFAULT_TRAVEL_ACCELERATION   2000    // X, Y, Z acceleration for travel (non printing) moves
 
 /**

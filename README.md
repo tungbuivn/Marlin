@@ -118,8 +118,11 @@ ngay khi thấy vệt rung — nhớ phải nâng **cả `M201` lẫn Cura**.
 > Z giữ `M201 Z100` (đã dưới 500) và E `M201 E1000`, nhưng Cura khai `machine_max_acceleration_e = 500`
 > nên **E thực tế cũng bị chặn ở 500**.
 >
-> ℹ️ `Configuration.h` vẫn ghi `DEFAULT_MAX_ACCELERATION { 1500, 1500, 100, 1000 }` — giá trị **biên
-> dịch** đó chỉ có tác dụng nếu chạy `M502` (đừng chạy). EEPROM đang là 500 và **EEPROM thắng**.
+> ℹ️ **Source và EEPROM nay đã đồng bộ với nhau.** `Configuration.h` ghi
+> `DEFAULT_MAX_ACCELERATION { 2000, 2000, 200, 1000 }` và `Configuration_adv.h` ghi `X/Y_CURRENT 600`,
+> `Z/Z2/Z3_CURRENT 500` — **đúng bằng** giá trị đang nằm trong EEPROM. Giá trị **biên dịch** chỉ có
+> tác dụng khi chạy `M502` (đừng chạy) hoặc sau khi xoá EEPROM; bình thường **EEPROM thắng**. Đồng bộ
+> như vậy để nếu buộc phải `M502` thì máy rơi về đúng bộ đã tune, chứ không rơi về số cũ.
 
 ### 3.2 `INVERT_E0_DIR` — hướng extruder
 
@@ -656,10 +659,10 @@ git diff up-2.1.2 HEAD --stat
 | Cân Z offset | `PROBE_OFFSET_WIZARD` + `PROBE_OFFSET_WIZARD_START_Z 0` + `PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }` (thêm mới) |
 | Hướng extruder | **`INVERT_E0_DIR false`** — Bondtech BMG là extruder có hộp số (từng để `true` → extruder quay ngược) |
 | Trục Z | `Z2_DRIVER_TYPE` + `Z3_DRIVER_TYPE` = TMC2209 → `NUM_Z_STEPPERS` **tự suy ra = 3** (`Conditionals_LCD.h:726-734`), `Z_STEPPER_AUTO_ALIGN` (**G34**) |
-| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE TMC2209` chế độ UART, `*_MICROSTEPS 16`, `*_CURRENT 400`, `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
+| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, `*_MICROSTEPS 16`, **`X/Y_CURRENT 600`**, **`Z/Z2/Z3_CURRENT 500`**, `E0_CURRENT 400`, `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
-| Chuyển động | `DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 800, 415 }`, `DEFAULT_MAX_FEEDRATE { 500, 500, 10, 25 }`, **`DEFAULT_MAX_ACCELERATION { 1500, 1500, 100, 1000 }`**, **`DEFAULT_ACCELERATION 1500`**, **`DEFAULT_TRAVEL_ACCELERATION 2000`** (`DEFAULT_RETRACT_ACCELERATION 500` giữ nguyên), **`DEFAULT_XJERK/DEFAULT_YJERK 8.0`** (`ZJERK 0.4`, `EJERK 5.0` giữ nguyên), **`CLASSIC_JERK`** (không dùng Junction Deviation) |
+| Chuyển động | `DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 800, 415 }`, **`DEFAULT_MAX_FEEDRATE { 150, 150, 10, 25 }`**, **`DEFAULT_MAX_ACCELERATION { 2000, 2000, 200, 1000 }`**, `DEFAULT_ACCELERATION 1500`, `DEFAULT_TRAVEL_ACCELERATION 2000`, **`DEFAULT_RETRACT_ACCELERATION 1500`**, `DEFAULT_XJERK/DEFAULT_YJERK 8.0` (`ZJERK 0.4`, `EJERK 5.0`), **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 |
 | Khác | `EEPROM_SETTINGS`, `SDSUPPORT`, `FILAMENT_RUNOUT_SENSOR`, `HOST_ACTION_COMMANDS` |
 
 ### 11.2 `Marlin/Configuration_adv.h` — cấu hình nâng cao

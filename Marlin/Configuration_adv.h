@@ -2735,7 +2735,9 @@
   #define INTERPOLATE      true
 
   #if AXIS_IS_TMC_CONFIG(X)
-    #define X_CURRENT       400        // (mA) RMS current. Multiply by 1.414 for peak current.
+    #define X_CURRENT       600        // (mA) RMS current. Dong bo voi M906 X600 trong EEPROM.
+                                       // Motor ST4118L0804-A dinh muc 0,8 A -> con du dia;
+                                       // kiem nhiet do motor <= 80 C. Xem README 3.3.
     #define X_CURRENT_HOME  X_CURRENT  // (mA) RMS current for sensorless homing
     #define X_MICROSTEPS     TTL_MICROSTEP        // 0..256
     #define X_RSENSE          0.11
@@ -2755,7 +2757,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Y)
-    #define Y_CURRENT       400
+    #define Y_CURRENT       600        // Dong bo voi M906 Y600 trong EEPROM
     #define Y_CURRENT_HOME  Y_CURRENT
     #define Y_MICROSTEPS     X_MICROSTEPS
     #define Y_RSENSE          0.11
@@ -2775,7 +2777,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z)
-    #define Z_CURRENT       400
+    #define Z_CURRENT       500        // Dong bo voi M906 Z500 trong EEPROM (3 vit me Z/Z2/Z3)
     #define Z_CURRENT_HOME  Z_CURRENT
     #define Z_MICROSTEPS     X_MICROSTEPS
     #define Z_RSENSE          0.11
@@ -2785,7 +2787,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z2)
-    #define Z2_CURRENT      400
+    #define Z2_CURRENT      500        // Dong bo voi M906 I1 Z500 trong EEPROM
     #define Z2_CURRENT_HOME Z2_CURRENT
     #define Z2_MICROSTEPS    Z_MICROSTEPS
     #define Z2_RSENSE         0.11
@@ -2795,7 +2797,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z3)
-    #define Z3_CURRENT      400
+    #define Z3_CURRENT      500        // Dong bo voi M906 I2 Z500 trong EEPROM
     #define Z3_CURRENT_HOME Z3_CURRENT
     #define Z3_MICROSTEPS    Z_MICROSTEPS
     #define Z3_RSENSE         0.11
