@@ -89,6 +89,11 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | 300 mm/s = `F18000` trong G-code (trước là 500) |
+
+> ⚠️ **Máy đang chạy chậm hơn thiết kế: EEPROM hiện giữ `M203 X100 Y100`.** Giá trị **100 mm/s**
+> (không phải 300) — Marlin kẹp mọi feedrate theo con số này, nên mọi lệnh nhanh hơn 100 mm/s đều
+> bị hạ xuống. Cần in nhanh thì gửi `M203 X300 Y300 Z10 E25` + `M500`. Lưu ý profile Cura và
+> `ClampFeeds` vẫn khai trần **300**, nên hai bên đang lệch nhau.
 | Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | **Trần cứng 500** cho X/Y — Marlin lấy `min(M204 P, M201)` |
 | Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in, luôn ≤ 500 |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | |
@@ -480,7 +485,7 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; M92 X80 Y80 Z800 E415 / M203 X300 Y300 Z10 E25
+M503        ; M92 X80 Y80 Z800 E415 / M203 X300 Y300 Z10 E25   (EEPROM dang la X100 Y100)
             ; M201 X500 Y500 Z100 E1000 / M204 P500 R500 T500 / M205 X8 Y8 Z0.40 E5
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
