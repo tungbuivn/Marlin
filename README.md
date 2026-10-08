@@ -1049,6 +1049,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 12 | **Dựng mesh UBL trước khi căn gantry (G34)** | G34 nghiêng lại gantry → mesh cũ hiệu chỉnh **thừa** đúng phần vừa sửa; probe gắn trên gantry nên mesh mã hoá luôn độ nghiêng lúc đo | Luôn **G34 trước, `G29` sau**; tháo/lắp gantry, đổi belt, đổi Z-stepper thì `G29` lại |
 | 13 | **Với UBL, `M420 S1` không kiểm tra mesh hợp lệ** (`bedlevel.cpp:62` chỉ check cho `AUTO_BED_LEVELING_BILINEAR`) | `M420 S1` bật leveling trên mesh hỏng → in ra rác mà **không báo lỗi gì** | Xem `M420 V` phải in `Mesh is valid` trước khi tin |
 | 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
+| 14b | **`git log -S"TÊN_BIẾN"` KHÔNG phát hiện được việc đổi giá trị** | `-S` đếm **số lần xuất hiện của chuỗi**. Đổi `#define INVERT_Y_DIR true` → `false` **không** đổi số lần xuất hiện → commit đó **không hiện ra**. Kết luận sai rằng "dòng này chưa từng bị sửa" | Dùng **`git log -G"INVERT_[XY]_DIR" -p`** (khớp theo **nội dung diff**) hoặc `-S` với **cả dòng kèm giá trị**: `-S"INVERT_Y_DIR true"` |
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 15b | **Build TĂNG DẦN sau khi sửa `Configuration*.h` cho ra firmware STALE** | `pio run` báo `SUCCESS`, `M115` ra timestamp mới, và một phần cấu hình mới **có** vào (nếu nó nằm ở translation unit được biên dịch lại) — nhưng phần khác thì **không**, nên firmware là "nửa cũ nửa mới". Đã gặp thật khi hoàn tác microstep: `DEFAULT_AXIS_STEPS_PER_UNIT` về 80 nhưng `X_MICROSTEPS` vẫn 8 → trục chạy **gấp đôi** mà trông như đã đúng | Sau khi sửa `Configuration.h` / `Configuration_adv.h`: **`Remove-Item -Recurse -Force .pio\build\mks_monster8`** rồi `pio run`. Đừng tin `SUCCESS` + timestamp. Kiểm chứng bằng `M122` (xem `blank time` = 24 hay 36) và bằng cách tìm mảng hằng số trong `.bin` |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
@@ -1109,6 +1110,64 @@ if (ui.button_pressed()) { g34_cancelled_by_user = true; err_break = true; break
 > `z_measured_min` còn là giá trị rác `100000.0f`, và nhánh `#else` sẽ trừ nó vào
 > `current_position.z` → ra toạ độ vô lý. Script firmware nay kiểm tra cờ và **home lại Z** thay
 > vì trừ. Trên máy này `HOME_AFTER_G34` đang bật nên nhánh đó không chạy, nhưng guard vẫn giữ.
+
+### 11.9 Chiều motor X/Y trên CoreXY — cách chẩn đoán
+
+Máy chạy CoreXY (`COREXY`, `Configuration.h:873`) nên X và Y là **hai motor A/B dùng chung một
+chuyển động**, không phải mỗi trục một motor. Điều này làm việc chẩn đoán "trục chạy sai" khác hẳn
+máy Cartesian.
+
+**Ánh xạ trong firmware** (`planner.cpp:2092-2093`, `stepper.cpp:603-604`):
+
+```c
+steps_dist_mm.a = (da + db) * mm_per_step[A_AXIS];   // motor A  <-  X + Y
+steps_dist_mm.b = CORESIGN(da - db) * ...;            // motor B  <-  X - Y
+SET_STEP_DIR(X); // A   ->  INVERT_X_DIR  dao motor A
+SET_STEP_DIR(Y); // B   ->  INVERT_Y_DIR  dao motor B
+```
+
+Gọi `σA`, `σB` là dấu hiệu dụng của hai motor (gộp cả `INVERT_*_DIR` lẫn cực dây motor):
+
+```
+p_x = x·(σA + σB) + y·(σA − σB)
+p_y = x·(σA − σB) + y·(σA + σB)
+```
+
+| | Kết luận |
+|---|---|
+| Máy chạy đúng | **`σA = σB`** |
+| `σA = −σB` | `p_x = −2y`, `p_y = −2x` → **lệnh Y làm đầu in chạy theo X** (và ngược lại). `G28 Y` không bao giờ chạm công tắc Y → hết thời gian → `kill()` → LCD `Printer halted. kill() called!` |
+
+> 🔵 **Vì `INVERT_X_DIR` và `INVERT_Y_DIR` phải BẰNG NHAU** (khi hai motor đấu và lắp giống nhau):
+> hai giá trị này chỉ là dấu của `σA`, `σB`. Nếu chúng khác nhau thì `σA = −σB` → lỗi trộn trục ở
+> trên. Đảo **cả hai** cùng lúc chỉ là **lật gương toàn cục** (X và Y cùng đổi chiều), **không** sửa
+> được lỗi trộn trục — đây là chỗ rất dễ sửa nhầm.
+
+**Ba bước tách nguyên nhân** (hai bước đầu **không cần cấp điện**, motor tắt là đẩy tay được):
+
+| Bước | Làm gì | Kết quả |
+|---|---|---|
+| **A** | Quay **một** motor X/Y bằng tay vài răng, xem đầu in đi đâu | Đi **chéo** → đúng là CoreXY · Đi **thẳng 1 trục** → máy là Cartesian, `COREXY` **sai** |
+| **B** | Đẩy đầu in bằng tay tới sát công tắc Y, đọc `M119` | `y_min: TRIGGERED` → công tắc tốt, lỗi ở chiều quay · vẫn `open` → **công tắc/đứt dây** là nguyên nhân, không liên quan CoreXY |
+| **C** | A và B đều bình thường mà lệnh Y vẫn ra chuyển động X | Đúng `σA = −σB` → **so sánh hai giắc motor**: xem **thứ tự 4 dây** ở hai giắc có giống nhau không, và hai motor có **lắp cùng chiều** không |
+
+Hai cách sửa, **khác nhau ở chỗ có đụng firmware hay không**:
+
+| Cách | Việc | Khi nào dùng |
+|---|---|---|
+| **1. Đảo dây** | Đảo thứ tự hai dây của **một** cuộn ở **một** motor (hoặc xoay giắc 180° nếu giắc cho phép) → `σ` của motor đó đổi dấu, khôi phục `σA = σB`. **Giữ nguyên** `INVERT_X_DIR = INVERT_Y_DIR = true` | Khi hai giắc có **thứ tự dây khác nhau** (một giắc bị đảo) |
+| **2. Sửa firmware** | Đổi **một** trong hai `INVERT` cho khác nhau (`INVERT_Y_DIR` → `false`), clean rebuild + flash | Khi hai giắc **giống hệt nhau** nhưng hai motor **lắp đối xứng** |
+
+> ⚠️ **Cách 2 có hai lựa chọn là ảnh gương của nhau** (đảo `INVERT_X_DIR` hoặc đảo `INVERT_Y_DIR`).
+> Cả hai đều sửa được lỗi trộn trục, nhưng **chỉ một** cho X/Y chạy đúng **chiều**; cái còn lại làm
+> cả X lẫn Y chạy **ngược hướng**. Vì vậy sau khi flash phải thử bằng một cú jog **nhỏ (3–5 mm)**
+> với tay đặt gần công tắc nguồn — đừng chạy `G28` để "thử".
+
+> 🔴 **`M114` KHÔNG dùng được để chẩn đoán chiều motor.** Với máy core, `stepper.cpp:3075` lưu
+> **toạ độ Cartesian** vào `count_position` (`count_position.set(spos.a + spos.b, CORESIGN(spos.a - spos.b), ...)`),
+> nên dòng `Count A:/B:` của `M114` chỉ là `X×steps_per_mm` và `Y×steps_per_mm` — **giống hệt nhau
+> dù firmware trộn trục hay không**. Nó luôn khớp với con số firmware tự tính, không phản ánh motor
+> quay thế nào. Muốn biết chiều thật thì phải **nhìn máy chạy** (hoặc quay tay).
 
 ---
 
