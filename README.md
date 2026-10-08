@@ -88,20 +88,18 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 | Thông số | Giá trị | Nguồn |
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
-| Max feedrate (mm/s) | `M203 X300 Y300 Z10 E25` | giá trị **thiết kế** — xem cảnh báo bên dưới |
-| Accel (mm/s²) | `M201 X500 Y500 Z100 E1000` | Marlin lấy `min(M204 P, M201)` |
-| Accel print/retract/travel | `M204 P500 R500 T500` | Cura đặt lại `M204 S…` mỗi lần in |
+| Max feedrate (mm/s) | `M203 X150 Y150 Z10 E25` | đã tối ưu — xem §3.3 (trước là 100, thiết kế cũ ghi 300) |
+| Accel (mm/s²) | `M201 X2000 Y2000 Z200 E1000` | Marlin lấy `min(M204 P, M201)` |
+| Accel print/retract/travel | `M204 P1500 R1500 T2000` | Cura đặt lại `M204 S…` mỗi lần in |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | `CLASSIC_JERK` + `S_CURVE_ACCELERATION` |
+| Dòng driver X/Y | `M906 X600 Y600` | motor định mức 0,8 A → còn dư địa; kiểm nhiệt `≤ 80 °C` |
 | Homing feedrate | X/Y 3000, Z **480** mm/min | Z = 8 mm/s < max 10 mm/s |
 | Soft endstop | `M211 S1` | |
 
-> ⚠️ **Máy đang chạy chậm hơn thiết kế: EEPROM hiện giữ `M203 X100 Y100`.** Giá trị **100 mm/s**
-> (không phải 300) — Marlin kẹp mọi feedrate theo con số này, nên mọi lệnh nhanh hơn 100 mm/s đều
-> bị hạ xuống. Lưu ý profile Cura và `ClampFeeds` khai trần **300**, nên hai bên đang lệch nhau.
-
-> 📐 **Tối ưu vận tốc & gia tốc: xem §3.3.** Ở đó có trần **điện cảm** của motor (mốc thật là
-> ~210–225 mm/s ở 24 V với `17 mH`), tải quy đổi `m_eff ≈ 1,2 kg`, và bảng giá trị đề xuất kèm
-> quy trình tinh chỉnh. Đừng chọn số theo cảm tính — bảng đó giải thích vì sao.
+> 📐 **Vì sao `M203` chỉ 150 chứ không 300: xem §3.3.** Motor này có **điện cảm `17 mH`** — ở 24 V
+> chỉ kéo đủ dòng định mức tới **~225 mm/s**, và vì `stealthChop` đang bật toàn dải
+> (`HYBRID_THRESHOLD` bị comment) nên trần thực tế còn thấp hơn, **~100–150 mm/s**. Con số 300 trong
+> bản thiết kế cũ không có cơ sở vật lý cho motor này.
 
 ### 3.1 Vì sao X/Y = 500 chứ không phải 3000 của Voron
 
@@ -187,54 +185,59 @@ thì vẫn `~10 000 mm/s²`.
 > đang đặt. Giới hạn thật là **chất lượng in** (ringing/ghosting), **độ cứng khung–belt**, và
 > **chế độ cắt của driver** (bên dưới) — không phải motor.
 
-**Đối chiếu hiện tại và đề xuất**
+**Đối chiếu: trước → đã áp dụng → trần nên dùng**
 
-| Lệnh | Hiện tại (EEPROM) | Đề xuất | Vì sao |
-|---|---|---|---|
-| `M203 X/Y` | **100** | **200** | 200 nằm dưới mốc điện cảm 225; 100 đang quá thấp |
-| `M203 Z` | 10 | 10 | vít me 4 mm → 150 RPM ở 10 mm/s, đủ |
-| `M203 E` | 25 | 25 | BMG, giữ |
-| `M201 X/Y` | **500** | **2500** | dư địa rất lớn; bắt đầu 2000 rồi tăng |
-| `M201 Z` | 100 | **200** | gantry nặng, tăng từ từ |
-| `M201 E` | 1000 | 1000 | giữ |
-| `M204 P` (in) | **500** | **2000** | phải `≤ M201 X/Y` |
-| `M204 R` (retract) | 500 | **1500** | |
-| `M204 T` (travel) | **500** | **2500** | = `M201 X/Y` để không bị kẹp lệch |
-| `M205 X/Y` (jerk) | **8** | **8–10** | ⚠️ không có input shaping → tăng là tăng ringing |
-| `M205 Z / E` | 0,4 / 5 | giữ | |
-| `M906 X/Y` (dòng) | **500 mA** | **600 → 700 mA** | motor định mức 0,8 A → còn dư địa; kiểm nhiệt độ motor `≤ 80 °C` |
+Bộ dưới đây **đã được ghi vào EEPROM** (`M500`, crc 48295) với lựa chọn **giữ `stealthChop` toàn
+dải**. Vì giữ stealthChop nên `M203` dừng ở **150** chứ không lên 200 — trần thực tế của chế độ đó
+là ~100–150 mm/s.
 
-> 🔴 **Đổi EEPROM thôi KHÔNG làm bản in nhanh hơn.** Cura phát `M204 S<acceleration_print>` mỗi
-> lần in, và script `ClampFeeds` đang **kẹp `M204 S` về 500**. Muốn nhanh thật phải sửa **cả ba**:
-> 1. **EEPROM** (bảng trên) — nâng cái *trần*
-> 2. **Cura**: `acceleration_print` / `acceleration_travel` / `machine_max_acceleration_x/y` — đặt
->    **trong giao diện Cura** (Cura bỏ qua giá trị ghi từ ngoài, xem §11.6)
-> 3. **`ClampFeeds.max_acceleration`**: 500 → 2000, rồi **cài lại** script
+| Lệnh | Trước | **Đã áp dụng** | Trần nên dùng | Vì sao |
+|---|---|---|---|---|
+| `M203 X/Y` | 100 | **150** | 225 | mốc điện cảm; chỉ lên 200–225 nếu **bật hybrid threshold** |
+| `M203 Z` | 10 | **10** | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
+| `M203 E` | 25 | **25** | 25 | BMG |
+| `M201 X/Y` | 500 | **2000** | 5000+ | mô-men dư 10–50×; trần thật là ringing |
+| `M201 Z` | 100 | **200** | 500 | gantry nặng — tăng từ từ |
+| `M201 E` | 1000 | **1000** | 1000 | |
+| `M204 P` (in) | 500 | **1500** | 3000 | phải `≤ M201 X/Y` |
+| `M204 R` (retract) | 500 | **1500** | 1500 | |
+| `M204 T` (travel) | 500 | **2000** | 2500 | `= M201 X/Y` để không bị kẹp lệch |
+| `M205 X/Y` (jerk) | 8 | **8** | 10–12 | ⚠️ **không có input shaping** → tăng là tăng ringing |
+| `M205 Z / E` | 0,4 / 5 | giữ | | |
+| `M906 X/Y` (dòng) | 500 mA | **600 mA** | 700–800 mA | motor định mức 0,8 A; kiểm nhiệt `≤ 80 °C` |
 
-> 🔴 **`stealthChop` đang bật ở MỌI tốc độ — đây là nút thắt lớn nhất.** `HYBRID_THRESHOLD` bị
-> comment (`Configuration_adv.h:3123`) trong khi các ngưỡng `X/Y_HYBRID_THRESHOLD 100` **đã khai**.
-> Nghĩa là driver không bao giờ chuyển sang **spreadCycle** ở tốc độ cao — mà stealthChop là
-> chopper kiểu **điện áp**, rất kém ở tốc độ cao, nhất là với motor **điện cảm cao 17 mH**. Đây là
-> lý do số 1 gây mất bước khi vượt ~100–150 mm/s.
+**Còn phải sửa hai chỗ nữa mới thấy khác biệt khi in:**
+
+| Chỗ | Việc |
+|---|---|
+| **Cura** | `acceleration_print` / `acceleration_travel` / `machine_max_acceleration_x/y` — đặt **trong giao diện Cura** (Cura bỏ qua giá trị ghi từ ngoài, xem §11.6). `machine_max_feedrate_x/y` cũng nên hạ từ 300 về **150** cho khớp EEPROM |
+| **`ClampFeeds.max_acceleration`** | 500 → **2000**, rồi **cài lại** script (`install-cura-profile.ps1`) — nếu không nó kẹp `M204 S` về 500 và mọi thứ trên thành vô nghĩa |
+
+> 🔵 **Đã giữ `stealthChop` toàn dải theo lựa chọn.** Hệ quả: driver không bao giờ chuyển sang
+> spreadCycle, mà stealthChop là chopper **điện áp** — rất kém ở tốc độ cao, tệ nhất với motor
+> **điện cảm cao `17 mH`**. Đây là lý do số 1 gây mất bước khi vượt ~100–150 mm/s. **Nếu thấy
+> layer shift ở travel nhanh, đây là thủ phạm đầu tiên cần nghĩ tới** — chứ không phải gia tốc.
 >
 > | Cách | Việc | Đánh đổi |
 > |---|---|---|
-> | **Tốt nhất — cần flash** | Bỏ comment `#define HYBRID_THRESHOLD`, clean rebuild + flash | Tự chuyển chế độ ở 100 mm/s: êm khi in chậm, khỏe khi travel nhanh |
-> | **Chỉ EEPROM** | `M569 S0 X Y` + `M500` → X/Y chạy **spreadCycle thường trực** | Khỏe và ổn định ở tốc độ cao, nhưng **ồn hơn rõ rệt**. Marlin lưu chế độ này **trong EEPROM** (`settings.cpp` dùng `tmc_stealth_enabled`) |
+> | **Tốt nhất — cần flash** | Bỏ comment `#define HYBRID_THRESHOLD` (`Configuration_adv.h:3123`), clean rebuild + flash | Tự chuyển chế độ ở 100 mm/s: êm khi in chậm, khỏe khi travel nhanh |
+> | **Chỉ EEPROM** | `M569 S0 X Y` + `M500` → X/Y chạy **spreadCycle thường trực** | Khỏe, ổn định ở tốc độ cao, nhưng **ồn hơn rõ rệt**. Marlin lưu chế độ này **trong EEPROM** (`settings.cpp` dùng `tmc_stealth_enabled`) |
 >
 > ℹ️ **Input shaping KHÔNG dùng được trên máy này.** `SanityCheck.h:4332-4334` chặn thẳng:
 > `"INPUT_SHAPING_X is not supported with COREXY, COREYX, COREXZ, COREZX, or MARKFORGED_*."`
-> Nên muốn tăng gia tốc mà không bị ringing thì chỉ còn cách làm cứng khung/gantry — không có
-> đường phần mềm.
+> Nên muốn tăng gia tốc mà không ringing thì chỉ còn cách làm cứng khung/gantry — không có đường
+> phần mềm.
 
 **Quy trình tìm giới hạn thật (đừng lấy số trong bảng làm điểm dừng)**
 
-1. Đặt bộ đề xuất vào EEPROM (`M201`/`M203`/`M204`/`M906` + **`M500`**), chạy `M503` đối chiếu.
-2. In **tháp gia tốc** (acceleration tower) hoặc in một khối có góc nhọn ở 2000 → 2500 → 3000 mm/s².
-3. Nhìn **ghosting sau góc** và **layer shift**. Có ghosting → giảm gia tốc. Có **layer shift** →
-   đó là **mất bước**, phải giảm gia tốc **hoặc** tăng `M906`, **hoặc** bật hybrid threshold.
-4. Nghe tiếng máy: spreadCycle kêu rít/ồn hơn stealthChop là bình thường.
-5. Kiểm nhiệt độ motor sau 30 phút in: `≤ 80 °C` là an toàn; nóng hơn thì hạ `M906`.
+1. Chạy `M503` đối chiếu EEPROM đã đúng chưa (mỗi lần `M500` in ra `crc`).
+2. In **tháp gia tốc** (acceleration tower) hoặc một khối có góc nhọn ở 1500 → 2000 → 2500 mm/s².
+3. Nhìn **ghosting sau góc** và **layer shift**:
+   - **Ghosting** → giảm gia tốc.
+   - **Layer shift** → đó là **MẤT BƯỚC**, không phải ringing. Phải giảm `M203` **hoặc** tăng
+     `M906` **hoặc** bật hybrid threshold — giảm gia tốc thường **không** chữa được.
+4. Nghe tiếng máy: spreadCycle rít/ồn hơn stealthChop là bình thường.
+5. Kiểm nhiệt độ motor sau 30 phút in: `≤ 80 °C` an toàn; nóng hơn thì hạ `M906`.
 
 > ⚠️ **Số `0,4 N·m` là giá trị danh định của dải ST4118 48 mm, KHÔNG lấy được từ datasheet gốc**
 > (trang Nanotec là JS, file PDF trả 404). Nếu datasheet thật khác thì thay vào công thức
@@ -597,8 +600,9 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; M92 X80 Y80 Z800 E415 / M203 X300 Y300 Z10 E25   (EEPROM dang la X100 Y100)
-            ; M201 X500 Y500 Z100 E1000 / M204 P500 R500 T500 / M205 X8 Y8 Z0.40 E5
+M503        ; M92 X80 Y80 Z800 E415 / M203 X150 Y150 Z10 E25
+            ; M201 X2000 Y2000 Z200 E1000 / M204 P1500 R1500 T2000 / M205 X8 Y8 Z0.40 E5
+            ; M906 X600 Y600 Z500 (I1/I2 Z500) / T0 E400
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 16 (ca 6 driver), khong co co loi
 M119        ; trang thai endstop
