@@ -51,9 +51,9 @@ class ClampFeeds(Script):
                 "max_feedrate_xy":
                 {
                     "label": "Tran toc do X/Y (mm/s)",
-                    "description": "Phai khop M203 X.. Y.. cua firmware.",
+                    "description": "Phai khop M203 X.. Y.. cua firmware. May nay la 150: motor co dien cam 17 mH nen o 24 V chi keo du dong dinh muc toi ~225 mm/s, va stealthChop bat toan dai keo tran thuc dung xuong ~100-150. Xem README 3.3.",
                     "type": "float",
-                    "default_value": 300,
+                    "default_value": 150,
                     "minimum_value": 1
                 },
                 "max_feedrate_z":
@@ -82,9 +82,9 @@ class ClampFeeds(Script):
                 "max_acceleration":
                 {
                     "label": "Tran acceleration (mm/s2)",
-                    "description": "Phai khop M201 X/Y cua firmware.",
+                    "description": "Phai khop M201 X/Y cua firmware. May nay la 2000. LUU Y: day chi la KEP XUONG - neu M204 S trong file nho hon 2000 thi no giu nguyen, nen Cura van phai phat ra dung so (xem README 3.3: machine_max_acceleration_x/y quyet dinh con so Cura phat).",
                     "type": "float",
-                    "default_value": 500,
+                    "default_value": 2000,
                     "minimum_value": 1
                 },
                 "split_xyz_moves":

@@ -96,20 +96,32 @@ def read_cura_settings(global_cfg, script_name):
     Tra ve dict cua rieng <script_name>, hoac None neu khong tim thay.
     """
     with open(global_cfg, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.startswith("post_processing_scripts"):
-                continue
-            raw = re.sub(r"\\+n", "\n", line.split("=", 1)[1])
-            settings, current = {}, None
-            for entry in raw.split("\n"):
-                entry = entry.strip()
-                if entry.startswith("[") and entry.endswith("]"):
-                    current = entry[1:-1]
-                    settings[current] = {}
-                elif "=" in entry and current is not None:
-                    key, value = entry.split("=", 1)
-                    settings[current][key.strip()] = value.strip()
-            return settings.get(script_name)
+        lines = f.read().split("\n")
+
+    for i, line in enumerate(lines):
+        if not line.startswith("post_processing_scripts"):
+            continue
+        # Khoi nay trai tren NHIEU DONG VAT LY: Cura chen newline that vao gia tri,
+        # nen cac dong tiep theo bi thut dau bang TAB (kieu INI continuation).
+        # Chi doc mot dong la MAT han script thu hai tro di -- da gap that: doc ra
+        # chi thay FirstLayerTwice, con ClampFeeds tra ve None du no CO trong file.
+        blob = line
+        j = i + 1
+        while j < len(lines) and lines[j][:1] in ("\t", " "):
+            blob += "\n" + lines[j]
+            j += 1
+
+        raw = re.sub(r"\\+n", "\n", blob.split("=", 1)[1])
+        settings, current = {}, None
+        for entry in raw.split("\n"):
+            entry = entry.strip()
+            if entry.startswith("[") and entry.endswith("]"):
+                current = entry[1:-1]
+                settings[current] = {}
+            elif "=" in entry and current is not None:
+                key, value = entry.split("=", 1)
+                settings[current][key.strip()] = value.strip()
+        return settings.get(script_name)
     return None
 
 

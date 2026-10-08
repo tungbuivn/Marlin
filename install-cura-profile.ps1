@@ -187,6 +187,34 @@ if (-not $AddAsNewPrinter) {
         }
     }
 
+    # ------------------------------------------------------------------ #
+    # Setting DANG LUU cua post-processing script (nam trong machine instance)
+    #
+    # Khi bat mot script, Cura luu TOAN BO setting cua no vao khoi
+    # `post_processing_scripts` trong machine_instances\*.global.cfg. Gia tri dang
+    # luu do DE LEN `default_value` trong file .py, nen copy .py la CHUA DU.
+    # Da gap that: ClampFeeds.py doi 300->150 / 500->2000 nhung Cura van dung so cu.
+    # ------------------------------------------------------------------ #
+    $ppTool = Join-Path $repoRoot "cura_profile\fix-pp-settings.py"
+    if (Test-Path $ppTool) {
+        $py = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $py) {
+            $candidate = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+            if (Test-Path $candidate) { $py = Get-Item $candidate }
+        }
+        if ($py) {
+            $ppArgs = @($ppTool, "--root", $root)
+            if ($WhatIf) { $ppArgs += "--what-if" }
+            $prevEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            & $py.Source @ppArgs
+            $ErrorActionPreference = $prevEAP
+            $done++
+        } else {
+            Write-Host "[PP] Bo qua dong bo setting da luu: khong thay python" -ForegroundColor Yellow
+        }
+    }
+
     Write-Host ""
     Write-Host "===== KET QUA =====" -ForegroundColor Cyan
     if ($done -gt 0) {

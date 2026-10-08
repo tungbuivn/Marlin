@@ -7,6 +7,7 @@ mong doi gi, thay vi hardcode: doi `first_pass_z` trong Cura thi cho nay theo.
 """
 import math
 import os
+import glob
 import re
 import sys
 
@@ -16,10 +17,20 @@ from _cura_stub import coerce, read_cura_settings
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_first_layer_twice import find_global_cfg
 
-GCODE = sys.argv[1] if len(sys.argv) > 1 else r"D:\0in\V300_Part3.gcode"
+
+def pick_gcode(explicit=None):
+    """Uu tien tham so; khong co thi lay file .gcode moi nhat trong D:\\0in."""
+    if explicit:
+        return explicit
+    cands = glob.glob(r"D:\0in\*.gcode")
+    return max(cands, key=os.path.getmtime) if cands else None
+
+
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+GCODE = pick_gcode(_args[0] if _args else None)
 FULL = "--full" in sys.argv
-LIMIT = {"X": 300.0, "Y": 300.0, "Z": 10.0, "E": 25.0}
-MAX_ACCEL = 500.0
+LIMIT = {"X": 150.0, "Y": 150.0, "Z": 10.0, "E": 25.0}
+MAX_ACCEL = 2000.0
 NUM = re.compile(r"([XYZEF])\s*(-?\d*\.?\d+)")
 
 
@@ -46,6 +57,11 @@ def show(name, values):
 
 
 def main():
+    if not GCODE or not os.path.isfile(GCODE):
+        print("FAIL: khong tim thay file gcode.")
+        print("  Da tim: {0}".format(GCODE))
+        print("  Hay truyen duong dan: python tests/verify_gcode.py <file.gcode>")
+        return 1
     with open(GCODE, "r", encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
 

@@ -209,12 +209,22 @@ là ~100–150 mm/s.
 | `M205 Z / E` | 0,4 / 5 | giữ | | |
 | `M906 X/Y` (dòng) | 500 mA | **600 mA** | 700–800 mA | motor định mức 0,8 A; kiểm nhiệt `≤ 80 °C` |
 
-**Còn phải sửa hai chỗ nữa mới thấy khác biệt khi in:**
+**Hai chỗ phía Cura — ✅ ĐÃ SỬA (commit cùng đợt):**
 
-| Chỗ | Việc |
+| Chỗ | Việc đã làm |
 |---|---|
-| **Cura** | `acceleration_print` / `acceleration_travel` / `machine_max_acceleration_x/y` — đặt **trong giao diện Cura** (Cura bỏ qua giá trị ghi từ ngoài, xem §11.6). `machine_max_feedrate_x/y` cũng nên hạ từ 300 về **150** cho khớp EEPROM |
-| **`ClampFeeds.max_acceleration`** | 500 → **2000**, rồi **cài lại** script (`install-cura-profile.ps1`) — nếu không nó kẹp `M204 S` về 500 và mọi thứ trên thành vô nghĩa |
+| **Container máy của Cura** | `machine_max_acceleration_x/y` 500 → **2000**, `machine_acceleration` 500 → **2000**, `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_z` 100 → **200**, `_e` 500 → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y = 500` **kẹp giá trị mặc định 5000** của Cura xuống 500. Nâng trần là Cura phát `M204 S2000` |
+| **`ClampFeeds`** | `max_feedrate_xy` 300 → **150**, `max_acceleration` 500 → **2000** — sửa ở **cả** `ClampFeeds.py` **và** khối setting đang lưu trong Cura (xem cạm bẫy 26). Đã cài lại bằng `install-cura-profile.ps1` |
+
+> ✅ **Đã kiểm chứng sau khi cài**: container máy trong `%APPDATA%\cura\5.13\definition_changes\` giữ
+> `machine_max_feedrate_x/y = 150`, `machine_max_acceleration_x/y = 2000`; khối đang lưu của
+> `ClampFeeds` giữ `max_feedrate_xy = 150`, `max_acceleration = 2000`; `ClampFeeds.py` đã cài có
+> `default_value` 150 và 2000. `tests/test_clamp_feeds.py` PASS với trần mới.
+
+> 📌 **Việc còn lại là SLICE LẠI.** File `D:\0in\V300_Part3_proj.gcode` hiện có là bản **cũ**
+> (`M204 S500`, `F18000` = 300 mm/s, và `FirstLayerTwice` theo cơ chế cũ). `tests/verify_gcode.py`
+> chạy trên nó báo: **276 bước vượt trần feedrate** + **`buoc pass 2 -> layer 1 = 0.40, phải là 0.2`**.
+> Đó là báo cáo đúng, không phải lỗi công cụ — chỉ cần mở Cura slice lại.
 
 > 🔵 **Đã giữ `stealthChop` toàn dải theo lựa chọn.** Hệ quả: driver không bao giờ chuyển sang
 > spreadCycle, mà stealthChop là chopper **điện áp** — rất kém ở tốc độ cao, tệ nhất với motor
@@ -788,7 +798,8 @@ quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver q
 | `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
 | `cura_profile/extruder_user.inst.cfg` | **Profile Cura — container `user` của EXTRUDER** (tốc độ retract). Phải nằm ở đây, xem 11.6 |
 | `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
-| `install-cura-profile.ps1` | Áp cả 3 container vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
+| `install-cura-profile.ps1` | Áp cả 4 container + 2 script hậu xử lý + **đồng bộ setting đang lưu của script** vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
+| `cura_profile/fix-pp-settings.py` | Đồng bộ các giá trị **đang lưu** của post-processing script trong `machine_instances\*.global.cfg` (chúng đè lên `default_value` của `.py` — xem cạm bẫy 26). Chạy tay: `python cura_profile/fix-pp-settings.py [--what-if]` |
 | `README.md` | tài liệu máy (file này) |
 | `.vscode/extensions.json`, `.gitignore` | cấu hình môi trường phát triển |
 
@@ -875,8 +886,8 @@ Làm 4 việc, mỗi việc có setting riêng:
 
 | Việc | Setting | Mặc định |
 |---|---|---|
-| Ép mọi `F` về **trần từng trục** | `max_feedrate_xy` / `_z` / `_e` | 300 / 10 / 25 mm/s |
-| Ép `M204 S` về trần | `clamp_acceleration`, `max_acceleration` | bật, 500 mm/s² |
+| Ép mọi `F` về **trần từng trục** | `max_feedrate_xy` / `_z` / `_e` | **150** / 10 / 25 mm/s |
+| Ép `M204 S` về trần | `clamp_acceleration`, `max_acceleration` | bật, **2000** mm/s² |
 | **Tách mọi bước XY+Z** thành 2 bước | `split_xyz_moves` | bật |
 | Chèn bước **về tâm** sau purge | `after_purge_xy`, `after_purge_f` | `152.5,152.5`, 6000 |
 
@@ -1100,55 +1111,63 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_endstop_positive_direction_x/y` | `True` | **`False`** | `X/Y/Z_HOME_DIR -1` — máy home về **MIN**, Voron gốc home về MAX |
 | `machine_width/depth` | 300 | **305** | vùng in thật |
 | `machine_height` | 300 | 300 | |
-| `machine_max_feedrate_x/y` | 500 | **300** | khớp `M203 X300 Y300`; **`speed_travel` bắt nguồn từ đây** — xem cảnh báo bên dưới |
+| `machine_max_feedrate_x/y` | 500 | **150** | khớp `M203 X150 Y150`; **`speed_travel` bắt nguồn từ đây** — xem cảnh báo bên dưới |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
-| `machine_max_acceleration_x/y` | 20000 | **500** | **trần cứng** — khớp `M201 X500 Y500` của firmware |
-| `machine_max_acceleration_z` | 500 | **100** | `M201 Z100` của firmware |
-| `machine_max_acceleration_e` | (mặc định 10000) | **500** | |
-| `acceleration_print` | 5000 | **500** | khớp trần `M201 X500 Y500` — xem giải thích bên dưới |
-| `acceleration_travel` | (công thức → 7000) | **500** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
-| `machine_acceleration` | 5000 | **500** | |
+| `machine_max_acceleration_x/y` | 20000 | **2000** | **trần cứng** — khớp `M201 X2000 Y2000`, **và là thứ quyết định `M204 S` Cura phát ra** |
+| `machine_max_acceleration_z` | 500 | **200** | `M201 Z200` của firmware |
+| `machine_max_acceleration_e` | (mặc định 10000) | **1000** | `M201 E1000` |
+| `acceleration_print` | 5000 | **2000** | khớp trần `M201 X2000 Y2000` — xem giải thích bên dưới |
+| `acceleration_travel` | (công thức → 7000) | **2000** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |
+| `machine_acceleration` | 5000 | **2000** | |
 | `jerk_print` / `_travel` | (mặc định 20 / 30) | **8 / 8** | `M205 X8 Y8` — `CLASSIC_JERK` |
 | `machine_max_jerk_xy` | (mặc định 20) | **8** | |
 | `machine_steps_per_mm_z/e` | 400 / – | **800 / 415** | `M92` |
 | `retraction_speed` / `_retract_speed` / `_prime_speed` | 30 / 25 / 25 | **15 / 15 / 15** | ngưỡng `machine_max_feedrate_e − 10 = 15`, xem cảnh báo bên trên |
 | Start / End G-code | macro Klipper `PRINT_START ...` | **G-code Marlin** | Firmware là Marlin — `PRINT_START` sẽ bị báo lỗi và **không home/không hâm nóng** |
 
-> 🔵 **Vì sao chặn ở 500 (đã chốt).** Marlin tính `accel_thực = min(M204 P, M201 trục)`. `M201 X/Y`
-> của firmware là **trần cứng 500**, nên để Cura khai 1500 hay 5000 thì máy vẫn chỉ chạy 500 — con số
-> trong Cura thành **nói dối**. Đã hạ **cả hai bên về 500**: `M201` trong EEPROM (không cần flash, chỉ
-> cần `M201 X500 Y500` + `M500`) và toàn bộ `acceleration_*` của Cura — kể cả
-> `machine_max_acceleration_x/y` để Cura không cho đặt cao hơn. Muốn nhanh hơn về sau thì phải nâng
-> **cả hai** cùng lúc.
+> 🔵 **Vì sao `machine_max_acceleration_x/y` là chỗ QUAN TRỌNG NHẤT bên Cura (đã chốt ở 2000).**
+> Marlin tính `accel_thực = min(M204 P, M201 trục)`. Nhưng trước khi tới Marlin, **Cura đã kẹp rồi**:
+> `acceleration_print` có `maximum_value` lấy từ `machine_max_acceleration_x/y`. Vì thế khi trần đó là
+> **500**, Cura nhận `acceleration_print = 5000` (mặc định của `voron2_base`) rồi **hạ xuống 500** và
+> phát `M204 S500` — đó chính là nguồn gốc con số 500, **không phải** profile ghi 500.
+> Đã nâng **cả hai bên cùng lúc lên 2000**: `M201 X2000 Y2000` trong EEPROM **và**
+> `machine_max_acceleration_x/y = 2000` + `machine_acceleration = 2000` trong container máy của Cura.
+> Muốn nhanh hơn nữa thì lại phải nâng **cả hai** cùng lúc.
 
 > 📐 **Các mức còn lại tự suy ra, không cần đặt tay.** Mọi `acceleration_*` khác của Cura đều tính từ
-> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 500` thì:
-> `acceleration_wall` / `_topbottom` / `_infill` = **500**, `acceleration_support` = **250**,
-> `acceleration_roofing` = `acceleration_wall_0` = **300**, `acceleration_layer_0` = **50**
-> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **500**.
-> Tất cả đều ≤ 500 nên firmware **không kẹp chỗ nào nữa**.
+> `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 2000` thì:
+> `acceleration_wall` / `_topbottom` / `_infill` = **2000**, `acceleration_support` = **1000**,
+> `acceleration_roofing` = `acceleration_wall_0` = **1200**, `acceleration_layer_0` = **200**
+> (lớp đầu chậm — chủ ý của UltiMaker), `acceleration_ironing` / `_flooring` = **2000**.
+> Tất cả đều ≤ 2000 nên firmware **không kẹp chỗ nào nữa**.
+> Quan sát được trên `V300_Part3_proj.gcode` (bản cũ, trần 500): Cura phát `M204 S275`, `S388`, `S500`
+> — đúng các bậc suy ra ở trần 500.
 
 > ⚠️ **Cura KHÔNG phát `M204 T`** — nó chỉ phát `M204 S<n>` (acceleration in). Kiểm chứng trên
-> `V300_Part3.gcode`: chỉ có `M204 S150`, `S488`, `S825`, `S1162`… và **không có lệnh `M204 T` nào**.
+> `V300_Part3_proj.gcode`: chỉ có `M204 S50`, `S162`, `S275`, `S388`, `S500` và **không có lệnh `M204 T` nào**.
 > Nên `acceleration_travel` của Cura **chỉ ảnh hưởng phần ước lượng thời gian in**, còn travel
 > acceleration thật của máy là `M204 T` lưu trong EEPROM.
 
-> ⚠️ **`G0 F30000` không phải lỗi — nó là hệ quả của `machine_max_feedrate_x/y`.** `voron2_base` tính
+> ⚠️ **`G0 F12000` không phải lỗi — nó là hệ quả của `machine_max_feedrate_x/y`.** `voron2_base` tính
 > `speed_travel` bằng:
 > ```
 > speed_travel = max(speed_print, round((machine_max_feedrate_x + machine_max_feedrate_y) / 2, -2))
 > ```
 > Với `machine_max_feedrate_x/y = 500` → `round(500, -2) = 500` mm/s → Cura phát **`G0 F30000`**.
-> Với **300** → `speed_travel = 300` mm/s → **`G0 F18000`**.
+> Với **300** → **`G0 F18000`**. Với **150** → `round(150, -2) = 200` mm/s → **`G0 F12000`**.
+> Con số 200 này **vượt trần 150**, nên `ClampFeeds` sẽ kéo về `F9000` — đó là lý do `ClampFeeds`
+> phải khai `max_feedrate_xy = 150` cho khớp.
 >
 > **Đừng nhầm đơn vị:** g-code `F` là **mm/phút**, còn `M203` và Cura là **mm/giây**
 > (`fdmprinter.def.json` ghi `"unit": "mm/s"`). `30000 ÷ 60 = 500` — tức `F30000` **bằng đúng trần**,
 > không phải vượt. Và kể cả vượt thì Marlin cũng **kẹp** chứ không báo lỗi (`planner.cpp:2415-2419`:
 > `if (cs > max_fr) NOMORE(speed_factor, max_fr / cs);`).
 >
-> ℹ️ `voron2_base` đặt `speed_travel.maximum_value_warning = max(500, round((mx+my)/2, -2)) + 1` nên
-> giá trị suy ra luôn nằm dưới ngưỡng cảnh báo — hạ `machine_max_feedrate_x/y` **không** làm Cura
-> báo lỗi. Ngưỡng cứng `maximum_value` của mọi `speed_*` là `√(mx²+my²)` = 424 mm/s khi mx=my=300,
+> ℹ️ `voron2_base` đặt `speed_travel.maximum_value_warning = max(500, round((mx+my)/2, -2)) + 1`, nên
+> giá trị suy ra luôn nằm dưới ngưỡng cảnh báo. Ngưỡng cứng `maximum_value` của mọi `speed_*` là
+> `√(mx²+my²)` = **212 mm/s** khi mx=my=150 — mà `speed_travel` suy ra là 200 mm/s nên vẫn **lọt**,
+> nhưng chỉ còn dư 12 mm/s. **Nếu sau này hạ `machine_max_feedrate_x/y` xuống ≤ 100 thì phải kiểm lại
+> chỗ này**, vì `round(100,-2) = 100` vẫn lọt, còn các mức khác thì đổi theo.
 > còn giá trị thật chỉ 30–120 mm/s.
 
 ### 11.7 Những chỗ dễ sai — đọc trước khi sửa
@@ -1188,6 +1207,8 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
 | 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.3 ✓ → layer1 0.6 ✗`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: mọi bước phải đúng `layer_height`. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
 | 25 | **Pully tuột khỏi trục motor X/Y** | Pulley trượt trên trục → **chỉ một belt được kéo** → lệnh **Y** làm đầu in đi **CHÉO 45°** thay vì thẳng; `G28` không chạm công tắc → `kill()`. Cực dễ chẩn đoán nhầm thành lỗi firmware/`INVERT`/kinematics, vì code và cấu hình **hoàn toàn không đổi**. Triệu chứng đi kèm: lệnh X có vẻ vẫn đúng (hướng đó pulley còn bám), rồi một lệnh đột nhiên **không nhích gì** (tuột hẳn) | Siết lại **vít hãm pully** ở **cả hai** motor X/Y, rồi cân lại gantry + `G28` + `G29`. Kiểm tra bằng vít hãm + vạch bút dạ bắc qua pulley và trục. Khoanh vùng bằng **phép thử tách motor** ở §11.9 |
+| 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500 | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu. Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
+| 27 | **Đọc `post_processing_scripts` chỉ lấy một dòng vật lý** | Khối này **trải trên nhiều dòng** (Cura chèn newline thật, các dòng sau thụt đầu bằng TAB). Đọc mỗi dòng đầu thì **mất hẳn script thứ hai trở đi** — `ClampFeeds` trả về `None` dù nó **có** trong file, dẫn tới kết luận sai "Cura không lưu script đó" | Đọc tiếp các dòng thụt đầu (kieu INI continuation) — xem `read_cura_settings()` trong `tests/_cura_stub.py` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 

@@ -1,7 +1,11 @@
 """Test cho ClampFeeds: chay tren file gcode that va kiem chung tung truc.
 
 Chay: python tests/test_clamp_feeds.py [duong_dan_gcode]
+
+Khong truyen duong dan thi lay file .gcode MOI NHAT trong D:\\0in -- de test khong
+vo khi file duoc dat ten khac di.
 """
+import glob
 import importlib
 import math
 import os
@@ -12,10 +16,22 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(os.path.dirname(HERE), "cura_profile", "scripts", "ClampFeeds.py")
-GCODE = sys.argv[1] if len(sys.argv) > 1 else r"D:\0in\V300_Part3.gcode"
 
-LIMIT = {"X": 300.0, "Y": 300.0, "Z": 10.0, "E": 25.0}
-MAX_A = 500.0
+
+def pick_gcode(explicit=None):
+    """Tra ve duong dan gcode: uu tien tham so, roi file .gcode moi nhat trong D:\\0in."""
+    if explicit:
+        return explicit
+    cands = glob.glob(r"D:\0in\*.gcode")
+    if not cands:
+        return None
+    return max(cands, key=os.path.getmtime)
+
+
+GCODE = pick_gcode(sys.argv[1] if len(sys.argv) > 1 else None)
+
+LIMIT = {"X": 150.0, "Y": 150.0, "Z": 10.0, "E": 25.0}
+MAX_A = 2000.0
 
 STUB = '''\
 class Script:
@@ -142,6 +158,12 @@ def audit(lines):
 
 
 def main():
+    if not GCODE or not os.path.isfile(GCODE):
+        print("FAIL: khong tim thay file gcode de test.")
+        print("  Da tim: {0}".format(GCODE))
+        print("  Hay truyen duong dan: python tests/test_clamp_feeds.py <file.gcode>")
+        return 1
+    print("Gcode test: {0}".format(GCODE))
     with open(GCODE, "r", encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
     chunks = split_chunks(lines)
@@ -150,8 +172,8 @@ def main():
     script = mod.ClampFeeds()
     script._settings = {
         "enabled": True,
-        "max_feedrate_xy": 300, "max_feedrate_z": 10, "max_feedrate_e": 25,
-        "clamp_acceleration": True, "max_acceleration": 500,
+        "max_feedrate_xy": 150, "max_feedrate_z": 10, "max_feedrate_e": 25,
+        "clamp_acceleration": True, "max_acceleration": 2000,
         "split_xyz_moves": True, "after_purge_xy": "152.5,152.5", "after_purge_f": 6000,
     }
 
@@ -234,4 +256,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
