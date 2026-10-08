@@ -414,10 +414,29 @@ Khác nhau giữa hai cách:
 > lúc đo**. G34 làm phẳng gantry xong thì mesh cũ hiệu chỉnh **thừa** đúng bằng phần nghiêng vừa sửa.
 >
 > G34 có tính lặp lại (`Z_STEPPER_ALIGN_ACC 0.02` → lệch tối đa 0.02 mm), nên quy tắc là:
-> **tạo mesh SAU khi đã G34** (đúng thứ tự bước 4 → 5 ở trên), và mỗi lần in đều G34 về đúng trạng
-> thái đó thì mesh giữ nguyên giá trị.
+> **tạo mesh SAU khi đã G34** (đúng thứ tự bước 4 → 5 ở trên).
 > **Phải chạy lại `G29`** nếu: mới G34 lần đầu sau khi tạo mesh, vừa tháo/lắp gantry, đổi belt,
 > hoặc đổi/thay Z-stepper.
+
+> 🔴 **`G34` ĐÃ BỊ BỎ KHỎI START G-CODE CỦA CURA (theo yêu cầu).** Từ nay máy **không** căn lại
+> gantry trước mỗi bản in. Hệ quả và quy tắc bù lại:
+>
+> | | |
+> |---|---|
+> | Bản in dựa vào gì | **Trạng thái cơ khí của gantry từ lần `G34` cuối** + **mesh UBL đã lưu** (`M420 S1`) |
+> | Vì sao vẫn chấp nhận được | G34 có tính lặp lại tốt và gantry không tự xê dịch giữa các bản in; mesh đã đo sau lần G34 cuối nên vẫn đúng |
+> | **BẮT BUỘC chạy `G34 Q99` bằng tay** khi | tháo/lắp gantry, đổi belt, đổi/thay Z-stepper, siết lại pully, hoặc sau bất kỳ va đập nào (xem cạm bẫy 25) |
+> | Sau khi chạy `G34` tay | **phải `G29` lại** — vì mesh cũ mã hoá độ nghiêng gantry trước đó (lý do ở khối trên) |
+> | Lợi ích | bỏ được bước căn gantry trước mỗi bản in (Q99 có thể mất hàng chục giây tới vài phút) |
+>
+> Quy trình bảo trì rút gọn: **`G34 Q99` → `G29` → `M500`** (thủ công, khi cần), rồi in bình thường.
+
+> ℹ️ **`G28 Z` cũng đã bị bỏ khỏi start G-code.** Nó tồn tại **chỉ để phục hồi Z sau khi `G34` làm
+> nghiêng gantry** (`HOME_AFTER_G34` bật → Z được home lại). Không còn `G34` thì `G28` đã home Z
+> rồi, nên `G28 Z` chỉ tốn thêm thời gian probe giữa bàn.
+> Nếu muốn tận dụng nó cho việc khác — **home lại Z SAU khi bàn và hotend đã nóng** để bù giãn nở
+> nhiệt — thì nên **chuyển** nó xuống dưới `M109`, chứ không phải để nguyên vị trí cũ. Hiện tại
+> **chưa làm** việc đó.
 
 > ⚠️ **Với UBL, `M420 S1` bật leveling kể cả khi mesh hỏng.** `bedlevel.cpp:62` chỉ kiểm tra mesh
 > hợp lệ cho `AUTO_BED_LEVELING_BILINEAR`:
@@ -429,14 +448,14 @@ Khác nhau giữa hai cách:
 
 ### `M420 S1` trong start G-code — thừa, nhưng nên giữ
 
-Start G-code hiện tại: `G28` → `G34 Q99` → `G28 Z` → `M420 S1`.
+Start G-code hiện tại: `G28` → `M190 S60` → `M109 S230` → `M420 S1`.
 
-Cả `G28` lẫn `G34` đều **tự khôi phục** trạng thái leveling, nên tới dòng `M420 S1` thì mesh đã bật sẵn:
+Cả `G28` đều **tự khôi phục** trạng thái leveling, nên tới dòng `M420 S1` thì mesh đã bật sẵn:
 
 | Lệnh | Cơ chế tự bật lại |
 |---|---|
 | `G28` | `RESTORE_LEVELING_AFTER_G28` (`Configuration.h:1977`) → `CAN_SET_LEVELING_AFTER_G28 = 1` (`bedlevel.h:26-28`) → `G28.cpp:546` |
-| `G34` | `RESTORE_LEVELING_AFTER_G34` (`Configuration_adv.h:1027`) → `G34_M422.cpp:553` |
+| `G34` *(không còn dùng trong start G-code)* | `RESTORE_LEVELING_AFTER_G34` (`Configuration_adv.h:1027`) → `G34_M422.cpp:553` |
 
 `M420 S1` vì thế gần như no-op — **nhưng cứ giữ**, nó là lưới an toàn nếu sau này bạn lỡ `M420 S0`
 rồi `M500` (trạng thái leveling **có** được lưu vào EEPROM, xem §11.7 cạm bẫy 1).
@@ -782,7 +801,7 @@ git diff up-2.1.2 HEAD --stat
 | `src/module/settings.cpp` | **sửa bug**: sau khi nạp EEPROM, ép lại `mstep_reg_select(true)` + `microsteps()` cho TMC2209. Không có bước này, `refresh_stepping_mode()` ghi đè GCONF bằng cache → chân MS1/MS2 không được điều khiển → driver rơi về **1/8**, trục chạy **gấp đôi** (đã gặp thật: `G1 Z10` đi 20mm). Lưu ý: hàm này **không** xử lý `Y2` — xem §11.4b |
 | `src/inc/Conditionals_LCD.h` | thêm `PROBE_ENABLE_DISABLE` vào `ANY(...)` của `HAS_STOWABLE_PROBE` → menu *Deploy/Stow Z-Probe* hoạt động cả với `FIX_MOUNTED_PROBE` |
 | `src/gcode/calibrate/G34_M422.cpp`, `src/gcode/gcode.h` | thêm tham số `Q<nloop>` (lặp G34, home lại sau mỗi 3 lần đo), `U` (chế độ hardcode balance), hàm `InfiniteG34()` |
-| Start G-code Cura | dùng **`G34 Q99`** — lặp tối đa 99 lần, **dừng ngay khi sai số ≤ `Z_STEPPER_ALIGN_ACC` (0.02)**. Xem mục 11.8 |
+| Start G-code Cura | **ĐÃ BỎ `G34`** — không còn căn gantry tự động trước mỗi bản in. Tham số `G34 Q<n>` vẫn có trong firmware để **chạy tay khi bảo trì**; xem §5 và mục 11.8 |
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
@@ -915,7 +934,7 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 
 | Tab | Ô | Key | Script điền gì |
 |---|---|---|---|
-| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → **`G34 Q99`** → `G28 Z` → `M190 S60` → `M109 S230` → `M420 S1` |
+| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `M190 S60` → `M109 S230` → `M420 S1`. **`G34` và `G28 Z` đã bỏ** — xem §5 |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
 | **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | `G1 Z2.0` → **đi ngang** tới `X2 Y10` → **rồi mới** hạ `Z0.3` → purge `Y10 → Y100` → `G92 E0` → nhấc `Z2.0` → về tâm `X152.5 Y152.5` |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
@@ -1296,6 +1315,9 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
 Tham số do dự án này thêm vào (`G34_M422.cpp:90`):
+
+> ℹ️ **`G34` KHÔNG còn nằm trong start G-code của Cura** — nay chỉ chạy **tay khi bảo trì**
+> (`G34 Q99` → `G29` → `M500`). Tham số `Q<n>` dưới đây vẫn dùng y như vậy khi chạy tay. Xem §5.
 
 ```c
 int8_t isInf = parser.intval('Q', 1);          // mac dinh 1 = chay nhu G34 goc
