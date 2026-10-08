@@ -513,6 +513,85 @@ tham số chạy được, **không cần flash**: `G34 T0.05`.
 | Preset vật liệu | `M145 S0 H200 B60` · `S1 H230 B60` · `S2 H240 B60` |
 | Filament runout | có, mặc định **TẮT** (`M412 S0`), chân PA13 |
 
+### 6.1 🔴 AN TOÀN — model MPC trong EEPROM trôi đi gây điều khiển nhiệt sai
+
+**Đây là lỗi im lặng và nguy hiểm nhất đã gặp trên máy này. Đọc trước khi hâm nóng đầu in.**
+
+**Triệu chứng (đã gặp thật):**
+
+- Hâm nóng, tới khoảng **130 °C thì số hiển thị bắt đầu GIẢM** trong khi heater vẫn được cấp điện
+- Thỉnh thoảng nhiệt độ **nhảy −10 °C rồi nhảy lại**
+- **Khởi động lại Marlin thì nhiệt độ hiển thị đúng** — nhưng chạy một lúc lại sai
+
+**Nguyên nhân gốc:** máy chạy **`MPCTEMP`** (không phải PID — `Configuration.h:651` đang comment `PIDTEMP`, `:652` bật `MPCTEMP`), và model MPC trong **EEPROM** có:
+
+```
+M306 E0 P40.00 C7.67 R-1.5637 A0.0466 F0.0878 H0.0056
+                        ^^^^^^^^^ R ÂM
+```
+
+`M306.cpp:42` định nghĩa `R<kelvin/second/kelvin>  Sensor responsiveness (= transfer coefficient / heat capacity)` — cả hai đều **dương**, nên **`R` âm là bất khả thi về vật lý**. `M306.cpp:58` nhận mọi số thực **không kiểm khoảng**, và EEPROM chỉ `EEPROM_READ` nguyên struct → số âm **nằm lại vĩnh viễn**.
+
+**Vì sao nguy hiểm — MPC điều khiển theo MÔ HÌNH, không theo cảm biến** (`temperature.cpp:1488`):
+
+```c
+power = (hotend.target - hotend.modeled_block_temp) * ...   // <-- theo MO HINH
+```
+
+Với `R` âm, `modeled_sensor_temp` **phân kỳ ra xa** block (`:1472`) → bộ điều khiển ra lệnh theo một nhiệt độ hoàn toàn sai. **Điểm chết người: PID điều khiển trực tiếp từ cảm biến nên lỗi cảm biến sẽ kích hoạt bảo vệ nhiệt; MPC thì CHE MẤT lỗi đó.** Đó là lý do một bộ điều khiển "thông minh hơn" lại nguy hiểm hơn ở đây.
+
+**Vì sao "restart là đúng lại":** `temperature.cpp:1435-1439` chỉ gieo model **một lần lúc khởi động**:
+
+```c
+// At startup, initialize modeled temperatures
+if (isnan(hotend.modeled_block_temp)) {
+  hotend.modeled_ambient_temp = _MIN(30.0f, hotend.celsius);
+  hotend.modeled_block_temp = hotend.modeled_sensor_temp = hotend.celsius;
+}
+```
+
+Boot thì model = cảm biến → điều khiển đúng; chạy một lúc thì model phân kỳ → sai. `modeled_*` nằm trong **RAM**, chỉ `constants` mới vào EEPROM.
+
+**Cách chẩn đoán (không cần flash, không cần hâm nóng):**
+
+| Việc | Đúng phải là |
+|---|---|
+| `M306` | `R` **dương** (mặc định `0.1284`). `R` âm = model hỏng |
+| `M105` | In kèm **raw ADC** (`SHOW_TEMP_ADC_VALUES` bật). Đổi sang điện trở: `R = 4,7 × raw / (4095 − raw) [kΩ]` — 100k NTC ở 25 °C phải cho ~100 kΩ |
+| `M105` đầu in vs bàn khi máy **nguội hẳn** | Phải xấp xỉ nhau (chênh ≤ 2–3 °C) |
+
+**Cách sửa — KHÔNG cần flash:**
+
+```
+M306 E0 P40.00 C7.13 R0.1284 A0.068 F0.097 H0.0056
+M500
+```
+
+> 🔴 **BẮT BUỘC RESET VẬT LÝ sau đó (nút RESET hoặc tắt/bật PSU). `M999` KHÔNG ĐỦ** —
+> `M999.cpp:38-45` chỉ đặt `marlin_state = MF_RUNNING`, xả buffer serial và `ui.reset_alert_level()`.
+> **RAM không bị đụng**, nên model vẫn là trạng thái đã phân kỳ, và phép thử sau đó vô nghĩa.
+
+**Đã kiểm chứng sau khi sửa** (số đo thật, `monitor-temp.ps1`):
+
+| Target | Vọt nhiệt lớn nhất | Ổn định | Trôi ngược |
+|---|---|---|---|
+| 100 °C | **+0,46 °C** | ±0,05 °C | không |
+| 150 °C | **+0,51 °C** | ±0,05 °C | không — **qua mốc 130 °C trơn** |
+| 230 °C | **+1,89 °C** | hội tụ về target | không |
+
+**Công cụ:** `.\monitor-temp.ps1 -Target 100 -Seconds 130` — giữ **một** kết nối duy nhất (mở lại cổng COM giữa chừng có thể reset board và mất target), đọc `M105` **trước** khi bật heater, **tự `M104 S0`** nếu vượt `target + GuardBand`, tự tắt khi hết giờ. `-ProbeOnly` để kiểm tra đường hiển thị mà **không** bật heater.
+
+> ⚠️ **Bộ mặc định ở trên KHÔNG phải đã autotune cho đầu in này** — nó là tham chiếu của Marlin cho
+> heater 40 W, và khớp phần cứng ở đây (model 40 W + `MPC_MAX = BANG_MAX = 128` giới hạn duty 50%
+> trên cartridge **80 W** → 40 W thực). Nó chạy tốt (bảng trên). Muốn khớp hơn thì `M306 T`
+> — nhưng **autotune đo bằng chính cảm biến**, nên chỉ chạy khi cảm biến đã được xác nhận, và
+> chạy **từ trạng thái nguội, quạt tắt**. Luôn quay lại được vì bộ mặc định đã ghi ở đây.
+
+> 🔵 **Khuyến nghị dài hạn: cân nhắc bật lại `PIDTEMP`** (`Configuration.h:651`) và tắt `MPCTEMP`
+> (`:652`). Không phải vì PID "quen thuộc hơn", mà vì **PID điều khiển trực tiếp từ cảm biến** —
+> khi cảm biến hỏng thì bảo vệ nhiệt kích hoạt đúng, còn MPC che mất. Với thiết bị gia nhiệt, đó là
+> tiêu chí an toàn, không phải sở thích. (Cần flash + `M303 E0 S230 C8`.)
+
 ---
 
 ## 7. Chân kết nối (đã kiểm chứng bằng `M43`)
@@ -793,6 +872,7 @@ quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver q
 | `upload-dfu.ps1` | nạp qua DFU: tự tìm `dfu-util`, dùng `-t 2048`, ghi đúng `0x0800C000`, in SHA256 |
 | `upload-firmware.ps1` | nạp qua ST-Link |
 | `send-gcode.ps1` | gửi G-code qua cổng serial (mặc định COM4) và in phản hồi. Board dùng **USB CDC** nên `BAUDRATE` không quan trọng; đọc "cho tới khi lặng" thay vì đợi `ok`, vì `M997` làm board **biến mất** khỏi cổng. Ví dụ: `.\send-gcode.ps1 -Command M122,M92` |
+| `monitor-temp.ps1` | đặt nhiệt độ hotend và **theo dõi bằng `M105` trong MỘT kết nối duy nhất** (mở lại cổng COM giữa chừng có thể reset board → mất `M104` target). Đọc + in **trước** khi bật heater; **tự `M104 S0`** nếu vượt `target + GuardBand`; tự tắt khi hết giờ. `-ProbeOnly` kiểm đường hiển thị mà không bật heater. Ví dụ: `.\monitor-temp.ps1 -Target 100 -Seconds 130` |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
 | `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura — container của MÁY IN** (bàn, gốc, endstop, feedrate/accel/jerk, steps/mm, Start/End G-code) |
 | `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
@@ -1209,6 +1289,9 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 25 | **Pully tuột khỏi trục motor X/Y** | Pulley trượt trên trục → **chỉ một belt được kéo** → lệnh **Y** làm đầu in đi **CHÉO 45°** thay vì thẳng; `G28` không chạm công tắc → `kill()`. Cực dễ chẩn đoán nhầm thành lỗi firmware/`INVERT`/kinematics, vì code và cấu hình **hoàn toàn không đổi**. Triệu chứng đi kèm: lệnh X có vẻ vẫn đúng (hướng đó pulley còn bám), rồi một lệnh đột nhiên **không nhích gì** (tuột hẳn) | Siết lại **vít hãm pully** ở **cả hai** motor X/Y, rồi cân lại gantry + `G28` + `G29`. Kiểm tra bằng vít hãm + vạch bút dạ bắc qua pulley và trục. Khoanh vùng bằng **phép thử tách motor** ở §11.9 |
 | 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500 | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu. Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
 | 27 | **Đọc `post_processing_scripts` chỉ lấy một dòng vật lý** | Khối này **trải trên nhiều dòng** (Cura chèn newline thật, các dòng sau thụt đầu bằng TAB). Đọc mỗi dòng đầu thì **mất hẳn script thứ hai trở đi** — `ClampFeeds` trả về `None` dù nó **có** trong file, dẫn tới kết luận sai "Cura không lưu script đó" | Đọc tiếp các dòng thụt đầu (kieu INI continuation) — xem `read_cura_settings()` trong `tests/_cura_stub.py` |
+| 28 | **🔴 `R` âm trong model MPC của EEPROM** | Số hiển thị **giảm** khi đang hâm nóng trong khi heater vẫn cấp điện; nhiệt độ **nhảy −10 °C**; "restart thì đúng lại". Nguy cơ **quá nhiệt/cháy**: MPC điều khiển theo **mô hình**, nên model hỏng làm bộ điều khiển ra lệnh sai và **che mất** lỗi cảm biến — bảo vệ nhiệt không cứu được kiểu này | Xem đầy đủ ở **§6.1**. `M306` phải có `R` **dương**; sửa bằng `M306 ... R0.1284 ...` + `M500` + **reset vật lý** (`M999` **không** đủ) |
+| 29 | **Tưởng `M999` là "khởi động lại"** | `M999.cpp:38-45` chỉ đặt `marlin_state = MF_RUNNING`, xả buffer serial, `ui.reset_alert_level()`. **RAM không bị đụng** → mọi trạng thái trong RAM (model MPC `modeled_*`, vị trí) **giữ nguyên**. Dùng `M999` để "làm mới" model MPC là **vô ích mà tưởng là xong** | Cần reset thật: nút RESET hoặc tắt/bật PSU |
+| 30 | **Bật heater trước khi xác nhận mọi thứ chạy được** | Một lỗi định dạng chuỗi trong script theo dõi (`"{3,+6:F2}"` — dấu `+` trong phần canh lề là **không hợp lệ** trong .NET) nổ ra **sau khi** `M104 S100` đã gửi → script chết, heater chạy một mình tới 73,9 °C | **Đọc và in `M105` phải xảy ra TRƯỚC khi gửi `M104`** — `monitor-temp.ps1` nay làm đúng vậy, và có `-ProbeOnly`. Tổng quát: đừng bao giờ gửi lệnh gia nhiệt từ một code path chưa chạy sạch |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
