@@ -583,8 +583,14 @@ git diff up-2.1.2 HEAD --stat
 ### 11.4b Đã THỬ cho X/Y chạy 1/8 microstep — và **đã hoàn tác**
 
 > 🔴 **Kết luận: giữ nguyên 1/16 và `M92 X80 Y80`.** Đã flash thử 1/8 (X/Y = 8, Z/Z2/Z3/E = 16,
-> `M92 X40 Y40`), và **trục Y di chuyển sai** → hoàn tác toàn bộ về 1/16 + `M92 X80 Y80`.
-> **Đừng thử lại** trừ khi tìm ra nguyên nhân; xem phần "Vì sao có thể hỏng" bên dưới.
+> `M92 X40 Y40`) — bản đó **tự nó nhất quán** (driver 1/8 + `M92` 40) nên về nguyên tắc vẫn chạy
+> đúng quãng đường. Sau đó **trục Y di chuyển sai**, nên đã hoàn tác toàn bộ về 1/16 + `M92 X80 Y80`.
+
+> ✅ **ĐÍNH CHÍNH — nguyên nhân thật của "trục Y di chuyển sai" KHÔNG phải việc đổi microstep.**
+> Sau khi hoàn tác, Y **vẫn** sai (chứng minh microstep không phải thủ phạm). Truy tiếp bằng phép
+> thử tách motor (§11.9 bước D) thì ra: **pully bị tuột khỏi trục motor X/Y** — xem cạm bẫy 25.
+> Siết lại vít hãm pully thì máy chạy bình thường. Ghi lại đây để **lần sau đừng đổ lỗi cho
+> microstep** khi thấy Y đi chéo: kiểm **vít hãm pully** trước.
 
 > 🔴🔴 **HOÀN TÁC XONG THÌ BẮT BUỘC PHẢI CLEAN REBUILD — build tăng dần cho ra firmware STALE.**
 > Lần hoàn tác đầu tiên (`git checkout` rồi `pio run`) báo `SUCCESS` và relink, `M115` ra timestamp
@@ -1043,13 +1049,14 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 9 | **Cura ghi đè file cấu hình khi thoát** | Ghi file lúc Cura đang mở → mất sạch khi đóng Cura | **Đóng Cura trước**; script đã tự từ chối nếu thấy tiến trình Cura |
 | 10 | **`microsteps` đọc ra 1/8 thay vì 16** | `refresh_stepping_mode()` ghi đè GCONF từ cache, chân MS1/MS2 không được điều khiển → **trục chạy gấp đôi** | Đã sửa trong `settings.cpp`, xem 11.4. Từ 11.4b, X/Y **cố ý** là 1/8 nên bug này là thứ giữ Z/E ở 1/16 |
 | 10b | **Đổi microstep mà quên `M92`** | EEPROM giữ `M92` cũ → driver 1/8 nhưng firmware tính 80 bước/mm → trục chạy **gấp đôi** (và ngược lại: về 1/16 mà quên `M92 X80 Y80` thì chạy **nửa**). Nguy hiểm nhất là lúc **home**: trục lao vào endstop với tốc độ sai | Sau khi flash **gửi `M92` khớp với microstep + `M500` TRƯỚC khi cho máy chạy**. `M350` không có trên board này nên không thể đổi microstep qua USB — xem 11.4b |
-| 10c | **Đổi X/Y sang 1/8 microstep** | Trục **Y di chuyển sai** dù `M122` báo driver nhận đúng `msteps 8 8 …` và `M92` đã khớp. Máy chạy **CoreXY** nên X/Y là hai motor A/B dùng chung chuyển động → lệch giữa hai driver biểu hiện thành lỗi trục Y. Đã hoàn tác về 1/16 | **Đừng thử lại** nếu chưa tìm ra nguyên nhân. Xem 11.4b |
+| 10c | **Đổi X/Y sang 1/8 microstep** | ✅ **KHÔNG phải nguyên nhân** — sau khi hoàn tác về 1/16, trục Y **vẫn** sai, nên microstep bị đổ oan. Nguyên nhân thật là **pully tuột khỏi trục motor** (cạm bẫy 25). Bản 1/8 tự nó nhất quán (driver 1/8 + `M92` 40) nên vẫn đúng quãng đường | Đã hoàn tác về 1/16 + `M92 X80 Y80`. **Bài học: thấy Y đi chéo thì kiểm vít hãm pully TRƯỚC, đừng nghi microstep/firmware** — xem 11.4b và 11.9 |
 | 10d | **Hoàn tác microstep mà không clean rebuild** | Firmware "nửa cũ nửa mới": `DEFAULT_AXIS_STEPS_PER_UNIT` kịp về 80 nhưng `X_MICROSTEPS` vẫn 8 → **trục chạy gấp đôi** trong khi `M92`/`M115` trông hợp lệ | `Remove-Item -Recurse -Force .pio\build\mks_monster8` rồi build lại. Kiểm chứng: `M122` phải in `msteps 16 …` **và** `blank time 24`. Xem cạm bẫy 15b |
 | 11 | **Chạy USB không có PSU** | TMC2209 undervoltage → **kéo cứng đường endstop lên HIGH**, mọi endstop báo `TRIGGERED` | Luôn cấp nguồn PSU khi kiểm tra endstop |
 | 12 | **Dựng mesh UBL trước khi căn gantry (G34)** | G34 nghiêng lại gantry → mesh cũ hiệu chỉnh **thừa** đúng phần vừa sửa; probe gắn trên gantry nên mesh mã hoá luôn độ nghiêng lúc đo | Luôn **G34 trước, `G29` sau**; tháo/lắp gantry, đổi belt, đổi Z-stepper thì `G29` lại |
 | 13 | **Với UBL, `M420 S1` không kiểm tra mesh hợp lệ** (`bedlevel.cpp:62` chỉ check cho `AUTO_BED_LEVELING_BILINEAR`) | `M420 S1` bật leveling trên mesh hỏng → in ra rác mà **không báo lỗi gì** | Xem `M420 V` phải in `Mesh is valid` trước khi tin |
 | 14 | **Grep `locked_Z_motor` không thấy chỗ nào *đọc*** | Tưởng cơ chế khoá Z-stepper là no-op → đi "sửa" một thứ đang chạy đúng, tốn cả buổi | Nó dùng **macro nối token**: `locked_##A##_motor` (`stepper.cpp:326-328`, `TRIPLE_SEPARATE_APPLY_STEP`). Grep chữ literal **không bao giờ thấy** |
 | 14b | **`git log -S"TÊN_BIẾN"` KHÔNG phát hiện được việc đổi giá trị** | `-S` đếm **số lần xuất hiện của chuỗi**. Đổi `#define INVERT_Y_DIR true` → `false` **không** đổi số lần xuất hiện → commit đó **không hiện ra**. Kết luận sai rằng "dòng này chưa từng bị sửa" | Dùng **`git log -G"INVERT_[XY]_DIR" -p`** (khớp theo **nội dung diff**) hoặc `-S` với **cả dòng kèm giá trị**: `-S"INVERT_Y_DIR true"` |
+| 14c | **Thấy `msteps` tụt về 1/8 hoặc về `256` rồi kết luận "firmware ghi sai microstep"** | Khi driver **mất nguồn VM**, thanh ghi đọc ra **rỗng** (`off time 0`, `msteps 256`, `stealthChop false`, `uStep count 0`) và **mọi endstop báo `TRIGGERED`** (chân bị kéo cứng lên HIGH do undervoltage). Rất dễ tưởng là lỗi firmware/`mstep_reg_select` | Trước khi nghi firmware, kiểm **nguồn 24V**: quạt 24V có quay không. Xem cạm bẫy 11 |
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 15b | **Build TĂNG DẦN sau khi sửa `Configuration*.h` cho ra firmware STALE** | `pio run` báo `SUCCESS`, `M115` ra timestamp mới, và một phần cấu hình mới **có** vào (nếu nó nằm ở translation unit được biên dịch lại) — nhưng phần khác thì **không**, nên firmware là "nửa cũ nửa mới". Đã gặp thật khi hoàn tác microstep: `DEFAULT_AXIS_STEPS_PER_UNIT` về 80 nhưng `X_MICROSTEPS` vẫn 8 → trục chạy **gấp đôi** mà trông như đã đúng | Sau khi sửa `Configuration.h` / `Configuration_adv.h`: **`Remove-Item -Recurse -Force .pio\build\mks_monster8`** rồi `pio run`. Đừng tin `SUCCESS` + timestamp. Kiểm chứng bằng `M122` (xem `blank time` = 24 hay 36) và bằng cách tìm mảng hằng số trong `.bin` |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
@@ -1061,6 +1068,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 22 | **Đọc setting từ `global.cfg` ra rỗng** | Cura escape newline bằng **ba** dấu `\` + `n`, không phải hai. Khớp cứng hai dấu `\` để lại một `\` lụng ở đầu mỗi dòng → tiêu đề `[FirstLayerTwice]` thành `[FirstLayerTwice]\` → không nhận ra → dict rỗng, tool im lặng bỏ qua mọi phép kiểm phụ thuộc setting | Khớp **cả cụm** bằng regex: `re.sub(r"\\+n", "\n", raw)` (`tests/_cura_stub.py`) |
 | 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
 | 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.3 ✓ → layer1 0.6 ✗`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: mọi bước phải đúng `layer_height`. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
+| 25 | **Pully tuột khỏi trục motor X/Y** | Pulley trượt trên trục → **chỉ một belt được kéo** → lệnh **Y** làm đầu in đi **CHÉO 45°** thay vì thẳng; `G28` không chạm công tắc → `kill()`. Cực dễ chẩn đoán nhầm thành lỗi firmware/`INVERT`/kinematics, vì code và cấu hình **hoàn toàn không đổi**. Triệu chứng đi kèm: lệnh X có vẻ vẫn đúng (hướng đó pulley còn bám), rồi một lệnh đột nhiên **không nhích gì** (tuột hẳn) | Siết lại **vít hãm pully** ở **cả hai** motor X/Y, rồi cân lại gantry + `G28` + `G29`. Kiểm tra bằng vít hãm + vạch bút dạ bắc qua pulley và trục. Khoanh vùng bằng **phép thử tách motor** ở §11.9 |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
@@ -1148,10 +1156,45 @@ p_y = x·(σA − σB) + y·(σA + σB)
 | Bước | Làm gì | Kết quả |
 |---|---|---|
 | **A** | Quay **một** motor X/Y bằng tay vài răng, xem đầu in đi đâu | Đi **chéo** → đúng là CoreXY · Đi **thẳng 1 trục** → máy là Cartesian, `COREXY` **sai** |
-| **B** | Đẩy đầu in bằng tay tới sát công tắc Y, đọc `M119` | `y_min: TRIGGERED` → công tắc tốt, lỗi ở chiều quay · vẫn `open` → **công tắc/đứt dây** là nguyên nhân, không liên quan CoreXY |
-| **C** | A và B đều bình thường mà lệnh Y vẫn ra chuyển động X | Đúng `σA = −σB` → **so sánh hai giắc motor**: xem **thứ tự 4 dây** ở hai giắc có giống nhau không, và hai motor có **lắp cùng chiều** không |
+| **B** | Đẩy đầu in bằng tay **+Y** và xem hai pully | Quay **ngược chiều** và đầu in đi **thẳng** → đường belt đúng · Quay **cùng chiều** → **belt lắp sai đường** |
+| **C** | Đẩy đầu in bằng tay tới sát công tắc Y, đọc `M119` | `y_min: TRIGGERED` → công tắc tốt · vẫn `open` → **công tắc/đứt dây** là nguyên nhân, không liên quan CoreXY |
+| **D** | **Phép thử tách motor** (bảng dưới) | Khoanh vùng được **từng motor/pully** — đây là bước tìm ra lỗi pully tuột |
 
-Hai cách sửa, **khác nhau ở chỗ có đụng firmware hay không**:
+**Bước D — phép thử tách từng motor.** Trong CoreXY, chọn toạ độ sao cho chỉ một motor phải chạy:
+
+```
+G1 X+n Y+n     →  a = 2n, b = 0   →  CHỈ motor A chạy
+G1 X+n Y−n     →  a = 0,  b = 2n  →  CHỈ motor B chạy
+```
+
+Hai lệnh này phải cho **hai đường chéo 45° VUÔNG GÓC và DÀI BẰNG NHAU**. Đây là phép thử **rẻ nhất và
+khoanh vùng giỏi nhất** — nó tách được lỗi ở motor/pully khỏi lỗi ở firmware/`INVERT` mà không cần
+đụng dây hay flash gì:
+
+| Hiện tượng | Kết luận |
+|---|---|
+| Hai đường chéo **vuông góc, bằng nhau** | Hai motor + hai belt đều tốt → tìm nguyên nhân chỗ khác |
+| Một lệnh **không nhích gì** | Motor/driver/giắc của motor đó có vấn đề — hoặc **pully tuột hẳn** |
+| Hai đường chéo **không đều nhau** | Một bên **yếu hoặc trượt** (pully tuột một phần) |
+| Lệnh Y ra **đường chéo** nhưng lệnh X ra **thẳng** | 🔴 **Dấu hiệu đặc trưng của pully tuột** — xem cạm bẫy 25 |
+
+> 🔴 **Pully tuột là nghi phạm số 1 khi "máy tự nhiên hỏng" mà code không đổi.** Pulley trượt trên
+> trục motor → chỉ còn một belt được kéo → đầu in đi chéo; sau đó tuột hẳn thì **không nhích gì**.
+> Vì code và cấu hình **không hề đổi**, rất dễ đi sai đường hàng giờ vào firmware/`INVERT`. **Luôn
+> kiểm vít hãm pully trước khi nghi firmware.** Cách kiểm: vẽ một vạch bút dạ **bắc qua pully và
+> trục motor**, đẩy đầu in qua lại vài vòng — vạch lệch là tuột.
+
+> ⚠️ **Nếu `M122` đọc ra thanh ghi RỖNG thì DỪNG chẩn đoán firmware.** Dấu hiệu: `off time 0`,
+> `msteps 256`, `stealthChop false`, `uStep count 0`, và **mọi endstop `TRIGGERED`** — đó là TMC2209
+> **mất nguồn VM**, không phải `mstep_reg_select` bị xoá. Xem cạm bẫy 11 và 14c.
+
+> ⚠️ **Tuyệt đối KHÔNG chạy `G28` hay bất kỳ lệnh chuyển động nào để "thử" khi chưa xác nhận driver
+> đang ở đúng microstep.** `M92` khớp sai với microstep thật (ví dụ `M92 X80` trong khi driver ở 1/8)
+> làm trục chạy **gấp đôi quãng đường và gấp đôi tốc độ** — home kiểu đó là một cú va mạnh. Thử bằng
+> **jog 3–5 mm giữa bàn**, không phải `G28`.
+
+Hai cách sửa `INVERT`, **khác nhau ở chỗ có đụng firmware hay không** (chỉ dùng khi bước A–D đã loại
+trừ cơ khí):
 
 | Cách | Việc | Khi nào dùng |
 |---|---|---|
