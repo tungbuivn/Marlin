@@ -53,6 +53,11 @@
 // ---------------------------------------------------------------------------
 static bool g34_cancelled_by_user = false;
 
+#if ENABLED(Z_STEPPER_AUTO_ALIGN)
+  // Ket qua cua lan chay G34 gan nhat, de G34() bao cho man hinh khi het vong Q
+  static MarlinUI::G34Phase g34_last_phase = MarlinUI::G34_PHASE_ABORT;
+#endif
+
 #if HAS_Z_STEPPER_ALIGN_STEPPER_XY
   #include "../../libs/least_squares_fit.h"
 #endif
@@ -141,7 +146,13 @@ void GcodeSuite::G34() {
   if (g34_cancelled_by_user) {
     SERIAL_ECHOLNPGM("G34 cancelled - chay lai bang G34 Q99 khi can.");
     ui.set_status(F("G34 da huy"), true);
+    TERN_(Z_STEPPER_AUTO_ALIGN, g34_last_phase = MarlinUI::G34_PHASE_CANCEL);
   }
+
+  // Man hinh G34: giu ket qua tren man hinh them 15 giay roi tra ve status screen.
+  // Goi o day (sau ca vong Q) chu khong phai trong InfiniteG34, de trang khong
+  // bi an/hien giua cac vong lap.
+  TERN_(Z_STEPPER_AUTO_ALIGN, ui.g34_screen_end(g34_last_phase));
 }
 
 bool GcodeSuite::InfiniteG34(int nloop){
@@ -196,6 +207,10 @@ bool GcodeSuite::InfiniteG34(int nloop){
       }
 
       if (parser.seen('R')) z_stepper_align.reset_to_default();
+
+      // Man hinh G34: trang thai (status) qua nho de hien thi ket qua G34,
+      // nen chuyen sang mot trang rieng tren LCD (xem draw_g34_screen).
+      ui.g34_screen_begin(uint8_t(z_auto_align_iterations), z_auto_align_accuracy);
 
       const ProbePtRaise raise_after = parser.boolval('E') ? PROBE_PT_STOW : PROBE_PT_RAISE;
 
@@ -282,6 +297,9 @@ bool GcodeSuite::InfiniteG34(int nloop){
         if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> probing all positions.");
 
         const int iter = iteration + 1;
+        ui.g34_screen.iter = iter;                        // Man hinh G34: vong do thu may
+        ui.g34_screen.phase = MarlinUI::G34_PHASE_PROBE;
+        ui.g34_screen_refresh();
         SERIAL_ECHOLNPGM("\nG34 Iteration: ", iter);
         #if HAS_STATUS_MESSAGE
           char str[iter_str_len + 2 + 1];
@@ -309,6 +327,10 @@ bool GcodeSuite::InfiniteG34(int nloop){
           // iteration odd/even --> downward / upward stepper sequence
           const uint8_t iprobe = (iteration & 1) ? NUM_Z_STEPPERS - 1 - i : i;
 
+          // Man hinh G34: danh dau truc Z dang duoc do
+          ui.g34_screen.stepper = iprobe + 1;
+          ui.g34_screen_refresh();
+
           // Safe clearance even on an incline
           if ((iteration == 0 || i > 0) && z_probe > current_position.z) do_blocking_move_to_z(z_probe);
 
@@ -331,6 +353,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
           // Add height to each value, to provide a more useful target height for
           // the next iteration of probing. This allows adjustments to be made away from the bed.
           z_measured[iprobe] = z_probed_height + Z_CLEARANCE_BETWEEN_PROBES;
+          ui.g34_screen.measured[iprobe] = z_measured[iprobe];  // Man hinh G34: chieu cao do duoc
 
           if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("> Z", iprobe + 1, " measured position is ", z_measured[iprobe]);
 
@@ -344,6 +367,7 @@ bool GcodeSuite::InfiniteG34(int nloop){
         // Adapt the next probe clearance height based on the new measurements.
         // Safe_height = lowest distance to bed (= highest measurement) plus highest measured misalignment.
         z_maxdiff = z_measured_max - z_measured_min;
+        ui.g34_screen.deviation = z_maxdiff;              // Man hinh G34: do lech do duoc
         z_probe = Z_BASIC_CLEARANCE + z_measured_max + z_maxdiff;
 
         #if HAS_Z_STEPPER_ALIGN_STEPPER_XY
@@ -494,7 +518,15 @@ bool GcodeSuite::InfiniteG34(int nloop){
           #endif
 
           // Do a move to correct part of the misalignment for the current stepper
-          do_blocking_move_to_z(amplification * z_align_move + current_position.z);
+          const float applied_move = amplification * z_align_move;
+
+          // Man hinh G34: ghi lai huong (+ = len, - = xuong) va luong dieu chinh vua ap dung
+          ui.g34_screen.phase = MarlinUI::G34_PHASE_ADJUST;
+          ui.g34_screen.stepper = zstepper + 1;
+          ui.g34_screen.move[zstepper] = applied_move;
+          ui.g34_screen_refresh();
+
+          do_blocking_move_to_z(applied_move + current_position.z);
         } // for (zstepper)
 
         // Back to normal stepper operations
@@ -552,6 +584,25 @@ bool GcodeSuite::InfiniteG34(int nloop){
       #if BOTH(HAS_LEVELING, RESTORE_LEVELING_AFTER_G34)
         set_bed_leveling_enabled(leveling_was_active);
       #endif
+
+      // Man hinh G34: ghi lai ket qua cuoi cung (G34() se hien thi khi het vong Q)
+      TERN_(Z_STEPPER_AUTO_ALIGN,
+        g34_last_phase = g34_cancelled_by_user ? MarlinUI::G34_PHASE_CANCEL :
+                         G34Result             ? MarlinUI::G34_PHASE_DONE
+                                               : MarlinUI::G34_PHASE_ABORT
+      );
+
+      // Bao cao huong dieu chinh cuoi cung cua tung truc Z ra serial
+      LOOP_L_N(i, NUM_Z_STEPPERS) {
+        char buf[48], mv[9];
+        dtostrf(ABS(ui.g34_screen.move[i]), 1, 3, mv);
+        snprintf_P(buf, sizeof(buf), PSTR("G34 Z%u last move %s %s"),
+          uint16_t(i + 1),
+          ui.g34_screen.move[i] > 0 ? PSTR("UP") : ui.g34_screen.move[i] < 0 ? PSTR("DN") : PSTR("="),
+          mv
+        );
+        SERIAL_ECHOLN(buf);
+      }
 
     }while(0);
     return G34Result;

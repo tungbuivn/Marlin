@@ -407,6 +407,49 @@ public:
     static void pin_test_update();
   #endif
 
+  #if ENABLED(Z_STEPPER_AUTO_ALIGN)
+
+    /**
+     * G34 (Z stepper auto-align) info page.
+     *
+     * The one-line status message is far too small (about 21 characters) for the
+     * G34 numbers, so G34 switches the display to a dedicated 5-line page:
+     *
+     *   G34 PROBE 1/3 P2      <- phase, probe round, stepper being probed
+     *   Z1 1.234 UP 0.105     <- last probed height, direction and size of the
+     *   Z2 1.189 DN 0.045        last correction applied to that stepper
+     *   Z3 1.279 -- 0.000
+     *   DEV 0.090 / 0.020     <- measured spread / target accuracy
+     *
+     * With "G34 Q99" the probe rounds repeat, so a "R2" round counter is added.
+     * The page is shown while G34 runs and for 15s after it ends, then the
+     * normal status screen comes back.
+     */
+    enum G34Phase : uint8_t {
+      G34_PHASE_OFF, G34_PHASE_PROBE, G34_PHASE_ADJUST,
+      G34_PHASE_DONE, G34_PHASE_ABORT, G34_PHASE_CANCEL
+    };
+
+    struct G34Screen {
+      bool     active    = false;                 // Draw the G34 page instead of the status screen
+      uint8_t  phase     = G34_PHASE_OFF;         // One of G34Phase
+      uint8_t  round     = 0;                     // Repeat round of the "Q" loop (from 1)
+      uint8_t  iter      = 0, iter_max = 0;       // Probe round in progress / rounds planned
+      uint8_t  stepper   = 0;                     // Stepper 1..NUM_Z_STEPPERS in use (0 = none)
+      float    deviation = 0, target = 0;         // Measured spread / target accuracy
+      float    measured[NUM_Z_STEPPERS] = { 0 };  // Last probed height per Z stepper
+      float    move[NUM_Z_STEPPERS] = { 0 };      // Last correction per Z stepper (+ = up)
+      millis_t hold_ms   = 0;                     // Time to leave the result page (0 = keep it up)
+    };
+    static G34Screen g34_screen;
+
+    static void g34_screen_begin(const uint8_t iterations, const float target);
+    static void g34_screen_refresh();                  // Repaint the page now (no-op when inactive)
+    static void g34_screen_end(const G34Phase phase);  // Show the result, then revert
+    static void g34_screen_tick();                     // Auto-revert timer (called from update())
+    static void draw_g34_screen();                     // G34 page (status_screen_DOGM.cpp)
+  #endif
+
   #if HAS_DISPLAY
 
     static void update();

@@ -941,6 +941,11 @@ void MarlinUI::init() {
       pin_test_update();
     #endif
 
+    // G34 info page: drop back to the status screen after its hold time
+    #if ENABLED(Z_STEPPER_AUTO_ALIGN)
+      g34_screen_tick();
+    #endif
+
     #if LED_POWEROFF_TIMEOUT > 0
       leds.update_timeout(powerManager.psu_on);
     #endif
@@ -1982,3 +1987,78 @@ void MarlinUI::init() {
   #endif // EEPROM_AUTO_INIT
 
 #endif // EEPROM_SETTINGS
+
+#if ENABLED(Z_STEPPER_AUTO_ALIGN)
+
+  //////////////////////////////////////////////
+  /////////// G34 (Z Stepper Align) ////////////
+  //////////////////////////////////////////////
+
+  // How long the final result stays on screen before the status screen returns
+  constexpr millis_t G34_SCREEN_HOLD_MS = 15000UL;
+
+  MarlinUI::G34Screen MarlinUI::g34_screen; // = { false, ... }
+
+  /**
+   * Switch the display to the G34 page. Called once per G34 run, and again for
+   * every extra round of the "Q" repeat loop (keeping the previous numbers and
+   * only bumping the round counter).
+   */
+  void MarlinUI::g34_screen_begin(const uint8_t iterations, const float target) {
+    const bool first   = !g34_screen.active,      // G34 must take over the display
+               restart = first || g34_screen.hold_ms; // ...also when the last run just ended
+
+    g34_screen.active  = true;
+    g34_screen.hold_ms = 0;                 // Stay up until G34 says otherwise
+    g34_screen.target  = target;
+    g34_screen.iter_max = iterations;
+    g34_screen.stepper = 0;
+
+    if (restart) {
+      g34_screen.phase = G34_PHASE_PROBE;
+      g34_screen.iter = 0;
+      g34_screen.deviation = 0;
+      g34_screen.round = 0;
+      LOOP_L_N(i, NUM_Z_STEPPERS) { g34_screen.measured[i] = 0; g34_screen.move[i] = 0; }
+    }
+    g34_screen.round++;                     // Round of the "Q" repeat loop
+
+    if (first) {
+      // Leave any menu the user was on, so the page can actually be seen
+      TERN_(HAS_MARLINUI_MENU, return_to_status());
+      TERN_(HAS_WIRED_LCD, refresh(LCDVIEW_CLEAR_CALL_REDRAW));
+    }
+    else
+      g34_screen_refresh();
+  }
+
+  // Repaint the G34 page at the next opportunity
+  void MarlinUI::g34_screen_refresh() {
+    if (g34_screen.active) TERN_(HAS_WIRED_LCD, refresh(LCDVIEW_REDRAW_NOW));
+  }
+
+  /**
+   * G34 is done (or was cancelled): keep the numbers on screen for a while so
+   * they can be read, then hand the display back to the status screen.
+   */
+  void MarlinUI::g34_screen_end(const G34Phase phase) {
+    if (!g34_screen.active) return;
+    g34_screen.phase = phase;
+    g34_screen.stepper = 0;
+    g34_screen.hold_ms = millis() + G34_SCREEN_HOLD_MS;
+    g34_screen_refresh();
+  }
+
+  // Called from MarlinUI::update(): leave the G34 page when its hold time is up
+  void MarlinUI::g34_screen_tick() {
+    if (!g34_screen.active || !g34_screen.hold_ms) return;
+    if (!ELAPSED(millis(), g34_screen.hold_ms)) return;
+
+    g34_screen.active = false;
+    g34_screen.hold_ms = 0;
+    g34_screen.phase = G34_PHASE_OFF;
+    // Clear the page away, then repaint the normal status screen
+    TERN_(HAS_WIRED_LCD, refresh(LCDVIEW_CLEAR_CALL_REDRAW));
+  }
+
+#endif // Z_STEPPER_AUTO_ALIGN

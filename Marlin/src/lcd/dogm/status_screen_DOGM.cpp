@@ -486,6 +486,85 @@ FORCE_INLINE void _draw_axis_value(const AxisEnum axis, const char *value, const
   #endif
 #endif // HAS_PRINT_PROGRESS
 
+#if ENABLED(Z_STEPPER_AUTO_ALIGN)
+  /**
+   * G34 (Z stepper auto-align) info page.
+   *
+   * The status message line is far too small for the G34 report, so G34 gets a
+   * page of its own: 5 lines in the status font (6x12 pixels, so the baselines
+   * sit at y = 10, 22, 34, 46 and 58).
+   *
+   *   G34 PROBE 1/3 P2
+   *   Z1 1.234 UP 0.105
+   *   Z2 1.189 DN 0.045
+   *   Z3 1.279 -- 0.000
+   *   DEV 0.090 / 0.020
+   */
+  void MarlinUI::draw_g34_screen() {
+    static char lines[6][24];
+
+    constexpr uint8_t dev_row = NUM_Z_STEPPERS + 1,       // Row for the deviation line
+                      n_rows  = _MIN(dev_row + 1, 5);     // Rows that fit on a 64px display
+
+    if (first_page) {
+      PGM_P phase;
+      switch (g34_screen.phase) {
+        default:
+        case G34_PHASE_PROBE:  phase = PSTR("PROBE");  break;
+        case G34_PHASE_ADJUST: phase = PSTR("ADJUST"); break;
+        case G34_PHASE_DONE:   phase = PSTR("DONE");   break;
+        case G34_PHASE_ABORT:  phase = PSTR("ABORT");  break;
+        case G34_PHASE_CANCEL: phase = PSTR("CANCEL"); break;
+      }
+
+      // Row 0: phase, probe round in progress, and the stepper being probed
+      snprintf_P(lines[0], sizeof(lines[0]), PSTR("G34 %s %u/%u"),
+        FTOP(phase), uint16_t(g34_screen.iter), uint16_t(g34_screen.iter_max));
+
+      if (g34_screen.stepper) {
+        char s[8];
+        snprintf_P(s, sizeof(s), PSTR(" P%u"), uint16_t(g34_screen.stepper));
+        strcat(lines[0], s);
+      }
+
+      // Show the repeat round when "G34 Q..." runs the whole thing several times
+      if (g34_screen.round > 1) {
+        char s[8];
+        snprintf_P(s, sizeof(s), PSTR(" R%u"), uint16_t(g34_screen.round));
+        strcat(lines[0], s);
+      }
+
+      // One row per Z stepper: probed height, direction of the last correction, size
+      LOOP_L_N(i, NUM_Z_STEPPERS) {
+        char z[9], mv[9];
+        dtostrf(g34_screen.measured[i], 1, 3, z);
+        dtostrf(g34_screen.move[i], 1, 3, mv);
+        snprintf_P(lines[i + 1], sizeof(lines[i + 1]), PSTR("Z%u %s %s %s"),
+          uint16_t(i + 1), z,
+          g34_screen.move[i] > 0 ? PSTR("UP") : g34_screen.move[i] < 0 ? PSTR("DN") : PSTR("--"),
+          mv
+        );
+      }
+
+      // Last row: measured spread against the target accuracy
+      if (dev_row < 5) {
+        char dev[9], tgt[9];
+        dtostrf(g34_screen.deviation, 1, 3, dev);
+        dtostrf(g34_screen.target, 1, 3, tgt);
+        snprintf_P(lines[dev_row], sizeof(lines[dev_row]), PSTR("DEV %s / %s"), dev, tgt);
+      }
+    }
+
+    // Draw the rows that fall inside the stripe currently being rendered
+    set_font(FONT_STATUSMENU);
+    LOOP_L_N(i, n_rows) {
+      const uint8_t y = 10 + i * 12;
+      if (PAGE_CONTAINS(y - INFO_FONT_ASCENT, y + INFO_FONT_DESCENT))
+        lcd_put_u8str(0, y, lines[i]);
+    }
+  }
+#endif // Z_STEPPER_AUTO_ALIGN
+
 /**
  * Draw the Status Screen for a 128x64 DOGM (U8glib) display.
  *
@@ -493,6 +572,12 @@ FORCE_INLINE void _draw_axis_value(const AxisEnum axis, const char *value, const
  * Use the PAGE_CONTAINS macros to avoid pointless draw calls.
  */
 void MarlinUI::draw_status_screen() {
+
+  #if ENABLED(Z_STEPPER_AUTO_ALIGN)
+    // G34 shows a page of its own, the status line is too small for its report
+    if (g34_screen.active) return draw_g34_screen();
+  #endif
+
   constexpr int xystorage = TERN(INCH_MODE_SUPPORT, 8, 5);
   static char xstring[TERN(LCD_SHOW_E_TOTAL, 12, xystorage)];
   #if HAS_Y_AXIS

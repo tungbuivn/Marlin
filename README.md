@@ -1379,6 +1379,55 @@ if (ui.button_pressed()) { g34_cancelled_by_user = true; err_break = true; break
 > `current_position.z` → ra toạ độ vô lý. Script firmware nay kiểm tra cờ và **home lại Z** thay
 > vì trừ. Trên máy này `HOME_AFTER_G34` đang bật nên nhánh đó không chạy, nhưng guard vẫn giữ.
 
+#### Màn hình G34 riêng trên LCD
+
+Dòng status chỉ rộng **~21 ký tự** (font `ISO10646_1_5x7`, 6 px/ký tự) nên không đủ chỗ cho báo cáo
+G34. Vì vậy khi G34 chạy, màn hình **đổi hẳn sang một trang riêng** gồm 5 dòng:
+
+```
+G34 PROBE 1/3 P2       <- pha / vòng probe thứ mấy / đang probe Z2
+Z1 1.234 UP 0.105      <- cao độ vừa đo · lần điều chỉnh cuối (lên/xuống) · lượng dịch
+Z2 1.189 DN 0.045
+Z3 1.279 -- 0.000      <- -- = lần cuối không phải dịch
+DEV 0.090 / 0.020      <- độ lệch đo được / ngưỡng T cần đạt
+```
+
+| | |
+|---|---|
+| `UP` / `DN` | Chiều dịch **vừa áp dụng** cho trục Z đó: `UP` = nâng (khe hở tăng), `DN` = hạ. Đây đúng là giá trị đưa vào `do_blocking_move_to_z(amplification * z_align_move + ...)`, đã tính cả `adjustment_reverse` |
+| `--` | Lần điều chỉnh cuối của trục đó bằng 0 (không phải dịch) |
+| `DEV` | `z_maxdiff` = max − min của vòng probe vừa rồi |
+| Ngưỡng | `Z_STEPPER_ALIGN_ACC` = **0.02**, hoặc tham số `T<acc>` khi chạy tay |
+| `R<n>` | Chỉ hiện khi `Q>1` (ví dụ `G34 Q99`): đang ở vòng lặp thứ n |
+| Pha | `PROBE` → `ADJUST` → `DONE` / `ABORT` / `CANCEL` |
+| Giữ kết quả | **15 giây** sau khi G34 kết thúc rồi tự trả về status screen (`G34_SCREEN_HOLD_MS`, `marlinui.cpp`) |
+| Huỷ | Bấm encoder → trang hiện `CANCEL` |
+
+Các chỗ đã sửa:
+
+| File | Việc |
+|---|---|
+| `lcd/marlinui.h` | `struct G34Screen` + `MarlinUI::g34_screen` (dữ liệu), `enum G34Phase`, API `g34_screen_begin/refresh/end/tick`, `draw_g34_screen()` |
+| `lcd/marlinui.cpp` | Cài đặt API; `g34_screen_tick()` được gọi trong `MarlinUI::update()` để tự trả về status screen |
+| `lcd/dogm/status_screen_DOGM.cpp` | `draw_g34_screen()` + nhánh `if (g34_screen.active) return draw_g34_screen();` ở đầu `draw_status_screen()` |
+| `gcode/calibrate/G34_M422.cpp` | `g34_screen_begin()` khi bắt đầu, ghi số liệu từng bước probe/dịch, `g34_screen_end()` **sau khi hết cả vòng `Q`** (không đặt trong `InfiniteG34` để trang khỏi bị ẩn/hiện giữa các vòng) |
+
+> **Vì sao phải `PAGE_CONTAINS` cho từng dòng:** LCD này (`MKS_MINI_12864_V3` →
+> `U8GLIB_MINI12864_2X_HAL`, xem `marlinui_DOGM.h:102-110`) vẽ theo **8 dải 8 px**, mỗi lần `draw_*`
+> chỉ vẽ **một** dải. Font status cao 12 px nên màn 64 px chỉ xếp được **5 dòng**, baseline ở
+> y = 10, 22, 34, 46, 58.
+
+> **Chuỗi được dựng ở `first_page`** (dải đầu tiên của mỗi khung hình) rồi mới vẽ ở dải tương ứng —
+> dựng ở mọi dải thì `dtostrf`/`snprintf_P` phải chạy 8 lần cho một khung hình.
+
+Cuối mỗi lần G34, serial in thêm một dòng cho từng trục (dễ copy vào log):
+
+```
+G34 Z1 last move UP 0.105
+G34 Z2 last move DN 0.045
+G34 Z3 last move = 0.000
+```
+
 ### 11.9 Chiều motor X/Y trên CoreXY — cách chẩn đoán
 
 Máy chạy CoreXY (`COREXY`, `Configuration.h:873`) nên X và Y là **hai motor A/B dùng chung một
