@@ -1350,6 +1350,12 @@ while ((isInf-- > 0) && !InfiniteG34(3)) { }   // lap, home lai sau moi 3 lan do
 | Ngưỡng dừng | `Z_STEPPER_ALIGN_ACC` = **0.02** (`Configuration_adv.h:1026`), đổi bằng `T<acc>` |
 | Mỗi vòng | 3 iteration (tham số `nloop` truyền vào `InfiniteG34`), **home lại Z ở giữa** |
 
+> ⚠️ **Tham số `I<n>` KHÔNG có tác dụng.** `G34()` luôn gọi `InfiniteG34(3)`, mà trong đó
+> `z_auto_align_iterations = nloop ? nloop : parser.intval('I', …)` — `nloop=3` luôn thắng, nên
+> `G34 I5` vẫn chỉ chạy **3 iteration**. Muốn chạy nhiều hơn thì tăng **số vòng `Q`**, không phải `I`.
+> (Đo thực tế: `Configuration_adv.h:1025` ghi `Z_STEPPER_ALIGN_ITERATIONS 5` nhưng log in ra
+> `Did 3 of 3`.)
+
 > Thực tế `Q99` gần như tương đương "chạy tới khi xong": gần như không bao giờ chạm 99 lần, vì
 > mỗi vòng đã home lại nên sai số giảm dần. Đặt `Q` nhỏ (1–3) nếu muốn giới hạn thời gian chờ.
 
