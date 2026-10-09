@@ -650,6 +650,7 @@ M500
 | **Motion → Probe Offset Wizard** | — | Cân `Z offset`: home → probe → hạ nozzle bằng encoder tới khi chạm bàn (test giấy) → `DONE`. Cũng có ở **Advanced Settings → Z Probe Offsets** |
 | **Motion → Deploy / Stow Z-Probe** | `M401` / `M402` | Bật/tắt mạch cảm biến qua chân PA8 |
 | **Motion → Tramming Wizard** | `G35` | Cân bàn 4 vít |
+| **Motion → Z ALIGN MANUAL** | — | Dịch tay **Z1 / Z2 / Z3** từng bước **0.01mm** bằng encoder + **probe lại từng điểm** để xem ngay nó lên/xuống bao nhiêu (xem §11.8b) |
 
 `PINS_DEBUGGING` đang **BẬT** (chiếm ~8KB flash) — cần cho `M43`, `M43 E1` và menu *Endstop Pins*.
 Khi debug xong có thể tắt trong `Configuration_adv.h` để tiết kiệm flash (menu *Endstop Pins* sẽ mất theo).
@@ -815,6 +816,7 @@ git diff up-2.1.2 HEAD --stat
 | Start G-code Cura | **ĐÃ BỎ `G34`** — không còn căn gantry tự động trước mỗi bản in. Tham số `G34 Q<n>` vẫn có trong firmware để **chạy tay khi bảo trì**; xem §5 và mục 11.8 |
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
+| `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
 | `src/inc/Conditionals_adv.h`, `Conditionals_post.h` | guard nhỏ: bỏ `BABYSTEP_ZPROBE_OFFSET` khi không có probe, bỏ `PREHEAT_BEFORE_LEVELING` khi không bật `PIDTEMPBED` |
 
@@ -1433,6 +1435,53 @@ G34 Z1 last move UP 0.105
 G34 Z2 last move DN 0.045
 G34 Z3 last move = 0.000
 ```
+
+### 11.8b `Z ALIGN MANUAL` — dịch tay Z1/Z2/Z3 rồi probe lại từng điểm
+
+**Vì sao cần:** vị trí probe **không trùng** vị trí trục Z. Dịch Z1 (hoặc Z2, Z3) một lượng `x`
+thì điểm probe chỉ lên/xuống một lượng **khác** (tỉ lệ đòn bẩy), và tỉ lệ đó còn đổi theo độ
+nghiêng của gantry. Nên muốn điểm probe lên/xuống đúng ý thì phải lặp: **probe → dịch một chút →
+probe lại → dịch tiếp**. G34 tự động làm việc này bằng thuật toán; màn hình này cho làm **bằng tay**.
+
+**Vào:** `Motion → Z ALIGN MANUAL` (`menu_z_align.cpp`). Nếu máy chưa home, nó tự chèn `G28` rồi
+vào màn hình; trước khi vào nó **chỉ nâng** Z lên `Z_CLEARANCE_BETWEEN_PROBES` (5mm) nếu đang thấp
+hơn — không bao giờ hạ xuống, để không đâm vào vật đang in.
+
+**Màn hình:**
+
+```
+Z2 MOVE    SP 0.090      <- đang chọn Z2, chế độ MOVE, SP = độ lệch max-min giữa các điểm đã probe
+>Z1  0.712  0.000        <- '>' = đang chọn | kết quả probe | đã dịch tay bao nhiêu từ lần probe đó
+ Z2  0.630  0.100
+ Z3  0.622 -0.020
+TURN .01 CLICK PROBE     <- dòng hướng dẫn, đổi theo chế độ
+```
+
+| Chế độ | Quay encoder | Bấm encoder |
+|---|---|---|
+| **MOVE** (`Z2 MOVE`) | dịch **đúng trục đó** `0.01mm` mỗi nấc (giữ `set_separate_multi_axis` + `set_all_z_lock` quanh lệnh dịch — cùng cách G34 bù sai số) | sang chế độ **PROBE** |
+| **PROBE** (`Z2 PROBE`) | sang **ô kế tiếp**: Z1 → Z2 → Z3 → EXIT → Z1 | **probe điểm đó** (bấm lại được nhiều lần), xong tự về MOVE |
+| **EXIT** | về Z1 | **thoát** — và **home lại Z** (`G28Z`) vì khung Z đã lệch sau khi dịch tay |
+
+- **`SP`** (dòng đầu) là con số cần đưa về 0 — giống `DEV` của màn hình G34. Giá trị từng điểm chỉ
+  có ý nghĩa **tương đối** (khung toạ độ Z đổi mỗi lần dịch), nên hãy nhìn `SP` và mức thay đổi.
+- Số ở cột thứ ba là **lượng đã dịch tay kể từ lần probe gần nhất của điểm đó** (tự về 0 sau khi probe).
+
+**Ba lớp chặn an toàn** (đều nằm trong `menu_z_align.cpp`):
+
+| Chặn | Giá trị | Ý nghĩa |
+|---|---|---|
+| Bước mỗi nấc | `ZA_MOVE_SCALE` = **0.01mm** | độ phân giải khi dịch |
+| Một lần quay nhanh | `ZA_MAX_DETENTS` = **50 nấc** = 0.5mm | `ENCODER_RATE_MULTIPLIER` đang bật (10×/100×) nên quay nhanh sinh ra rất nhiều nấc; chặn lại để không nhảy một cái thật xa |
+| Hạ xuống | `ZA_DOWN_BUDGET` = **1mm** kể từ lần probe gần nhất | 🔴 **Đây là chặn quan trọng nhất.** Vì tỉ lệ đòn bẩy có thể **lớn hơn 1**, không thể tin `current_position.z` để biết đầu in cách bàn bao xa. Muốn hạ tiếp thì **phải probe lại** — đúng vòng lặp mà công cụ này sinh ra để làm |
+
+> ⚠️ **Thoát màn hình là Z được home lại** (`set_axis_never_homed(Z_AXIS)` + `G28Z`), giống
+> `HOME_AFTER_G34`. Cần thiết vì sau khi dịch tay từng trục thì khung Z không còn đúng nữa; nếu
+> không home lại mà chạy `G29` thì mesh sẽ sai theo.
+
+> ℹ️ **Chưa nạp thử lên máy** (viết lúc đang in). Đã build sạch thành công
+> (`Flash 25.0%`, `RAM 9.0%`) nhưng hành vi trên máy cần bạn kiểm lần đầu: vào menu → bấm 1 lần
+> (sang PROBE) → bấm lần nữa để probe điểm 1, rồi quay thử vài nấc xem Z1 có nhích đúng chiều không.
 
 ### 11.9 Chiều motor X/Y trên CoreXY — cách chẩn đoán
 

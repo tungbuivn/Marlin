@@ -320,6 +320,10 @@ void menu_move() {
   void goto_tramming_wizard();
 #endif
 
+#if ENABLED(Z_STEPPER_AUTO_ALIGN)
+  void goto_z_align_manual();   // lcd/menu/menu_z_align.cpp
+#endif
+
 void menu_motion() {
   START_MENU();
 
@@ -358,6 +362,13 @@ void menu_motion() {
   //
   #if EITHER(Z_STEPPER_AUTO_ALIGN, MECHANICAL_GANTRY_CALIBRATION)
     GCODES_ITEM(MSG_AUTO_Z_ALIGN, F("G34"));
+  #endif
+
+  //
+  // Manual Z-Align: dich tay Z1 / Z2 / Z3 tung buoc 0.01mm + probe lai tung diem
+  //
+  #if ENABLED(Z_STEPPER_AUTO_ALIGN)
+    SUBMENU_F(F("Z ALIGN MANUAL"), goto_z_align_manual);
   #endif
 
   //
