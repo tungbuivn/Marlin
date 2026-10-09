@@ -1399,7 +1399,7 @@ DEV 0.090 / 0.020      <- độ lệch đo được / ngưỡng T cần đạt
 | `DEV` | `z_maxdiff` = max − min của vòng probe vừa rồi |
 | Ngưỡng | `Z_STEPPER_ALIGN_ACC` = **0.02**, hoặc tham số `T<acc>` khi chạy tay |
 | `R<n>` | Chỉ hiện khi `Q>1` (ví dụ `G34 Q99`): đang ở vòng lặp thứ n |
-| Pha | `PROBE` → `ADJUST` → `DONE` / `ABORT` / `CANCEL` |
+| Pha | `PROBE` → `ADJUST` → kết thúc bằng `DONE` (đạt ngưỡng) / `LIMIT` (hết số iteration mà chưa đạt) / `ABORT` (lỗi probe hoặc sai số tăng) / `CANCEL` (bấm encoder) |
 | Giữ kết quả | **15 giây** sau khi G34 kết thúc rồi tự trả về status screen (`G34_SCREEN_HOLD_MS`, `marlinui.cpp`) |
 | Huỷ | Bấm encoder → trang hiện `CANCEL` |
 

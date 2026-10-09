@@ -589,7 +589,8 @@ bool GcodeSuite::InfiniteG34(int nloop){
       TERN_(Z_STEPPER_AUTO_ALIGN,
         g34_last_phase = g34_cancelled_by_user ? MarlinUI::G34_PHASE_CANCEL :
                          G34Result             ? MarlinUI::G34_PHASE_DONE
-                                               : MarlinUI::G34_PHASE_ABORT
+                         : err_break           ? MarlinUI::G34_PHASE_ABORT
+                                               : MarlinUI::G34_PHASE_LIMIT
       );
 
       // Bao cao huong dieu chinh cuoi cung cua tung truc Z ra serial
