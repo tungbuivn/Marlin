@@ -1050,8 +1050,11 @@
 
   #define ASSISTED_TRAMMING_WIZARD    // Add a Tramming Wizard to the LCD menu
 
-  // Sau khi probe xong, chay nozzle ra giua ban (Z30) de ban van vít goc duoc.
-  #define ASSISTED_TRAMMING_WAIT_POSITION { X_CENTER, Y_CENTER, 30 } // Move the nozzle out of the way for adjustment
+  // TAT (2026-10-09): truoc day sau khi probe xong nozzle chay ra giua ban (Z30) de ban van
+  // vít goc. Nay BO HAN cu nang-cuoi: G35 va wizard se DUNG NGAY tai diem probe cuoi cung
+  // (dau in ~5mm tren diem do), khong tu di dau nua.
+  // => Doi lai: toolhead co the vuong tay khi van vit o goc do. Bat lai bang cach bo comment.
+  //#define ASSISTED_TRAMMING_WAIT_POSITION { X_CENTER, Y_CENTER, 30 } // Move the nozzle out of the way for adjustment
 
   /**
    * Screw thread:

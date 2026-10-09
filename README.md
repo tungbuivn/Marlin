@@ -790,7 +790,7 @@ git diff up-2.1.2 HEAD --stat
 | Nhóm | Giá trị |
 |---|---|
 | Trục Z | `INVERT_Z2_VS_Z_DIR` **tắt** (cả 3 vít me quay cùng chiều), `Z_STEPPER_ALIGN_XY { {280,285}, {25,285}, {X_CENTER,25} }`, `Z_STEPPER_ALIGN_AMP 1.0`, `Z_STEPPER_ALIGN_ITERATIONS 5`, `Z_STEPPER_ALIGN_ACC 0.02` |
-| Tram bàn | `ASSISTED_TRAMMING`, `ASSISTED_TRAMMING_WIZARD`, `REPORT_TRAMMING_MM`, `TRAMMING_SCREW_THREAD 40` (vít M4, bước 0.7mm), `TRAMMING_POINT_XY` 4 góc `{280,285} {25,285} {25,25} {280,25}` |
+| Tram bàn | `ASSISTED_TRAMMING`, `ASSISTED_TRAMMING_WIZARD`, `REPORT_TRAMMING_MM`, `TRAMMING_SCREW_THREAD 40` (vít M4, bước 0.7mm), `TRAMMING_POINT_XY` 4 góc `{280,285} {25,285} {25,25} {280,25}`. **`ASSISTED_TRAMMING_WAIT_POSITION` đã TẮT** (2026-10-09): trước đây sau khi probe xong nozzle tự chạy ra giữa bàn ở Z30; nay G35/wizard **dừng ngay tại điểm probe cuối** (đầu in ~5mm trên điểm đó). Đổi lại: toolhead có thể vướng tay khi vặn vít ở góc đó |
 | TMC2209 | `STEALTHCHOP_XY`, `STEALTHCHOP_Z` (không dùng sensorless homing — đã bỏ `USES_DIAG_JUMPERS`, xem 11.3) |
 | Debug | `PINS_DEBUGGING` (cho `M43`, `M43 E1`, menu *Endstop Pins*) |
 | **Thêm mới** | `STM32_DFU_REBOOT` — cho phép `M997` nhảy vào ROM DFU bootloader, không cần nhấn BOOT0/RESET |
