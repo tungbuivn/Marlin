@@ -21,17 +21,18 @@
  */
 
 //
-// Bed Tramming Wizard
+// Bed Tramming Wizard - thuat toan rieng cua du an nay (khac Marlin goc)
 //
-// Khac Marlin goc o 2 diem:
-//
-//  1) MOC CUA MOI DELTA Z LA TAM BAN (vi tri Z-home), khong phai mot goc nao.
-//     Sau moi lan home Z, goc khung Z nam tai tam ban, nen "lech so voi tam" chinh la
-//     "lech so voi Z-home". Khi vao wizard, tam ban duoc probe truoc de lam moc.
-//
-//  2) Co muc "Re-home Z + probe": van bat ky vit nao cung lam Z-home doi, nen sau khi
-//     van phai home lai Z. Muc nay: NHO VI TRI HIEN TAI -> G28 Z -> QUAY VE DUNG VI TRI
-//     DA NHO -> PROBE LAI ngay tai do (va moc tam ban tro thanh 0).
+// LUONG LAM VIEC
+//   1. Vao wizard: G28 (tat ca truc) -> TU DONG probe 4 goc
+//      MOC CUA MOI DELTA Z LA TAM BAN. Sau moi lan home Z, goc cua khung Z nam ngay
+//      tai tam ban (vi tri Z-home), nen gia tri probe tai moi goc CHINH LA "delta so voi
+//      Z-home". Vi vay khong can probe rieng tam ban.
+//   2. Tu dong di nozzle toi GOC CO |DELTA| LON NHAT de nguoi dung van vit goc do.
+//   3. Man hinh hien delta ca 4 goc + goc dang chinh. Hai nut:
+//        NEXT : home lai Z -> probe lai 4 goc -> di toi goc lech nhat  (lap lai)
+//        DONE : thoat
+//      Vi van vit lam Z-home doi, nen NEXT phai home lai Z truoc khi do lai.
 //
 
 #include "../../inc/MarlinConfigPre.h"
@@ -50,145 +51,219 @@
   #include "../../feature/bltouch.h"
 #endif
 
+// Man hinh ve theo dai (stripe) tren LCD do hoa; cac man khac luon ve ca man
+#ifndef PAGE_CONTAINS
+  #define PAGE_CONTAINS(...) true
+#endif
+
 //#define DEBUG_OUT 1
 #include "../../core/debug_out.h"
 
-static float z_measured[G35_PROBE_COUNT];
-static Flags<G35_PROBE_COUNT> z_isvalid;
-static uint8_t tram_index = 0;
+#define TR_IDLE   0   // dang cho nguoi dung van vit
+#define TR_HOMING 1   // dang cho G28 Z xong
+#define TR_PROBE  2   // dang probe 4 goc
+#define TR_GOTO   3   // dang di toi goc lech nhat
 
-static float z_center = NAN;              // (mm) Z tai TAM BAN = moc cua moi delta Z
-static float rehome_x, rehome_y;          // Vi tri duoc nho truoc khi home lai Z
-static bool  rehome_running = false,      // Chan tai nhap man hinh cho (blocking move goi idle)
-             center_probing = false;
+static float   z_delta[G35_PROBE_COUNT];   // (mm) lech so voi TAM BAN (= Z-home)
+static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
+static uint8_t worst_index,                // goc lech nhieu nhat (dang duoc chinh)
+               step_index;                 // dang probe toi goc thu may
+static uint8_t tram_state;                 // TR_*
+static bool    tram_busy,                  // chan tai nhap: blocking move goi idle() -> screen chay lai
+               exit_selected;              // false = NEXT, true = DONE
 
-#if HAS_LEVELING
-  #include "../../feature/bedlevel/bedlevel.h"
-#endif
+// ---------------------------------------------------------------------------
+// Tien ich
+// ---------------------------------------------------------------------------
 
-static void tramming_wizard_menu();
+// Nhan 2 ky tu [L/R][F/B] suy ra TU TOA DO (khong hard-code thu tu)
+static void tram_tag(const uint8_t i, char * const out) {
+  out[0] = tramming_points[i].x < X_CENTER ? 'L' : 'R';
+  out[1] = tramming_points[i].y < Y_CENTER ? 'F' : 'B';
+  out[2] = '\0';
+}
 
-// Nang len do cao an toan, di toi (x, y), roi probe. Tra ve true neu do duoc.
+// "+0.12" / "-0.05" / "  ---"
+static void tram_fmt_delta(const uint8_t i, char * const out) {
+  if (!z_ok[i]) { strcpy(out, "  ---"); return; }
+  char num[9];
+  dtostrf(ABS(z_delta[i]), 1, 2, num);
+  snprintf_P(out, 9, PSTR("%c%s"), z_delta[i] < 0 ? '-' : '+', num);
+}
+
+// Do lech max-min giua cac diem do duoc
+static float tram_spread() {
+  uint8_t n = 0;
+  float mn = 0, mx = 0;
+  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
+    if (!n || z_delta[i] < mn) mn = z_delta[i];
+    if (!n || z_delta[i] > mx) mx = z_delta[i];
+    ++n;
+  }
+  return n < 2 ? 0 : mx - mn;
+}
+
+static void tram_row(const uint8_t row, const char * const text) {
+  const uint8_t y = LCD_ROW_Y(row);
+  if (PAGE_CONTAINS(y - MENU_FONT_HEIGHT, y + 2))
+    lcd_put_u8str(0, y, text);
+}
+
+// Nang len do cao an toan, di toi (x, y), roi probe
 static bool tramming_probe_xy(const float x, const float y, float &out_z) {
   do_blocking_move_to_z(TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, Z_CLEARANCE_BETWEEN_PROBES));
-  // Stow after each point with BLTouch "HIGH SPEED" mode for push-pin safety
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
-  move_to_tramming_wait_pos();
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
   return !isnan(out_z);
 }
 
-// Probe TAM BAN (= vi tri Z-home): moc cho MOI delta Z
-static bool probe_bed_center() {
-  return tramming_probe_xy((float)Z_SAFE_HOMING_X_POINT, (float)Z_SAFE_HOMING_Y_POINT, z_center);
+// Tim goc co |delta| lon nhat roi di nozzle toi do (de nguoi dung van vit goc do)
+static void tramming_goto_worst() {
+  float worst = 0;
+  bool found = false;
+  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
+    const float a = ABS(z_delta[i]);
+    if (!found || a > worst) { worst = a; worst_index = i; found = true; }
+  }
+  if (!found) { DEBUG_ECHOLNPGM("tramming: khong probe duoc diem nao"); return; }
+
+  DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " delta=", z_delta[worst_index]);
+
+  do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
+  do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
 }
 
-static bool probe_single_point() {
-  const bool v = tramming_probe_xy(tramming_points[tram_index].x, tramming_points[tram_index].y, z_measured[tram_index]);
-  z_isvalid.set(tram_index, v);
-  return v;
+// NEXT: home lai Z (Z-home vua doi vi vua van vit) -> probe lai 4 goc -> toi goc lech nhat
+static void tramming_restart() {
+  LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  set_axis_never_homed(Z_AXIS);          // de all_axes_homed() = false cho toi khi G28 Z xong
+  queue.inject(F("G28 Z"));
+  tram_state = TR_HOMING;
+  step_index = 0;
+  ui.refresh();
 }
 
-static void _menu_single_probe() {
-  DEBUG_ECHOLNPGM("Screen: single probe screen Arg:", tram_index);
-  START_MENU();
-  STATIC_ITEM(MSG_BED_TRAMMING, SS_LEFT);
-  // Delta so voi TAM BAN (vi tri Z-home), khong phai so voi mot goc nao
-  STATIC_ITEM_F(F("Delta vs center"), SS_LEFT,
-    (!isnan(z_center) && z_isvalid[tram_index]) ? ftostr42_52(z_measured[tram_index] - z_center) : "---");
-  ACTION_ITEM(MSG_UBL_BC_INSERT2, []{ if (probe_single_point()) ui.refresh(); });
-  ACTION_ITEM(MSG_BUTTON_DONE, ui.goto_previous_screen);
-  END_MENU();
+static void tramming_exit() {
+  probe.stow();
+  set_axis_never_homed(Z_AXIS);          // vit da bi van -> phai home lai Z truoc khi di chuyen/in
+  ui.goto_previous_screen_no_defer();
 }
 
-//
-// Man hinh cho: G28 Z xong -> quay ve dung vi tri da nho -> probe lai
-//
-static void _lcd_rehome() {
-  if (ui.should_draw()) MenuItem_static::draw(1, F("Re-homing Z ..."));
+// ---------------------------------------------------------------------------
+// Ve man hinh
+// ---------------------------------------------------------------------------
+static void tramming_draw() {
+  ui.set_font(FONT_STATUSMENU);
 
-  if (rehome_running || !all_axes_homed()) return;   // Cho G28 Z chay xong
-  rehome_running = true;
+  char dots[] = "...";
 
-  // Quay ve dung vi tri da nho
-  do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
-  do_blocking_move_to_xy(rehome_x, rehome_y, XY_PROBE_FEEDRATE_MM_S);
+  // Dang chay: chi hien tien do
+  if (tram_state != TR_IDLE) {
+    switch (tram_state) {
+      case TR_HOMING: MenuEditItemBase::draw_edit_screen(F("Re-homing Z"), dots); break;
+      case TR_GOTO:   MenuEditItemBase::draw_edit_screen(F("Go to worst"), dots); break;
+      default: {
+        char v[8];
+        snprintf_P(v, sizeof(v), PSTR("%u/%u"), uint16_t(step_index + 1), uint16_t(G35_PROBE_COUNT));
+        MenuEditItemBase::draw_edit_screen(F("Probing corner"), v);
+      } break;
+    }
+    return;
+  }
 
-  // Probe lai ngay tai do
-  float z = NAN;
-  const bool ok = tramming_probe_xy(rehome_x, rehome_y, z);
+  char line[28], tag[3], d0[8], d1[8];
 
-  // Sau khi home lai Z, goc khung Z = tam ban => tam ban = 0. Cac so do cu da doi moc
-  // nen bi xoa; rieng diem vua probe duoc cap nhat lai.
-  z_center = 0.0f;
-  z_isvalid.reset();
-  LOOP_L_N(i, G35_PROBE_COUNT) {
-    if (ABS(tramming_points[i].x - rehome_x) < 0.5f && ABS(tramming_points[i].y - rehome_y) < 0.5f) {
-      z_measured[i] = z;
-      z_isvalid.set(i, ok);
+  // Dong 0: goc dang chinh (nhan + toa do) va do lech tong
+  if (z_ok[worst_index]) {
+    char sp[9];
+    dtostrf(tram_spread(), 1, 3, sp);
+    tram_tag(worst_index, tag);
+    snprintf_P(line, sizeof(line), PSTR("%s(%i,%i) SP %s"),
+      tag, int(tramming_points[worst_index].x), int(tramming_points[worst_index].y), sp);
+  }
+  else
+    strcpy(line, "---");
+  tram_row(0, line);
+
+  // Dong 1-2: delta 2 goc mot dong, theo thu tu TRAMMING_POINT_XY
+  LOOP_L_N(r, 2) {
+    const uint8_t i0 = r * 2, i1 = i0 + 1;
+    char t0[3], t1[3];
+    tram_tag(i0, t0); tram_tag(i1, t1);
+    tram_fmt_delta(i0, d0); tram_fmt_delta(i1, d1);
+    snprintf_P(line, sizeof(line), PSTR("%s %s   %s %s"), t0, d0, t1, d1);
+    tram_row(r + 1, line);
+  }
+
+  // Dong 3-4: hai nut
+  snprintf_P(line, sizeof(line), PSTR("%cNEXT (home + probe)"), exit_selected ? ' ' : '>');
+  tram_row(3, line);
+  snprintf_P(line, sizeof(line), PSTR("%cDONE"), exit_selected ? '>' : ' ');
+  tram_row(4, line);
+}
+
+// ---------------------------------------------------------------------------
+// Vong lap: 1 buoc moi khung hinh (first_page), blocking move khong lam sai trang thai
+// ---------------------------------------------------------------------------
+static void _lcd_tramming() {
+  if (ui.should_draw()) tramming_draw();
+
+  if (tram_busy || !ui.first_page) return;
+
+  switch (tram_state) {
+    case TR_HOMING:
+      if (!all_axes_homed()) return;          // cho G28 Z chay xong
+      tram_state = TR_PROBE;
+      step_index = 0;
+      break;
+
+    case TR_PROBE:
+      if (step_index >= G35_PROBE_COUNT) { tram_state = TR_GOTO; break; }
+      tram_busy = true;
+      z_ok[step_index] = tramming_probe_xy(tramming_points[step_index].x, tramming_points[step_index].y, z_delta[step_index]);
+      tram_busy = false;
+      ++step_index;
+      break;
+
+    case TR_GOTO:
+      tram_busy = true;
+      tramming_goto_worst();
+      tram_busy = false;
+      tram_state = TR_IDLE;
+      exit_selected = false;                  // mac dinh chon NEXT
+      break;
+
+    default: {                                // TR_IDLE: nhan nut
+      if (ui.encoderPosition) { ui.encoderPosition = 0; exit_selected = !exit_selected; }
+      else if (ui.use_click()) {
+        if (exit_selected) { tramming_exit(); return; }
+        tramming_restart();
+        return;
+      }
+      break;
     }
   }
 
-  rehome_running = false;
-  ui.goto_screen(tramming_wizard_menu);
+  ui.refresh();
 }
 
-//
-// ACTION: nho vi tri hien tai -> home lai Z (man hinh cho se quay ve + probe lai)
-//
-static void tramming_rehome() {
-  rehome_x = current_position.x;
-  rehome_y = current_position.y;
-  set_axis_never_homed(Z_AXIS);        // de all_axes_homed() = false cho toi khi G28 Z xong
-  queue.inject(F("G28 Z"));
-  ui.defer_status_screen();
-  ui.goto_screen(_lcd_rehome);
-}
-
-static void tramming_wizard_menu() {
-  START_MENU();
-  STATIC_ITEM(MSG_SELECT_ORIGIN);
-
-  // Moc: do Z tai TAM BAN (vi tri Z-home) truoc
-  ACTION_ITEM_F(F("Probe center (Z-home)"), []{ if (probe_bed_center()) ui.refresh(); });
-
-  // Draw a menu item for each tramming point
-  for (tram_index = 0; tram_index < G35_PROBE_COUNT; tram_index++)
-    SUBMENU_F(FPSTR(pgm_read_ptr(&tramming_point_name[tram_index])), _menu_single_probe);
-
-  // Van vit lam Z-home doi -> home lai Z, quay ve dung cho cu va probe lai
-  ACTION_ITEM_F(F("Re-home Z + probe"), tramming_rehome);
-
-  ACTION_ITEM(MSG_BUTTON_DONE, []{
-    probe.stow(); // Stow before exiting Tramming Wizard
-    ui.goto_previous_screen_no_defer();
-  });
-  END_MENU();
-}
-
-// Init the wizard and enter the submenu
+// ---------------------------------------------------------------------------
+// Diem vao tu menu
+// ---------------------------------------------------------------------------
 void goto_tramming_wizard() {
   DEBUG_ECHOLNPGM("Screen: goto_tramming_wizard", 1);
   ui.defer_status_screen();
 
-  // Initialize measured point flags
-  z_isvalid.reset();
-  z_center = NAN;
+  LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  worst_index = 0; step_index = 0;
+  tram_busy = false; exit_selected = false;
+  tram_state = TR_HOMING;                     // cho G28 (tat ca truc) xong roi probe 4 goc
 
-  // Inject G28, wait for homing to complete,
+  // Home tat ca truc; Z-home chinh la TAM BAN -> moc cho moi delta
   set_all_unhomed();
   queue.inject(TERN(CAN_SET_LEVELING_AFTER_G28, F("G28L0"), FPSTR(G28_STR)));
 
-  ui.goto_screen([]{
-    _lcd_draw_homing();
-    if (all_axes_homed() && !center_probing) {
-      // Probe TAM BAN truoc: do la moc cho MOI delta Z
-      center_probing = true;
-      probe_bed_center();
-      center_probing = false;
-      ui.goto_screen(tramming_wizard_menu);
-    }
-  });
+  ui.goto_screen(_lcd_tramming);
 }
 
 #endif // HAS_MARLINUI_MENU && ASSISTED_TRAMMING_WIZARD

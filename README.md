@@ -649,7 +649,7 @@ M500
 | **Advanced Settings → Endstop Pins** | — | Hiện **mức điện thô** X/Y/Z MIN lên status line (đọc thẳng `READ()`, bỏ qua logic endstop của Marlin) |
 | **Motion → Probe Offset Wizard** | — | Cân `Z offset`: home → probe → hạ nozzle bằng encoder tới khi chạm bàn (test giấy) → `DONE`. Cũng có ở **Advanced Settings → Z Probe Offsets** |
 | **Motion → Deploy / Stow Z-Probe** | `M401` / `M402` | Bật/tắt mạch cảm biến qua chân PA8 |
-| **Motion → Tramming Wizard** | `G35` | Cân bàn 4 vít |
+| **Motion → Tramming Wizard** | `G35` | Vòng lặp tự động: probe 4 góc → đi tới **góc lệch nhất** → bạn vặn vít → **NEXT** (home lại Z + probe lại 4 góc + tới góc lệch mới). Mốc = **tâm bàn** (Z-home). Xem §11.8c |
 | **Motion → Z ALIGN MANUAL** | — | Dịch tay **Z1 / Z2 / Z3** từng bước **0.01mm** bằng encoder + **probe lại từng điểm** để xem ngay nó lên/xuống bao nhiêu (xem §11.8b) |
 
 `PINS_DEBUGGING` đang **BẬT** (chiếm ~8KB flash) — cần cho `M43`, `M43 E1` và menu *Endstop Pins*.
@@ -817,7 +817,8 @@ git diff up-2.1.2 HEAD --stat
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
-| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | **G35/wizard: mọi delta Z tính so với TÂM BÀN** (`Z_SAFE_HOMING_X/Y_POINT` = đúng vị trí Z-home, được probe làm mốc) thay vì so với 1 góc; báo **cả 4 góc**, không bỏ sót góc nào. Wizard thêm mục **`Probe center (Z-home)`** và **`Re-home Z + probe`**: nhớ vị trí hiện tại → `G28 Z` → quay lại đúng vị trí đã nhớ → probe lại (vì vặn bất kỳ vít nào cũng làm Z-home đổi) |
+| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard viết lại: mốc = TÂM BÀN (Z-home)**; wizard chạy **vòng lặp tự động** (probe 4 góc → đi tới góc lệch nhất → user vặn vít → **NEXT** = home lại Z + probe lại 4 góc + tới góc lệch mới) |
+| `Marlin/Configuration_adv.h` (`TRAMMING_POINT_NAME_1..4`) | **sửa tên 4 góc cho khớp toạ độ** — trước đây bị ngược 180° nên G35/wizard chỉ sai góc cần vặn |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
 | `src/inc/Conditionals_adv.h`, `Conditionals_post.h` | guard nhỏ: bỏ `BABYSTEP_ZPROBE_OFFSET` khi không có probe, bỏ `PREHEAT_BEFORE_LEVELING` khi không bật `PIDTEMPBED` |
 
@@ -1483,6 +1484,40 @@ TURN .01 CLICK PROBE     <- dòng hướng dẫn, đổi theo chế độ
 > ℹ️ **Chưa nạp thử lên máy** (viết lúc đang in). Đã build sạch thành công
 > (`Flash 25.0%`, `RAM 9.0%`) nhưng hành vi trên máy cần bạn kiểm lần đầu: vào menu → bấm 1 lần
 > (sang PROBE) → bấm lần nữa để probe điểm 1, rồi quay thử vài nấc xem Z1 có nhích đúng chiều không.
+
+### 11.8c `G35` / Tramming Wizard — thuật toán viết lại (mốc = tâm bàn, vòng lặp tự động)
+
+**Nguyên tắc mốc:** sau mỗi lần home Z, **gốc khung Z nằm ngay tại TÂM BÀN** (vị trí Z-home
+`Z_SAFE_HOMING_X/Y_POINT` = `152,152`). Nên giá trị probe ở mỗi góc **chính là** "delta so với
+Z-home" — không cần probe riêng tâm bàn.
+
+**Lệnh `G35`** (không tương tác): probe tâm bàn làm mốc → probe 4 góc → in delta của **cả 4 góc**
+so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu sau khi xong (không park).
+
+**Wizard `Motion → Tramming Wizard`** — vòng lặp tự động:
+
+| Bước | Việc |
+|---|---|
+| 1 | `G28` (cả 3 trục) → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`) |
+| 2 | Tự động **đi nozzle tới góc có \|delta\| lớn nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó |
+| 3 | Hiện delta 4 góc + góc đang chỉnh, 2 nút: **`NEXT (home + probe)`** và **`DONE`** |
+| 4 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
+
+```
+RB(280,285) SP 0.050        <- goc dang chinh + toa do; SP = max-min 4 delta
+RB -0.05   LB +0.12
+FL +0.31   FR -0.08
+>NEXT (home + probe)        <- mac dinh chon NEXT: bam 1 lan la chay
+ DONE
+```
+
+- Quay encoder = đổi giữa **NEXT** / **DONE**; bấm = chạy mục đang chọn.
+- Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
+- `DONE` = thoát và **đánh dấu Z chưa home** (vít đã bị vặn) → phải `G28` trước khi in.
+- Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
+
+> ⚠️ Trong lúc wizard probe/đi, màn hình đứng ở dòng tiến độ — bình thường (mỗi probe ~10s).
+> Máy đo `G35` lần đầu sau khi viết lại: 4 góc lệch **≤ 0,05mm** so với tâm.
 
 ### 11.9 Chiều motor X/Y trên CoreXY — cách chẩn đoán
 

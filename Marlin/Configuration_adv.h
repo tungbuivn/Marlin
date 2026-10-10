@@ -1040,10 +1040,13 @@
   #define TRAMMING_POINT_XY { {  280, 285 }, { 25,  285 }, { 25, 25 }, { 280, 25 } }
 
   // Define position names for probe points.
-  #define TRAMMING_POINT_NAME_1 "Front-Left"
-  #define TRAMMING_POINT_NAME_2 "Front-Right"
-  #define TRAMMING_POINT_NAME_3 "Back-Right"
-  #define TRAMMING_POINT_NAME_4 "Back-Left"
+  // SUA (2026-10-10): ten phai khop TOA DO. Goc (0,0) la truoc-trai (README 2.1) nen:
+  //   (280,285)=sau-phai  (25,285)=sau-trai  (25,25)=truoc-trai  (280,25)=truoc-phai
+  // Truoc day 4 ten bi nguoc 180 do -> G35/wizard chi sai goc can van.
+  #define TRAMMING_POINT_NAME_1 "Back-Right"   // (280,285)
+  #define TRAMMING_POINT_NAME_2 "Back-Left"    // (25,285)
+  #define TRAMMING_POINT_NAME_3 "Front-Left"   // (25,25)
+  #define TRAMMING_POINT_NAME_4 "Front-Right"  // (280,25)
 
   #define RESTORE_LEVELING_AFTER_G35    // Enable to restore leveling setup after operation
   #define REPORT_TRAMMING_MM          // Report Z deviation (mm) for each point relative to the first
