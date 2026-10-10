@@ -1501,7 +1501,7 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
 | 1 | `G28` (cả 3 trục) → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`) |
 | 2 | Tự động **đi nozzle tới góc có \|delta\| lớn nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó |
 | 3 | Hiện delta 4 góc + 3 nút: **`PROBE`** / **`NEXT (home + probe)`** / **`DONE`** |
-| 4 | **PROBE** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại, **KHÔNG nâng Z sau khi probe**) → hiện độ lệch mới và lượng thay đổi của nó (`doi -0.19mm` / `khong doi`) |
+| 4 | **PROBE** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện độ lệch mới và lượng thay đổi của nó (`doi -0.19mm` / `khong doi`) |
 | 5 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
 
 ```
@@ -1518,9 +1518,12 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
   - `doi = giá trị mới − giá trị cũ`, cả hai so với **cùng một mốc** → chính là lượng ốc vừa siết làm điểm đó nhích so với mốc
 - 🔴 **PROBE KHÔNG probe lại tâm bàn** (theo yêu cầu). Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi bấm **NEXT** (home lại Z → `z_ok[]` xoá hết → 4 góc được đo lại trong cùng một mốc mới).
 - `PROBE lech x.xx` = chưa có số cũ **trong cùng mốc** để so, chỉ hiện độ lệch hiện tại.
-- 🔴 **Không nâng Z sau khi probe** (`PROBE_PT_NONE` thay cho `PROBE_PT_RAISE`). Trước đây Marlin nâng thêm `Z_CLEARANCE_BETWEEN_PROBES` = **5mm** sau mỗi lần probe (`probe.cpp:898`) — cú "nhấc lên" đó **không phải** `probe.offset.z`. Nay nozzle **dừng nguyên tại điểm vừa chạm**.
-  - Trước khi đi XY (probe điểm kế / tới góc lệch nhất) firmware **chỉ nâng lên 5mm nếu đang thấp hơn** (`tramming_clearance()`, không bao giờ hạ xuống) để không cào nozzle.
-  - Vì `Z_HOMING_HEIGHT` trong `Configuration.h:1754` đang **tắt**, `G28` **không tự nâng Z** trước khi chạy XY tới tâm (`G28.cpp:413` chỉ nâng khi `z_homing_height != 0`) → nên nút **NEXT** và **DONE** đều tự nâng 5mm trước, kẻo nozzle cào bàn.
+- **Ba chuyển động Z quanh một lần probe** — **không cái nào là `probe.offset.z`**:
+  1. *(nhấc rất nhỏ, trước khi probe)* firmware đưa nozzle về đúng `Z_CLEARANCE_BETWEEN_PROBES` = 5mm. Lần probe trước kết thúc ở `trigger + 5mm`; nếu bàn ở góc đó cao/thấp hơn 0 một chút thì bước này chỉ nhích vài phần mười mm — đây chính là cú "nhấc lên một đoạn rất nhỏ" thấy trước khi probe.
+  2. *(5mm)* `MULTIPLE_PROBING 2`: giữa lần chạm **nhanh** và lần chạm **chậm**, firmware nhấc lên `Z_CLEARANCE_MULTI_PROBE` = 5mm (`probe.cpp:737`).
+  3. *(5mm)* sau khi probe xong: nhấc `Z_CLEARANCE_BETWEEN_PROBES` = 5mm (`PROBE_PT_RAISE`, `probe.cpp:898`) — **giữ nguyên**.
+- `probe.offset.z` (`M851 Z0.70`) **không tạo ra chuyển động nào**: nó chỉ vào phép tính (`measured_z = run_z_probe() + offset.z`, `probe.cpp:891`) và vào giới hạn `z_probe_low_point = -offset.z + Z_PROBE_LOW_POINT` (`probe.cpp:721`).
+- `Z_HOMING_HEIGHT` (`Configuration.h:1754`) đang **tắt**, nhưng `G28` vẫn nâng Z: cuối quá trình home Z, nozzle được đưa lên `Z_AFTER_PROBING` = 10mm (quan sát `M114` sau `G28`: `Z:10.00`).
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - `DONE` = thoát và **đánh dấu Z chưa home** (vít đã bị vặn) → phải `G28` trước khi in.
 - Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
