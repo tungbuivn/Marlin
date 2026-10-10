@@ -1500,18 +1500,20 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
 |---|---|
 | 1 | `G28` (cả 3 trục) → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`) |
 | 2 | Tự động **đi nozzle tới góc có \|delta\| lớn nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó |
-| 3 | Hiện delta 4 góc + góc đang chỉnh, 2 nút: **`NEXT (home + probe)`** và **`DONE`** |
-| 4 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
+| 3 | Hiện delta 4 góc + 3 nút: **`PROBE`** / **`NEXT (home + probe)`** / **`DONE`** |
+| 4 | **PROBE** = probe lại **ngay tại góc đang đứng**, **KHÔNG home lại** → hiện **lượng Z vừa đổi** (`doi -0.19mm` / `khong doi`). Dùng để kiểm tra ngay "vặn ốc đã làm Z nhích chưa" mà không mất 1 phút home lại |
+| 5 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
 
 ```
-RB(280,285) SP 0.050        <- goc dang chinh + toa do; SP = max-min 4 delta
-RB -0.05   LB +0.12
-FL +0.31   FR -0.08
->NEXT (home + probe)        <- mac dinh chon NEXT: bam 1 lan la chay
+*RB -0.05   LB +0.12        <- '*' = goc nozzle dang dung (goc lech nhat)
+ FL +0.31   FR -0.08
+>PROBE doi -0.19mm          <- nut PROBE + ket qua lan probe vua roi
+ NEXT (home + probe)
  DONE
 ```
 
-- Quay encoder = đổi giữa **NEXT** / **DONE**; bấm = chạy mục đang chọn.
+- Quay encoder = đổi giữa **PROBE** / **NEXT** / **DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
+- **PROBE** không home lại, nên con số `doi x.xxmm` = **lượng mặt bàn tại góc đó vừa dịch** so với lần đo trước — đúng câu hỏi "vặn ốc đã làm Z đổi chưa". Giá trị delta của góc đó trên màn hình cũng được cập nhật ngay.
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - `DONE` = thoát và **đánh dấu Z chưa home** (vít đã bị vặn) → phải `G28` trước khi in.
 - Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
