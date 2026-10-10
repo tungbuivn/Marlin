@@ -1501,7 +1501,7 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
 | 1 | `G28` (cả 3 trục) → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`) |
 | 2 | Tự động **đi nozzle tới góc có \|delta\| lớn nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó |
 | 3 | Hiện delta 4 góc + 3 nút: **`PROBE`** / **`NEXT (home + probe)`** / **`DONE`** |
-| 4 | **PROBE** = probe lại **tâm bàn + góc đang đứng** (KHÔNG home lại) → hiện **độ lệch mới so với tâm** và **lượng thay đổi của độ lệch đó** (`doi -0.19mm` / `khong doi`). Đúng câu hỏi "vặn ốc đã làm Z nhích chưa" mà không mất 1 phút home lại |
+| 4 | **PROBE** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện độ lệch mới và lượng thay đổi của nó (`doi -0.19mm` / `khong doi`). Đúng câu hỏi "vặn ốc đã làm Z nhích chưa" mà không mất 1 phút home lại |
 | 5 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
 
 ```
@@ -1513,11 +1513,11 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
 ```
 
 - Quay encoder = đổi giữa **PROBE** / **NEXT** / **DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
-- **PROBE** không home lại, nên nó probe **tâm bàn trước** (để biết tâm vừa dịch bao nhiêu = mốc mới) rồi probe góc đang đứng. Vì vậy **cả giá trị hiển thị lẫn `doi x.xxmm` đều tính so với TÂM BÀN**, không phải so với chính giá trị cũ của điểm đó:
-  - `do lech moi = (goc − tam) hien tai` → hiện ở ô của góc đó
-  - `doi = do lech moi − do lech cu` → chính là lượng ốc vừa siết làm góc đó nhích **so với tâm**
-  - Sau khi probe tâm, **tất cả** các điểm còn lại được trừ đi lượng tâm vừa dịch (mốc mới) — với mount 3 điểm thì chính xác, vì vặn 1 vít chỉ làm vít đó và tâm dịch, 2 vít kia đứng yên
-- `PROBE lech x.xx` = chưa có số cũ để so, chỉ hiện độ lệch hiện tại.
+- **Mốc là KHUNG Z của lần home cuối** (`Z-home` = tâm bàn tại thời điểm đó). Mốc này **không đổi khi vặn ốc** — chỉ `G28` (nút NEXT) hay `G92` mới đổi. Vì vậy:
+  - giá trị probe trả về = **độ lệch của điểm đó so với mốc** (đúng khung Z hiện tại)
+  - `doi = giá trị mới − giá trị cũ`, cả hai so với **cùng một mốc** → chính là lượng ốc vừa siết làm điểm đó nhích so với mốc
+- 🔴 **PROBE KHÔNG probe lại tâm bàn** (theo yêu cầu). Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi bấm **NEXT** (home lại Z → `z_ok[]` xoá hết → 4 góc được đo lại trong cùng một mốc mới).
+- `PROBE lech x.xx` = chưa có số cũ **trong cùng mốc** để so, chỉ hiện độ lệch hiện tại.
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - `DONE` = thoát và **đánh dấu Z chưa home** (vít đã bị vặn) → phải `G28` trước khi in.
 - Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
