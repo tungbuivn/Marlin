@@ -113,10 +113,20 @@ static void tram_row(const uint8_t row, const char * const text) {
     lcd_put_u8str(0, y, text);
 }
 
-// Nang len do cao an toan, di toi (x, y), roi probe
+// Nang len do cao an toan neu dang thap hon - KHONG BAO GIO ha xuong
+static void tramming_clearance() {
+  if (current_position.z < (float)Z_CLEARANCE_BETWEEN_PROBES)
+    do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
+}
+
+// Di toi (x, y) roi probe.
+// - Truoc khi di XY: CHI nang len neu dang thap hon (khong ha xuong, khong cao hon)
+// - Sau khi probe: KHONG nang len (PROBE_PT_NONE). Truoc day dung PROBE_PT_RAISE nen
+//   sau moi lan probe nozzle tu nhac them Z_CLEARANCE_BETWEEN_PROBES = 5mm.
+//   Nay nozzle dung nguyen tai diem vua cham.
 static bool tramming_probe_xy(const float x, const float y, float &out_z) {
-  do_blocking_move_to_z(TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, Z_CLEARANCE_BETWEEN_PROBES));
-  out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
+  tramming_clearance();
+  out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_NONE, 0, true);
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
   return !isnan(out_z);
 }
@@ -174,6 +184,9 @@ static void tramming_probe_here() {
 static void tramming_restart() {
   LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
   probe_state = PR_NONE;
+  // PROBE khong nang len nua nen nozzle co the dang cham ban. Z_HOMING_HEIGHT dang TAT
+  // -> G28 KHONG tu nang truoc khi chay XY toi tam, nen phai nang o day keo cao ban.
+  tramming_clearance();
   set_axis_never_homed(Z_AXIS);          // de all_axes_homed() = false cho toi khi G28 Z xong
   queue.inject(F("G28 Z"));
   tram_state = TR_HOMING;
@@ -182,6 +195,7 @@ static void tramming_restart() {
 }
 
 static void tramming_exit() {
+  tramming_clearance();                  // roi khoi ban truoc khi thoat (nozzle co the dang cham)
   probe.stow();
   set_axis_never_homed(Z_AXIS);          // vit da bi van -> phai home lai Z truoc khi di chuyen/in
   ui.goto_previous_screen_no_defer();
