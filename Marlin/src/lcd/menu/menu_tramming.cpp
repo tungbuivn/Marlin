@@ -72,10 +72,11 @@
 #define BTN_COUNT 3
 
 // Ket qua lan PROBE gan nhat
-#define PR_NONE    0
-#define PR_CHANGED 1
-#define PR_SAME    2
-#define PR_FAILED  3
+#define PR_NONE     0
+#define PR_CHANGED  1
+#define PR_SAME     2
+#define PR_FAILED   3
+#define PR_MEASURED 4
 
 static float   z_delta[G35_PROBE_COUNT];   // (mm) lech so voi TAM BAN (= Z-home)
 static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
@@ -136,21 +137,42 @@ static void tramming_goto_worst() {
   do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
 }
 
-// PROBE: do lai NGAY tai goc dang dung, KHONG home lai -> thay duoc luong Z vua doi
+// PROBE: do lai TAM BAN + goc dang dung, KHONG home lai.
+// MOC LA TAM BAN: ca gia tri moi va luong thay doi deu tinh so voi TAM BAN,
+// khong phai so voi chinh gia tri cu cua diem do.
+//   do lech moi  = (goc - tam) hien tai
+//   thay doi     = do lech moi - do lech cu     <- "van oc da lam Z doi chua"
+// Vi khung Z khong doi (khong home lai), probe tam cho biet tam ban vua dich bao
+// nhieu; lay do lam moc moi cho TAT CA cac diem (voi mount 3 diem thi chinh xac:
+// van 1 vit chi lam vit do va tam dich, 2 vit kia dung yen).
 static void tramming_probe_here() {
   const uint8_t i = worst_index;
-  const float before = z_ok[i] ? z_delta[i] : NAN;
+  const float before = z_ok[i] ? z_delta[i] : NAN;   // do lech CU so voi tam
 
+  // 1) TAM BAN (vi tri Z-home): tam vua doi bao nhieu
+  float zc = NAN;
+  const bool okc = tramming_probe_xy((float)Z_SAFE_HOMING_X_POINT, (float)Z_SAFE_HOMING_Y_POINT, zc);
+
+  // 2) Goc dang dung (ket thuc o day -> nozzle lai dung ngay tai goc can van vit)
   float z = NAN;
   const bool ok = tramming_probe_xy(tramming_points[i].x, tramming_points[i].y, z);
-  z_ok[i] = ok;
 
-  if (!ok) { probe_state = PR_FAILED; return; }
+  if (!okc || !ok) { probe_state = PR_FAILED; return; }
 
-  z_delta[i] = z;
-  if (isnan(before)) { probe_state = PR_NONE; return; }   // chua co so cu de so
+  // Tam ban doi -> doi moc cho tat ca cac diem (khung Z van la khung cu)
+  if (ABS(zc) > 0.0005f)
+    LOOP_L_N(j, G35_PROBE_COUNT) if (z_ok[j]) z_delta[j] -= zc;
 
-  probe_change = z - before;
+  z_delta[i] = z - zc;                               // do lech MOI so voi TAM BAN hien tai
+  z_ok[i] = true;
+
+  if (isnan(before)) {                               // chua co so cu de so sanh
+    probe_change = z_delta[i];
+    probe_state = PR_MEASURED;
+    return;
+  }
+
+  probe_change = z_delta[i] - before;                // thay doi DO LECH so voi tam
   probe_state = ABS(probe_change) < 0.005f ? PR_SAME : PR_CHANGED;
 }
 
@@ -207,7 +229,7 @@ static void tramming_draw() {
     tram_row(r, line);
   }
 
-  // Dong 2: nut PROBE + ket qua lan probe vua roi
+  // Dong 2: nut PROBE + ket qua lan probe vua roi (moi so deu so voi TAM BAN)
   switch (probe_state) {
     case PR_CHANGED: {
       char num[9];
@@ -217,6 +239,11 @@ static void tramming_draw() {
     case PR_SAME:
       snprintf_P(line, sizeof(line), PSTR("%cPROBE khong doi"), btn_sel == BTN_PROBE ? '>' : ' ');
       break;
+    case PR_MEASURED: {
+      char num[9];
+      dtostrf(probe_change, 1, 2, num);
+      snprintf_P(line, sizeof(line), PSTR("%cPROBE lech %s"), btn_sel == BTN_PROBE ? '>' : ' ', num);
+    } break;
     case PR_FAILED:
       snprintf_P(line, sizeof(line), PSTR("%cPROBE loi"), btn_sel == BTN_PROBE ? '>' : ' ');
       break;
