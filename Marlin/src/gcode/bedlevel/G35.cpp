@@ -100,8 +100,26 @@ void GcodeSuite::G35() {
 
   bool err_break = false;
 
+  //
+  // MOC CUA MOI DELTA Z = TAM BAN, dung vi tri Z-home (Z_SAFE_HOMING_X/Y_POINT).
+  //
+  // Sau moi lan home Z, goc cua khung Z nam ngay tai tam ban. Vi vay "lech so voi tam"
+  // chinh la "lech so voi Z-home" - con so co y nghia de can ban. Van bat ky vit nao
+  // cung lam Z-home doi, nen phai probe lai tam (wizard co muc 'Re-home Z + probe').
+  //
+  const float center_x = Z_SAFE_HOMING_X_POINT,
+              center_y = Z_SAFE_HOMING_Y_POINT;
+
+  do_blocking_move_to_z(SUM_TERN(BLTOUCH, Z_CLEARANCE_BETWEEN_PROBES, bltouch.z_extra_clearance()));
+  const float z_center = probe.probe_at_point(center_x, center_y, PROBE_PT_RAISE, 0, true);
+
+  if (isnan(z_center)) {
+    SERIAL_ECHOPGM("G35 failed at bed center (", center_x, ", ", center_y, ")");
+    err_break = true;
+  }
+
   // Probe all positions
-  LOOP_L_N(i, G35_PROBE_COUNT) {
+  if (!err_break) LOOP_L_N(i, G35_PROBE_COUNT) {
 
     // In BLTOUCH HS mode, the probe travels in a deployed state.
     // Users of G35 might have a badly misaligned bed, so raise Z by the
@@ -133,9 +151,12 @@ void GcodeSuite::G35() {
   if (!err_break) {
     const float threads_factor[] = { 0.5, 0.7, 0.8 };
 
-    // Calculate adjusts
-    LOOP_S_L_N(i, 1, G35_PROBE_COUNT) {
-      const float diff = z_measured[0] - z_measured[i],
+    SERIAL_ECHOLNPGM("G35 moc = TAM BAN (Z-home) X", center_x, " Y", center_y, "  Z=", z_center);
+    SERIAL_ECHOLNPGM("Delta duoi day la lech so voi TAM (khong phai so voi mot goc).");
+
+    // Calculate adjusts: moi diem so voi TAM BAN, ke ca cac goc
+    LOOP_L_N(i, G35_PROBE_COUNT) {
+      const float diff = z_center - z_measured[i],
                   adjust = ABS(diff) < 0.001f ? 0 : diff / threads_factor[(screw_thread - 30) / 10];
 
       const int full_turns = trunc(adjust);

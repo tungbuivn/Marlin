@@ -817,6 +817,7 @@ git diff up-2.1.2 HEAD --stat
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
+| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | **G35/wizard: mọi delta Z tính so với TÂM BÀN** (`Z_SAFE_HOMING_X/Y_POINT` = đúng vị trí Z-home, được probe làm mốc) thay vì so với 1 góc; báo **cả 4 góc**, không bỏ sót góc nào. Wizard thêm mục **`Probe center (Z-home)`** và **`Re-home Z + probe`**: nhớ vị trí hiện tại → `G28 Z` → quay lại đúng vị trí đã nhớ → probe lại (vì vặn bất kỳ vít nào cũng làm Z-home đổi) |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
 | `src/inc/Conditionals_adv.h`, `Conditionals_post.h` | guard nhỏ: bỏ `BABYSTEP_ZPROBE_OFFSET` khi không có probe, bỏ `PREHEAT_BEFORE_LEVELING` khi không bật `PIDTEMPBED` |
 
