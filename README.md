@@ -322,7 +322,7 @@ Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable q
 |---|---|
 | Leveling | **UBL (Unified Bed Leveling)** |
 | Mesh | **7 × 7 = 49 điểm**, `MESH_INSET 15` → phủ **`(15,15)` … `(290,290)`** |
-| Fade height | 10 mm |
+| Fade height | **10 mm** — `M420 S1 Z10` + `M500` |
 | Trạng thái | **Đã có mesh ở slot 0** — `Mesh is valid`, `Storage slot: 0`, `Bed Leveling ON`. `M500` báo `Mesh saved in slot 0` |
 | Căn gantry | `Z_STEPPER_AUTO_ALIGN` (**G34**) — 3 điểm `{280,285} {25,285} {152.5,25}` = **sau-phải, sau-trái, trước-GIỮA** (layout 2, đúng vị trí 3 vít me) |
 | Tram bàn | `ASSISTED_TRAMMING` (**G35**) + Tramming Wizard — 4 điểm góc |
@@ -510,18 +510,22 @@ Khác nhau giữa hai cách:
 > UBL không nằm trong điều kiện đó → **đừng tin `M420 S1` là an toàn**; muốn chắc thì `M420 V`
 > phải in ra `Mesh is valid`.
 
-### `M420 S1` trong start G-code — thừa, nhưng nên giữ
+### `M420 S1 Z10` trong start G-code — thừa, nhưng nên giữ
 
-Start G-code hiện tại: `G28` → `M190 S60` → `M109 S230` → `M420 S1`.
+Start G-code hiện tại: `G28` → `M190 S60` → `M109 S230` → `M420 S1 Z10`.
 
-Cả `G28` đều **tự khôi phục** trạng thái leveling, nên tới dòng `M420 S1` thì mesh đã bật sẵn:
+**Fade = 10 mm — giá trị chuẩn; phần bù mesh giảm dần về 0 ở 10 mm đầu.** Đã chạy
+`M420 S1 Z10` + `M500` trên máy và **verify qua reset**: `Fade Height 10.00`, `Mesh is valid`,
+`Storage slot: 0`, `Bed Leveling ON` (fade nằm trong EEPROM, xem §11.7 cạm bẫy 1).
+
+Cả `G28` đều **tự khôi phục** trạng thái leveling, nên tới dòng `M420 S1 Z10` thì mesh đã bật sẵn:
 
 | Lệnh | Cơ chế tự bật lại |
 |---|---|
 | `G28` | `RESTORE_LEVELING_AFTER_G28` (`Configuration.h:1977`) → `CAN_SET_LEVELING_AFTER_G28 = 1` (`bedlevel.h:26-28`) → `G28.cpp:546` |
 | `G34` *(không còn dùng trong start G-code)* | `RESTORE_LEVELING_AFTER_G34` (`Configuration_adv.h:1027`) → `G34_M422.cpp:529` |
 
-`M420 S1` vì thế gần như no-op — **nhưng cứ giữ**, nó là lưới an toàn nếu sau này bạn lỡ `M420 S0`
+`M420 S1 Z10` vì thế gần như no-op — **nhưng cứ giữ**, nó là lưới an toàn nếu sau này bạn lỡ `M420 S0`
 rồi `M500` (trạng thái leveling **có** được lưu vào EEPROM, xem §11.7 cạm bẫy 1).
 
 > ℹ️ `G29` (dựng mesh) cũng tự tắt leveling trong lúc đo rồi khôi phục — `ubl_G29.cpp:1244-1245`
@@ -1121,7 +1125,7 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 
 | Tab | Ô | Key | Script điền gì |
 |---|---|---|---|
-| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `M190 S60` → `M109 S230` → `M420 S1`. **`G34` và `G28 Z` đã bỏ** — xem §5 |
+| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `M190 S60` → `M109 S230` → `M420 S1 Z10` (**fade 10 mm**). **`G34` và `G28 Z` đã bỏ** — xem §5 |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
 | **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | `G1 Z2.0` → **đi ngang** tới `X2 Y10` → **rồi mới** hạ `Z0.3` → purge `Y10 → Y100` → `G92 E0` → nhấc `Z2.0` → về tâm `X152.5 Y152.5` |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
@@ -1421,8 +1425,7 @@ cao** (0.1 và 0.35): một lớp mỏng miết bám bàn + một lớp đầy �
 | `pass2_feedrate` | **60 mm/s** | **Tốc độ in pass 2 — DỰ PHÒNG (mm/s)** — chỉ dùng khi **tự lấy thất bại** (layer 1 không có `F`) hoặc **tắt auto** (`pass2_feedrate_auto = false`); `0` = không đổi. Chỉ áp cho bước **có X/Y + E** (travel, Z-hop, retract giữ nguyên) |
 | `pass2_z_extra` | **0.05 mm** | **Nâng thêm khi nhảy pass 1 → pass 2 để nozzle không cà vào lớp nhựa vừa in của pass 1** (0 = không thêm). Bước nhảy thành `first_pass_z + <Z gốc layer 0> + 0.05` = `G1 Z0.35`; **`G92` giữ nguyên Z gốc (0.2)** nên hệ quy chiếu lệch 0.15 và **các lớp phía trên vẫn cách nhau đúng `layer_height`** (chỉ bước pass 1 → pass 2 rộng ra `layer_height + pass2_z_extra` = 0.25, cố ý) |
 | `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
-| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` + `pass2_z_extra` |
-| `z_mode` / `z_raise` / `layer0_z` | — | **Không dùng nữa.** Giữ lại trong khai báo để config cũ trong Cura không báo lỗi; script bỏ qua |
+| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` + `pass2_z_extra` (vd `0.1 + 0.2 + 0.05 = 0.35`) |
 
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
 Script nằm ở `%APPDATA%\cura\<version>\scripts\FirstLayerTwice.py` và **chỉ được nạp lúc Cura
@@ -1589,7 +1592,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 15b | **Build TĂNG DẦN sau khi sửa `Configuration*.h` cho ra firmware STALE** | `pio run` báo `SUCCESS`, `M115` ra timestamp mới, và một phần cấu hình mới **có** vào (nếu nó nằm ở translation unit được biên dịch lại) — nhưng phần khác thì **không**, nên firmware là "nửa cũ nửa mới". Đã gặp thật khi hoàn tác microstep: `DEFAULT_AXIS_STEPS_PER_UNIT` về 80 nhưng `X_MICROSTEPS` vẫn 8 → trục chạy **gấp đôi** mà trông như đã đúng | Sau khi sửa `Configuration.h` / `Configuration_adv.h`: **`Remove-Item -Recurse -Force .pio\build\mks_monster8`** rồi `pio run`. Đừng tin `SUCCESS` + timestamp. Kiểm chứng bằng `M122` (xem `blank time` = 24 hay 36) và bằng cách tìm mảng hằng số trong `.bin` |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
 | 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2`. Lấy nhầm `layer_z = 0.4` thì độ dịch thành `0.4 − first_pass_z = 0.3`, đường in thật của pass 1 rơi xuống **`Z-0.1`** (Marlin kẹp về 0 → **đầu in cày trên mặt bàn**), và bước nhấc thành `G1 Z0.55` | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` (có cả phép thử đối chứng mô phỏng lại cách sai này) |
-| 20 | **`FirstLayerTwice` quét E thiếu phần đầu của chính chunk layer 0** | Start G-code và đường purge nằm **cùng chunk** với `;LAYER:0`, nên quét `data[:index]` sẽ bỏ sót retract `E-0.75` cuối cùng. `G92 E0` khi đó sai → pass 2 **mất một lần unretract** | Quét E qua **cả `prefix`** của chunk layer 0: `_scan_mode_and_e(data[:index] + [prefix])`. Test đã bắt được lỗi này |
+| 20 | **`FirstLayerTwice` quét E thiếu phần đầu của chính chunk layer 0** | Start G-code và đường purge nằm **cùng chunk** với `;LAYER:0`, nên quét `data[:index]` sẽ bỏ sót retract `E-0.75` cuối cùng. `G92 E0` khi đó sai → pass 2 **mất một lần unretract** | Quét E qua **cả `prefix`** của chunk layer 0: `_scan_last_e(data[:index] + [prefix])` (chỉ lấy **giá trị E CUỐI CÙNG**, không cần theo dõi `M82`/`M83`). Test đã bắt được lỗi này |
 | 18 | **Thấy `G0 F30000` tưởng vượt trần máy** | G-code `F` là **mm/phút** còn `M203`/Cura là **mm/giây** — `F30000` = 500 mm/s, đúng bằng trần chứ không vượt. Và `speed_travel` của Cura **suy ra từ `machine_max_feedrate_x/y`** nên đổi trần là đổi luôn con số này | Đổi đơn vị trước khi kết luận (`mm/s × 60`). Marlin **kẹp** feedrate chứ không báo lỗi (`planner.cpp:2419`) |
 | 19 | **Đặt setting sai container → Cura XOÁ ÂM THẦM khi ghi lại** | 11 key bị xoá khỏi `definition_changes` (container cấp **MÁY**): `acceleration_print`, `acceleration_travel`, `jerk_print`, `jerk_travel`, `machine_steps_per_mm_x/y/z/e`, `machine_endstop_positive_direction_x/y/z`. Chúng **chỉ có tác dụng cho lần slice ĐẦU** sau khi cài, rồi biến mất. Hệ quả thật: `acceleration_print` rơi về mặc định **5000** của `voron2_base` → G-code chứa `M204 S5000`; `machine_endstop_positive_direction_*` mất nên Cura tưởng máy home về MAX | Đặt đúng container: `settable_per_mesh: true` (print setting) → container `user` của máy in; `settable_per_extruder: true` → container **extruder**. Cura cũng tự làm đúng như vậy (`cura/Settings/MachineManager.py:976-992`). Xem §11.6 |
 | 21 | **Cộng số thực ra `0.35000000000000003` trong G-code** | `first_pass_z + layer_z + pass2_z_extra` = `0.1 + 0.2 + 0.05` → Python ghi `G1 Z0.35000000000000003 F600`. Marlin vẫn hiểu đúng nên **máy không sai**, nhưng test hồi quy so khớp chuỗi `"G1 Z0.35 F600"` **fail**, và G-code đọc rất khó chịu | Dùng `_fmt_num()` (`"{0:.5f}".format(v).rstrip("0").rstrip(".")`) cho mọi giá trị Z ghi ra, đừng dùng `str()`/`format()` trần |
