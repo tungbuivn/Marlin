@@ -1375,6 +1375,23 @@
   #define ENCODER_100X_STEPS_PER_SEC  80  // (steps/s) Encoder rate for 100x speed
 #endif
 
+/**
+ * ENCODER_QUAD_ISR -- doc encoder bang NGAT (pin-change) thay vi polling.
+ *
+ * Van de cua cach cu (polling trong MarlinUI::update_buttons): khi UI ban (doc the SD, ghi
+ * EEPROM, ve man hinh, delay luc probe...) thi khong doc duoc chan -> MAT nac quay, phai bu
+ * bang ENCODER_RATE_MULTIPLIER (doan so buoc mat theo toc do). Cach moi: 2 chan EN1/EN2 ngat
+ * doi trang thai, ISR chi day mau 2 bit vao mot ring CO DINH 32 phan tu (khong heap, khong STL),
+ * roi luong chinh giai ma bang bang chuyen tiep y het cua Marlin -> cung don vi, cung chieu quay.
+ *
+ * Chi ap dung khi co encoder tren man hinh (HAS_ENCODER_WHEEL); neu dung man hinh rieng qua
+ * PANEL_SERIAL_UI thi encoder nam o panel -> khoi nay tu dong khong duoc bien dich.
+ *
+ * Muon quay lai cach cu: comment dong duoi day (khong can sua gi khac).
+ * Code: src/lcd/encoder_quad.cpp/.h (them vao build bang ini/features.ini).
+ */
+#define ENCODER_QUAD_ISR
+
 // Play a beep when the feedrate is changed from the Status Screen
 //#define BEEP_ON_FEEDRATE_CHANGE
 #if ENABLED(BEEP_ON_FEEDRATE_CHANGE)
@@ -1477,6 +1494,8 @@
   /**
    * LED Control Menu
    * Add LED Control to the LCD menu
+   * !! CUNG phai comment khi bat PANEL_SERIAL_UI (xem
+   *    docs/issues/0001-panel-serial-ui-tat-custom-menu.md)
    */
   #define LED_CONTROL_MENU
   #if ENABLED(LED_CONTROL_MENU)
@@ -3761,6 +3780,8 @@
 // @section custom main menu
 
 // Custom Menu: Main Menu
+// !! Neu bat PANEL_SERIAL_UI (man hinh rieng qua ExtUI) thi PHAI comment dong duoi day,
+//    va ghi nho viec "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
 #define CUSTOM_MENU_MAIN
 #if ENABLED(CUSTOM_MENU_MAIN)
   #define CUSTOM_MENU_MAIN_TITLE "Custom Commands"

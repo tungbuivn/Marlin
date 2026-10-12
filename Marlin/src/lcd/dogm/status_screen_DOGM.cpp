@@ -514,7 +514,6 @@ FORCE_INLINE void _draw_axis_value(const AxisEnum axis, const char *value, const
         case G34_PHASE_ADJUST: phase = PSTR("ADJUST"); break;
         case G34_PHASE_DONE:   phase = PSTR("DONE");   break;
         case G34_PHASE_ABORT:  phase = PSTR("ABORT");  break;
-        case G34_PHASE_CANCEL: phase = PSTR("CANCEL"); break;
         case G34_PHASE_LIMIT:  phase = PSTR("LIMIT");  break;
       }
 

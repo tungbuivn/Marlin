@@ -55,6 +55,10 @@ PGM_P const tramming_point_name[] PROGMEM = {
   #endif
 };
 
+// Diem "lech nhat": MAX (goc cao nhat) hay MIN (goc thap nhat).
+// Mac dinh MAX. Gia tri duoc luu/doc trong EEPROM (settings.cpp) -> nho qua cac lan sau.
+bool tramming_worst_max = true;
+
 #ifdef ASSISTED_TRAMMING_WAIT_POSITION
 
   // Move to the defined wait position

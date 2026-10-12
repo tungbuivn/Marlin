@@ -30,6 +30,44 @@
 
 constexpr xy_pos_t tramming_points[] = TRAMMING_POINT_XY;
 
+//
+// Diem "lech nhat" (worst) ma Tramming Wizard dua dau in toi de van vit:
+//   true  = MAX - goc CAO NHAT  (chinh goc cao xuong)
+//   false = MIN - goc THAP NHAT (nang goc thap len)
+//
+// Doi khi vit cua goc MAX (hoac MIN) da het hanh trinh, van mai khong duoc nua -> doi sang
+// goc nguoc lai: "thay vi dieu chinh max thi dieu chinh min".
+//
+// Bien nay duoc luu trong EEPROM (settings.cpp) nen nho duoc qua cac lan khoi dong.
+//
+extern bool tramming_worst_max;
+
+//
+// CHIEU VAN VIT - do tren may nay (ban Voron, vit M4 ren phai, dau vit o TREN):
+//     van CW  (chieu kim dong ho)   -> goc do HA XUONG  (delta Z giam)
+//     van CCW (nguoc kim dong ho)   -> goc do NANG LEN  (delta Z tang)
+// => goc co delta > 0 (cao hon mat phang trung binh) phai van CW de ha xuong.
+//
+// Neu thay vit ren nguoc chieu thi khai bao ma S le (31 / 41 / 51) -> tu dong dao chieu,
+// khong phai sua code.
+//
+inline float tramming_pitch(const uint8_t screw_thread) {
+  constexpr float threads_factor[] = { 0.5f, 0.7f, 0.8f };   // M3, M4, M5 (mm/vong)
+  return threads_factor[(screw_thread - 30) / 10];
+}
+
+// true = van theo chieu KIM DONG HO (CW), false = nguoc kim dong ho (CCW)
+// delta > 0 = goc CAO hon mat phang TB -> phai HA xuong
+inline bool tramming_turn_cw(const float delta, const uint8_t screw_thread) {
+  const bool lower_cw = !(screw_thread & 1);   // ren phai (CW) -> van CW de HA goc xuong
+  return (delta > 0) == lower_cw;
+}
+
+// So vong can van cho do lech delta (mm) - luon duong; chieu lay tu tramming_turn_cw()
+inline float tramming_turns(const float delta, const uint8_t screw_thread) {
+  return ABS(delta) / tramming_pitch(screw_thread);
+}
+
 #define G35_PROBE_COUNT COUNT(tramming_points)
 static_assert(WITHIN(G35_PROBE_COUNT, 3, 6), "TRAMMING_POINT_XY requires between 3 and 6 XY positions.");
 

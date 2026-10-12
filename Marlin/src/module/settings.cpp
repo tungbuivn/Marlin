@@ -146,6 +146,10 @@
   #include "../feature/caselight.h"
 #endif
 
+#if ENABLED(ASSISTED_TRAMMING)
+  #include "../feature/tramming.h"    // tramming_worst_max (xem khoi "Mesh Bed Leveling" ben duoi)
+#endif
+
 #if ENABLED(PASSWORD_FEATURE)
   #include "../feature/password/password.h"
 #endif
@@ -871,7 +875,23 @@ void MarlinSettings::postprocess() {
       const uint8_t mesh_num_x = TERN(MESH_BED_LEVELING, GRID_MAX_POINTS_X, 3),
                     mesh_num_y = TERN(MESH_BED_LEVELING, GRID_MAX_POINTS_Y, 3);
 
-      EEPROM_WRITE(TERN(MESH_BED_LEVELING, bedlevel.z_offset, dummyf));
+      // O nho dau tien cua khoi MBL (z_offset) - khi MESH_BED_LEVELING TAT thi o nay khong
+      // dung cho gi. TAN DUNG no de luu "goc lech nhat = MAX/MIN" cua Tramming Wizard
+      // (tramming_worst_max, xem src/feature/tramming.h):
+      //   - kich thuoc SettingsData KHONG doi -> EEPROM_VERSION va CRC khong doi
+      //     => du lieu EEPROM dang co (M851 Z0.70, mesh UBL, M203/M201/M906...) KHONG bi xoa
+      //   - 0.0f = MAX (goc cao nhat) | 1.0f = MIN (goc thap nhat)
+      //   - EEPROM cu (o nay = 0.0f) => MAX = dung bang gia tri mac dinh cua firmware
+      #if ENABLED(MESH_BED_LEVELING)
+        EEPROM_WRITE(bedlevel.z_offset);
+      #else
+        #if ENABLED(ASSISTED_TRAMMING)
+          dummyf = tramming_worst_max ? 0.0f : 1.0f;
+        #endif
+        EEPROM_WRITE(dummyf);
+        dummyf = 0;   // cac o dummy con lai (mesh MBL 3x3) phai giu nguyen 0
+      #endif
+
       EEPROM_WRITE(mesh_num_x);
       EEPROM_WRITE(mesh_num_y);
 
@@ -1811,6 +1831,12 @@ void MarlinSettings::postprocess() {
         EEPROM_READ(dummyf);
         EEPROM_READ_ALWAYS(mesh_num_x);
         EEPROM_READ_ALWAYS(mesh_num_y);
+
+        // Khi MESH_BED_LEVELING TAT, o z_offset cua MBL duoc dung de luu "worst = MAX/MIN"
+        // cua Tramming Wizard (xem phan save() phia tren): 0.0f = MAX, 1.0f = MIN.
+        #if DISABLED(MESH_BED_LEVELING) && ENABLED(ASSISTED_TRAMMING)
+          if (!validating) tramming_worst_max = (dummyf < 0.5f);
+        #endif
 
         #if ENABLED(MESH_BED_LEVELING)
           if (!validating) bedlevel.z_offset = dummyf;
@@ -3037,6 +3063,13 @@ void MarlinSettings::reset() {
   TERN_(HAS_LEVELING, reset_bed_level());
 
   //
+  // Assisted Tramming: goc "lech nhat" = MAX (goc cao nhat) - mac dinh
+  //
+  #if ENABLED(ASSISTED_TRAMMING)
+    tramming_worst_max = true;
+  #endif
+
+  //
   // X Axis Twist Compensation
   //
   TERN_(X_AXIS_TWIST_COMPENSATION, xatc.reset());
@@ -3656,6 +3689,14 @@ void MarlinSettings::reset() {
     // Probe Offset
     //
     TERN_(HAS_BED_PROBE, gcode.M851_report(forReplay));
+
+    //
+    // Assisted Tramming: diem "lech nhat" = MAX / MIN (luu trong o dummy cua khoi MBL)
+    //
+    #if ENABLED(ASSISTED_TRAMMING)
+      CONFIG_ECHO_START();
+      SERIAL_ECHOLNPGM("; Tramming worst point: ", tramming_worst_max ? "MAX (cao nhat)" : "MIN (thap nhat)");
+    #endif
 
     //
     // Bed Skew Correction

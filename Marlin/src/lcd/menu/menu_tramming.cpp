@@ -25,16 +25,28 @@
 //
 // LUONG LAM VIEC
 //   1. Vao wizard: G28 (tat ca truc) -> TU DONG probe 4 goc
-//      MOC CUA MOI DELTA Z LA TAM BAN. Sau moi lan home Z, goc cua khung Z nam ngay
-//      tai tam ban (vi tri Z-home), nen gia tri probe tai moi goc CHINH LA "delta so voi
-//      Z-home". Vi vay khong can probe rieng tam ban.
-//   2. Tu dong di nozzle toi GOC CO |DELTA| LON NHAT de nguoi dung van vit goc do.
-//   3. Man hinh hien delta 4 goc + 3 nut:
-//        PROBE : probe LAI ngay tai goc dang dung, KHONG home lai -> hien luong thay doi
-//                (de biet vua van oc co lam Z doi khong)
-//        NEXT  : home lai Z -> probe lai 4 goc -> di toi goc lech nhat (lap lai)
+//      MOC CUA MOI GIA TRI PROBE LA KHUNG Z SAU KHI HOME ("Z-home") - khong can probe
+//      rieng tam ban.
+//      NHUNG CON SO HIEN TREN MAN HINH / DUNG DE VAN VIT thi tinh theo MAT PHANG TRUNG BINH
+//      cua cac goc da do (xem tram_fmt_delta + G35.cpp): do lech vai phan tram mm moi noi len
+//      duoc can nang/ha bao nhieu, con "chieu cao so voi Z-home" thi ca 4 goc deu giong nhau.
+//   2. Tu dong di nozzle toi GOC "LECH NHAT" de nguoi dung van vit goc do.
+//      Goc nao la "lech nhat" do bien tramming_worst_max quyet dinh:
+//        MAX = goc CAO NHAT  |  MIN = goc THAP NHAT
+//      (xep hang theo tri tuyet doi hay theo gia tri deu cho cung ket qua, vi moi goc bi
+//       tru di cung mot so trung binh)
+//      Vi mot goc co the het hanh trinh vit (van mai khong duoc), muc WORST cho doi
+//      ngay sang goc nguoc lai: thay vi dieu chinh max thi dieu chinh min.
+//   3. Man hinh hien do lech 4 goc + 6 nut:
+//        PROBE : probe LAI ngay tai goc dang dung, KHONG home lai -> hien TARGET con lai
+//                (z cuoi, 3 so le) + huong van CW/CCW cho goc do
+//        PREV  : lui 1 goc (vong tron) + probe luon goc do
+//        NEXT  : toi goc ke tiep (vong tron) + probe luon goc do
+//                -> van xong goc nay thi NEXT sang goc khac van tiep, khong phai home lai
+//        MAX<->MIN : doi goc dang chinh (cao nhat <-> thap nhat), luu EEPROM, di ngay toi goc moi
+//        HOME+PROBE: home lai Z + probe lai CA 4 GOC (khung Z moi) + toi goc lech nhat
 //        DONE  : thoat
-//      Vi van vit lam Z-home doi, nen NEXT phai home lai Z truoc khi do lai.
+//      Vi van vit lam Z-home doi, nen sau khi van xong nen bam HOME+PROBE de do lai ca 4 goc.
 //
 
 #include "../../inc/MarlinConfigPre.h"
@@ -47,6 +59,7 @@
 
 #include "../../module/motion.h"
 #include "../../module/probe.h"
+#include "../../module/settings.h"
 #include "../../gcode/queue.h"
 
 #if ENABLED(BLTOUCH)
@@ -65,20 +78,22 @@
 #define TR_HOMING 1   // dang cho G28 Z xong
 #define TR_PROBE  2   // dang probe 4 goc
 #define TR_GOTO   3   // dang di toi goc lech nhat
+#define TR_POINT  4   // dang di toi goc ke tiep / goc truoc (nut PREV/NEXT)
 
-#define BTN_PROBE 0
-#define BTN_NEXT  1
-#define BTN_DONE  2
-#define BTN_COUNT 3
+#define BTN_PROBE 0   // probe lai goc dang dung
+#define BTN_PREV  1   // lui 1 goc (vong tron) + probe
+#define BTN_NEXT  2   // toi goc ke tiep (vong tron) + probe
+#define BTN_WORST 3   // doi goc dang chinh: MAX (cao nhat) <-> MIN (thap nhat)
+#define BTN_HOME  4   // home lai Z + probe lai CA 4 GOC (khung Z moi) + toi goc lech nhat
+#define BTN_DONE  5   // thoat
+#define BTN_COUNT 6
 
 // Ket qua lan PROBE gan nhat
-#define PR_NONE     0
-#define PR_CHANGED  1
-#define PR_SAME     2
-#define PR_FAILED   3
-#define PR_MEASURED 4
+#define PR_NONE   0   // chua probe lai o goc nay -> hien huong van (CW/CCW + so vong)
+#define PR_RESULT 1   // da probe lai -> hien TARGET con lai (z cuoi) + huong van
+#define PR_FAILED 2
 
-static float   z_delta[G35_PROBE_COUNT];   // (mm) lech so voi TAM BAN (= Z-home)
+static float   z_delta[G35_PROBE_COUNT];   // (mm) gia tri probe GAN NHAT (moc vat ly = Z-home)
 static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
 static uint8_t worst_index,                // goc lech nhieu nhat (nozzle dang o day)
                step_index;                 // dang probe toi goc thu may
@@ -86,7 +101,6 @@ static uint8_t tram_state;                 // TR_*
 static bool    tram_busy;                  // chan tai nhap: blocking move goi idle() -> screen chay lai
 static uint8_t btn_sel;                    // BTN_*
 static uint8_t probe_state;                // PR_*
-static float   probe_change;               // (mm) luong doi Z cua lan PROBE vua roi
 
 // ---------------------------------------------------------------------------
 // Tien ich
@@ -99,12 +113,23 @@ static void tram_tag(const uint8_t i, char * const out) {
   out[2] = '\0';
 }
 
-// "+0.12" / "-0.05" / "  ---"
-static void tram_fmt_delta(const uint8_t i, char * const out) {
+// Trung binh cac goc DA probe duoc = "mat phang quy chieu" (xem G35.cpp).
+// Day moi la moc de biet can nang len / ha xuong bao nhieu, KHONG phai Z-home.
+static float tramming_mean() {
+  float sum = 0;
+  uint8_t n = 0;
+  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) { sum += z_delta[i]; ++n; }
+  return n ? sum / n : 0;
+}
+
+// "+0.023" / "-0.008" / "  ---" : do lech so voi MAT PHANG TRUNG BINH (khong phai so voi Z-home).
+// Duong = goc CAO hon mat phang TB -> phai HA xuong; am = goc THAP hon -> phai NANG len.
+// 3 so le (0.001mm) khi |lech| < 1mm vi sai so that su chi vai phan tram mm; >= 1mm thi 2 so le
+// la du va con giu duoc dong hien thi rong 21 ky tu (buffer 12 byte luon du).
+static void tram_fmt_delta(const uint8_t i, const float mean, char * const out) {
   if (!z_ok[i]) { strcpy(out, "  ---"); return; }
-  char num[9];
-  dtostrf(ABS(z_delta[i]), 1, 2, num);
-  snprintf_P(out, 9, PSTR("%c%s"), z_delta[i] < 0 ? '-' : '+', num);
+  const float d = constrain(z_delta[i] - mean, -9999.0f, 9999.0f);  // chot an toan cho buffer
+  dtostrf(d, 1, ABS(d) >= 1 ? 2 : 3, out);
 }
 
 static void tram_row(const uint8_t row, const char * const text) {
@@ -121,20 +146,31 @@ static bool tramming_probe_xy(const float x, const float y, float &out_z) {
   return !isnan(out_z);
 }
 
-// Tim goc co |delta| lon nhat roi di nozzle toi do (de nguoi dung van vit goc do)
+// Tim goc "lech nhat" theo che do dang chon:
+//   tramming_worst_max = true  -> goc CAO NHAT (z_delta lon nhat)
+//   tramming_worst_max = false -> goc THAP NHAT (z_delta nho nhat)
+// roi di nozzle toi do (de nguoi dung van vit goc do).
 static void tramming_goto_worst() {
-  float worst = 0;
+  float best = 0;
   bool found = false;
   LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
-    const float a = ABS(z_delta[i]);
-    if (!found || a > worst) { worst = a; worst_index = i; found = true; }
+    const float d = z_delta[i];
+    if (!found || (tramming_worst_max ? d > best : d < best)) { best = d; worst_index = i; found = true; }
   }
   if (!found) { DEBUG_ECHOLNPGM("tramming: khong probe duoc diem nao"); return; }
 
-  DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " delta=", z_delta[worst_index]);
+  DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " (", tramming_worst_max ? "MAX" : "MIN", ") delta=", z_delta[worst_index]);
 
   do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
   do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
+}
+
+// Doi goc "lech nhat" giua MAX (goc cao nhat) va MIN (goc thap nhat) + LUU NGAY vao EEPROM
+// de nho cho cac lan sau (dung khi vit cua goc dang chinh da het hanh trinh, khong van
+// tiep duoc nua thi chuyen sang chinh goc nguoc lai).
+void tramming_worst_toggle() {
+  tramming_worst_max = !tramming_worst_max;
+  settings.save();
 }
 
 // PROBE: CHI probe goc dang dung. KHONG probe tam ban, KHONG home lai.
@@ -149,28 +185,36 @@ static void tramming_goto_worst() {
 // (Sau moi lan NEXT, z_ok[] duoc xoa het nen khong bao gio so sanh gia tri cua 2 moc khac nhau.)
 static void tramming_probe_here() {
   const uint8_t i = worst_index;
-  const bool had = z_ok[i];                          // co so cu trong CUNG mot moc?
-  const float before = z_delta[i];
 
   float z = NAN;
   const bool ok = tramming_probe_xy(tramming_points[i].x, tramming_points[i].y, z);
 
   if (!ok) { probe_state = PR_FAILED; return; }
 
-  z_delta[i] = z;                                    // do lech MOI so voi moc (khung Z hien tai)
+  // Chi lay z CUOI. Khung Z khong doi giua cac lan probe (khong home lai) nen gia tri nay
+  // dung de so ngay: van dung chieu -> target (delta so voi mat phang TB) GIAM, van sai -> TANG.
+  // Cac goc CHUA do lai trong vong nay van dung so CU (khong xoa) cho toi khi bam HOME+PROBE.
+  z_delta[i] = z;
   z_ok[i] = true;
-
-  if (!had) {                                        // chua co so cu trong moc nay
-    probe_change = z;
-    probe_state = PR_MEASURED;
-    return;
-  }
-
-  probe_change = z - before;                         // thay doi do lech SO VOI MOC
-  probe_state = ABS(probe_change) < 0.005f ? PR_SAME : PR_CHANGED;
+  probe_state = PR_RESULT;
 }
 
-// NEXT: home lai Z (Z-home vua doi vi vua van vit) -> probe lai 4 goc -> toi goc lech nhat
+// Di nozzle toi goc KE TIEP (dir = +1) hoac goc TRUOC (dir = -1), di vong tron qua 4 goc,
+// roi PROBE LUON goc do. Phai probe lai vi sau khi vua van mot goc thi cac goc kia da lech di
+// (so cu khong con dung) - co so MOI trong cung khung Z thi moi biet can van bao nhieu.
+static void tramming_goto_point(const int8_t dir) {
+  worst_index = uint8_t((int8_t(worst_index) + int8_t(G35_PROBE_COUNT) + dir) % int8_t(G35_PROBE_COUNT));
+
+  DEBUG_ECHOLNPGM("tramming: di toi goc ", worst_index, (dir > 0 ? " (NEXT)" : " (PREV)"));
+
+  do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
+  do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
+
+  tramming_probe_here();          // probe luon -> man hinh co target MOI cua goc nay
+}
+
+// HOME+PROBE: home lai Z (Z-home vua doi vi vua van vit) -> probe lai CA 4 GOC (khung Z moi)
+// -> di toi goc "lech nhat". Day la nut reset moc cho ca ban.
 static void tramming_restart() {
   LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
   probe_state = PR_NONE;
@@ -200,6 +244,7 @@ static void tramming_draw() {
     switch (tram_state) {
       case TR_HOMING: MenuEditItemBase::draw_edit_screen(F("Re-homing Z"), dots); break;
       case TR_GOTO:   MenuEditItemBase::draw_edit_screen(F("Go to worst"), dots); break;
+      case TR_POINT:  MenuEditItemBase::draw_edit_screen(F("Go to point"), dots); break;
       default: {
         char v[8];
         snprintf_P(v, sizeof(v), PSTR("%u/%u"), uint16_t(step_index + 1), uint16_t(G35_PROBE_COUNT));
@@ -209,48 +254,81 @@ static void tramming_draw() {
     return;
   }
 
-  char line[28], tag[3], d0[8], d1[8];
+  char line[40], d0[12], d1[12];
 
-  // Dong 0-1: delta 2 goc mot dong; '*' = goc nozzle dang dung (goc lech nhat)
+  // Dong 0-1: do lech 2 goc mot dong, so voi MAT PHANG TRUNG BINH cua 4 goc (xem tram_fmt_delta)
+  const float mean = tramming_mean();
   LOOP_L_N(r, 2) {
     const uint8_t i0 = r * 2, i1 = i0 + 1;
     char t0[3], t1[3];
     tram_tag(i0, t0); tram_tag(i1, t1);
-    tram_fmt_delta(i0, d0); tram_fmt_delta(i1, d1);
-    snprintf_P(line, sizeof(line), PSTR("%c%s %s  %c%s %s"),
+    tram_fmt_delta(i0, mean, d0);
+    tram_fmt_delta(i1, mean, d1);
+    snprintf_P(line, sizeof(line), PSTR("%c%s %s %c%s %s"),
       worst_index == i0 ? '*' : ' ', t0, d0,
       worst_index == i1 ? '*' : ' ', t1, d1);
     tram_row(r, line);
   }
 
-  // Dong 2: nut PROBE + ket qua lan probe vua roi (moi so deu so voi TAM BAN)
+  // Dong 2: nut PROBE + ket qua lan probe vua roi.
+  //   PR_RESULT: "CW con +0.013" = van tiep CW, con lech +0.013mm (target) - chi lay z CUOI,
+  //              khong cong don. Van dung chieu thi so nay GIAM, van sai thi TANG.
+  //   PR_NONE  : chua probe lai -> "CW 0.43 vong" (huong + so vong can van)
+  //   "DAT" khi |delta| < 0.002mm (duoi nguong nhieu). Tat ca in 3 so le (0.001mm).
   switch (probe_state) {
-    case PR_CHANGED: {
-      char num[9];
-      dtostrf(probe_change, 1, 2, num);
-      snprintf_P(line, sizeof(line), PSTR("%cPROBE doi %smm"), btn_sel == BTN_PROBE ? '>' : ' ', num);
-    } break;
-    case PR_SAME:
-      snprintf_P(line, sizeof(line), PSTR("%cPROBE khong doi"), btn_sel == BTN_PROBE ? '>' : ' ');
-      break;
-    case PR_MEASURED: {
-      char num[9];
-      dtostrf(probe_change, 1, 2, num);
-      snprintf_P(line, sizeof(line), PSTR("%cPROBE lech %s"), btn_sel == BTN_PROBE ? '>' : ' ', num);
+    case PR_RESULT: {
+      // Chi lay z CUOI: delta so voi mat phang TB = target con phai dua ve 0.
+      // Van dung chieu -> so nay giam; van sai chieu -> so nay tang.
+      const float delta = z_delta[worst_index] - mean;
+      if (ABS(delta) < 0.002f)
+        snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
+      else {
+        char num[12];
+        dtostrf(delta, 1, ABS(delta) >= 10 ? 2 : 3, num);
+        snprintf_P(line, sizeof(line), PSTR("%cPROBE %s con %s"),
+          btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW", num);
+      }
     } break;
     case PR_FAILED:
       snprintf_P(line, sizeof(line), PSTR("%cPROBE loi"), btn_sel == BTN_PROBE ? '>' : ' ');
       break;
-    default:
-      snprintf_P(line, sizeof(line), PSTR("%cPROBE goc nay"), btn_sel == BTN_PROBE ? '>' : ' ');
-      break;
+    default: {
+      // Chua probe lai o goc nay -> huong dan luon cho goc dang dung:
+      //   "CW 0.43 vong" = van CW 0.43 vong (CW = ha goc xuong, CCW = nang goc len)
+      const uint8_t i = worst_index;
+      if (!z_ok[i])
+        snprintf_P(line, sizeof(line), PSTR("%cPROBE goc nay"), btn_sel == BTN_PROBE ? '>' : ' ');
+      else {
+        const float delta = z_delta[i] - mean;   // mean da tinh o tren (mat phang trung binh)
+        if (ABS(delta) < 0.002f)
+          snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
+        else {
+          const float turns = tramming_turns(delta, TRAMMING_SCREW_THREAD);
+          char num[10];
+          if (turns < 0.01f)
+            snprintf_P(line, sizeof(line), PSTR("%cPROBE %s nhe"),
+              btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW");
+          else {
+            dtostrf(turns, 1, 2, num);
+            snprintf_P(line, sizeof(line), PSTR("%cPROBE %s %s vong"),
+              btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW", num);
+          }
+        }
+      }
+    } break;
   }
   tram_row(2, line);
 
-  // Dong 3-4: NEXT / DONE
-  snprintf_P(line, sizeof(line), PSTR("%cNEXT (home + probe)"), btn_sel == BTN_NEXT ? '>' : ' ');
+  // Dong 3: PREV | NEXT | doi goc dang chinh (MAX <-> MIN)  - 3 muc, dung 21 ky tu
+  snprintf_P(line, sizeof(line), PSTR("%cPREV %cNEXT %c%s->%s"),
+    btn_sel == BTN_PREV ? '>' : ' ', btn_sel == BTN_NEXT ? '>' : ' ',
+    btn_sel == BTN_WORST ? '>' : ' ',
+    tramming_worst_max ? "MAX" : "MIN", tramming_worst_max ? "MIN" : "MAX");
   tram_row(3, line);
-  snprintf_P(line, sizeof(line), PSTR("%cDONE"), btn_sel == BTN_DONE ? '>' : ' ');
+
+  // Dong 4: HOME+PROBE (home lai Z + probe lai ca 4 goc) | DONE (thoat)
+  snprintf_P(line, sizeof(line), PSTR("%cHOME+PROBE %cDONE"),
+    btn_sel == BTN_HOME ? '>' : ' ', btn_sel == BTN_DONE ? '>' : ' ');
   tram_row(4, line);
 }
 
@@ -299,9 +377,33 @@ static void _lcd_tramming() {
             tramming_probe_here();
             tram_busy = false;
             break;
-          case BTN_NEXT:
+          case BTN_PREV:
+          case BTN_NEXT: {
+            // Lui / toi goc ke tiep (vong tron) + probe luon goc do.
+            // btn_sel giu nguyen -> bam lien tuc la di het vong 4 goc.
+            tram_busy = true;
+            tram_state = TR_POINT;                // man hinh hien "Go to point"
+            ui.refresh();
+            tramming_goto_point(btn_sel == BTN_NEXT ? 1 : -1);
+            tram_state = TR_IDLE;
+            tram_busy = false;
+          } break;
+          case BTN_HOME:
+            // Home lai Z + probe lai CA 4 GOC (khung Z moi) + di toi goc lech nhat
             tramming_restart();
             return;
+          case BTN_WORST:
+            // Doi MAX <-> MIN + luu EEPROM, roi DI NGAY toi goc moi VA PROBE luon goc do
+            // (de goc co dau '*' luon la so MOI).
+            tram_busy = true;
+            tramming_worst_toggle();
+            tram_state = TR_POINT;                // man hinh hien "Go to point"
+            ui.refresh();
+            tramming_goto_worst();
+            tramming_probe_here();
+            tram_state = TR_IDLE;
+            tram_busy = false;
+            break;
           default:
             tramming_exit();
             return;
@@ -324,7 +426,7 @@ void goto_tramming_wizard() {
   LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
   worst_index = 0; step_index = 0;
   tram_busy = false;
-  btn_sel = BTN_PROBE; probe_state = PR_NONE; probe_change = 0;
+  btn_sel = BTN_PROBE; probe_state = PR_NONE;
   tram_state = TR_HOMING;                     // cho G28 (tat ca truc) xong roi probe 4 goc
 
   // Home tat ca truc; Z-home chinh la TAM BAN -> moc cho moi delta

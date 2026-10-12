@@ -329,20 +329,50 @@ mắt hay bằng thước.
 | | |
 |---|---|
 | Đo tại đâu | 4 điểm `TRAMMING_POINT_XY` = `{280,285} {25,285} {25,25} {280,25}` — phải **nằm trên 4 vít** |
-| Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:112`, `menu_tramming.cpp:58` |
-| Tính gì | `diff = z_điểm_0 − z_điểm_i`, rồi `số_vòng = diff ÷ bước_ren` |
+| Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:149`, `menu_tramming.cpp:147` |
+| Mốc vật lý | **`z_home` = `base_home_pos(Z_AXIS)`** — khung Z của lần `G28 Z` (Z_SAFE_HOMING probe ở tâm bàn). **Không probe thêm tâm bàn** |
+| Mốc để vặn vít | **MẶT PHẲNG TRUNG BÌNH** của các góc đã đo: `delta = chiều_cao − TB` — đây mới là số cần đưa về 0 |
+| Tính gì | `chiều_cao = z_probe − z_home`, `delta = chiều_cao − TB`, rồi `số_vòng = −delta ÷ bước_ren` |
 | Bước ren | `TRAMMING_SCREW_THREAD 40` → M4 × **0.7 mm/vòng** (`threads_factor = {0.5 M3, 0.7 M4, 0.8 M5}`) |
-| Kết quả | `Turn <góc> CW/CCW by N turns and M minutes (x.xx mm)` |
+| Kết quả | `Turn <góc>: van CW/CCW by N turns and M minutes \| lech x.xxxmm (cao z.zzzmm)` — **CW = vặn để hạ góc đó xuống, CCW = vặn để nâng lên** |
+
+> ℹ️ **Vì sao `chiều_cao = z_probe − z_home` mà không cần probe tâm bàn:** Z home bằng chính
+> probe này, nên lúc trigger ở tâm bàn firmware gán `current_position.z = base_home_pos(Z) − probe.offset.z`
+> (`set_axis_is_at_home`, `motion.cpp:2349`); `probe_at_point()` lại **cộng** `probe.offset.z` vào kết quả
+> (`probe.cpp:891`). Hai số bù nhau ⇒ **giá trị probe trả về ở bất kỳ điểm nào đã chính là
+> "z_probe − z_home"**. Probe lại tâm bàn chỉ tốn ~10 giây và **cộng sai số của lần đo đó vào cả 4 số**.
+> (Nếu vặn vít rồi mà không home lại thì mốc vẫn là mốc cũ — giống wizard: bấm `HOME+PROBE` để home lại Z.)
+
+> 🔴 **Vì sao phải trừ TRUNG BÌNH, không dùng thẳng "chiều cao so với Z-home":** ví dụ 4 góc đo được
+> `2.000 / 2.000 / 2.000 / 2.030 mm`. Nhìn "chiều cao so với Z-home" thì cả 4 góc đều ≈ **+2mm** —
+> trông như cả bàn bị nâng 2mm, nhưng thực ra **4 góc chỉ lệch nhau 0.030mm**, tức là gần như đã
+> phẳng. Con số 2mm chỉ là **độ lệch của cả mặt bàn so với mốc Z-home** (nó phụ thuộc `M851 Z offset`,
+> độ võng tâm bàn, lần home…) và **không nói lên điều gì về độ phẳng**.
+> Trừ trung bình đi thì được đúng phần cần vặn:
+> ```
+> TB = (2.000+2.000+2.000+2.030)/4 = 2.0075
+> delta = -0.0075 / -0.0075 / -0.0075 / +0.0225   ->  chỉ cần chỉnh 1 góc ~0.022mm
+> ```
+> `delta > 0` = góc **cao hơn** mặt phẳng trung bình ⇒ phải **hạ xuống** (vặn **CW**); `delta < 0` ⇒ **nâng lên** (vặn **CCW**). Tổng 4 delta luôn = 0 nên **vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại** — 1 vòng là xong.
+>
+> 🔧 **Chiều vặn đã được đo lại trên máy này:** *vặn CW thì delta Z **giảm*** (góc đó **hạ xuống**),
+> *vặn CCW thì delta Z **tăng*** (góc đó **nâng lên**) — đầu vít nằm **trên** bàn, vít M4 ren phải.
+> Vì vậy `tramming_turn_cw()` (`src/feature/tramming.h`) được viết theo đúng quy luật đó:
+> **delta > 0 (góc cao) → CW**, **delta < 0 (góc thấp) → CCW**. Công thức gốc của Marlin
+> (`(screw_thread & 1) == (adjust > 0)`) cho kết quả **ngược lại** trên máy này, nên đã bỏ.
+> Nếu sau này thay loại vít **ren ngược chiều** thì chỉ cần khai báo mã `S` **lẻ** (`TRAMMING_SCREW_THREAD 41`
+> hoặc `G35 S41`) — code tự đảo chiều, không phải sửa gì thêm.
+
 
 **Cảm biến được bật/tắt tự động** — không cần `M401` trước:
 `probe_at_point()` → `deploy()` → `Probe::set_deployed()` → `Endstops::enable_z_probe(true)`
 → `WRITE(PROBE_ENABLE_PIN, on)` (`endstops.cpp:466`), tức chân **PA8 lên HIGH**. G35 kết thúc
-bằng `probe.stow()` (`G35.cpp:167`) → PA8 về LOW.
+bằng `probe.stow()` (`G35.cpp:193`) → PA8 về LOW.
 
 Khác nhau giữa hai cách:
 
 **Menu trên máy: `Motion` → `Tramming Wizard`.** (`LCD_LANGUAGE en` nên nhãn là tiếng Anh —
-`MSG_TRAMMING_WIZARD` = *"Tramming Wizard"*, khai báo ở `menu_motion.cpp:382`.)
+`MSG_TRAMMING_WIZARD` = *"Tramming Wizard"*, khai báo ở `menu_motion.cpp:404`.)
 
 | | `G35` | Tramming Wizard (menu) |
 |---|---|---|
@@ -351,8 +381,9 @@ Khác nhau giữa hai cách:
 | Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
 
 > **`G35` không có mục nào trong menu LCD** — nó chỉ là lệnh G-code, phải gửi qua console/host.
-> Trong `Motion` chỉ có **Tramming Wizard** là bản đồ hoạ của cùng thuật toán đó.
-> `Motion` cũng có **Auto Z Align** (= `G34`) và **Deploy/Stow Z-Probe** (= `M401`/`M402`).
+> Trong `Motion` có **Tramming Wizard** là bản đồ hoạ của cùng thuật toán đó, kèm mục
+> **`WORST POINT = MAX`** (bật/tắt gốc "lệch nhất" — xem §11.8c).
+> `Motion` cũng có **Auto Z Align** (= `G34`), **Z ALIGN MANUAL** và **Deploy/Stow Z-Probe** (= `M401`/`M402`).
 >
 > Trên máy này **không có** mục *"Bed Tramming"* (`_lcd_level_bed_corners`) vì `LCD_BED_TRAMMING`
 > không được bật — bản đó là tram **bằng tay**, không dùng probe, phải tự quay encoder để hạ
@@ -649,7 +680,9 @@ M500
 | **Advanced Settings → Endstop Pins** | — | Hiện **mức điện thô** X/Y/Z MIN lên status line (đọc thẳng `READ()`, bỏ qua logic endstop của Marlin) |
 | **Motion → Probe Offset Wizard** | — | Cân `Z offset`: home → probe → hạ nozzle bằng encoder tới khi chạm bàn (test giấy) → `DONE`. Cũng có ở **Advanced Settings → Z Probe Offsets** |
 | **Motion → Deploy / Stow Z-Probe** | `M401` / `M402` | Bật/tắt mạch cảm biến qua chân PA8 |
-| **Motion → Tramming Wizard** | `G35` | Vòng lặp tự động: probe 4 góc → đi tới **góc lệch nhất** → bạn vặn vít → **NEXT** (home lại Z + probe lại 4 góc + tới góc lệch mới). Mốc = **tâm bàn** (Z-home). Xem §11.8c |
+| **Motion → Tramming Wizard** | `G35` | Wizard 6 nút. Vòng lặp: probe 4 góc → đi tới **góc đang chỉnh** → vặn vít → **`PROBE`** (đo lại đúng góc đó) → **`PREV`/`NEXT`** (sang góc khác để vặn tiếp, **tự probe luôn**) → khi xong bấm **`HOME+PROBE`** (home lại Z + đo lại cả 4 góc). Mốc = **Z-home** (`base_home_pos(Z)`, khung Z sau `G28 Z`). Nút **`MAX->MIN`** đổi góc đang chỉnh giữa **MAX (cao nhất)** và **MIN (thấp nhất)**, lưu EEPROM. Xem §11.8c |
+| **Motion → WORST POINT = MAX** | — | Bật/tắt gốc "lệch nhất" cho Tramming Wizard: **ON = MAX** (góc cao nhất), **OFF = MIN** (góc thấp nhất). Bấm là **lưu ngay vào EEPROM** → nhớ cho các lần sau. Dùng khi vít của góc đang chỉnh **đã hết hành trình** (vặn mãi không được) thì chuyển sang chỉnh góc ngược lại. Xem §11.8c |
+| **Màn hình riêng `lcd_panel`** | — | Firmware **riêng cho MCU của màn hình** (F411CCU6 / F103C6T6 + ILI9341 2.4" SPI): panel tự vẽ, Marlin chỉ gửi nhiệt độ/XY/tiến độ qua G-code. Xem §12 |
 | **Motion → Z ALIGN MANUAL** | — | Dịch tay **Z1 / Z2 / Z3** từng bước **0.01mm** bằng encoder + **probe lại từng điểm** để xem ngay nó lên/xuống bao nhiêu (xem §11.8b) |
 
 `PINS_DEBUGGING` đang **BẬT** (chiếm ~8KB flash) — cần cho `M43`, `M43 E1` và menu *Endstop Pins*.
@@ -790,7 +823,7 @@ git diff up-2.1.2 HEAD --stat
 | Nhóm | Giá trị |
 |---|---|
 | Trục Z | `INVERT_Z2_VS_Z_DIR` **tắt** (cả 3 vít me quay cùng chiều), `Z_STEPPER_ALIGN_XY { {280,285}, {25,285}, {X_CENTER,25} }`, `Z_STEPPER_ALIGN_AMP 1.0`, `Z_STEPPER_ALIGN_ITERATIONS 5`, `Z_STEPPER_ALIGN_ACC 0.02` |
-| Tram bàn | `ASSISTED_TRAMMING`, `ASSISTED_TRAMMING_WIZARD`, `REPORT_TRAMMING_MM`, `TRAMMING_SCREW_THREAD 40` (vít M4, bước 0.7mm), `TRAMMING_POINT_XY` 4 góc `{280,285} {25,285} {25,25} {280,25}`. **`ASSISTED_TRAMMING_WAIT_POSITION` đã TẮT** (2026-10-09): trước đây sau khi probe xong nozzle tự chạy ra giữa bàn ở Z30; nay G35/wizard **dừng ngay tại điểm probe cuối** (đầu in ~5mm trên điểm đó). Đổi lại: toolhead có thể vướng tay khi vặn vít ở góc đó |
+| Tram bàn | `ASSISTED_TRAMMING`, `ASSISTED_TRAMMING_WIZARD`, `REPORT_TRAMMING_MM`, `TRAMMING_SCREW_THREAD 40` (vít M4 ren phải, bước 0.7mm — **giữ 40**, xem ghi chú chiều vặn bên dưới), `TRAMMING_POINT_XY` 4 góc `{280,285} {25,285} {25,25} {280,25}`. **`ASSISTED_TRAMMING_WAIT_POSITION` đã TẮT** (2026-10-09): trước đây sau khi probe xong nozzle tự chạy ra giữa bàn ở Z30; nay G35/wizard **dừng ngay tại điểm probe cuối** (đầu in ~5mm trên điểm đó). Đổi lại: toolhead có thể vướng tay khi vặn vít ở góc đó. **Góc đang chỉnh (MAX/MIN) lưu trong EEPROM**, đổi bằng nút `MAX->MIN` trong wizard hoặc `Motion → WORST POINT = MAX` — xem §11.8c |
 | TMC2209 | `STEALTHCHOP_XY`, `STEALTHCHOP_Z` (không dùng sensorless homing — đã bỏ `USES_DIAG_JUMPERS`, xem 11.3) |
 | Debug | `PINS_DEBUGGING` (cho `M43`, `M43 E1`, menu *Endstop Pins*) |
 | **Thêm mới** | `STM32_DFU_REBOOT` — cho phép `M997` nhảy vào ROM DFU bootloader, không cần nhấn BOOT0/RESET |
@@ -812,12 +845,14 @@ git diff up-2.1.2 HEAD --stat
 | `src/HAL/STM32/HAL.cpp`, `HAL.h` | thêm `reboot_to_dfu()` (theo AN2606: `HAL_RCC_DeInit`, remap system flash, `SCB->VTOR`, `__set_MSP`) và cho `flashFirmware()` gọi nó khi bật `STM32_DFU_REBOOT` |
 | `src/module/settings.cpp` | **sửa bug**: sau khi nạp EEPROM, ép lại `mstep_reg_select(true)` + `microsteps()` cho TMC2209. Không có bước này, `refresh_stepping_mode()` ghi đè GCONF bằng cache → chân MS1/MS2 không được điều khiển → driver rơi về **1/8**, trục chạy **gấp đôi** (đã gặp thật: `G1 Z10` đi 20mm). Lưu ý: hàm này **không** xử lý `Y2` — xem §11.4b |
 | `src/inc/Conditionals_LCD.h` | thêm `PROBE_ENABLE_DISABLE` vào `ANY(...)` của `HAS_STOWABLE_PROBE` → menu *Deploy/Stow Z-Probe* hoạt động cả với `FIX_MOUNTED_PROBE` |
-| `src/gcode/calibrate/G34_M422.cpp`, `src/gcode/gcode.h` | thêm tham số `Q<nloop>` (lặp G34, home lại sau mỗi 3 lần đo), `U` (chế độ hardcode balance), hàm `InfiniteG34()` |
+| `src/gcode/calibrate/G34_M422.cpp`, `src/gcode/gcode.h` | thêm tham số `Q<nloop>` (lặp G34, home lại sau mỗi 3 lần đo), `U` (chế độ hardcode balance), hàm `InfiniteG34()`. **Đã gỡ** tính năng "huỷ G34 bằng nút encoder" (2026-10) vì **không dừng được G34** — xem §11.8 |
 | Start G-code Cura | **ĐÃ BỎ `G34`** — không còn căn gantry tự động trước mỗi bản in. Tham số `G34 Q<n>` vẫn có trong firmware để **chạy tay khi bảo trì**; xem §5 và mục 11.8 |
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
-| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard viết lại: mốc = TÂM BÀN (Z-home)**; wizard chạy **vòng lặp tự động** (probe 4 góc → đi tới góc lệch nhất → user vặn vít → **NEXT** = home lại Z + probe lại 4 góc + tới góc lệch mới) |
+| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard: mốc vật lý = Z-home** (`base_home_pos(Z_AXIS)`, **bỏ lần probe tâm bàn**) và **mốc để vặn vít = mặt phẳng trung bình** (`delta = chiều_cao − TB`, in 3 số lẻ, kèm **chiều vặn `CW`/`CCW`** theo quy luật đo trên máy: CW = hạ góc xuống, CCW = nâng lên); probe lỗi 1 góc không mất cả phép đo; wizard **6 nút**: `PROBE` (đo lại góc đang đứng) / `PREV` / `NEXT` (sang góc khác để vặn tiếp, **tự probe**) / `MAX->MIN` (đổi góc đang chỉnh) / `HOME+PROBE` (home lại Z + đo lại cả 4 góc) / `DONE` |
+| `src/feature/tramming.h` (helper `tramming_pitch/turn_cw/turns`) | Gộp công thức bước ren + **chiều vặn** vào một chỗ để `G35` và wizard dùng chung (trước đây mỗi nơi một kiểu, và công thức gốc của Marlin báo **ngược chiều** trên máy này) |
+| `src/feature/tramming.h`, `tramming.cpp`, `src/module/settings.cpp`, `src/lcd/menu/menu_motion.cpp` | **`tramming_worst_max`** (góc đang chỉnh = MAX cao nhất / MIN thấp nhất): menu **`Motion` → `WORST POINT = MAX`** + nút **`MAX->MIN`** trong wizard, **lưu EEPROM** trong ô `z_offset` của khối MBL (MBL đang tắt nên ô đó trống) → **không đổi kích thước/CRC EEPROM** nên không xoá cấu hình đang có. Xem §11.8c |
 | `Marlin/Configuration_adv.h` (`TRAMMING_POINT_NAME_1..4`) | **sửa tên 4 góc cho khớp toạ độ** — trước đây bị ngược 180° nên G35/wizard chỉ sai góc cần vặn |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
 | `src/inc/Conditionals_adv.h`, `Conditionals_post.h` | guard nhỏ: bỏ `BABYSTEP_ZPROBE_OFFSET` khi không có probe, bỏ `PREHEAT_BEFORE_LEVELING` khi không bật `PIDTEMPBED` |
@@ -1363,31 +1398,10 @@ while ((isInf-- > 0) && !InfiniteG34(3)) { }   // lap, home lai sau moi 3 lan do
 > Thực tế `Q99` gần như tương đương "chạy tới khi xong": gần như không bao giờ chạm 99 lần, vì
 > mỗi vòng đã home lại nên sai số giảm dần. Đặt `Q` nhỏ (1–3) nếu muốn giới hạn thời gian chờ.
 
-#### Huỷ G34 bằng nút encoder
-
-Vì `Q99` có thể chạy lâu, **bấm nút encoder bất kỳ lúc nào là dừng G34** (dự án này thêm vào).
-
-```c
-// G34_M422.cpp — doc thang chan BTN_ENC, khong phu thuoc vong lap giao dien
-if (ui.button_pressed()) { g34_cancelled_by_user = true; err_break = true; break; }
-```
-
-| | |
-|---|---|
-| Đọc bằng gì | `ui.button_pressed()` → `hw_button_pressed()`, đọc **thẳng chân `BTN_ENC`** và có debounce (`ENCODER_SAMPLES`) — nên dùng được trong lúc G34 đang chặn |
-| Kiểm tra ở đâu | **Trước từng điểm probe** (`LOOP_L_N(i, NUM_Z_STEPPERS)`) → phản hồi trong khoảng **một lần probe (~2–5 s)**; và ở đầu mỗi vòng lặp iteration |
-| Thông báo | Serial: `G34 cancelled by encoder button.` · LCD: `G34 STOP` |
-| Sau khi huỷ | `HOME_AFTER_G34` đang bật → **Z được home lại**; probe được stow; leveling được khôi phục. Bản in **vẫn tiếp tục** bình thường |
-
-> **Cờ `g34_cancelled_by_user` phải ở phạm vi FILE.** `InfiniteG34()` trả về `true/false` để
-> vòng lặp `Q` biết "đã xong chưa" — mà **"bị huỷ" khác với "đã xong"**. Nếu chỉ dựa vào giá trị
-> trả về thì vòng `Q` sẽ **chạy lại tiếp** và nút bấm thành vô nghĩa. Vòng lặp ngoài vì vậy kiểm
-> tra thêm cờ: `while ((isInf-- > 0) && !g34_cancelled_by_user && !InfiniteG34(3))`.
-
-> **Guard khi `HOME_AFTER_G34` bị tắt:** nếu huỷ *trước khi probe được điểm nào*,
-> `z_measured_min` còn là giá trị rác `100000.0f`, và nhánh `#else` sẽ trừ nó vào
-> `current_position.z` → ra toạ độ vô lý. Script firmware nay kiểm tra cờ và **home lại Z** thay
-> vì trừ. Trên máy này `HOME_AFTER_G34` đang bật nên nhánh đó không chạy, nhưng guard vẫn giữ.
+> ⛔ **KHÔNG có cách huỷ G34 giữa chừng.** Bản trước có thêm "bấm nút encoder để dừng G34" nhưng
+> **đã bỏ** (2026-10): nút bấm **không dừng được** G34 đang chạy — thực tế bấm chỉ ăn vào encoder,
+> G34 vẫn chạy tiếp tới hết, nên tính năng gây hiểu nhầm. Nay G34 chạy như Marlin gốc.
+> Muốn G34 **ngắn** thì giới hạn bằng `G34 Q<n>` (số vòng) và `T<acc>` (ngưỡng dừng) — xem bảng trên.
 
 #### Màn hình G34 riêng trên LCD
 
@@ -1409,9 +1423,8 @@ DEV 0.090 / 0.020      <- độ lệch đo được / ngưỡng T cần đạt
 | `DEV` | `z_maxdiff` = max − min của vòng probe vừa rồi |
 | Ngưỡng | `Z_STEPPER_ALIGN_ACC` = **0.02**, hoặc tham số `T<acc>` khi chạy tay |
 | `R<n>` | Chỉ hiện khi `Q>1` (ví dụ `G34 Q99`): đang ở vòng lặp thứ n |
-| Pha | `PROBE` → `ADJUST` → kết thúc bằng `DONE` (đạt ngưỡng) / `LIMIT` (hết số iteration mà chưa đạt) / `ABORT` (lỗi probe hoặc sai số tăng) / `CANCEL` (bấm encoder) |
+| Pha | `PROBE` → `ADJUST` → kết thúc bằng `DONE` (đạt ngưỡng) / `LIMIT` (hết số iteration mà chưa đạt) / `ABORT` (lỗi probe hoặc sai số tăng) |
 | Giữ kết quả | **15 giây** sau khi G34 kết thúc rồi tự trả về status screen (`G34_SCREEN_HOLD_MS`, `marlinui.cpp`) |
-| Huỷ | Bấm encoder → trang hiện `CANCEL` |
 
 Các chỗ đã sửa:
 
@@ -1485,39 +1498,106 @@ TURN .01 CLICK PROBE     <- dòng hướng dẫn, đổi theo chế độ
 > (`Flash 25.0%`, `RAM 9.0%`) nhưng hành vi trên máy cần bạn kiểm lần đầu: vào menu → bấm 1 lần
 > (sang PROBE) → bấm lần nữa để probe điểm 1, rồi quay thử vài nấc xem Z1 có nhích đúng chiều không.
 
-### 11.8c `G35` / Tramming Wizard — thuật toán viết lại (mốc = tâm bàn, vòng lặp tự động)
+### 11.8c `G35` / Tramming Wizard — mốc = Z-home + mặt phẳng trung bình, 6 nút (PROBE / PREV / NEXT / MAX-MIN / HOME+PROBE / DONE)
 
 **Nguyên tắc mốc:** sau mỗi lần home Z, **gốc khung Z nằm ngay tại TÂM BÀN** (vị trí Z-home
-`Z_SAFE_HOMING_X/Y_POINT` = `152,152`). Nên giá trị probe ở mỗi góc **chính là** "delta so với
-Z-home" — không cần probe riêng tâm bàn.
+`Z_SAFE_HOMING_X/Y_POINT` = `152.5,152.5`). Nên giá trị probe ở mỗi góc **chính là** "z_probe − z_home"
+— **không cần probe riêng tâm bàn**, và `z_home = base_home_pos(Z_AXIS)` (thường = `0.00`).
 
-**Lệnh `G35`** (không tương tác): probe tâm bàn làm mốc → probe 4 góc → in delta của **cả 4 góc**
-so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu sau khi xong (không park).
+**Lệnh `G35`** (không tương tác): **không probe tâm bàn** → probe 4 góc → in
+**chiều cao** (`z_probe − z_home`) **và độ lệch so với mặt phẳng trung bình** (`delta = chiều_cao − TB`)
++ số vòng vít. Không tự di chuyển đi đâu sau khi xong (không park).
+
+```
+G35 moc = Z-HOME (khung Z sau G28 Z)  Z=0.000
+Chieu cao TB cac goc = 2.007mm  |  Do lech max-min = 0.030mm
+Moc de van vit = MAT PHANG TRUNG BINH. delta = chieu_cao - TB; KHONG phu thuoc Z-offset.
+Chieu van: CW = HA goc do xuong, CCW = NANG goc do len.
+Turn Back-Right: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
+Turn Back-Left: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
+Turn Front-Left: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
+Turn Front-Right: van CW by 0 turns and 1 minutes  | lech 0.022mm  (cao 2.030mm)
+Chinh truoc: Front-Right (lech 0.022mm) -> van CW
+```
+
+> 🔴 **Vì sao phải trừ TRUNG BÌNH:** 4 góc `2.000/2.000/2.000/2.030` đều "cao +2mm so với Z-home" —
+> nhìn như cả bàn bị nâng 2mm, nhưng thực ra **4 góc chỉ lệch nhau 0.030mm** (gần như đã phẳng).
+> "Chiều cao so với Z-home" chỉ là **độ lệch của cả mặt bàn so với mốc**, nó phụ thuộc `M851 Z offset`,
+> độ võng tâm bàn và lần home — **không nói gì về độ phẳng**. `delta = chiều_cao − TB` mới là phần
+> **cần vặn**, và firmware nói luôn **vặn chiều nào**: `delta > 0` = góc cao hơn mặt phẳng TB ⇒ **vặn CW** (hạ xuống);
+> `delta < 0` ⇒ **vặn CCW** (nâng lên). Tổng 4 delta luôn = 0 ⇒ vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại.
+> |delta| < 0.002mm thì in `DAT (khong can van)` — dưới ngưỡng nhiễu, vặn nữa là vô nghĩa.
 
 **Wizard `Motion → Tramming Wizard`** — vòng lặp tự động:
 
 | Bước | Việc |
 |---|---|
 | 1 | `G28` (cả 3 trục) → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`) |
-| 2 | Tự động **đi nozzle tới góc có \|delta\| lớn nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó |
-| 3 | Hiện delta 4 góc + 3 nút: **`PROBE`** / **`NEXT (home + probe)`** / **`DONE`** |
-| 4 | **PROBE** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện độ lệch mới và lượng thay đổi của nó (`doi -0.19mm` / `khong doi`) |
-| 5 | **NEXT** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại 4 góc → đi tới góc lệch mới |
+| 2 | Tự động **đi nozzle tới góc đang chỉnh** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó. Góc đang chỉnh = **cao nhất** (MAX) hay **thấp nhất** (MIN), đổi bằng nút `MAX->MIN` |
+| 3 | Hiện độ lệch 4 góc + **6 nút**: **`PROBE`** / **`PREV`** / **`NEXT`** / **`MAX->MIN`** / **`HOME+PROBE`** / **`DONE`** |
+| 4 | **PROBE** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện lại **target còn lại** (z cuối) + chiều vặn cho góc đó |
+| 5 | **PREV / NEXT** = **lui / tới góc kế tiếp** (vòng tròn qua 4 góc) **và probe luôn góc đó** — vặn xong một góc thì bấm để sang góc khác vặn tiếp, **không phải home lại**. Bấm liên tục = đi hết vòng 4 góc; giữ nguyên mục đang chọn nên bấm hoài được |
+| 6 | **MAX->MIN** = đổi góc đang chỉnh giữa `MAX (góc cao nhất)` ⇄ `MIN (góc thấp nhất)`, **lưu ngay vào EEPROM** và **đi ngay** tới góc mới |
+| 7 | **HOME+PROBE** = `G28 Z` (vì vặn vít làm Z-home đổi) → probe lại **cả 4 góc** (khung Z mới) → đi tới góc đang chỉnh. Đây là nút "làm lại từ đầu cho chắc" |
+| 8 | **DONE** = thoát (đánh dấu Z chưa home) |
 
 ```
-*RB -0.05   LB +0.12        <- '*' = goc nozzle dang dung (goc lech nhat)
- FL +0.31   FR -0.08
->PROBE doi -0.19mm          <- nut PROBE + ket qua lan probe vua roi
- NEXT (home + probe)
- DONE
+*RB -0.007 LB -0.007       <- '*' = goc nozzle dang dung (goc dang chinh)
+ FL -0.007 FR +0.013       <- so la CON LAI (lech so voi MAT PHANG TRUNG BINH, 3 so le = 0.001mm)
+>PROBE CW con +0.013       <- PROBE: target con lai + chieu van cho goc dang dung
+ PREV  NEXT  MAX->MIN      <- PREV/NEXT: sang goc khac van tiep (tu probe) | MAX->MIN: doi goc dang chinh
+ HOME+PROBE  DONE          <- HOME+PROBE: home lai Z + do lai CA 4 GOC | DONE: thoat
 ```
 
-- Quay encoder = đổi giữa **PROBE** / **NEXT** / **DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
-- **Mốc là KHUNG Z của lần home cuối** (`Z-home` = tâm bàn tại thời điểm đó). Mốc này **không đổi khi vặn ốc** — chỉ `G28` (nút NEXT) hay `G92` mới đổi. Vì vậy:
+- `*` = **góc đang đứng** (góc đang chỉnh). Góc này **luôn là số vừa đo** (PROBE, PREV, NEXT, MAX->MIN đều
+  probe luôn góc mới) ⇒ target + chiều vặn ở dòng `PROBE` luôn đúng cho góc đó.
+- Các góc chưa đo lại trong vòng này **vẫn dùng số cũ** (máy không xoá) cho tới khi bấm `HOME+PROBE` ⇒
+  màn hình không có ký hiệu gì thêm, số nào cũng dùng được để định hướng.
+
+> 🔀 **Nút `MAX->MIN` (giữa dòng 3)** — nhãn luôn đọc là *"đang chỉnh gì → bấm sẽ chuyển sang gì"*:
+> `MAX->MIN` (đang chỉnh góc **cao nhất**, bấm để chuyển sang góc **thấp nhất**) hoặc `MIN->MAX`.
+> Bấm: máy **đổi ngay**, **lưu EEPROM**, và **đi ngay** tới góc mới.
+> ➡️ **Nút `PREV` / `NEXT` (dòng 3)** — sang góc khác để vặn tiếp: máy đi tới góc đó **và probe luôn**
+> (số của góc đó phải mới, vì vừa vặn một góc thì các góc kia đã lệch đi). Đi **vòng tròn**: 1→2→3→4→1.
+> Chỉ 1 mục được chọn tại một thời điểm nên chỉ có **1 dấu `>`** trên màn hình.
+
+- Quay encoder = chọn 1 trong **6 mục**, theo đúng thứ tự trên màn hình:
+  **PROBE → PREV → NEXT → MAX->MIN → HOME+PROBE → DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
+- **Dòng `PROBE` hiện luôn hướng vặn cho góc đang đứng.** Trước khi bấm: `CW 0.43 vong` = vặn CW
+  0.43 vòng (`CW` = vặn để **hạ** góc đó xuống, `CCW` = vặn để **nâng** lên); lệch < 1/100 vòng thì
+  hiện `CW nhe` (vặn nhẹ một nấc). Sau khi bấm: `CW con +0.013` = vặn tiếp **CW**, **còn lệch
+  +0.013mm** (target). |delta| < 0.002mm thì hiện `DAT` (đã đạt, dưới ngưỡng nhiễu).
+- **Sau mỗi lần `PROBE` chỉ lấy `z` CUỐI** (giá trị probe mới nhất, cùng khung Z vì không home lại)
+  ⇒ hiện ngay **target còn lại**. Đây là cách tự kiểm tra chiều vặn: vặn **đúng** chiều thì target
+  **giảm**, vặn **sai** chiều thì target **tăng**. Không cần cộng dồn gì cả.
+- **4 số trên 2 dòng đầu = `delta` so với mặt phẳng trung bình** (giống `G35`), in **3 số lẻ** để thấy
+  được sai số 0.001mm — vì sau khi đã gần phẳng thì các số chỉ còn vài phần trăm mm. Góc nào lệch
+  ≥ 1mm thì tự rút về 2 số lẻ cho vừa dòng (màn hình rộng 21 ký tự). Đây chính là **phần còn lại phải
+  vặn** ở góc đang đứng (`*`).
+- **Nút `PREV` / `NEXT` (dòng 3) — sang góc khác để vặn tiếp:** máy đi tới góc kế tiếp / góc trước
+  (vòng tròn 1→2→3→4→1) **và probe luôn góc đó**. Dùng sau khi đã vặn xong một góc: bấm để sang góc
+  còn lại, xem target mới rồi vặn tiếp — **không phải home lại**. Giữ nguyên mục đang chọn nên bấm liên
+  tục là đi hết một vòng 4 góc.
+- **Nút đổi góc đang chỉnh (`MAX->MIN` / `MIN->MAX`, dòng 3):** vít của góc đang
+  chỉnh có thể **hết hành trình** (siết/nới mãi không được). Khi đó thay vì điều chỉnh góc **cao nhất**
+  thì **chuyển sang góc thấp nhất** (và ngược lại): bấm nút một lần là máy **đổi ngay**, **đi ngay** tới
+  góc kia, và **nhớ luôn** cho các lần sau. Nhãn nút luôn đọc theo kiểu *"đang chỉnh gì → bấm sẽ sang gì"*.
+- **Nút `HOME+PROBE`** = `G28 Z` → đo lại **cả 4 góc** (khung Z mới, `z_ok[]` xoá hết) → đi tới góc đang
+  chỉnh. Bấm nút này khi đã vặn xong vài góc để **chốt lại toàn bộ** bằng một khung Z mới.
+- **Góc đang chỉnh được nhớ qua các lần sau** — lưu vào EEPROM ngay khi bấm (không cần `M500`), nạp lại lúc
+  khởi động. Cũng đổi được ở **`Motion` → `WORST POINT = MAX`** (ON = MAX, OFF = MIN) và xem lại bằng
+  `M503` (`; Tramming worst point: MAX (cao nhat)`).
+- Mặc định là **MAX** (góc cao nhất) — giống hành vi cũ (góc lệch nhiều nhất khi bàn nghiêng).
+- **Mốc là KHUNG Z của lần home cuối** (`Z-home` = tâm bàn tại thời điểm đó). Mốc này **không đổi khi vặn ốc** — chỉ `G28` (nút **`HOME+PROBE`**) hay `G92` mới đổi. Vì vậy:
   - giá trị probe trả về = **độ lệch của điểm đó so với mốc** (đúng khung Z hiện tại)
-  - `doi = giá trị mới − giá trị cũ`, cả hai so với **cùng một mốc** → chính là lượng ốc vừa siết làm điểm đó nhích so với mốc
-- 🔴 **PROBE KHÔNG probe lại tâm bàn** (theo yêu cầu). Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi bấm **NEXT** (home lại Z → `z_ok[]` xoá hết → 4 góc được đo lại trong cùng một mốc mới).
-- `PROBE lech x.xx` = chưa có số cũ **trong cùng mốc** để so, chỉ hiện độ lệch hiện tại.
+  - giữa các lần `PROBE` (và cả `PREV`/`NEXT`) **không home lại** ⇒ mọi giá trị nằm trong **cùng một khung Z** ⇒ so sánh trực tiếp được với nhau: **vặn đúng chiều thì delta giảm, vặn sai thì delta tăng**
+- 🔴 **KHÔNG probe lại tâm bàn** (theo yêu cầu) — cả `G35` lẫn wizard. Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian, cộng sai số vào cả 4 số và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi bấm **`HOME+PROBE`** (home lại Z → `z_ok[]` xoá hết → 4 góc được đo lại trong cùng một mốc mới).
+- `PROBE … con x.xxx` sau mỗi lần bấm = **target còn lại** của góc đang đứng (độ lệch so với mặt phẳng
+  trung bình, 3 số lẻ, cùng dấu với 4 số ở 2 dòng trên) — chỉ lấy **`z` cuối**, **không cộng dồn**.
+  `DAT` = đã trong ngưỡng nhiễu (|delta| < 0.002mm).
+- **Chiều vặn (CW/CCW) lấy từ đâu:** hàm `tramming_turn_cw()` trong `src/feature/tramming.h`, theo đúng
+  quy luật đo trên máy: **CW = hạ góc đó xuống**, **CCW = nâng góc đó lên** (xem §5). Chỉ báo `CW`/`CCW`,
+  **không** còn in "NANG len / HA xuong" nữa — vì khi vặn ốc thì chiều vặn mới là thứ cần hình dung.
 - **Ba chuyển động Z quanh một lần probe** — **không cái nào là `probe.offset.z`**:
   1. *(nhấc rất nhỏ, trước khi probe)* firmware đưa nozzle về đúng `Z_CLEARANCE_BETWEEN_PROBES` = 5mm. Lần probe trước kết thúc ở `trigger + 5mm`; nếu bàn ở góc đó cao/thấp hơn 0 một chút thì bước này chỉ nhích vài phần mười mm — đây chính là cú "nhấc lên một đoạn rất nhỏ" thấy trước khi probe.
   2. *(5mm)* `MULTIPLE_PROBING 2`: giữa lần chạm **nhanh** và lần chạm **chậm**, firmware nhấc lên `Z_CLEARANCE_MULTI_PROBE` = 5mm (`probe.cpp:737`).
@@ -1527,6 +1607,100 @@ so với tâm + số vòng vít cần vặn. Không tự di chuyển đi đâu s
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - `DONE` = thoát và **đánh dấu Z chưa home** (vít đã bị vặn) → phải `G28` trước khi in.
 - Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
+
+#### Điều chỉnh nhiều góc — số của các góc khác có bị đổi không?
+
+**Có, và đổi theo 2 nguyên nhân khác nhau.** Không phải lỗi — nhưng phải biết để không bị "số nhảy" làm hoang mang:
+
+| Nguyên nhân | Số đổi thế nào | Đánh giá |
+|---|---|---|
+| **(1) Mốc = trung bình 4 góc** (toán học) | Vặn hạ góc `i` đi `Δ` ⇒ trung bình giảm `Δ/4` ⇒ **3 góc kia mỗi góc tăng `+Δ/4`**, còn góc `i` giảm `0.75Δ` | **Đúng**, không phải lỗi. Ba góc kia giờ nằm cao hơn mặt phẳng trung bình mới. Đây cũng chính là lý do quy tắc "vặn đúng bằng số đang hiện" chỉ giảm **75%** mỗi vòng |
+| **(2) Cơ khí: bàn là một tấm liền, 4 góc có lò xo** | Vặn ốc một góc **kéo các góc khác nhích theo một chút** (bao nhiêu tuỳ độ cứng tấm bàn / độ nén lò xo). Số **cũ** của các góc đó vì thế không còn đúng | Firmware không thể biết — nó **giữ nguyên số cũ** cho tới khi bạn đo lại góc đó (`PROBE`/`PREV`/`NEXT`) hoặc `HOME+PROBE` |
+
+**Màn hình không hiện ký hiệu gì thêm — số nào cũng dùng được để định hướng.** Quy tắc duy nhất cần nhớ:
+
+> ✅ **`HOME+PROBE` KHÔNG cần bấm sau mỗi góc.** Vì:
+> - **Đứng ở góc nào thì tin số của góc đó**: dấu `*` = góc đang đứng, và nó **luôn là số vừa đo**
+>   (`PROBE`, `PREV`, `NEXT`, `MAX->MIN` đều probe luôn góc mới) ⇒ dòng `PROBE` (target + chiều vặn) đúng cho góc đó.
+> - Bấm **`PREV`/`NEXT`** là máy **đi tới góc kế và đo luôn góc đó** ⇒ sang góc khác vặn tiếp ngay.
+> - Các góc chưa đo lại vẫn **dùng số cũ** (máy không xoá) — đủ để biết góc nào đang cao/thấp mà điều chỉnh tiếp.
+> - `HOME+PROBE` chỉ cần khi **muốn cả 4 số cùng mới trong một khung Z**: hợp lý nhất là **sau khi vặn xong một vòng 4 góc**, để xem `max−min` còn bao nhiêu rồi quyết định vòng tiếp theo.
+>
+> 🔁 **Vòng làm việc:** vặn 1 góc → `PROBE` (xem target giảm) → `NEXT` (góc mới, số mới) → vặn → … hết 4 góc
+> → `HOME+PROBE` → xem `max−min` → lặp lại. Thường **2–3 vòng** là xuống dưới ngưỡng nhiễu (0.02mm).
+> Góc nào hiện `DAT` thì bấm `NEXT`/`PREV` sang góc khác, **đừng** vặn thêm góc đó.
+
+#### Độ tin cậy của thuật toán (đã kiểm lại)
+
+| Điểm | Kết luận |
+|---|---|
+| **Trung bình có phải mốc đúng?** | **Có.** Mặt phẳng bình phương-tối-thiểu (LS) luôn đi qua **trọng tâm** tập điểm, nên "trừ trung bình" = chiếu lên mặt phẳng LS tại tâm bàn. Đây là mốc **tối ưu**: tổng 4 delta = 0 và **\|delta\| lớn nhất là nhỏ nhất có thể** (không mốc phẳng nào cho kết quả tốt hơn). |
+| **Phụ thuộc gì không?** | **Không phụ thuộc** `z_home`, `M851` (`probe.offset.z`), lần home nào, hay việc có `G92` — vì mọi giá trị đều bị trừ đi cùng một hằng số. ⇒ **Số liệu vẫn đúng kể cả khi Z offset chưa cân chuẩn.** (Đây là lý do thật sự nên dùng delta − TB thay vì chiều cao tuyệt đối.) |
+| **Probe lỗi 1 góc?** | `G35` **không bỏ cả phép đo**: nó đo tiếp các góc còn lại, in rõ góc lỗi, và tính TB trên các góc **đo được** (cần ≥ 3). Trước đây chỉ cần 1 góc lỗi là mất toàn bộ kết quả. |
+| **Độ phân giải / nhiễu** | In **3 số lẻ (0.001mm)**. Nhiễu thật của probe ~**±0.005–0.01mm** (`MULTIPLE_PROBING 2` — trung bình có trọng số của pha nhanh + pha chậm) ⇒ **\|delta\| < ~0.01mm nằm trong nhiễu, đừng đuổi theo**; `max-min ≤ 0.02–0.03mm` coi như đạt. Thuật toán in `DAT` khi \|delta\| < 0.002mm. |
+| **Bàn không phẳng (võng/vênh)** | 4 điểm góc chỉ mô tả được **một mặt phẳng**; phần võng/vênh ở giữa bàn **không** sửa được bằng 4 vít — đó là việc của mesh (`G29`). `G35` cũng chỉ đưa 4 góc về cùng một mặt phẳng. |
+| **Có bị "ảo" khi cả bàn cao/thấp đều?** | Không: đó chính là ca `2.000/2.000/2.000/2.030` — delta chỉ ra **0.030mm**, không đòi vặn cả 4 vít như cách tính theo Z-home. |
+| **Nút `WORST` (MAX/MIN) có bị lệch theo?** | Không: trừ đi một hằng số **không đổi thứ tự** ⇒ chọn góc cao nhất/thấp nhất cho kết quả y hệt dù xếp theo số thô hay theo delta. |
+
+#### Vặn 1 lần không tới đích — bấm `PROBE` nhiều lần
+
+Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên vặn → `PROBE` → vặn → `PROBE`… Màn hình
+được thiết kế cho đúng vòng lặp này, và **không cần cộng dồn gì** — chỉ lấy **`z` cuối** sau mỗi lần probe:
+
+| Hiển thị | Nghĩa |
+|---|---|
+| `CW con +0.013` (dòng `PROBE` sau khi bấm) | **Target còn lại** của góc đang đứng: còn lệch `+0.013mm` so với mặt phẳng trung bình, phải vặn tiếp **CW** |
+| `+0.013` (số ở dòng có dấu `*`) | Cùng con số đó, nằm trong bảng 4 góc (3 số lẻ) — cập nhật ngay sau mỗi lần probe |
+| `DAT` | \|delta\| < 0.002mm — đã đạt, dưới ngưỡng nhiễu |
+
+- **Tự kiểm tra chiều vặn:** vặn **đúng** chiều → target **giảm**; vặn **sai** chiều → target **tăng**.
+  Không cần biết "tổng đã vặn bao nhiêu", chỉ cần nhìn số đó đi về 0.
+- **Vì sao so sánh được:** giữa các lần `PROBE` **không home lại** ⇒ mọi giá trị nằm trong **cùng một
+  khung Z** ⇒ so sánh trực tiếp, và **không** phụ thuộc `M851`/Z-home.
+- Bấm `PROBE` liên tục mà **không vặn gì**: số đứng yên ⇒ nhìn là biết không nhích. Chênh lệch giữa 2
+  lần bấm khi đó chính là **độ lặp lại của probe** (±0.005–0.01mm).
+- **Quy tắc vặn cho nhanh tới đích:** cứ vặn **đúng bằng số đang hiện**. Vặn góc đó một lượng `x` làm cả
+  mặt phẳng trung bình dịch theo `x/4`, nên phần lệch chỉ **giảm 75%** mỗi vòng:
+  `con_mới = 0.25 × con_cũ`. Vài vòng là dưới ngưỡng nhiễu.
+- **Số của 3 góc kia là số CŨ** khi bạn chỉ `PROBE` 1 góc (bàn thật đã nghiêng đi một chút khi vặn) ⇒
+  chúng chỉ để tham khảo; **bấm `PREV`/`NEXT` để sang góc khác (máy probe luôn góc đó)**, hoặc
+  `HOME+PROBE` nếu muốn cả 4 số cùng "mới" trong một khung Z mới.
+
+| Tình huống khác | Kết luận |
+|---|---|
+| Chạy `G35` nhiều lần liên tiếp | **Đúng và độc lập.** Mỗi lần `G35` đo mới cả 4 điểm rồi tính TB mới; delta không phụ thuộc Z-home nên giữa 2 lần có home lại Z vẫn so sánh được. |
+| Probe lỗi giữa chừng | Góc lỗi **không** được đưa vào TB và được in rõ là lỗi; cần ≥ 3 góc đo được, còn lại vẫn ra kết quả. |
+| Muốn **giảm nhiễu** cho một góc | Máy chỉ giữ **giá trị mới nhất** của mỗi góc (không tự lấy trung bình) — đo lặp rồi tự chia, hoặc tin vào `max-min`: ≤ 0.02–0.03mm là đạt, đừng vặn theo các delta < 0.01mm. |
+
+#### Chọn điểm `MIN` thì chiều vặn có ngược với `MAX` không?
+
+**Không ngược.** Nút `WORST` **chỉ đổi góc mà đầu in chạy tới**, không đụng tới phép tính:
+`delta = chiều_cao − TB` và chiều vặn `CW/CCW` luôn theo **cùng một quy ước** ở cả 2 chế độ —
+`delta > 0` = góc **cao hơn** mặt phẳng TB ⇒ **vặn CW** (hạ xuống); `delta < 0` ⇒ **vặn CCW** (nâng lên).
+
+Vì tổng 4 delta luôn = 0 nên luôn có **ít nhất 1 góc ≥ 0 và 1 góc ≤ 0**, do đó:
+
+- `MAX` luôn chọn góc có `delta ≥ 0` → hướng dẫn sẽ là **vặn CW** (hạ góc đó xuống).
+- `MIN` luôn chọn góc có `delta ≤ 0` → hướng dẫn sẽ là **vặn CCW** (nâng góc đó lên).
+
+Nhìn thì thấy "ngược" (MAX → CW, MIN → CCW) nhưng thực ra bạn chỉ đang đứng ở **góc đối diện**;
+quy ước **không hề đổi**. `CW/CCW` luôn nói về **chiều vặn ốc**, không phụ thuộc chế độ MAX/MIN.
+
+> 🔧 **Hai điều thực dụng khi dùng `MIN` (vít góc cao đã hết hành trình):**
+> - Chiến lược "chỉ nâng các góc thấp" hội tụ về **mặt phẳng của góc cao nhất** (không phải về trung
+>   bình): mỗi vòng khoảng cách `max−min` co lại ~25%, nên cần vài vòng — cứ bấm `HOME+PROBE` rồi làm theo
+>   delta mới (delta luôn được tính lại theo mặt phẳng trung bình mới).
+> - Nâng/hạ **cả mặt phẳng** không làm sai `Z offset`: mỗi lần `G28` máy probe lại tâm bàn nên mốc Z
+>   đi theo bàn. Chỉ cần để ý **hành trình Z** còn đủ.
+
+> 📌 **`WORST` lưu ở đâu (không xoá EEPROM):** cờ này nằm trong **ô `z_offset` của khối MBL** — mà
+> `MESH_BED_LEVELING` đang **TẮT** nên ô đó vốn bỏ trống (`settings.cpp:875-895` lúc lưu,
+> `settings.cpp:1832-1839` lúc đọc). Nhờ vậy **kích thước `SettingsData` không đổi** →
+> `EEPROM_VERSION` và CRC **không đổi** → **dữ liệu EEPROM đang có (`M851 Z0.70`, mesh UBL,
+> `M203/M201/M906`…) KHÔNG bị xoá** khi nạp bản này. Ô đó ghi `0.0f` = MAX, `1.0f` = MIN (giá trị cũ
+> trong EEPROM là 0 ⇒ MAX, đúng bằng mặc định).
+> ⚠️ Vì là mã nguồn Marlin bị sửa, nếu sau này ai bật `MESH_BED_LEVELING` thì cờ này **không** được lưu
+> nữa (code tự bỏ qua) — không hỏng gì, chỉ mất tính "nhớ".
 
 > ⚠️ Trong lúc wizard probe/đi, màn hình đứng ở dòng tiến độ — bình thường (mỗi probe ~10s).
 > Máy đo `G35` lần đầu sau khi viết lại: 4 góc lệch **≤ 0,05mm** so với tâm.
@@ -1623,6 +1797,186 @@ trừ cơ khí):
 > nên dòng `Count A:/B:` của `M114` chỉ là `X×steps_per_mm` và `Y×steps_per_mm` — **giống hệt nhau
 > dù firmware trộn trục hay không**. Nó luôn khớp với con số firmware tự tính, không phản ánh motor
 > quay thế nào. Muốn biết chiều thật thì phải **nhìn máy chạy** (hoặc quay tay).
+
+---
+
+## 12. Màn hình riêng `lcd_panel` — MCU tự render, Marlin chỉ gửi dữ liệu
+
+Thay vì để Marlin vẽ màn hình 12864, dự án có thêm một **firmware màn hình độc lập** trong thư mục
+`lcd_panel/`: một MCU riêng (**STM32F411CCU6** hoặc **STM32F103C6T6**) cắm màn **2.4" SPI ILI9341
+240×320**, tự vẽ nhiệt độ / vị trí / tiến độ in, và **hỏi Marlin bằng G-code chuẩn**
+(`M105`, `M114`, `M27`) qua **1 UART** ⇒ **Marlin không phải sửa code, không phải render**.
+
+**Có 2 kiểu, xem §15 để biết kiểu mới (Marlin đẩy dữ liệu + LVGL):**
+
+| | |
+|---|---|
+| Firmware panel | `lcd_panel/` — **project PlatformIO riêng** (`lcd_panel/platformio.ini`), không phải env của Marlin |
+| Build (kiểu G-code) | `pio run -d lcd_panel -e panel_f411cc` (F411CCU6) · `pio run -d lcd_panel -e panel_f103c6` (F103C6T6) |
+| Build (kiểu PUSH + LVGL) | `pio run -d lcd_panel -e panel_f407vgz_lvgl` · `panel_f411cc_lvgl` · `panel_esp32_cyd` |
+| Kích thước thực tế (G-code UI) | F411: **20,7 KB** flash / 1,9 KB RAM · F103C6T6: **21,1 / 32 KB (64%)** flash, 1,8 / 10 KB RAM |
+| Thư viện ngoài | Kiểu G-code: **không có** (driver ILI9341 + font 8×8 tự viết). Kiểu LVGL: `lvgl@^8.3.11` (+ `TFT_eSPI` cho ESP32-CYD) |
+| Marlin phải làm | kiểu G-code: bật 1 UART (`SERIAL_PORT_2 3` + `BAUDRATE_2 250000`). Kiểu PUSH: bật `PANEL_SERIAL_UI` — **1 lệnh** `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on` |
+| Dây (Monster8 → panel) | EXP1 chân 5 (PD9 = USART3-**RX**) ← TX panel · chân 6 (PD8 = USART3-**TX**) → RX panel · chân 9 GND chung · chân 10 = 5V nếu board panel có regulator |
+
+> 🔎 **MKS làm thế nào?** Trong `Marlin/src/lcd/extui/` có **2 kiểu**, đừng lẫn:
+> * `extui/mks_ui` (MKS Robin), `lcd/tft`, `e2v2`… = màn gắn thẳng vào mainboard, **Marlin tự vẽ**
+>   (LVGL/DWIN biên dịch vào firmware) — đúng thứ kiến trúc này **tránh**.
+> * `extui/nextion`, `extui/dgus` (kể cả `dgus/mks`) = **màn có MCU riêng**, Marlin chỉ gửi dữ liệu.
+>   `lcd_panel` đi theo kiểu này, nhưng ở mức **"TFT panel"** giống **MKS TFT28/32/35**: panel tự
+>   poll bằng G-code nên **không cần thêm `ExtUI`** nào trong Marlin.
+
+> ⚠️ **USART2 (PA2/PA3) của Monster8 đã dùng cho `HEATER_2`/`FAN0`** → dùng **USART3**, nhưng nhớ
+> đúng chiều chân: **PD8 = USART3_TX** (EXP1 chân 6), **PD9 = USART3_RX** (EXP1 chân 5) → dây **chéo**.
+> Cờ build đúng: `-DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8`.
+> ⚠️ **PD8 còn là `NEOPIXEL_PIN` = `EXP1_06_PIN`** (đèn nền RGB của màn 12864 V3, `NEOPIXEL_LED` đang
+> bật) và PD9 là `LCD_PINS_D4` của màn 12864 song song → phải **tắt cả `MKS_MINI_12864_V3` và
+> `NEOPIXEL_LED`** (và với mọi cổng khác `Serial` thì cờ `-DPIN_SERIALx_TX/RX` là **bắt buộc**,
+> nếu thiếu core không gán chân → `begin()` thất bại). Không muốn đụng vào LCD thì dùng
+> **USART1 = header WiFi** (PA9=TX/PA10=RX): `SERIAL_PORT_2 1` + `-DENABLE_HWSERIAL1
+> -DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` — `MKS_WIFI_MODULE` đang tắt.
+> Chi tiết đầy đủ (nối dây, xử lý sự cố, giao thức, cách đổi font): **`lcd_panel/README.md`**.
+
+---
+
+## 13. Encoder: đọc bằng NGẮT + hàng đợi (`ENCODER_QUAD_ISR`)
+
+Đã thay cách đọc encoder của cả Marlin và panel bằng thuật toán lấy ý từ `D:\summer-fan`.
+
+| | Marlin gốc | summer-fan (`encode2.cpp`) | **Dùng bây giờ** |
+|---|---|---|---|
+| Đọc chân A/B | **polling** trong `MarlinUI::update_buttons()` | **ngắt đổi chân** + `std::queue` | **ngắt đổi chân** + **ring cố định** |
+| Mất cạnh khi UI bận? | **Có** (đọc SD, ghi EEPROM, vẽ màn hình, delay khi probe…) → phải bù bằng `ENCODER_RATE_MULTIPLIER` (**đoán** số bước mất theo tốc độ) | Không | **Không** |
+| Chống dội / nhiễu | Bảng chuyển tiếp **đã** bỏ qua bước nhảy 2 bit ✓ | Máy trạng thái full-cycle, rất chống dội ✓ | Bảng chuyển tiếp y hệt Marlin (nhảy 2 bit = 0) ✓ |
+| Đơn vị | 1 xung = 1 cạnh, chia `ENCODER_PULSES_PER_STEP` | 1 sự kiện = **cả chu kỳ 4 cạnh** (thô hơn) | **Y hệt Marlin** → mọi logic menu không đổi |
+| Cấp phát trong ngắt | — | **`std::queue` + `new` trong ISR** ✗ (phân mảnh, không xác định) | **Không** (mảng `volatile uint8_t[32]`) ✓ |
+| Chiều quay | — | — | **Giống hệt Marlin cũ** (bảng cùng cực tính) → không bị đảo chiều |
+
+**Kết luận:** summer-fan **không** "tốt hơn toàn diện" — bảng chuyển tiếp của Marlin vốn đã bỏ qua
+bước nhảy 2 bit, và cách của summer-fan thô hơn (1 sự kiện/chu kỳ) lại còn cấp phát heap trong
+ngắt. **Điểm hay thật sự** của nó là **ngắt + hàng đợi ⇒ không mất cạnh**, đúng chỗ Marlin yếu
+(vì thế Marlin phải có `ENCODER_RATE_MULTIPLIER` để *đoán* bù). Nên đã lấy đúng ý đó, làm lại cho
+an toàn: **ring cố định trong ngắt + đúng bảng/đúng đơn vị của Marlin**.
+
+* Marlin: option **`ENCODER_QUAD_ISR`** (`Configuration_adv.h`, đang **BẬT**) + `src/lcd/encoder_quad.cpp`.
+  Muốn quay lại cách cũ: comment `#define ENCODER_QUAD_ISR`. Chi phí: +1,2 KB flash, +40 B RAM.
+* Panel (`lcd_panel`): cùng thuật toán trong `lcd_panel/src/encoder.cpp` — quan trọng hơn vì panel
+  vẽ SPI theo từng khối lớn (một lần `fillScreen` 240×320 ≈ 150 KB ⇒ hàng chục ms **không đọc được
+  chân**), polling ở đó chắc chắn mất nấc.
+* Đã kiểm bằng mô phỏng: 1 vòng CW = +1 nấc, CCW = −1, **có dội phím vẫn đúng**, **nhiễu nhảy 2 bit
+  = 0 nấc**, và quay quá nhanh trong một lần đọc thì bị **kẹp trần** (chống chạy loạn).
+
+---
+
+## 14. ISR encoder (`ENCODER_QUAD_ISR`) có đụng ISR nào của Marlin không? — **Không**
+
+Đã kiểm tận code (không đoán). Chân ngắt của encoder trên MKS Monster8 V2:
+
+| | Chân | Digital pin | EXTI |
+|---|---|---|---|
+| `BTN_EN1` = `EXP2_03_PIN` | **PE9** | 73 (`variant.cpp` dòng 104, `NUM_DIGITAL_PINS 82`) | line **9** |
+| `BTN_EN2` = `EXP2_05_PIN` | **PE8** | 72 (`variant.cpp` dòng 103) | line **8** |
+
+**1. Bảng callback của core chỉ có 1 callback cho mỗi LINE (không phân biệt port).**
+`attachInterrupt(pin, cb, CHANGE)` → `stm32_interrupt_enable()` lưu vào
+`gpio_irq_conf[16]` (`framework-arduinoststm32/libraries/SrcWrapper/src/stm32/interrupt.cpp`), index =
+số thứ tự chân 0…15. PE8 và PE9 là **2 line khác nhau** → 2 callback cùng tồn tại, **không ghi đè nhau**.
+(`digitalPinToPinName(73)` → `digitalPin[73]` = `PE_9`; `PNUM_MASK 0xFF`, pin < 82 nên ánh xạ đúng.)
+
+**2. Vector dùng chung `EXTI9_5_IRQHandler` — không phải xung đột.**
+Line 5…9 chung 1 vector; handler quét từng line còn cờ rồi gọi `HAL_GPIO_EXTI_IRQHandler()`
+(line nào xong line đó: xoá cờ → gọi callback của đúng line). Nên 2 chân encoder nằm gọn trong
+1 vector và vẫn độc lập; sau này thêm ngắt ở line 6/7 cũng sống chung được.
+
+**3. Trong bản build này, EXTI chỉ có đúng 2 người dùng — chính là 2 chân encoder:**
+
+| Tính năng có thể gắn ngắt | Trạng thái | Bằng chứng |
+|---|---|---|
+| `ENDSTOP_INTERRUPTS_FEATURE` | **tắt** | `Configuration.h:1158` (comment) |
+| `EMERGENCY_PARSER` | **tắt** | `Configuration_adv.h:2493` (comment) |
+| Flowmeter (`LASER_COOLANT_FLOW_METER` → `attachInterrupt` trong `feature/cooler.h:69`) | **không biên dịch** | `SPINDLE_FEATURE`/`LASER_FEATURE` comment (3372/3373), flowmeter 3519, `TEMP_SENSOR_COOLER 0` (`Configuration.h:572`) |
+| SD_DETECT (`PC4`/`EXP2_07`) | **polling**, không ngắt | `cardreader` đọc chân |
+| BLTouch/servo, NeoPixel, TMC UART | timer/PWM/bit-bang | — |
+| USB flash drive host | chỉ ở `env:mks_monster8_usb_flash_drive*` | không phải env đang dùng |
+
+Trong `Marlin/src/HAL/STM32`, `Marlin/src/feature`, `Marlin/src/lcd` **không còn chỗ nào** gọi
+`attachInterrupt`/`HAL_NVIC_EnableIRQ` cho GPIO — chỉ `lcd/encoder_quad.cpp`.
+
+**4. Ưu tiên ngắt — encoder không thể làm hỏng nhịp bước (step).**
+
+| ISR | Priority | Ghi chú |
+|---|---|---|
+| Servo / SoftwareSerial | 1 | `timers.cpp` default |
+| **Step timer** | **2** | cắt ngang được ISR encoder ⇒ bước đi vẫn đúng nhịp |
+| USB device (CDC) | 5 | `-DUSBD_IRQ_PRIO=5` (env `mks_monster8`) |
+| **EXTI (encoder)** | **6** | `interrupt.h` (Cortex-M4 → 6); **không** override ở pins/variant/ini |
+| Temp timer | 14 | ISR encoder cắt ngang được temp ISR |
+
+`HAL_Init()` gọi `HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4)` ⇒ toàn bộ 4 bit là preemption,
+sub-priority bị bỏ qua ⇒ so sánh số là so sánh quyền cắt ngang. `quad_isr()` chỉ đọc 2 chân
+(`READ()` = đọc IDR) và ghi 1 byte vào ring: **không** `millis()`, không cấp phát, không in, không
+khoá ngắt lồng nhau ⇒ vài chục chu kỳ, không ảnh hưởng ISR khác.
+
+**5. Vài điều phải nhớ (đã kiểm, không phải suy đoán):**
+
+* **Cấm trùng line:** bảng core chỉ giữ **1 callback/line**. Nếu sau này bật
+  `ENDSTOP_INTERRUPTS_FEATURE` (hoặc bật lại laser/flowmeter) mà chân ngắt rơi vào **cùng line 8/9 ở
+  port khác** (PA8/PA9, PB8/PB9, PC8/PC9, PD8/PD9) thì người gắn sau **ghi đè** callback của encoder.
+  Line 5/6/7 khác slot nên vô hại.
+* **NeoPixel khoá ngắt:** `Adafruit_NeoPixel::show()` gọi `noInterrupts()` trong lúc đẩy bit
+  (~30 µs/byte ở 800 kHz ⇒ ~90 µs cho 1 LED RGB, ~1 ms cho 10 LED). Cờ EXTI vẫn được phần cứng
+  **chốt lại**, nên cùng lắm mẫu đến muộn — không đếm sai (nhảy 2 bit = 0 xung).
+* **Ring 32 mẫu**: ISR ghi dữ liệu **trước** rồi mới tăng `quad_head` (chỉ số `uint8_t volatile` →
+  atomic trên M4), luồng chính chốt `head` rồi đọc tới đó ⇒ SPSC ring an toàn. Ring đầy thì **bỏ mẫu
+  mới** (mất xung, không bao giờ sai chiều).
+* **Tắt màn 12864 ⇒ không còn ngắt nào:** không có `HAS_ENCODER_WHEEL` thì cả `encoder_quad.cpp`
+  không được biên dịch (guard `#if ENABLED(ENCODER_QUAD_ISR) && HAS_ENCODER_WHEEL && BUTTONS_EXIST(EN1, EN2)`).
+* **Phía panel** (`lcd_panel`, MCU riêng, không liên quan ISR của Marlin): encoder PB12/PB13 →
+  `EXTI15_10_IRQHandler` (line 12/13), trên panel **không** có ngắt nào khác; nút PB14 đọc bằng polling.
+  Đã kiểm 2 variant: `F411C(C-E)(U-Y)` (PB12=27/PB13=28/PB14=29) và `F103C4T_F103C6` (28/29/30) —
+  đều có thật trong `digitalPin[]`.
+
+---
+
+## 15. Màn hình LVGL riêng — Marlin **ĐẨY** dữ liệu (`PANEL_SERIAL_UI`)
+
+Màn hình mới (**không** dùng G-code để vẽ): Marlin chủ động đẩy **frame nhị phân** xuống MCU màn
+hình qua UART, panel vẽ bằng **LVGL**. Panel chỉ gửi G-code cho **hành động** (G28 / M104 / M140 /
+M24 / M524…). Cách này cho panel **đủ dữ liệu để vẽ mọi khối** mà G-code không lấy được: danh sách
+file SD, lưới bed mesh, PID / steps-mm / jerk, probe offset, hộp thoại xác nhận, tên file đang in…
+
+**Vì sao không thể cứ dùng G-code?** Panel ở MCU riêng không đọc được biến nội bộ của Marlin; nếu chỉ
+hỏi `M105/M114/M27` thì thiếu rất nhiều thứ, và MKS cũng phải thêm hàng loạt M-code riêng cho TFT
+của họ (`makerbase-mks/MKS-TFT28-32-Firmware` — tham khảo để đối chiếu, không dùng lại).
+
+| | |
+|---|---|
+| Trong Marlin | `Marlin/src/lcd/extui/panel_serial/` — ExtUI mới (hooks `ExtUI::on*`), bật bằng `#define PANEL_SERIAL_UI` |
+| Giao thức | `panel_protocol.h` — **một file dùng chung** cho cả Marlin và panel (copy y nguyên hai bên) |
+| UART | `MSerial3` = USART3 **PD8 (TX) / PD9 (RX)** = EXP1 chân 6/5. **Không** dùng `SERIAL_PORT_2` (Marlin sẽ coi đó là cổng host thứ 2 và diễn giải frame nhị phân như G-code) |
+| Build flag (đã có trong `ini/stm32f4.ini`) | `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8` |
+| Bật/tắt 1 lệnh | `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on\|off\|status` (đổi 5 dòng config; xem `lcd_panel/README.md` §3) |
+| Panel | `lcd_panel/src/panel_link.cpp` (nhận/phân tích frame) + `ui_lvgl.cpp` (LVGL 8.3) |
+| Env panel | `panel_f407vgz_lvgl` · `panel_f411cc_lvgl` · `panel_esp32_cyd` (ESP32-2432S028R "CYD", ILI9341 + XPT2046) |
+| Build thật (đã kiểm) | F411 LVGL: **134.012 B** flash / 46.180 B RAM · F407 LVGL: **135.928 B** / 74.900 B · ESP32-CYD: **441.561 B** / 95.284 B · (G-code UI: F411 20.688 B, F103C6 21.096 B/64 %) |
+| Kiểm thử offline | `pwsh lcd_panel/tools/run_host_test.ps1` — 40 kiểm tra giao thức chạy trên máy tính (đã bắt được 2 lỗi thật: lệch offset `feed/flow %`, điều kiện gửi PING) |
+| Flash Marlin | chế độ panel **196.444 B** (18,7 %) so với 266.536 B (25,4 %) khi dùng màn 12864 |
+
+Khi bật `PANEL_SERIAL_UI`, Marlin **không thể đồng thời** có màn gắn trực tiếp (ExtUI chiếm
+`MarlinUI::init_lcd()/update()` — sẽ lỗi `multiple definition`), nên script tắt luôn
+`MKS_MINI_12864_V3`, `NEOPIXEL_LED` (PD8 trùng USART3_TX), `CUSTOM_MENU_MAIN` và `LED_CONTROL_MENU`
+(ExtUI không dùng hệ thống menu của MarlinUI — các mục menu tuỳ biến được đưa sang màn **CUSTOM**
+của panel, đúng 2 mục cũ `G34 Q99` và `M22`+`M21`). SanityCheck của Marlin báo lỗi rõ ràng nếu còn
+màn hình gắn trực tiếp.
+
+> ⚠️ **Chưa nạp thử lên máy**: code Marlin đã build sạch ở cả 2 chế độ và giao thức đã test trên máy
+> tính, nhưng phần cứng thật (ESP32-CYD / F407 + màn) thì phải chờ board về mới kiểm được.
+>
+> 📌 **Việc còn nợ:** chế độ panel phải tắt `CUSTOM_MENU_MAIN` (+ `LED_CONTROL_MENU`) nên **menu tuỳ
+> biến của Marlin hiện không có**; 2 mục cũ đã đưa sang màn CUSTOM của panel nhưng thêm mục mới thì
+> phải sửa code panel. Kế hoạch & tiêu chí nghiệm thu ở
+> **`docs/issues/0001-panel-serial-ui-tat-custom-menu.md`** (issue nháp, chưa tạo trên GitHub — máy
+> không có `gh` CLI/token, trong file có sẵn lệnh tạo).
 
 ---
 

@@ -945,6 +945,15 @@ static_assert(Y_MAX_LENGTH >= Y_BED_SIZE, "Movement bounds (Y_MIN_POS, Y_MAX_POS
 #endif
 
 /**
+ * Man hinh rieng "lcd_panel" (ExtUI panel_serial) chiem chu ky init_lcd()/update() cua MarlinUI
+ * va KHONG dung he thong menu cua MarlinUI, nen khong the vua bat no vua de man hinh gan truc tiep
+ * (MKS_MINI_12864_V3...): se "multiple definition of MarlinUI::init_lcd()" khi link.
+ */
+#if ENABLED(PANEL_SERIAL_UI) && HAS_WIRED_LCD
+  #error "PANEL_SERIAL_UI dung ExtUI rieng: hay comment man hinh dang bat (MKS_MINI_12864_V3, NEOPIXEL_LED, CUSTOM_MENU_MAIN, LED_CONTROL_MENU) trong Configuration.h / Configuration_adv.h."
+#endif
+
+/**
  * Custom Boot and Status screens
  */
 #if ENABLED(SHOW_CUSTOM_BOOTSCREEN) && NONE(HAS_MARLINUI_U8GLIB, TOUCH_UI_FTDI_EVE, IS_DWIN_MARLINUI)

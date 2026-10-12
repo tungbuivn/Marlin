@@ -52,6 +52,10 @@
   #include "../../feature/bedlevel/bedlevel.h"
 #endif
 
+#if ENABLED(ASSISTED_TRAMMING)
+  #include "../../feature/tramming.h"
+#endif
+
 //
 // "Motion" > "Move Axis" submenu
 //
@@ -318,6 +322,14 @@ void menu_move() {
 
 #if ENABLED(ASSISTED_TRAMMING_WIZARD)
   void goto_tramming_wizard();
+  void tramming_worst_toggle();     // lcd/menu/menu_tramming.cpp
+
+  // Doi goc "lech nhat" cua Tramming Wizard: MAX (goc cao nhat) <-> MIN (goc thap nhat).
+  // Ham tren da luu EEPROM (nho cho cac lan sau); o day chi bao them tren dong trang thai.
+  static void _tramming_worst_toggled() {
+    tramming_worst_toggle();
+    ui.set_status(tramming_worst_max ? F("TRAMMING WORST = MAX") : F("TRAMMING WORST = MIN"));
+  }
 #endif
 
 #if ENABLED(Z_STEPPER_AUTO_ALIGN)
@@ -391,6 +403,11 @@ void menu_motion() {
   //
   #if ENABLED(ASSISTED_TRAMMING_WIZARD)
     SUBMENU(MSG_TRAMMING_WIZARD, goto_tramming_wizard);
+
+    // Goc "lech nhat" ma wizard dua dau in toi: ON = MAX (goc CAO NHAT), OFF = MIN (goc THAP NHAT).
+    // Bam = doi va luu ngay vao EEPROM -> nho cho cac lan sau. Dung khi vit cua goc dang
+    // chinh da het hanh trinh (van mai khong duoc) thi chuyen sang chinh goc nguoc lai.
+    EDIT_ITEM_F(bool, F("WORST POINT = MAX"), &tramming_worst_max, _tramming_worst_toggled);
   #endif
 
   //

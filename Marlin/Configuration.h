@@ -125,6 +125,29 @@
 //#define BAUDRATE_2 115200   // :[2400, 9600, 19200, 38400, 57600, 115200, 250000, 500000, 1000000] Enable to override BAUDRATE
 
 /**
+ * MAN HINH RIENG "lcd_panel" (MCU cua man hinh tu render, Marlin chi gui du lieu bang frame)
+ *
+ * Firmware man hinh nam o thu muc lcd_panel/ (project PlatformIO RIENG, xem
+ * lcd_panel/README.md). Ban moi (LVGL) KHONG hoi G-code de ve nua: Marlin chu dong day frame
+ * nhi phan xuong qua 1 UART (ExtUI "panel_serial", bat bang #define PANEL_SERIAL_UI o duoi),
+ * panel chi gui lenh G-code cho HANH DONG (G28 / M104 / M140 / M24 / M524...).
+ *
+ * Tren MKS Monster8 V2: dung USART3 vi chan nam ngay header EXP1 (header man 12864 cu).
+ * Chieu chan lay tu variant MARLIN_F4x7Vx (variant.h dong 91-92): PD8 = USART3_TX, PD9 = USART3_RX
+ *     EXP1 chan 5 = PD9 = USART3_RX  <-  TX cua panel
+ *     EXP1 chan 6 = PD8 = USART3_TX  ->  RX cua panel   => day phai CHEO
+ *     EXP1 chan 9 = GND (phai noi chung), chan 10 = 5V (neu board panel co regulator)
+ * KHONG dung SERIAL_PORT_2: PA2/PA3 cua Monster8 da la FAN0/HEATER_2, va neu khai bao
+ * SERIAL_PORT_2 thi Marlin coi do la cong host thu 2 -> se dien giai frame nhi phan nhu G-code.
+ *
+ * Cach bat (1 lenh): pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on
+ * (script tu tat MKS_MINI_12864_V3 + NEOPIXEL_LED + CUSTOM_MENU_MAIN + LED_CONTROL_MENU va
+ *  bat PANEL_SERIAL_UI; xem docs/issues/0001-panel-serial-ui-tat-custom-menu.md).
+ * Build flag can co trong ini/stm32f4.ini (env mks_monster8) -- da co san:
+ *     -DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8
+ */
+
+/**
  * Select a third serial port on the board to use for communication with the host.
  * Currently only supported for AVR, DUE, LPC1768/9 and STM32/STM32F1
  * :[-1, 0, 1, 2, 3, 4, 5, 6, 7]
@@ -3115,6 +3138,32 @@
 // Sources should be installed in 'src/lcd/extui'.
 //
 //#define EXTENSIBLE_UI
+
+/**
+ * MAN HINH RIENG "lcd_panel" -- Marlin DAY du lieu xuong MCU man hinh (khong dung G-code de ve)
+ *
+ * Man hinh (STM32F411/F103/F407 hoac ESP32-2432S028R "CYD") chay firmware rieng trong thu muc
+ * lcd_panel/ va ve bang LVGL. Marlin chu dong gui frame nhi phan qua 1 UART (xem
+ * src/lcd/extui/panel_serial/panel_protocol.h); panel chi gui lenh G-code cho HANH DONG
+ * (G28 / M104 / M140 / M24 ...). Nho vay panel co DU du lieu de ve moi khoi ma G-code khong
+ * the lay duoc: danh sach file SD, luoi bed mesh, PID / steps-mm / jerk, prompt nguoi dung...
+ *
+ * UART: USART3 = PD8 (TX) / PD9 (RX) -- nam ngay header EXP1 chan 6/5 tren MKS Monster8 V2.
+ *       Da co san build flag trong ini/stm32f4.ini (env mks_monster8):
+ *           -DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8
+ *
+ * !!! KHI BAT: phai tat man hinh dang dung vi ExtUI chiem chu ky init_lcd()/update() cua
+ *     MarlinUI (khong the vua co man 12864 vua co ExtUI), va ExtUI khong dung he thong menu
+ *     cua MarlinUI nen cac menu tuy bien phai dua sang panel:
+ *         Configuration.h:      comment MKS_MINI_12864_V3, NEOPIXEL_LED
+ *         Configuration_adv.h:  comment CUSTOM_MENU_MAIN, LED_CONTROL_MENU
+ *     (SanityCheck da bao loi ro rang neu con man hinh gan truc tiep.)
+ *     Lam tu dong: pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on
+ *
+ * Khong muon nua: comment dong duoi day (hoac chay script tren voi -Mode off).
+ * Ke hoach "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
+ */
+//#define PANEL_SERIAL_UI
 
 #if ENABLED(EXTENSIBLE_UI)
   //#define EXTUI_LOCAL_BEEPER // Enables use of local Beeper pin with external display

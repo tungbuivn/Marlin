@@ -40,6 +40,9 @@
 #include "marlinui.h"
 MarlinUI ui;
 
+// Optional: interrupt-driven quadrature decoder for the encoder wheel
+#include "encoder_quad.h"
+
 #if HAS_DISPLAY
   #include "../gcode/queue.h"
   #include "fontutils.h"
@@ -271,6 +274,11 @@ void MarlinUI::init() {
 
   #if HAS_U8GLIB_I2C_OLED && PINS_EXIST(I2C_SCL, I2C_SDA) && DISABLED(SOFT_I2C_EEPROM)
     Wire.begin(int(I2C_SDA_PIN), int(I2C_SCL_PIN));
+  #endif
+
+  // Attach the encoder pin-change interrupts once (no-op unless ENCODER_QUAD_ISR)
+  #if ENABLED(ENCODER_QUAD_ISR) && HAS_ENCODER_WHEEL && BUTTONS_EXIST(EN1, EN2)
+    quad_encoder_init();
   #endif
 
   update_buttons();
@@ -1398,27 +1406,38 @@ void MarlinUI::init() {
       } // next_button_update_ms
 
       #if HAS_ENCODER_WHEEL
-        static uint8_t lastEncoderBits;
-
-        // Manage encoder rotation
-        #define ENCODER_SPIN(_E1, _E2) switch (lastEncoderBits) { case _E1: encoderDiff += encoderDirection; break; case _E2: encoderDiff -= encoderDirection; }
-
-        uint8_t enc = 0;
-        if (buttons & EN_A) enc |= B01;
-        if (buttons & EN_B) enc |= B10;
-        if (enc != lastEncoderBits) {
-          switch (enc) {
-            case 0: ENCODER_SPIN(1, 2); break;
-            case 2: ENCODER_SPIN(0, 3); break;
-            case 3: ENCODER_SPIN(2, 1); break;
-            case 1: ENCODER_SPIN(3, 0); break;
+        #if ENABLED(ENCODER_QUAD_ISR)
+          // Interrupt-driven, transition-validated decoder (src/lcd/encoder_quad.cpp).
+          // Same unit as the polling decoder below: 1 = one quadrature edge.
+          const int8_t quad_pulses = quad_encoder_pulses();
+          if (quad_pulses) {
+            encoderDiff += quad_pulses;
+            #if BOTH(HAS_MARLINUI_MENU, AUTO_BED_LEVELING_UBL)
+              external_encoder();
+            #endif
           }
-          #if BOTH(HAS_MARLINUI_MENU, AUTO_BED_LEVELING_UBL)
-            external_encoder();
-          #endif
-          lastEncoderBits = enc;
-        }
+        #else
+          static uint8_t lastEncoderBits;
 
+          // Manage encoder rotation
+          #define ENCODER_SPIN(_E1, _E2) switch (lastEncoderBits) { case _E1: encoderDiff += encoderDirection; break; case _E2: encoderDiff -= encoderDirection; }
+
+          uint8_t enc = 0;
+          if (buttons & EN_A) enc |= B01;
+          if (buttons & EN_B) enc |= B10;
+          if (enc != lastEncoderBits) {
+            switch (enc) {
+              case 0: ENCODER_SPIN(1, 2); break;
+              case 2: ENCODER_SPIN(0, 3); break;
+              case 3: ENCODER_SPIN(2, 1); break;
+              case 1: ENCODER_SPIN(3, 0); break;
+            }
+            #if BOTH(HAS_MARLINUI_MENU, AUTO_BED_LEVELING_UBL)
+              external_encoder();
+            #endif
+            lastEncoderBits = enc;
+          }
+        #endif // ENCODER_QUAD_ISR
       #endif // HAS_ENCODER_WHEEL
     }
 
@@ -2038,8 +2057,8 @@ void MarlinUI::init() {
   }
 
   /**
-   * G34 is done (or was cancelled): keep the numbers on screen for a while so
-   * they can be read, then hand the display back to the status screen.
+   * G34 is done: keep the numbers on screen for a while so they can be read,
+   * then hand the display back to the status screen.
    */
   void MarlinUI::g34_screen_end(const G34Phase phase) {
     if (!g34_screen.active) return;
