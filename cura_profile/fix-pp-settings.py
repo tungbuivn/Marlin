@@ -44,8 +44,9 @@ OVERRIDES = {
         "max_acceleration": "300",  # = M201 X/Y
     },
     "FirstLayerTwice": {
-        "pass1_flow": "60",         # lop miet bam ban (mac dinh moi)
+        "pass1_flow": "30",         # lop miet bam ban (mac dinh moi)
         "pass2_flow": "100",        # lop 2 = lop binh thuong
+        "pass2_feedrate": "60",     # pass 2 in o toc do binh thuong (mm/s), khong dung Initial Layer Speed
     },
 }
 

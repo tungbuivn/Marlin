@@ -3,12 +3,15 @@
 Kiem tra co che dung M221 flow thay vi nhan lai E:
 
   pass 1  - body da HA xuong first_pass_z (0.1) = lop MIET BAM BAN,
-            chi doi flow bang M221 S60 (pass1_flow, mac dinh 60%)
+            chi doi flow bang M221 S30 (pass1_flow, mac dinh 30%); toc do GIU NGUYEN
+            (Cura 'Initial Layer Speed')
   giua    - nhac Z THAT len first_pass_z + <Z goc layer 0> (0.1 + 0.2 = 0.3),
             roi G92 khai bao lai day la <Z goc layer 0> (0.2), reset extruder ve
             E dau layer 0, M221 S100
   pass 2  - BODY GOC, khong ha -> nam CAO HON pass 1 dung mot chieu cao layer
-            init => in nhu mot lop BINH THUONG, flow 100%
+            init => in nhu mot lop BINH THUONG, flow 100%;
+            va duoc EP TOC DO ve pass2_feedrate (60 mm/s = F3600) vi Cura ap
+            'Initial Layer Speed' cho CA layer 0
   ket thuc- M221 S100 (cho layer 1 tro len)
 
 Boi canh ba loi da gap:
@@ -62,8 +65,9 @@ SETTINGS = {
     "enabled": True,
     "force_temperatures": False,
     "double_first_layer": True,
-    "pass1_flow": 60,
+    "pass1_flow": 30,
     "pass2_flow": 100,
+    "pass2_feedrate": 60,
     "z_feedrate": 600,
     "first_pass_z": 0.1,
 }
@@ -144,9 +148,39 @@ def main():
     assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
 
     # moc M221
-    assert any("M221 S60" in l for l in lines[i1:i2]), "FAIL: thieu M221 S60 truoc pass 1"
+    assert any("M221 S30" in l for l in lines[i1:i2]), "FAIL: thieu M221 S30 truoc pass 1"
     assert any("M221 S100" in l for l in lines[i2:i3]), "FAIL: thieu M221 S100 truoc pass 2"
     assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
+
+    # --- TOC DO: pass 1 giu feedrate goc cua Cura; pass 2 ep ve pass2_feedrate (60mm/s = F3600) ---
+    # Chi cac buoc CO DUN NHUA (co X/Y va E) moi bi doi F; travel / Z-hop / retract giu nguyen.
+    def extruding_moves(seg):
+        out = []
+        for l in seg:
+            code = l.split(";", 1)[0].strip()
+            if not code or code.split()[0] not in ("G0", "G1"):
+                continue
+            if " E" not in code:
+                continue
+            if "X" not in code and "Y" not in code:
+                continue
+            out.append(l)
+        return out
+
+    ex1 = extruding_moves(lines[i1:i2])
+    ex2 = extruding_moves(lines[i3:i4])
+    print("")
+    print("  buoc dun pass 1: {0}".format([l.strip() for l in ex1]))
+    print("  buoc dun pass 2: {0}".format([l.strip() for l in ex2]))
+    assert ex1 and ex2, "FAIL: khong tim thay buoc dun nao"
+    assert all("F3600" in l for l in ex2), "FAIL: pass 2 phai in o F3600 (60mm/s)"
+    # pass 1: KHONG bi doi toc do. Cura bo bot F lap lai o buoc sau (dung chuan G-code), nen chi
+    # kiem: co it nhat 1 buoc mang F goc cua layer 0 va KHONG co buoc nao bi doi thanh F3600.
+    assert not any("F3600" in l for l in ex1), "FAIL: pass 1 bi doi toc do"
+    assert any("F1800" in l for l in ex1), "FAIL: pass 1 phai giu F1800 (toc do layer 0 cua Cura)"
+    # Z-hop / retract khong bi doi toc do
+    assert any("F600 Z0.4" in l for l in lines[i3:i4]), "FAIL: Z-hop cua pass 2 bi doi toc do"
+    assert any("F900 E0" in l for l in lines[i3:i4]), "FAIL: buoc E khong XY cua pass 2 bi doi toc do"
 
     # nang Z THAT len first_pass_z + Z goc layer 0 = 0.1 + 0.2 = 0.3, roi G92 ve 0.2
     # (ve Z GOC cua layer 0, de body goc roi dung cho va moi layer sau giu dung buoc 0.2)
