@@ -1287,7 +1287,7 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 |---|---|---|---|
 | Pass 1 = lớp **miết bám bàn** | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) — mỏng hơn `layer_height` | `M221 S20` → **20 %** (`pass1_flow`, mặc định 20 %); **tốc độ giữ nguyên** tốc độ chậm của Cura (`speed_print_layer_0` = "Initial Layer Speed") |
 | ↕ giữa hai pass | — | `G1 Z0.35` = `first_pass_z` + `layer_z` + `pass2_z_extra` (0.1 + 0.2 + 0.05), rồi `G92 Z0.2` → khai báo lại **Z gốc của layer 0** (hệ quy chiếu lệch **0.15**) | — |
-| Pass 2 = lớp **bình thường** | body **GỐC**, không hạ | **0.35** (0.2 trong hệ đã lệch 0.15) — cao hơn pass 1 **`layer_height` + `pass2_z_extra` = 0.25** (cố ý nhả thêm 0.05 mm để nozzle không cà vào lớp nhựa vừa in của pass 1) | `M221 S100` → **100 %**, và `F` của các bước **có X/Y + E** bị ép về `pass2_feedrate` (**60 mm/s** = `F3600`) |
+| Pass 2 = lớp **bình thường** | body **GỐC**, không hạ | **0.35** (0.2 trong hệ đã lệch 0.15) — cao hơn pass 1 **`layer_height` + `pass2_z_extra` = 0.25** (cố ý nhả thêm 0.05 mm để nozzle không cà vào lớp nhựa vừa in của pass 1) | `M221 S100` → **100 %**; `F` của các bước **có X/Y + E** được ép lại **(tốc độ = tốc độ in thật của layer 1)** — tự lấy `F` phổ biến nhất của `;LAYER:1` khi `pass2_feedrate_auto` bật; dự phòng `pass2_feedrate` = **60 mm/s** = `F3600` |
 | Layer 1 trở lên | không đụng | 0.4 → **0.55** (cách pass 2 đúng `layer_height` = 0.20) | `M221 S100` → 100 % |
 
 ```gcode
@@ -1302,11 +1302,16 @@ G1 Z0.35 F600               ; nang Z len first_pass_z + Z goc cua layer 0 + pass
 G92 Z0.2                    ; khai bao lai day la Z goc cua layer 0
 G92 E-0.75                  ; reset extruder ve E dau layer 0
 M221 S100                   ; flow pass 2 = 100% (da nang len layer_height + pass2_z_extra)
-; --- First Layer Twice: bat dau pass 2 (100%) ---
-G1 F3600 X20 Y20 E1         ; pass 2: buoc CO X/Y + E -> ep ve pass2_feedrate (60 mm/s)
+; --- First Layer Twice: bat dau pass 2 (100%) | toc do 100 mm/s (lay tu layer 1) ---
+G1 F6000 X20 Y20 E1         ; pass 2: buoc CO X/Y + E -> mang F cua layer 1 (o day 100 mm/s = F6000)
 G0 F600 Z0.4                ; travel / Z-hop: GIU nguyen F do Cura dat
 G1 F900 E-0.75              ; retract (co E, khong X/Y): GIU nguyen F do Cura dat
 ```
+
+> 🔵 **Mọi bước ĐÙN của pass 2 mang `F` của layer 1**, không phải tốc độ chậm của layer 0. Ở ví dụ
+> trên layer 1 in **100 mm/s** (`F6000`) nên pass 2 cũng `F6000` (thay vì 60 mm/s = `F3600` như trước).
+> Dòng marker `... | toc do 100 mm/s (lay tu layer 1)` in ra để **kiểm bằng mắt**: chữ trong ngoặc là
+> `lay tu layer 1` khi tự lấy được, hoặc `theo setting` khi phải dùng `pass2_feedrate` dự phòng.
 
 > 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1; pass 2 ở `first_pass_z + <Z gốc của layer 0> + pass2_z_extra`.**
 > `first_pass_z` **không** phụ thuộc `layer_height`. Script **dịch body của layer 0 xuống**
@@ -1338,7 +1343,7 @@ G1 F900 E-0.75              ; retract (co E, khong X/Y): GIU nguyen F do Cura da
 `flow_percentage`. **Hai pass KHÔNG còn cộng lại thành 100 %** (đó là cách của bản cũ 20 % + 80 %):
 nay pass 1 và pass 2 nằm ở **hai độ cao khác nhau**, nên lượng nhựa thực tế = **`pass1_flow` % + 100 %**
 — pass 1 là lớp miết mỏng bám bàn, pass 2 là **một lớp đầy đủ bình thường** (cả về flow 100 % **và**
-tốc độ: xem `pass2_feedrate`).
+tốc độ: tự lấy tốc độ in thật của layer 1 — xem `pass2_feedrate_auto` và khối 🔵 bên dưới).
 
 > **Vì sao `G92 E<e đầu layer 0>` là bắt buộc.** Trước layer 0 có thể có retract (đường purge kết
 > thúc bằng `G1 F900 E-0.75`), nên E lúc bắt đầu layer 0 **không phải 0**. Reset về 0 thì bước
@@ -1370,21 +1375,29 @@ tốc độ: xem `pass2_feedrate`).
 > `G92` vẫn giữ nguyên Z gốc của layer 0 nên **các layer phía trên không bị ảnh hưởng**.
 >
 > Vì pass 2 đã nằm **cao hơn pass 1 `layer_height` + `pass2_z_extra`** (0.25), nó in y như một lớp bình
-> thường ⇒ **flow pass 2 để 100 %** (và tốc độ ép về `pass2_feedrate`, xem khối 🔵 bên dưới); giảm flow
+> thường ⇒ **flow pass 2 để 100 %** (và tốc độ ép về **tốc độ in thật của layer 1**, dự phòng `pass2_feedrate` 60 mm/s — xem khối 🔵 bên dưới); giảm flow
 > ở đây chỉ làm lớp đó thiếu nhựa.
 >
 > Còn pass 1 để ở **0.1** (mỏng hơn `layer_height` 0.2) với **20 % nhựa** là để **ép nhựa bám bàn**:
 > đầu in miết sát mặt bàn, nhựa dẹt ra và dính chắc — đúng vai trò "lớp dính bàn". Con số này **do bạn
 > chọn** (`pass1_flow`, mặc định **20 %**): quá ít thì lớp 1 không dính, quá nhiều thì nhựa trào/lem.
 
-> 🔵 **Tốc độ: pass 1 chậm theo Cura, pass 2 bị ép về `pass2_feedrate`.** Cura áp
+> 🔵 **Tốc độ: pass 1 chậm theo Cura, pass 2 TỰ LẤY tốc độ in thật của layer 1.** Cura áp
 > `speed_print_layer_0` (**"Initial Layer Speed"**) cho **toàn bộ** chunk layer 0 — cả pass 1 **lẫn**
 > pass 2 — nên để nguyên thì pass 2 (đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra`, tức là một
-> lớp **bình thường**) vẫn bị in **chậm**. Script sửa `F` của **các bước CÓ đùn nhựa** (có cả `X`/`Y`
-> **và** `E`) trong pass 2 về `pass2_feedrate × 60` mm/phút (`_set_speed()`, mặc định 60 mm/s →
-> `F3600`). **Giữ nguyên**: travel (không `E`), Z-hop, và retract/unretract (có `E` nhưng không
-> `X`/`Y`) — tốc độ của chúng do Cura đặt riêng. Pass 1 **không bị đụng tới** (in chậm đúng ý đồ), và
-> `pass2_feedrate = 0` nghĩa là không đổi gì.
+> lớp **bình thường**) vẫn bị in **chậm**. Script quét các bước **CÓ ĐÙN NHỰA** (có cả `X`/`Y` **và**
+> `E`) trong chunk **`;LAYER:1`** (lớp ngay trên layer 0) của **chính file G-code**, lấy giá trị **`F`
+> phổ biến nhất**, rồi áp cho các bước đùn của pass 2 (`_layer_speed()` + `_set_speed()`) ⇒ pass 2
+> **luôn khớp tốc độ in bình thường của profile đang dùng**. Ví dụ profile của máy này: quality **"fast"**
+> có **`speed_print = 100` mm/s** ⇒ pass 2 in **100 mm/s** (`F6000`) thay vì 60.
+> **Vì sao lấy từ G-code:** Cura **không cho script hậu xử lý đọc setting của profile**
+> (`getSettingValueByKey` chỉ đọc được setting của **chính script**) — nhưng tốc độ thật thì **đã nằm sẵn
+> trong G-code các layer trên**.
+> **`pass2_feedrate` (60 mm/s) nay chỉ là DỰ PHÒNG**: dùng khi `pass2_feedrate_auto = false`, hoặc khi
+> layer 1 **không có** `F` trên bước đùn nào (ví dụ file chỉ có 1 layer) ⇒ `_layer_speed()` trả 0.
+> `pass2_feedrate = 0` nghĩa là không đổi tốc độ.
+> **Giữ nguyên**: travel (không `E`), Z-hop, và retract/unretract (có `E` nhưng không `X`/`Y`) — tốc độ
+> của chúng do Cura đặt riêng. Pass 1 **không bị đụng tới** (in chậm đúng ý đồ).
 
 **Lượng nhựa:** không cần tính gì cả. `M221` nhân ở firmware, nên pass 1 đùn `pass1_flow` % (mặc định
 **20 %**) và pass 2 đùn **100 %** của **cùng một bộ giá trị E** → tổng **120 %** nhựa nằm trên **hai độ
@@ -1404,7 +1417,8 @@ cao** (0.1 và 0.35): một lớp mỏng miết bám bàn + một lớp đầy �
 | `double_first_layer` | bật | In layer 0 hai lần |
 | `pass1_flow` | **20 %** | `M221 S<so nay>` trước pass 1 — **lớp miết bám bàn** (in ở `first_pass_z`). Mặc định **20 %**: **tăng** nếu lớp 1 không dính, **giảm** nếu nhựa trào/lem. Tốc độ pass 1 giữ nguyên tốc độ chậm của Cura |
 | `pass2_flow` | **100 %** | `M221 S<so nay>` trước pass 2 — **để 100 %**: pass 2 nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` nên in như lớp bình thường |
-| `pass2_feedrate` | **60 mm/s** | **Ép tốc độ in của pass 2 (mm/s); 0 = không đổi.** Cần vì Cura áp `speed_print_layer_0` ("Initial Layer Speed") cho **cả** layer 0 nên pass 2 cũng bị in chậm; chỉ áp cho bước **có X/Y + E** (travel, Z-hop, retract giữ nguyên) |
+| `pass2_feedrate_auto` | **bật** | **Tự lấy tốc độ in thật của layer 1**: quét `F` **phổ biến nhất** trên các bước đùn của `;LAYER:1` rồi áp cho pass 2 ⇒ **luôn khớp tốc độ in thật của profile**. Cura **không** cho script đọc setting của profile (`getSettingValueByKey` chỉ đọc được setting của chính script), nhưng tốc độ thật **đã nằm sẵn trong G-code** |
+| `pass2_feedrate` | **60 mm/s** | **Tốc độ in pass 2 — DỰ PHÒNG (mm/s)** — chỉ dùng khi **tự lấy thất bại** (layer 1 không có `F`) hoặc **tắt auto** (`pass2_feedrate_auto = false`); `0` = không đổi. Chỉ áp cho bước **có X/Y + E** (travel, Z-hop, retract giữ nguyên) |
 | `pass2_z_extra` | **0.05 mm** | **Nâng thêm khi nhảy pass 1 → pass 2 để nozzle không cà vào lớp nhựa vừa in của pass 1** (0 = không thêm). Bước nhảy thành `first_pass_z + <Z gốc layer 0> + 0.05` = `G1 Z0.35`; **`G92` giữ nguyên Z gốc (0.2)** nên hệ quy chiếu lệch 0.15 và **các lớp phía trên vẫn cách nhau đúng `layer_height`** (chỉ bước pass 1 → pass 2 rộng ra `layer_height + pass2_z_extra` = 0.25, cố ý) |
 | `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
 | `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` + `pass2_z_extra` |
@@ -1421,6 +1435,12 @@ khởi động** — thêm file xong phải mở lại Cura.
 > `pass2_feedrate = 60` và `pass2_z_extra = 0.05` (được gọi tự động trong `install-cura-profile.ps1`),
 > và sau khi chạy phải **mở lại Cura**.
 
+> ℹ️ **`pass2_feedrate` nay chỉ là DỰ PHÒNG — không cần chỉnh khi đổi profile.** Cứ để
+> `pass2_feedrate_auto = true` (mặc định của script) thì pass 2 **tự lấy tốc độ in thật của layer 1**
+> từ G-code, nên đổi quality/profile (ví dụ "fast" 100 mm/s) là pass 2 tự đúng theo. Giá trị `60` đang
+> lưu trong `machine_instances\*.global.cfg` **không ảnh hưởng** khi auto bật; chỉ còn ý nghĩa khi bạn
+> **tắt auto** hoặc file slice **không có layer 1**.
+
 > Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
 > `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.
 
@@ -1430,7 +1450,7 @@ khởi động** — thêm file xong phải mở lại Cura.
 
 | Lệnh | Việc |
 |---|---|
-| `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 **và `F`** (pass 2 = `F3600` = 60 mm/s; pass 1, Z-hop, retract **không** bị đổi tốc độ). Kèm `pass2_z_extra` — khẳng định `G1 Z0.35 F600`, `M221 S20`, và bước Z **pass 1 → pass 2 = 0.25**, **các bước trên = 0.20** |
+| `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 **và `F`** (**tự lấy tốc độ layer 1**: fixture layer 1 dùng `F2400` = 40 mm/s để phân biệt với layer 0 `F1800` ⇒ pass 2 = `F2400`; **ca dự phòng**: layer 1 không có `F` ⇒ pass 2 = `F3600` = 60 mm/s; pass 1, Z-hop, retract **không** bị đổi tốc độ). Kèm `pass2_z_extra` — khẳng định `G1 Z0.35 F600`, `M221 S20`, và bước Z **pass 1 → pass 2 = 0.25**, **các bước trên = 0.20** |
 | `python tests\test_clamp_feeds.py` | Test hồi quy `ClampFeeds` — chạy trên **file gcode thật** (mặc định fixture trong repo) rồi audit lại từng trục. ⚠️ `ClampFeeds` **đã gỡ**: test nạp file ở `cura_profile/scripts_disabled/ClampFeeds.py`, chỉ để bảo đảm script còn đúng nếu bật lại — **không** có nghĩa nó đang được cài |
 | `python tests\verify_gcode.py <file.gcode>` | Soi một file đã xuất: mốc `FirstLayerTwice` + **audit feed/accel của `ClampFeeds` (TUY CHỌN)** — file không có marker `[ClampFeeds]` thì **bỏ qua** phần đó, không tính là vấn đề |
 
@@ -1585,7 +1605,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 31 | **Chạy `test_clamp_feeds.py` lên file ĐÃ qua ClampFeeds** | Chạy ClampFeeds lần hai lên file đã xử lý làm **hỏng phép đếm vị trí** (bước XY+Z bị tách hai lần, bước "về tâm" bị chèn hai lần) → audit báo **hàng nghìn lỗi GIẢ**. Đã gặp thật: file 2,2 MB đã xử lý → **2481** "bước vượt trần", trong khi chính file đó chỉ có 6 dòng lệch biên | `test_clamp_feeds.py` nay **TỪ CHỐI** file có marker `ClampFeeds:` và trỏ sang `verify_gcode.py`. **File ĐÃ xử lý → dùng `verify_gcode.py`; file CHƯA xử lý → dùng `test_clamp_feeds.py`.** Mặc định test dùng fixture `tests/fixtures/clean_raw.gcode`. ⚠️ Từ 2026-10-12 `ClampFeeds` **đã gỡ** nên file slice **mới** không còn marker này — cạm bẫy chỉ còn gặp với **file cũ** |
 | 32 | **Ngưỡng so trần quá chặt gây lỗi oan** | Dùng `> LIMIT + 1e-6` cho feedrate: một bước `F9000` (= **đúng** trần 150 mm/s) tính lại ra `150,0000x` do sai số dấu phẩy động tích lũy → bị báo vượt trần **oan** (đã gặp: 6 dòng trên file 2,2 MB, tất cả đều `F9000`) | Dùng `TOL = 0,05 mm/s`. Vẫn bắt được mọi vi phạm thật (200 mm/s lệch 50 mm/s) |
 | 33 | **Thay thế chuỗi bằng PowerShell trên file có tiếng Việt** | `Get-Content -Raw` **không có `-Encoding`** đọc UTF-8 bằng ANSI → `WriteAllText` ghi lại thành UTF-8 **hỏng**: **916 dòng** tiếng Việt trong README nát thành mojibake (`trần cứng` → `tráº§n cá»©ng`). `Set-Content` không `-Encoding` còn ghi **CRLF** vào file vốn LF | **Sửa text bằng công cụ `edit`, không bằng `-replace` của PowerShell.** Nếu buộc phải dùng Python/PowerShell thì chỉ định encoding rõ ràng và `newline`. Khôi phục: `git checkout -- <file>` |
-| 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về `pass2_feedrate` (mm/s, mặc định **60** → `F3600`), giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |
+| 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_layer_speed()` lấy `F` **phổ biến nhất** trên các bước đùn của `;LAYER:1` trong chính G-code, `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về tốc độ đó (`pass2_feedrate_auto`, mặc định bật) ⇒ khớp tốc độ in thật của profile. Vì Cura **không** cho script đọc setting của profile nên phải lấy từ G-code; `pass2_feedrate` (**60** mm/s → `F3600`) chỉ còn là **dự phòng** khi tắt auto hoặc layer 1 không có `F`. Giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
