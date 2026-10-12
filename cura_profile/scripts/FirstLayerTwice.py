@@ -145,35 +145,13 @@ class FirstLayerTwice(Script):
                     "default_value": 600,
                     "minimum_value": 1
                 },
-                "z_mode":
-                {
-                    "label": "z_mode (khong dung nua)",
-                    "description": "Giu lai chi de config cu khong loi. Script nay khong con dung den.",
-                    "type": "enum",
-                    "options": { "split": "split", "shift": "shift" },
-                    "default_value": "split"
-                },
                 "first_pass_z":
                 {
                     "label": "Z cua pass 1 (mm)",
-                    "description": "pass 1 in o Z nay (mac dinh 0.1). pass 2 dung lai body GOC nen in o Z = so nay + Z goc cua layer 0 (vd 0.1 + 0.2 = 0.3).",
+                    "description": "pass 1 in o Z nay (mac dinh 0.1). pass 2 dung lai body GOC nen in o Z = so nay + Z goc cua layer 0 + pass2_z_extra (vd 0.1 + 0.2 + 0.05 = 0.35).",
                     "type": "float",
                     "default_value": 0.1,
                     "minimum_value": 0.01
-                },
-                "z_raise":
-                {
-                    "label": "z_raise (khong dung nua)",
-                    "description": "Giu lai chi de config cu khong loi. Script tu tinh tu chieu cao layer 0.",
-                    "type": "float",
-                    "default_value": 0.4
-                },
-                "layer0_z":
-                {
-                    "label": "layer0_z (khong dung nua)",
-                    "description": "Giu lai chi de config cu khong loi.",
-                    "type": "float",
-                    "default_value": 0.2
                 }
             }
         }"""
@@ -333,9 +311,8 @@ class FirstLayerTwice(Script):
                     return index, offset
         return None, None
 
-    def _scan_mode_and_e(self, chunks):
-        """Quet cac chunk truoc do -> (dang E tuong doi?, gia tri E cuoi cung)."""
-        relative = False
+    def _scan_last_e(self, chunks):
+        """Quet cac chunk truoc do -> gia tri E CUOI CUNG (de G92 E... ve dung cho truoc pass 2)."""
         e = 0.0
         for chunk in chunks:
             for line in chunk.split("\n"):
@@ -343,12 +320,6 @@ class FirstLayerTwice(Script):
                 if not code:
                     continue
                 word = code.split()[0]
-                if word == "M83":
-                    relative = True
-                    continue
-                if word == "M82":
-                    relative = False
-                    continue
                 if word == "G92":
                     value = self.getValue(line, "E")
                     if value is not None:
@@ -358,7 +329,7 @@ class FirstLayerTwice(Script):
                     value = self.getValue(line, "E")
                     if value is not None:
                         e = float(value)
-        return relative, e
+        return e
 
     # ------------------------------------------------------------------ #
 
@@ -397,7 +368,7 @@ class FirstLayerTwice(Script):
         # cung chunk voi ';LAYER:0' trong file that). Neu chi quet data[:index] thi
         # se bo sot lenh retract cuoi cung truoc layer 0, va pass 2 se mat mot lan
         # unretract dung bang so do.
-        relative, e_at_layer0 = self._scan_mode_and_e(data[:index] + ["\n".join(prefix)])
+        e_at_layer0 = self._scan_last_e(data[:index] + ["\n".join(prefix)])
         layer_z = self._find_layer_z(body)
 
         # --- pass 1: ha Z cua body xuong first_pass_z, KHONG doi E ---
