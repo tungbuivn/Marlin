@@ -340,7 +340,7 @@ mắt hay bằng thước.
 | | |
 |---|---|
 | Đo tại đâu | 4 điểm `TRAMMING_POINT_XY` = `{280,285} {25,285} {25,25} {280,25}` — phải **nằm trên 4 vít** |
-| Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:150`, `menu_tramming.cpp:181` |
+| Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:150`, `menu_tramming.cpp:190` |
 | Mốc vật lý | **`z_home` = `base_home_pos(Z_AXIS)`** — khung Z của lần `G28 Z` (Z_SAFE_HOMING probe ở tâm bàn). **Không probe thêm tâm bàn** |
 | Mốc để vặn vít | **`Z-MIN` (chế độ MAX, mặc định) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo: `delta = chiều_cao − mốc` — đây mới là số cần đưa về 0. Cả hai mốc được **chốt một lần** sau lần đo đủ 4 góc đầu tiên |
 | Tính gì | `chiều_cao = z_probe − z_home`, **mốc so sánh = `Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo ⇒ `delta = chiều_cao − mốc`. **Số cần chỉnh in theo MM, KHÔNG phải vòng**: vặn vít đi `X` mm thì góc đó lên/xuống đúng `X` mm ⇒ **lượng cần vặn = `\|delta\|` mm** (không chia cho bước ren). **Chiều vặn là chuyện riêng**, do `tramming_turn_cw()` quyết định (`tramming.h:61-64`) |
@@ -396,7 +396,7 @@ Khác nhau giữa hai cách:
 
 | | `G35` | Tramming Wizard (menu) |
 |---|---|---|
-| Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số mm cần vặn | Đo **từng góc một**; mốc để vặn vít là **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo (giống `G35`, `tramming_ref()` `menu_tramming.cpp:145-148`) — tức lấy **cực trị** làm mốc, **không** dùng trung bình; góc đang là **mốc** thì được **bỏ qua** khi đi vòng |
+| Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số mm cần vặn | Đo **từng góc một**; mốc để vặn vít là **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo (giống `G35`, `tramming_ref()` `menu_tramming.cpp:154-157`) — tức lấy **cực trị** làm mốc, **không** dùng trung bình; góc đang là **mốc** thì được **bỏ qua** khi đi vòng |
 | Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm **`PROBE`** (đo lại đúng góc đang đứng) hoặc **`DONE`** (sang góc cần chỉnh kế tiếp), lặp tới khi ≈ 0 |
 | Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
 
@@ -1697,7 +1697,7 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
   probe luôn góc mới) ⇒ số mm còn phải vặn + chiều vặn ở dòng `PROBE` luôn đúng cho góc đó.
 - Các góc chưa đo lại trong vòng này **vẫn dùng số cũ** (máy không xoá) cho tới khi bấm `DONE` lúc **đã hết
   góc cần chỉnh** (lúc đó máy home lại Z + đo lại cả 4 góc). Góc nào **chưa có số trong khung Z hiện tại**
-  (probe lỗi, hoặc chưa tới lượt đo) thì hiện `  ---` thay cho số (`tram_fmt_delta`, `menu_tramming.cpp:166`)
+  (probe lỗi, hoặc chưa tới lượt đo) thì hiện `  ---` thay cho số (`tram_fmt_delta`, `menu_tramming.cpp:175`)
   — đó là dấu hiệu "chưa đo", không phải "0.000".
 
 > 🔀 **Nút `MAX->MIN` (dòng 3)** — nhãn luôn đọc là *"đang chỉnh gì → bấm sẽ chuyển sang gì"*:
