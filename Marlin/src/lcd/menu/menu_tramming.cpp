@@ -106,6 +106,8 @@
 
 static float   z_delta[G35_PROBE_COUNT];   // (mm) gia tri probe GAN NHAT (moc vat ly = Z-home)
 static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
+static bool    z_accepted[G35_PROBE_COUNT];// nguoi dung da bam DONE o goc nay = COI NHU XONG
+                                           // (du |delta| chua vao nguong) -> khong quay lai goc do nua
 static uint8_t worst_index,                // goc lech nhieu nhat (nozzle dang o day)
                step_index;                 // dang probe toi goc thu may
 static uint8_t tram_state;                 // TR_*
@@ -260,9 +262,11 @@ static void tramming_goto_index(const uint8_t i) {
 }
 
 // Goc i co CON phai chinh khong?
+//   - goc nguoi dung DA BAM DONE (z_accepted) thi KHONG: coi nhu xong, du delta chua vao nguong
 //   - goc dinh nghia MOC (Z-MIN o che do MAX, Z-MAX o che do MIN) thi KHONG: no chinh la chuan
 //   - goc da trong nguong nhieu (|delta| <= TRAM_DONE_MM = 0.01mm) thi KHONG -> coi nhu "auto DAT"
 static bool tramming_need_adjust(const uint8_t i) {
+  if (z_accepted[i]) return false;                // nguoi dung da chap nhan goc nay
   if (!z_ok[i]) return true;                      // chua do duoc -> van phai toi kiem tra
   if (z_ref_set) {
     const bool is_ref = tramming_worst_max ? (z_delta[i] <= z_ref_min + 0.0005f)
@@ -292,7 +296,7 @@ static bool tramming_any_need_adjust() {
 // DONE khi het goc can chinh: home lai Z (Z-home vua doi vi vua van vit) -> probe lai CA 4 GOC
 // -> di toi goc "lech nhat". Day la nut reset moc cho ca ban.
 static void tramming_restart() {
-  LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  LOOP_L_N(i, G35_PROBE_COUNT) { z_ok[i] = false; z_accepted[i] = false; }
   z_ref_set = false;                     // se CHOT MOC MOI sau khi do lai du 4 goc
   tram_all_dat = false;                  // vong moi -> chua biet da dat hay chua
   probe_state = PR_NONE;
@@ -530,8 +534,10 @@ static void _lcd_tramming() {
             tram_state = tramming_need_adjust(worst_index) ? TR_IDLE : TR_AUTO;
             break;
           case BTN_DONE:
-            // DONE = "xong goc nay": TU DI toi goc CAN CHINH ke tiep (bo qua goc MOC va cac goc
-            // da DAT) roi probe luon goc do. Khong con goc nao -> HOME lai Z + probe lai CA 4 GOC.
+            // DONE = "GOC NAY XONG": danh dau goc dang dung la DA CHAP NHAN (coi nhu dat, du delta
+            // chua vao nguong) => lan sau khong quay lai goc nay nua, di thang toi goc can chinh
+            // ke tiep CHUA duoc chap nhan. Het goc -> home lai Z + probe lai CA 4 GOC (vong moi).
+            z_accepted[worst_index] = true;
             if (tramming_next_need_adjust()) {
               tram_busy = true;
               tram_state = TR_POINT;              // man hinh hien "Go to point"
@@ -570,7 +576,7 @@ void goto_tramming_wizard() {
   DEBUG_ECHOLNPGM("Screen: goto_tramming_wizard", 1);
   ui.defer_status_screen();
 
-  LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  LOOP_L_N(i, G35_PROBE_COUNT) { z_ok[i] = false; z_accepted[i] = false; }
   z_ref_set = false;                          // moc se duoc CHOT sau lan do 4 goc dau tien
   tram_all_dat = false;
   worst_index = 0; step_index = 0;
