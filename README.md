@@ -352,7 +352,7 @@ mắt hay bằng thước.
 > (`set_axis_is_at_home`, `motion.cpp:2349`); `probe_at_point()` lại **cộng** `probe.offset.z` vào kết quả
 > (`probe.cpp:891`). Hai số bù nhau ⇒ **giá trị probe trả về ở bất kỳ điểm nào đã chính là
 > "z_probe − z_home"**. Probe lại tâm bàn chỉ tốn ~10 giây và **cộng sai số của lần đo đó vào cả 4 số**.
-> (Nếu vặn vít rồi mà không home lại thì mốc vẫn là mốc cũ — giống wizard: bấm `DONE` khi đã hết góc cần chỉnh để home lại Z.)
+> (Nếu vặn vít rồi mà không home lại thì mốc vẫn là mốc cũ — giống wizard: khi đã hết góc cần chỉnh máy **tự** home lại Z + đo lại 4 góc, bấm `DONE` chỉ là cách **đi tay**.)
 
 > 🔴 **Vì sao KHÔNG dùng thẳng "chiều cao so với Z-home":** ví dụ 4 góc đo được `2.000 / 2.000 /
 > 2.000 / 2.030 mm`. Nhìn "chiều cao so với Z-home" thì cả 4 góc đều ≈ **+2mm** — trông như cả bàn bị
@@ -397,7 +397,7 @@ Khác nhau giữa hai cách:
 | | `G35` | Tramming Wizard (menu) |
 |---|---|---|
 | Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số mm cần vặn | Đo **từng góc một**; mốc để vặn vít là **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo (giống `G35`, `tramming_ref()` `menu_tramming.cpp:154-157`) — tức lấy **cực trị** làm mốc, **không** dùng trung bình; góc đang là **mốc** thì được **bỏ qua** khi đi vòng |
-| Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm **`PROBE`** (đo lại đúng góc đang đứng) hoặc **`DONE`** (sang góc cần chỉnh kế tiếp), lặp tới khi ≈ 0 |
+| Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm **`PROBE`** (đo lại đúng góc đang đứng) — máy **tự** sang góc cần chỉnh kế tiếp ngay khi góc vừa đo `DAT` (hoặc bấm **`DONE`** để **đi tay**), lặp tới khi ≈ 0 |
 | Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
 
 > **`G35` không có mục nào trong menu LCD** — nó chỉ là lệnh G-code, phải gửi qua console/host.
@@ -700,7 +700,7 @@ M500
 | **Advanced Settings → Endstop Pins** | — | Hiện **mức điện thô** X/Y/Z MIN lên status line (đọc thẳng `READ()`, bỏ qua logic endstop của Marlin) |
 | **Motion → Probe Offset Wizard** | — | Cân `Z offset`: home → probe → hạ nozzle bằng encoder tới khi chạm bàn (test giấy) → `DONE`. Cũng có ở **Advanced Settings → Z Probe Offsets** |
 | **Motion → Deploy / Stow Z-Probe** | `M401` / `M402` | Bật/tắt mạch cảm biến qua chân PA8 |
-| **Motion → Tramming Wizard** | `G35` | Wizard **4 nút**, thứ tự encoder: **`PROBE` → `MAX->MIN` → `BACK` → `DONE`** (mặc định chọn `PROBE`). Vòng lặp: probe 4 góc → đi tới **góc lệch nhất** → vặn vít → **`PROBE`** (đo lại **đúng góc đang đứng**, không home lại → hiện còn phải vặn bao nhiêu **mm** + chiều `CW`/`CCW`); **`MAX->MIN`** đổi chiến lược **MAX ⇄ MIN** (mốc `Z-MIN` ⇄ `Z-MAX`), lưu EEPROM ngay, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn**; **`BACK`** = **thoát về màn hình chính** (stow probe + `set_axis_never_homed(Z_AXIS)`, hàm `tramming_exit()`); **`DONE`** = "xong góc này" → tự đi tới **góc cần chỉnh kế tiếp** (bỏ qua góc **mốc** và các góc **đã đạt** `|delta| ≤ 0.01mm`) rồi **probe luôn** góc đó, khi **hết góc cần chỉnh** thì tự **home lại Z + probe lại cả 4 góc** (vòng mới, **mốc mới**) → đi tới góc lệch nhất. Mốc so sánh = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)**, **chốt một lần** sau lần đo đủ 4 góc đầu tiên; `PROBE` lại 1 góc chỉ đổi số của chính góc đó. ⚠️ Wizard vào bằng **`G28L0`** nên **bed leveling bị tắt** và **không** tự bật lại khi thoát. Xem §11.8c |
+| **Motion → Tramming Wizard** | `G35` | Wizard **4 nút**, thứ tự encoder: **`PROBE` → `MAX->MIN` → `BACK` → `DONE`** (mặc định chọn `PROBE`). Vòng lặp: probe 4 góc → đi tới **góc lệch nhất** → vặn vít → **`PROBE`** (đo lại **đúng góc đang đứng**, không home lại → hiện còn phải vặn bao nhiêu **mm** + chiều `CW`/`CCW`; nếu góc vừa đo **đã đạt** `\|delta\| ≤ 0.01mm` (`DAT`, hằng số `TRAM_DONE_MM`) thì máy **TỰ ĐỘNG đi tiếp** tới **góc cần chỉnh kế tiếp** và **probe luôn** góc đó — trạng thái `TR_AUTO`, màn hình hiện `Auto next`, **không cần bấm `DONE`**); **`MAX->MIN`** đổi chiến lược **MAX ⇄ MIN** (mốc `Z-MIN` ⇄ `Z-MAX`), lưu EEPROM ngay, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn** (góc đó **`DAT`** thì cũng **tự đi tiếp**); **`BACK`** = **thoát về màn hình chính** (stow probe + `set_axis_never_homed(Z_AXIS)`, hàm `tramming_exit()`); **`DONE`** = "xong góc này" (**vẫn còn, bấm tay**) → tự đi tới **góc cần chỉnh kế tiếp** (bỏ qua góc **mốc** và các góc **đã đạt** `\|delta\| ≤ 0.01mm`) rồi **probe luôn** góc đó; khi **hết góc cần chỉnh** thì máy **tự home lại Z + probe lại cả 4 góc** (vòng mới, **mốc mới**) → đi tới góc lệch nhất. Nếu **ngay sau lần đo đủ 4 góc mà CẢ 4 GÓC ĐỀU `DAT`** (`tram_all_dat = true`) thì dòng 2 hiện `TAT CA DAT` và dòng 3 **chỉ còn `BACK`** (encoder khoá vào `BACK`; **không** tự home + probe lặp vô tận). Mốc so sánh = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)**, **chốt một lần** sau lần đo đủ 4 góc đầu tiên; `PROBE` lại 1 góc chỉ đổi số của chính góc đó. ⚠️ Wizard vào bằng **`G28L0`** nên **bed leveling bị tắt** và **không** tự bật lại khi thoát. Xem §11.8c |
 | **Motion → WORST POINT = MAX** | — | Bật/tắt gốc "lệch nhất" cho Tramming Wizard: **ON = MAX** (góc cao nhất), **OFF = MIN** (góc thấp nhất). Bấm là **lưu ngay vào EEPROM** → nhớ cho các lần sau. Dùng khi vít của góc đang chỉnh **đã hết hành trình** (vặn mãi không được) thì chuyển sang chỉnh góc ngược lại. Xem §11.8c |
 | **Màn hình riêng `lcd_panel`** | — | Firmware **riêng cho MCU của màn hình** (F411CCU6 / F103C6T6 + ILI9341 2.4" SPI): panel tự vẽ, Marlin chỉ gửi nhiệt độ/XY/tiến độ qua G-code. Xem §12 |
 | **Motion → Z ALIGN MANUAL** | — | Dịch tay **Z1 / Z2 / Z3** từng bước **0.01mm** bằng encoder + **probe lại từng điểm** để xem ngay nó lên/xuống bao nhiêu (xem §11.8b) |
@@ -915,7 +915,7 @@ git diff up-2.1.2 HEAD --stat
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
-| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard: mốc vật lý = Z-home** (`base_home_pos(Z_AXIS)`, **bỏ lần probe tâm bàn**); **mốc để vặn vít = `Z-MIN` (chế độ MAX, mặc định) hoặc `Z-MAX` (chế độ MIN)**, và từ **2026-10-12 hai mốc này được CHỐT (đóng băng)** sau lần đo **đủ 4 góc đầu tiên** của wizard (`z_ref_min`/`z_ref_max`/`z_ref_set`, hàm `tramming_set_ref()`) ⇒ **`PROBE` lại 1 góc chỉ đổi số của góc đó**, còn đổi `MAX<->MIN` chỉ là **đổi lấy mốc kia** (không đo lại gì); số cần vặn in theo **mm** (`\|delta\|`, không phải vòng) và **chiều vặn đã ĐẢO LẠI: CCW = hạ góc xuống, CW = nâng lên**; probe lỗi 1 góc không mất cả phép đo; wizard **4 nút** (thứ tự encoder): `PROBE` (probe lại **góc đang đứng**, **không home lại** → hiện số **mm** còn phải vặn + `CW`/`CCW`) / `MAX->MIN` (đổi chiến lược **MAX ⇄ MIN**, **lưu EEPROM**, **đi ngay tới góc lệch nhất mới và probe luôn**) / `BACK` (**thoát về màn hình chính**: stow probe + `set_axis_never_homed(Z_AXIS)`, hàm `tramming_exit()`) / `DONE` (tự đi tới **góc cần chỉnh kế tiếp**, **bỏ qua góc mốc** + các góc **đã đạt** `|delta| ≤ 0.01mm`, **probe luôn**; **hết góc → home lại Z + probe lại cả 4 góc**, **chốt mốc mới**) |
+| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard: mốc vật lý = Z-home** (`base_home_pos(Z_AXIS)`, **bỏ lần probe tâm bàn**); **mốc để vặn vít = `Z-MIN` (chế độ MAX, mặc định) hoặc `Z-MAX` (chế độ MIN)**, và từ **2026-10-12 hai mốc này được CHỐT (đóng băng)** sau lần đo **đủ 4 góc đầu tiên** của wizard (`z_ref_min`/`z_ref_max`/`z_ref_set`, hàm `tramming_set_ref()`) ⇒ **`PROBE` lại 1 góc chỉ đổi số của góc đó**, còn đổi `MAX<->MIN` chỉ là **đổi lấy mốc kia** (không đo lại gì); số cần vặn in theo **mm** (`\|delta\|`, không phải vòng) và **chiều vặn đã ĐẢO LẠI: CCW = hạ góc xuống, CW = nâng lên**; probe lỗi 1 góc không mất cả phép đo; wizard **4 nút** (thứ tự encoder): `PROBE` (probe lại **góc đang đứng**, **không home lại** → hiện số **mm** còn phải vặn + `CW`/`CCW`; góc vừa đo **`DAT`** `\|delta\| ≤ 0.01mm` → **TỰ ĐỘNG đi tiếp** tới góc cần chỉnh kế tiếp và probe luôn, màn hình `Auto next`, **không cần bấm `DONE`**) / `MAX->MIN` (đổi chiến lược **MAX ⇄ MIN**, **lưu EEPROM**, **đi ngay tới góc lệch nhất mới và probe luôn**, **tự đi tiếp nếu góc đó `DAT`**) / `BACK` (**thoát về màn hình chính**: stow probe + `set_axis_never_homed(Z_AXIS)`, hàm `tramming_exit()`; khi **cả 4 góc `DAT`** thì đây là nút **duy nhất** còn lại) / `DONE` (**bấm tay** để đi tới **góc cần chỉnh kế tiếp**, **bỏ qua góc mốc** + các góc **đã đạt** `\|delta\| ≤ 0.01mm`, **probe luôn**; **hết góc → TỰ home lại Z + probe lại cả 4 góc**, **chốt mốc mới**; **cả 4 góc `DAT` ngay sau lần đo đủ 4 góc → dòng 2 hiện `TAT CA DAT`, dòng 3 chỉ còn `>BACK`**) |
 | `src/feature/tramming.h` (helper `tramming_pitch/turn_cw/turns`) | Gộp **chiều vặn** + bước ren vào một chỗ để `G35` và wizard dùng chung. **2026-10-12: ĐẢO CHIỀU** (`tramming_turn_cw()`: **CW = nâng, CCW = hạ** — đo lại trên máy, ghi chú cũ ghi ngược và sai) và **bỏ số vòng khỏi phần hiển thị** (in theo `\|delta\|` mm; `tramming_turns()` chỉ còn để tham chiếu) |
 | `src/feature/tramming.h`, `tramming.cpp`, `src/module/settings.cpp`, `src/lcd/menu/menu_motion.cpp` | **`tramming_worst_max`** (góc đang chỉnh = MAX cao nhất / MIN thấp nhất): menu **`Motion` → `WORST POINT = MAX`** + nút **`MAX->MIN`** trong wizard, **lưu EEPROM** trong ô `z_offset` của khối MBL (MBL đang tắt nên ô đó trống) → **không đổi kích thước/CRC EEPROM** nên không xoá cấu hình đang có. Xem §11.8c |
 | `Marlin/Configuration_adv.h` (`TRAMMING_POINT_NAME_1..4`) | **sửa tên 4 góc cho khớp toạ độ** — trước đây bị ngược 180° nên G35/wizard chỉ sai góc cần vặn |
@@ -1642,7 +1642,7 @@ TURN .01 CLICK PROBE     <- dòng hướng dẫn, đổi theo chế độ
 > (`Flash 25.0%`, `RAM 9.0%`) nhưng hành vi trên máy cần bạn kiểm lần đầu: vào menu → bấm 1 lần
 > (sang PROBE) → bấm lần nữa để probe điểm 1, rồi quay thử vài nấc xem Z1 có nhích đúng chiều không.
 
-### 11.8c `G35` / Tramming Wizard — mốc vật lý = Z-home, mốc vặn vít = `Z-MIN` / `Z-MAX`, 4 nút (PROBE / MAX-MIN / BACK / DONE)
+### 11.8c `G35` / Tramming Wizard — mốc vật lý = Z-home, mốc vặn vít = `Z-MIN` / `Z-MAX`, 4 nút (PROBE / MAX-MIN / BACK / DONE), **tự động đi tiếp khi `DAT`**
 
 **Nguyên tắc mốc:** sau mỗi lần home Z, **gốc khung Z nằm ngay tại TÂM BÀN** (vị trí Z-home
 `Z_SAFE_HOMING_X/Y_POINT` = `152.5,152.5`). Nên giá trị probe ở mỗi góc **chính là** "z_probe − z_home"
@@ -1679,70 +1679,91 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 |---|---|
 | 1 | **`G28L0`** = home cả 3 trục **kèm TẮT bed leveling** → **tự động probe 4 góc** (màn hình hiện `Probing corner n/4`). Ngay sau lần đo **đủ 4 góc đầu tiên** firmware **CHỐT MỐC** (`z_ref_min` / `z_ref_max` / `z_ref_set`, hàm `tramming_set_ref()`) và **không tính lại nữa**. ⚠️ Wizard **không bật lại** leveling khi thoát ⇒ sau khi dùng wizard phải `G28` (không `L`) hoặc `M420 S1` trước khi in |
 | 2 | Tự động **đi nozzle tới góc lệch nhất** (nâng lên 10mm rồi đi XY ở `XY_PROBE_FEEDRATE`) để bạn vặn vít góc đó. Góc lệch nhất = **cao nhất** (chế độ MAX, mốc = `Z-MIN`, mặc định) hay **thấp nhất** (chế độ MIN, mốc = `Z-MAX`), đổi bằng nút `MAX->MIN` |
-| 3 | Hiện độ lệch 4 góc + **4 nút**, thứ tự encoder: **`PROBE`** → **`MAX->MIN`** → **`BACK`** → **`DONE`** (mặc định chọn `PROBE`) |
-| 4 | **`PROBE`** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện **còn phải vặn bao nhiêu mm** + chiều vặn `CW`/`CCW` cho góc đó |
-| 5 | **`MAX->MIN`** = đổi chiến lược giữa `MAX (mốc = Z-MIN)` ⇄ `MIN (mốc = Z-MAX)`, **lưu ngay vào EEPROM**, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn** góc đó. Đây chỉ là **đổi lấy mốc kia** (cả hai mốc đã chốt), **không đo lại gì** |
-| 6 | **`BACK`** = **thoát về màn hình chính**: gọi `tramming_exit()` → stow probe + đánh dấu **Z chưa home** (`set_axis_never_homed(Z_AXIS)`) rồi quay về màn hình trước đó. Vì vít đã bị vặn nên **vẫn phải `G28` trước khi in** |
-| 7 | **`DONE`** = "xong góc này": máy **tự đi tới góc CẦN CHỈNH kế tiếp** (đi vòng tròn từ góc hiện tại, **bỏ qua góc MỐC** và các góc **đã đạt** `\|delta\| ≤ 0.01mm` = auto `DAT`) rồi **probe luôn** góc đó; con trỏ tự về `PROBE` |
-| 8 | **`DONE` khi KHÔNG còn góc nào cần chỉnh** = tự **home lại Z** (vì vặn vít làm Z-home đổi) → **probe lại CẢ 4 GÓC** (vòng mới) → **CHỐT MỐC MỚI** → đi tới góc lệch nhất. Đây là nút "làm lại từ đầu", **không phải nút thoát** (thoát bằng `BACK`) |
+| 3 | Hiện độ lệch 4 góc + **4 nút**, thứ tự encoder: **`PROBE`** → **`MAX->MIN`** → **`BACK`** → **`DONE`** (mặc định chọn `PROBE`). Nếu **cả 4 góc đã `DAT`** (`tram_all_dat`) thì **chỉ còn `BACK`** — encoder bị **khoá vào `BACK`** |
+| 4 | **`PROBE`** = **CHỈ probe góc đang đứng** (KHÔNG probe tâm, KHÔNG home lại) → hiện **còn phải vặn bao nhiêu mm** + chiều vặn `CW`/`CCW` cho góc đó. Góc vừa đo **đã đạt** (`\|delta\| ≤ 0.01mm` = `DAT`) ⇒ máy **TỰ ĐỘNG đi tới góc cần chỉnh kế tiếp và probe luôn** (`TR_AUTO`, màn hình `Auto next`) — **không cần bấm `DONE`** |
+| 5 | **`MAX->MIN`** = đổi chiến lược giữa `MAX (mốc = Z-MIN)` ⇄ `MIN (mốc = Z-MAX)`, **lưu ngay vào EEPROM**, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn** góc đó (góc đó **`DAT`** thì cũng **tự đi tiếp**). Đây chỉ là **đổi lấy mốc kia** (cả hai mốc đã chốt), **không đo lại gì** |
+| 6 | **`BACK`** = **thoát về màn hình chính**: gọi `tramming_exit()` → stow probe + đánh dấu **Z chưa home** (`set_axis_never_homed(Z_AXIS)`) rồi quay về màn hình trước đó. Vì vít đã bị vặn nên **vẫn phải `G28` trước khi in**. Khi **cả 4 góc `DAT`** thì đây là nút **duy nhất** còn lại trên màn hình (`>BACK`) |
+| 7 | **`DONE`** = "xong góc này" (**vẫn còn, bấm tay**): máy **tự đi tới góc CẦN CHỈNH kế tiếp** (đi vòng tròn từ góc hiện tại, **bỏ qua góc MỐC** và các góc **đã đạt** `\|delta\| ≤ 0.01mm` = auto `DAT`) rồi **probe luôn** góc đó; con trỏ tự về `PROBE`. Chỉ cần bấm khi muốn **đi tay** — bình thường máy đã **tự đi tiếp** ngay khi góc vừa đo `DAT` |
+| 8 | **Khi KHÔNG còn góc nào cần chỉnh** (máy **tự** làm, hoặc do bấm `DONE` ở bước 7) = **home lại Z** (vì vặn vít làm Z-home đổi) → **probe lại CẢ 4 GÓC** (vòng mới) → **CHỐT MỐC MỚI** → đi tới góc lệch nhất. **Không cần bấm gì**; `DONE` ở đây là "đi tay", **không phải nút thoát** (thoát bằng `BACK`) |
+| 9 | **CẢ 4 GÓC ĐỀU `DAT`** ngay sau lần đo **đủ 4 góc** (`tram_all_dat = true`, cũng gồm trường hợp **lần đầu home + probe đã `DAT` hết**) → dòng 2 hiện **`TAT CA DAT`**, dòng 3 **chỉ còn `>BACK`** (encoder khoá vào `BACK`) và máy **không** tự home + probe lặp vô tận |
 
 ```
 *RB -0.007 LB -0.007       <- '*' = goc nozzle dang dung (goc dang chinh)
  FL -0.007 FR +0.013       <- so la CON LAI (lech so voi MOC Z-MIN/Z-MAX, 3 so le = 0.001mm)
 >PROBE CCW con +0.013       <- PROBE: so mm con phai van + chieu van cho goc dang dung
->MAX->MIN >BACK >DONE      <- '>' = muc dang chon | MAX->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) | BACK: thoat ve man hinh chinh | DONE: di tiep goc can chinh / het goc -> home lai + do lai 4 goc
+>MAX->MIN >BACK >DONE      <- '>' = muc dang chon | MAX->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) | BACK: thoat ve man hinh chinh | DONE: (bam tay) di tiep goc can chinh / het goc -> home lai + do lai 4 goc
 ```
 
-- `*` = **góc đang đứng** (góc đang chỉnh). Góc này **luôn là số vừa đo** (`PROBE`, `MAX->MIN` và `DONE` đều
-  probe luôn góc mới) ⇒ số mm còn phải vặn + chiều vặn ở dòng `PROBE` luôn đúng cho góc đó.
-- Các góc chưa đo lại trong vòng này **vẫn dùng số cũ** (máy không xoá) cho tới khi bấm `DONE` lúc **đã hết
-  góc cần chỉnh** (lúc đó máy home lại Z + đo lại cả 4 góc). Góc nào **chưa có số trong khung Z hiện tại**
+Khi vừa probe xong một góc mà góc đó **đã `DAT`**, máy **tự đi tiếp** (màn hình hiện `Auto next` trong lúc di chuyển) — không phải bấm gì. Còn khi **cả 4 góc đều `DAT`**, màn hình chỉ còn:
+
+```
+*RB +0.004 LB -0.002       <- ca 4 goc |delta| <= 0.01mm = DAT
+ FL -0.006 FR +0.008
+TAT CA DAT                  <- tat ca da dat -> khong con gi de van
+>BACK                       <- CHI CON NUT BACK ('>' = muc dang chon, encoder khoa vao BACK)
+```
+
+- `*` = **góc đang đứng** (góc đang chỉnh). Góc này **luôn là số vừa đo** (`PROBE`, `MAX->MIN`, `DONE` — và cả bước
+  **tự động đi tiếp** khi `DAT` — đều probe luôn góc mới) ⇒ số mm còn phải vặn + chiều vặn ở dòng `PROBE` luôn đúng cho góc đó.
+- Các góc chưa đo lại trong vòng này **vẫn dùng số cũ** (máy không xoá) cho tới khi **đã hết góc cần chỉnh** (lúc đó
+  máy **tự** home lại Z + đo lại cả 4 góc; `DONE` chỉ là cách **đi tay**). Góc nào **chưa có số trong khung Z hiện tại**
   (probe lỗi, hoặc chưa tới lượt đo) thì hiện `  ---` thay cho số (`tram_fmt_delta`, `menu_tramming.cpp:175`)
   — đó là dấu hiệu "chưa đo", không phải "0.000".
+- **Tự động đi tiếp khi `DAT`:** ngay sau khi probe một góc mà góc đó **đã đạt** (`|delta| ≤ 0.01mm`, hằng số
+  `TRAM_DONE_MM`), máy **tự đi tới góc CẦN CHỈNH kế tiếp và probe luôn** góc đó — **không cần bấm `DONE`**
+  (trạng thái `TR_AUTO`, mỗi khung hình 1 bước, màn hình hiện `Auto next`). Hết góc cần chỉnh thì máy
+  **tự home lại Z + probe lại CẢ 4 GÓC** (vòng mới, mốc mới). `DONE` **vẫn còn** để đi tay khi muốn.
+- **Cả 4 góc `DAT`:** nếu ngay sau lần đo **đủ 4 góc** mà cả 4 đều trong ngưỡng (`tram_all_dat = true` — cũng gồm
+  trường hợp **lần đầu home + probe đã `DAT` hết**) thì dòng 2 hiện **`TAT CA DAT`** và dòng 3 **chỉ còn `>BACK`**;
+  encoder bị **khoá vào `BACK`** và máy **không** tự home + probe lặp vô tận.
 
 > 🔀 **Nút `MAX->MIN` (dòng 3)** — nhãn luôn đọc là *"đang chỉnh gì → bấm sẽ chuyển sang gì"*:
 > `MAX->MIN` (đang chỉnh góc **cao nhất**, bấm để chuyển sang góc **thấp nhất**) hoặc `MIN->MAX`.
 > Bấm: máy **đổi ngay**, **lưu EEPROM**, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn** góc đó.
-> ➡️ **Nút `DONE` (dòng 3)** — "xong góc này": máy **tự đi tới góc CẦN CHỈNH kế tiếp** (vòng tròn từ góc hiện tại,
-> **bỏ qua góc MỐC** và các góc **đã đạt** `|delta| ≤ 0.01mm`) **và probe luôn** góc đó (số của góc đó phải mới, vì vừa vặn một góc
-> thì các góc kia đã lệch đi). Khi **hết góc cần chỉnh** thì `DONE` **home lại Z + probe lại cả 4 góc** (mốc mới).
+> ➡️ **Nút `DONE` (dòng 3)** — "xong góc này", **vẫn là nút bấm tay**: máy **tự đi tới góc CẦN CHỈNH kế tiếp** (vòng tròn từ góc hiện tại,
+> **bỏ qua góc MỐC** và các góc **đã đạt** `\|delta\| ≤ 0.01mm`) **và probe luôn** góc đó (số của góc đó phải mới, vì vừa vặn một góc
+> thì các góc kia đã lệch đi). Bình thường **không cần bấm**: ngay khi góc vừa probe **`DAT`** thì máy đã **tự** đi tiếp (màn hình `Auto next`) — `DONE` chỉ dùng khi muốn **đi tay**.
+> Khi **hết góc cần chỉnh** thì máy **tự home lại Z + probe lại cả 4 góc** (mốc mới); bấm `DONE` lúc đó cũng vậy.
 > Chỉ 1 mục được chọn tại một thời điểm nên chỉ có **1 dấu `>`** trên màn hình.
 > ⬅️ **Nút `BACK` (dòng 3)** — **thoát về màn hình chính**: `tramming_exit()` → stow probe + `set_axis_never_homed(Z_AXIS)`
 > rồi quay về màn hình trước đó. Vì **không home lại** mà vít đã bị vặn, **vẫn phải `G28` trước khi in**.
 
 - Quay encoder = chọn 1 trong **4 mục**, theo đúng thứ tự trên màn hình:
-  **PROBE → MAX->MIN → BACK → DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
+  **PROBE → MAX->MIN → BACK → DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**. Khi **cả 4 góc đã `DAT`**
+  (`TAT CA DAT`) thì encoder bị **khoá vào `BACK`** — màn hình chỉ còn đúng 1 mục.
 - **Dòng `PROBE` hiện luôn hướng vặn cho góc đang đứng.** Trước khi bấm: `CCW 0.150mm` = vặn CCW
   0.150 mm (`CCW` = vặn để **hạ** góc đó xuống, `CW` = vặn để **nâng** lên); `0.01mm < |delta| < 0.02mm` thì
   hiện `CCW nhe` (vặn nhẹ một nấc). Sau khi bấm: `CCW con +0.013` = vặn tiếp **CCW**, **còn phải vặn
-  +0.013mm** nữa. `|delta| ≤ 0.01mm` (`TRAM_DONE_MM`) thì hiện `DAT` (đã đạt, trong ngưỡng nhiễu).
+  +0.013mm** nữa. `|delta| ≤ 0.01mm` (`TRAM_DONE_MM`) thì hiện `DAT` (đã đạt, trong ngưỡng nhiễu) — và máy
+  **tự đi tiếp** tới góc cần chỉnh kế tiếp ngay, **không cần bấm `DONE`**.
 - **Sau mỗi lần `PROBE` chỉ lấy `z` CUỐI** (giá trị probe mới nhất, cùng khung Z vì không home lại)
   ⇒ hiện ngay **số mm còn lại**. Đây là cách tự kiểm tra chiều vặn: vặn **đúng** chiều thì số đó
-  **giảm**, vặn **sai** chiều thì số đó **tăng**. Không cần cộng dồn gì cả.
+  **giảm**, vặn **sai** chiều thì số đó **tăng**. Không cần cộng dồn gì cả. Nếu góc vừa probe **đã `DAT`**
+  (`|delta| ≤ 0.01mm`) thì máy **tự đi tiếp** tới góc cần chỉnh kế tiếp ngay (màn hình `Auto next`).
 - **4 số trên 2 dòng đầu = `delta` so với MỐC** (`Z-MIN` ở chế độ MAX, `Z-MAX` ở chế độ MIN — giống `G35`),
   in **3 số lẻ** để thấy được sai số 0.001mm — vì sau khi đã gần phẳng thì các số chỉ còn vài phần trăm mm.
   Góc nào lệch ≥ 1mm thì tự rút về 2 số lẻ cho vừa dòng (màn hình rộng 21 ký tự). Đây chính là **phần còn lại
   phải vặn** ở góc đang đứng (`*`).
-- **Nút `DONE` (dòng 3) — sang góc cần chỉnh kế tiếp:** máy tự **đi tới góc CẦN CHỈNH kế tiếp** (vòng tròn
-  1→2→3→4→1, **bỏ qua góc MỐC** và các góc **đã đạt** `|delta| ≤ 0.01mm`) **và probe luôn góc đó**. Dùng sau khi đã vặn xong một
-  góc: bấm để sang góc còn phải chỉnh, xem số mới rồi vặn tiếp — **không phải home lại**. Sau mỗi lần bấm, con
-  trỏ tự về `PROBE`; bấm `DONE` liên tục sẽ đi hết vòng 4 góc rồi (khi hết góc cần chỉnh) tự home lại Z và đo
-  lại cả 4 góc.
+- **Nút `DONE` (dòng 3) — đi tay sang góc cần chỉnh kế tiếp:** máy **đi tới góc CẦN CHỈNH kế tiếp** (vòng tròn
+  1→2→3→4→1, **bỏ qua góc MỐC** và các góc **đã đạt** `\|delta\| ≤ 0.01mm`) **và probe luôn góc đó**. Bình thường
+  **không cần bấm**: máy **tự** làm đúng việc này ngay khi góc vừa probe **`DAT`** (màn hình `Auto next`); `DONE`
+  chỉ để **đi tay** khi muốn sang góc khác ngay. Sau mỗi lần bấm, con trỏ tự về `PROBE`; khi **hết góc cần chỉnh**
+  (dù do tự động hay do bấm `DONE`) máy **tự home lại Z và đo lại cả 4 góc**.
 - **Nút đổi chiến lược (`MAX->MIN` / `MIN->MAX`, dòng 3):** vít của góc đang
   chỉnh có thể **hết hành trình** (siết/nới mãi không được). Khi đó thay vì điều chỉnh góc **cao nhất**
   thì **chuyển sang góc thấp nhất** (và ngược lại): bấm nút một lần là máy **đổi ngay** (đổi mốc giữa
   `Z-MIN` và `Z-MAX`), **đi ngay tới góc lệch nhất mới và probe luôn** góc đó, và **nhớ luôn** cho các lần sau.
   Nhãn nút luôn đọc theo kiểu *"đang chỉnh gì → bấm sẽ sang gì"*.
-- **Nút `DONE` khi đã hết góc cần chỉnh** = `G28 Z` → đo lại **cả 4 góc** (khung Z mới, `z_ok[]` xoá hết) →
-  **chốt MỐC MỚI** → đi tới góc lệch nhất. Đây là cách **"làm lại từ đầu"** duy nhất; muốn **thoát** thì bấm **`BACK`** (mục giữa `MAX->MIN` và `DONE`).
+- **Khi đã hết góc cần chỉnh** (máy **tự** làm, hoặc do bấm `DONE` để đi tay) = `G28 Z` → đo lại **cả 4 góc** (khung Z mới, `z_ok[]` xoá hết) →
+  **chốt MỐC MỚI** → đi tới góc lệch nhất. Đây là cách **"làm lại từ đầu"**; muốn **thoát** thì bấm **`BACK`** (mục giữa `MAX->MIN` và `DONE`) — và khi **cả 4 góc `DAT`** thì `BACK` là **nút duy nhất** còn lại.
 - **Chế độ đang chỉnh (MAX/MIN) được nhớ qua các lần sau** — lưu vào EEPROM ngay khi bấm (không cần `M500`), nạp lại lúc
   khởi động. Cũng đổi được ở **`Motion` → `WORST POINT = MAX`** (ON = MAX, OFF = MIN) và xem lại bằng
   `M503` (`; Tramming worst point: MAX (cao nhat)`).
 - Mặc định là **MAX** (góc cao nhất) — giống hành vi cũ (góc lệch nhiều nhất khi bàn nghiêng).
-- **Mốc vật lý là KHUNG Z của lần home cuối** (`Z-home` = tâm bàn tại thời điểm đó). Mốc này **không đổi khi vặn ốc** — chỉ `G28` (bấm **`DONE` khi đã hết góc cần chỉnh**, hoặc vào lại menu) hay `G92` mới đổi. Vì vậy:
+- **Mốc vật lý là KHUNG Z của lần home cuối** (`Z-home` = tâm bàn tại thời điểm đó). Mốc này **không đổi khi vặn ốc** — chỉ `G28` (**tự động khi đã hết góc cần chỉnh**, hoặc bấm **`DONE`**, hoặc vào lại menu) hay `G92` mới đổi. Vì vậy:
   - giá trị probe trả về = **chiều cao của điểm đó so với `Z-home`** (đúng khung Z hiện tại); số hiện trên màn hình = `delta` so với **mốc đã chốt** (`Z-MIN` hoặc `Z-MAX`)
-  - giữa các lần `PROBE` và `DONE` (khi còn góc cần chỉnh) **không home lại** ⇒ mọi giá trị nằm trong **cùng một khung Z** ⇒ so sánh trực tiếp được với nhau: **vặn đúng chiều thì delta giảm, vặn sai thì delta tăng**
-- 🔴 **KHÔNG probe lại tâm bàn** (theo yêu cầu) — cả `G35` lẫn wizard. Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian, cộng sai số vào cả 4 số và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi bấm **`DONE` lúc đã hết góc cần chỉnh** (home lại Z → `z_ok[]` xoá hết → 4 góc được đo lại rồi **chốt mốc mới**, hàm `tramming_set_ref()`).
+  - giữa các lần `PROBE`, **tự động đi tiếp** và `DONE` (khi còn góc cần chỉnh) **không home lại** ⇒ mọi giá trị nằm trong **cùng một khung Z** ⇒ so sánh trực tiếp được với nhau: **vặn đúng chiều thì delta giảm, vặn sai thì delta tăng**
+- 🔴 **KHÔNG probe lại tâm bàn** (theo yêu cầu) — cả `G35` lẫn wizard. Vặn ốc làm tâm bàn *vật lý* dịch, nhưng **mốc thì không** — probe tâm chỉ tốn thời gian, cộng sai số vào cả 4 số và gây hiểu nhầm là mốc bị đổi. Mốc mới chỉ được thiết lập khi **đã hết góc cần chỉnh** (máy **tự** `G28 Z` → `z_ok[]` xoá hết → 4 góc được đo lại rồi **chốt mốc mới**, hàm `tramming_set_ref()`; bấm `DONE` lúc đó cũng vậy).
 - `PROBE … con x.xxx` sau mỗi lần bấm = **số mm còn lại** của góc đang đứng (độ lệch so với **mốc `Z-MIN` /
   `Z-MAX`**, 3 số lẻ, cùng dấu với 4 số ở 2 dòng trên) — chỉ lấy **`z` cuối**, **không cộng dồn**.
   `DAT` = đã trong ngưỡng nhiễu (`|delta| ≤ 0.01mm`, hằng số `TRAM_DONE_MM`).
@@ -1760,15 +1781,17 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - **Nút thoát là `BACK`** (mục thứ 3 trên dòng 3, giữa `MAX->MIN` và `DONE`): bấm là gọi `tramming_exit()` —
   stow probe + `set_axis_never_homed(Z_AXIS)` rồi quay về **màn hình chính**. `DONE` **không** phải nút thoát:
-  nó là "xong góc này / làm lại từ đầu". Cứ để nguyên màn hình khi không dùng nữa cũng được — lần sau vào lại
+  nó là "xong góc này / làm lại từ đầu" và **vẫn là nút bấm tay** (máy đã **tự đi tiếp** ngay khi góc vừa probe `DAT`).
+  Khi **cả 4 góc đều `DAT`** (`TAT CA DAT`) thì dòng 3 **chỉ còn `>BACK`** — encoder khoá vào `BACK` — nên đây là
+  lúc `BACK` là lựa chọn **duy nhất**. Cứ để nguyên màn hình khi không dùng nữa cũng được — lần sau vào lại
   menu wizard sẽ `G28` cả 3 trục và đo lại từ đầu. Vì vít đã bị vặn nên **vẫn phải `G28` trước khi in**.
 - Nozzle đứng ở góc cần vặn tại `Z_AFTER_PROBING` = 10mm.
 
 #### Điều chỉnh nhiều góc — số của các góc khác có bị đổi không?
 
 > 🟢 **Từ 2026-10-12: KHÔNG đổi.** Mốc = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc,
-> được **CHỐT (đóng băng)** ngay sau lần đo **đủ 4 góc đầu tiên** (lúc vào menu, hoặc sau `DONE` khi đã hết
-> góc cần chỉnh) và **không tính lại nữa**. Nên **`PROBE` lại 1 góc CHỈ làm đổi số của chính góc đó**; 3 góc
+> được **CHỐT (đóng băng)** ngay sau lần đo **đủ 4 góc đầu tiên** (lúc vào menu, hoặc khi **hết góc cần chỉnh** —
+> máy **tự** home lại + đo lại 4 góc, bấm `DONE` chỉ là cách **đi tay**) và **không tính lại nữa**. Nên **`PROBE` lại 1 góc CHỈ làm đổi số của chính góc đó**; 3 góc
 > kia giữ nguyên. Đổi `MAX <-> MIN` chỉ là **đổi lấy mốc kia** (cả hai mốc đều đã chốt), không đo lại gì.
 >
 > **Trước đây đổi là vì** mốc cũ = "trung bình các góc đã đo" **tính lại mỗi lần vẽ màn hình**: probe lại
@@ -1782,12 +1805,13 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 |---|---|
 | 4 số ở 2 dòng đầu | "**góc này còn cao/thấp hơn MỐC bao nhiêu mm**" — đích là đưa **từng số về 0** |
 | `PROBE` | **chỉ cập nhật số của góc đang đứng** = còn phải vặn bao nhiêu mm nữa để góc đó về mốc |
-| 3 góc kia | số **không tự đổi** — nhưng **thực tế đã dịch** khi bạn vặn (bàn là một tấm liền, 4 vít liên kết với nhau). Muốn số mới thì `PROBE` lại, hoặc `DONE` để tới góc đó (máy probe luôn) |
-| `DONE` (hết góc cần chỉnh) | đo lại **cả 4 góc** trong khung Z mới ⇒ **chốt MỐC MỚI** — cách "làm lại từ đầu" |
+| 3 góc kia | số **không tự đổi** — nhưng **thực tế đã dịch** khi bạn vặn (bàn là một tấm liền, 4 vít liên kết với nhau). Muốn số mới thì `PROBE` lại, hoặc để máy **tự đi tiếp** khi góc vừa đo `DAT` / bấm `DONE` để tới góc đó (máy probe luôn) |
+| Hết góc cần chỉnh (**tự động**, hoặc bấm `DONE`) | đo lại **cả 4 góc** trong khung Z mới ⇒ **chốt MỐC MỚI** — cách "làm lại từ đầu" |
 
 > ⚠️ **Hệ quả phải nhớ:** vì mốc không đổi, sau khi vặn một góc thì 3 số còn lại là **số CŨ** (không còn
-> đúng vật lý) — đừng cộng dồn; hãy `PROBE` lại góc cần kiểm tra, hoặc cứ bấm `DONE` cho tới khi **hết góc cần
-> chỉnh** để máy đo lại tất cả.
+> đúng vật lý) — đừng cộng dồn; hãy `PROBE` lại góc cần kiểm tra, hoặc cứ để máy chạy hết vòng (**tự đi tiếp**
+> khi `DAT`, bấm `DONE` nếu muốn đi tay) cho tới khi **hết góc cần
+> chỉnh** để máy **tự** đo lại tất cả.
 > Đổi lại: bạn luôn biết **chính xác từng góc cần lên/xuống bao nhiêu mm** so với mốc ban đầu, và số của
 > một góc **không nhảy** chỉ vì bạn vừa probe một góc khác.
 >
@@ -1796,17 +1820,17 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 
 **Màn hình không hiện ký hiệu gì thêm** (chỉ `*` = góc đang đứng và `---` = góc chưa có số trong khung Z này) — số nào cũng dùng được để định hướng. Quy tắc duy nhất cần nhớ:
 
-> ✅ **`DONE` KHÔNG cần bấm liên tục để đo lại tất cả.** Vì:
+> ✅ **KHÔNG cần bấm `DONE` liên tục để đo lại tất cả.** Vì:
 > - **Đứng ở góc nào thì tin số của góc đó**: dấu `*` = góc đang đứng, và nó **luôn là số vừa đo**
->   (`PROBE`, `MAX->MIN`, `DONE` đều probe luôn góc mới) ⇒ dòng `PROBE` (số mm còn lại + chiều vặn) đúng cho góc đó.
-> - Bấm **`DONE`** là máy tự **đi tới góc CẦN CHỈNH kế tiếp (bỏ qua góc MỐC và các góc đã đạt `|delta| ≤ 0.01mm`) và đo luôn góc đó** ⇒ sang góc khác vặn tiếp ngay.
+>   (`PROBE`, `MAX->MIN`, `DONE` — và cả bước **tự động đi tiếp** — đều probe luôn góc mới) ⇒ dòng `PROBE` (số mm còn lại + chiều vặn) đúng cho góc đó.
+> - **Máy TỰ đi tới góc CẦN CHỈNH kế tiếp ngay khi góc vừa probe `DAT`** (`|delta| ≤ 0.01mm`, màn hình hiện `Auto next`) — **bỏ qua góc MỐC và các góc đã đạt** rồi **đo luôn góc đó** ⇒ sang góc khác vặn tiếp ngay, **không cần bấm gì**. Bấm **`DONE`** cũng làm đúng việc đó — để dùng khi muốn **đi tay**.
 > - Các góc chưa đo lại vẫn **dùng số cũ** (máy không xoá) — đủ để biết góc nào đang cao/thấp mà điều chỉnh tiếp.
-> - `DONE` chỉ **home lại Z + đo lại cả 4 góc** khi **đã hết góc cần chỉnh**: đúng lúc cần xem `max−min` còn bao nhiêu rồi quyết định vòng tiếp theo.
+> - Máy chỉ **home lại Z + đo lại cả 4 góc** khi **đã hết góc cần chỉnh** (tự động, hoặc do bấm `DONE`): đúng lúc cần xem `max−min` còn bao nhiêu rồi quyết định vòng tiếp theo.
 >
-> 🔁 **Vòng làm việc:** vặn 1 góc → `PROBE` (xem số giảm) → `DONE` (góc cần chỉnh kế tiếp, số mới) → vặn → … hết 4 góc
-> → `DONE` (máy `G28 Z` + đo lại cả 4 góc, **mốc mới**) → xem `max−min` → lặp lại. Thường **2–3 vòng** là xuống dưới
-> ngưỡng nhiễu (0.02mm). Góc nào hiện `DAT` (hoặc là góc **mốc**) thì bấm `DONE` sang góc cần chỉnh kế tiếp,
-> **đừng** vặn thêm góc đó.
+> 🔁 **Vòng làm việc:** vặn 1 góc → `PROBE` (xem số giảm; nếu hiện `DAT` thì máy **tự** sang góc kế tiếp, không phải bấm gì)
+> → vặn → … hết 4 góc → máy **tự** `G28 Z` + đo lại cả 4 góc (**mốc mới**) → xem `max−min` → lặp lại. Thường **2–3 vòng** là xuống dưới
+> ngưỡng nhiễu (0.02mm). Góc nào hiện `DAT` (hoặc là góc **mốc**) thì máy **tự bỏ qua**, **đừng** vặn thêm góc đó.
+> Nếu **cả 4 góc đều `DAT`** thì dừng vòng lặp: dòng 2 hiện **`TAT CA DAT`**, dòng 3 **chỉ còn `>BACK`**.
 
 #### Độ tin cậy của thuật toán (đã kiểm lại)
 
@@ -1815,7 +1839,7 @@ Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 | **Vì sao không còn dùng trung bình làm mốc?** | Mốc cũ = **mặt phẳng trung bình** (LS qua trọng tâm) cho **tổng 4 delta = 0** và `\|delta\|` lớn nhất là nhỏ nhất có thể — nhưng nó **tính lại mỗi lần vẽ màn hình**, nên `PROBE` lại một góc làm **cả 3 số kia dịch** `−Δ/4`. Mốc mới = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** — một **cực trị** của chính 4 góc, **chốt một lần** sau lần đo đủ 4 góc đầu tiên ⇒ số của một góc **không nhảy** khi probe góc khác, và chiến lược chỉ còn **một chiều** (chỉ hạ hoặc chỉ nâng). |
 | **Phụ thuộc gì không?** | **Không phụ thuộc** `z_home`, `M851` (`probe.offset.z`), lần home nào, hay việc có `G92` — vì mọi giá trị đều bị trừ đi cùng một mốc. ⇒ **Số liệu vẫn đúng kể cả khi Z offset chưa cân chuẩn.** (Đây là lý do thật sự nên dùng `delta` so với mốc thay vì chiều cao tuyệt đối.) |
 | **Probe lỗi 1 góc?** | `G35` **không bỏ cả phép đo**: nó đo tiếp các góc còn lại, in rõ góc lỗi, và chốt mốc trên các góc **đo được** (cần ≥ 3). Trước đây chỉ cần 1 góc lỗi là mất toàn bộ kết quả. |
-| **Độ phân giải / nhiễu** | In **3 số lẻ (0.001mm)**. Nhiễu thật của probe ~**±0.005–0.01mm** (`MULTIPLE_PROBING 2` — trung bình có trọng số của pha nhanh + pha chậm) ⇒ **\|delta\| < ~0.01mm nằm trong nhiễu, đừng đuổi theo**; `max-min ≤ 0.02–0.03mm` coi như đạt. Thuật toán in `DAT` (auto đạt) khi `\|delta\| ≤ 0.01mm` (`TRAM_DONE_MM`) — trước đây là 0.002mm, ngưỡng cũ **hầu như không bao giờ đạt** nên `DONE` cứ xoay vòng mãi và **không bao giờ** chạy tới bước home + probe lại 4 góc. |
+| **Độ phân giải / nhiễu** | In **3 số lẻ (0.001mm)**. Nhiễu thật của probe ~**±0.005–0.01mm** (`MULTIPLE_PROBING 2` — trung bình có trọng số của pha nhanh + pha chậm) ⇒ **\|delta\| < ~0.01mm nằm trong nhiễu, đừng đuổi theo**; `max-min ≤ 0.02–0.03mm` coi như đạt. Thuật toán in `DAT` (auto đạt) khi `\|delta\| ≤ 0.01mm` (`TRAM_DONE_MM`) — trước đây là 0.002mm, ngưỡng cũ **hầu như không bao giờ đạt** nên vòng lặp cứ xoay mãi và **không bao giờ** chạy tới bước home + probe lại 4 góc. Với ngưỡng 0.01mm, góc vừa đo `DAT` thì máy **tự đi tiếp**; và nếu **cả 4 góc đều `DAT`** thì dừng hẳn — dòng 2 hiện `TAT CA DAT`, dòng 3 **chỉ còn `BACK`**. |
 | **Bàn không phẳng (võng/vênh)** | 4 điểm góc chỉ mô tả được **một mặt phẳng**; phần võng/vênh ở giữa bàn **không** sửa được bằng 4 vít — đó là việc của mesh (`G29`). `G35` cũng chỉ đưa 4 góc về cùng một mặt phẳng. |
 | **Có bị "ảo" khi cả bàn cao/thấp đều?** | Không: đó chính là ca `2.000/2.000/2.000/2.030` — delta chỉ ra **0.030mm**, không đòi vặn cả 4 vít như cách tính theo Z-home. |
 | **Nút `WORST` (MAX/MIN) có bị lệch theo?** | Không: trừ đi một hằng số **không đổi thứ tự** ⇒ chọn góc cao nhất/thấp nhất cho kết quả y hệt dù xếp theo số thô hay theo delta. |
@@ -1829,7 +1853,8 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
 |---|---|
 | `CCW con +0.013` (dòng `PROBE` sau khi bấm) | **Số mm còn lại** của góc đang đứng: còn lệch `+0.013mm` so với **MỐC**, phải vặn tiếp **CCW** |
 | `+0.013` (số ở dòng có dấu `*`) | Cùng con số đó, nằm trong bảng 4 góc (3 số lẻ) — cập nhật ngay sau mỗi lần probe |
-| `DAT` | `\|delta\| ≤ 0.01mm` (`TRAM_DONE_MM`) — đã đạt, trong ngưỡng nhiễu; `DONE` cũng **bỏ qua** góc này |
+| `DAT` | `\|delta\| ≤ 0.01mm` (`TRAM_DONE_MM`) — đã đạt, trong ngưỡng nhiễu; máy **tự bỏ qua** góc này và **tự đi tiếp** (`DONE` cũng **bỏ qua** góc này) |
+| `TAT CA DAT` (dòng 2) | **cả 4 góc** đều `\|delta\| ≤ 0.01mm` ngay sau lần đo đủ 4 góc (`tram_all_dat = true`) ⇒ dòng 3 **chỉ còn `>BACK`**; encoder bị **khoá vào `BACK`** |
 
 - **Tự kiểm tra chiều vặn:** vặn **đúng** chiều → số còn lại **giảm**; vặn **sai** chiều → số còn lại **tăng**.
   Không cần biết "tổng đã vặn bao nhiêu", chỉ cần nhìn số đó đi về 0.
@@ -1841,8 +1866,8 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
   một đoạn `x` mm thì số của **chính góc đó giảm đúng `x` mm**. Thực tế nên vặn ~80–90 % con số rồi `PROBE`
   lại: bàn là **một tấm liền** nên vặn một góc sẽ kéo 3 góc kia nhích theo một chút.
 - **Số của 3 góc kia là số CŨ** khi bạn chỉ `PROBE` 1 góc (bàn thật đã nghiêng đi một chút khi vặn) ⇒
-  chúng chỉ để tham khảo; **bấm `DONE` để sang góc cần chỉnh kế tiếp (máy probe luôn góc đó)**, hoặc cứ để
-  `DONE` chạy tới khi **hết góc cần chỉnh** nếu muốn cả 4 số cùng "mới" trong một khung Z mới.
+  chúng chỉ để tham khảo; **máy tự sang góc cần chỉnh kế tiếp khi góc vừa đo `DAT`** (hoặc bấm `DONE` nếu muốn
+  **đi tay** — máy probe luôn góc đó), hoặc cứ để máy chạy tới khi **hết góc cần chỉnh** nếu muốn cả 4 số cùng "mới" trong một khung Z mới.
 
 | Tình huống khác | Kết luận |
 |---|---|
@@ -1871,8 +1896,8 @@ quy ước **không hề đổi**. `CW/CCW` luôn nói về **chiều vặn ốc
 > 🔧 **Hai điều thực dụng khi dùng `MIN` (vít góc cao đã hết hành trình):**
 > - Chiến lược "chỉ nâng các góc thấp" hội tụ về **mặt phẳng của góc cao nhất** (không phải về trung
 >   bình): nâng mỗi góc thấp lên đúng số mm đang hiện là chúng về cùng mặt phẳng mốc — **một vòng là gần
->   xong** (mốc đóng băng nên không còn kiểu co 25 % mỗi vòng). Cứ để `DONE` chạy tới khi **hết góc cần chỉnh**
->   (máy home lại Z + đo lại cả 4 góc, **mốc mới**) rồi làm theo số mới.
+>   xong** (mốc đóng băng nên không còn kiểu co 25 % mỗi vòng). Cứ để máy **tự** chạy tới khi **hết góc cần chỉnh**
+>   (máy home lại Z + đo lại cả 4 góc, **mốc mới**) rồi làm theo số mới; `DONE` chỉ cần khi muốn **đi tay**.
 > - Nâng/hạ **cả mặt phẳng** không làm sai `Z offset`: mỗi lần `G28` máy probe lại tâm bàn nên mốc Z
 >   đi theo bàn. Chỉ cần để ý **hành trình Z** còn đủ.
 
@@ -1885,7 +1910,8 @@ quy ước **không hề đổi**. `CW/CCW` luôn nói về **chiều vặn ốc
 > ⚠️ Vì là mã nguồn Marlin bị sửa, nếu sau này ai bật `MESH_BED_LEVELING` thì cờ này **không** được lưu
 > nữa (code tự bỏ qua) — không hỏng gì, chỉ mất tính "nhớ".
 
-> ⚠️ Trong lúc wizard probe/đi, màn hình đứng ở dòng tiến độ — bình thường (mỗi probe ~10s).
+> ⚠️ Trong lúc wizard probe/đi, màn hình đứng ở dòng tiến độ — bình thường (mỗi probe ~10s);
+> khi máy **tự đi tiếp** sau một góc vừa `DAT` thì dòng đó hiện `Auto next` (trạng thái `TR_AUTO`, mỗi khung hình 1 bước).
 > Máy đo `G35` lần đầu sau khi viết lại: 4 góc lệch **≤ 0,05mm** so với tâm.
 
 ### 11.9 Chiều motor X/Y trên CoreXY — cách chẩn đoán
