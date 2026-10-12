@@ -28,8 +28,11 @@
 # `G92 E<e_dau_layer_0>` truoc pass 2 lam cho moi buoc cua pass 2 co delta E y het
 # pass 1. Marlin tu nhan E voi flow_percentage.
 #
-#   pass 1 @ M221 S<pass1_flow> -> vd 30% nhua, o Z = first_pass_z (0.1):
+#   pass 1 @ M221 S<pass1_flow> -> vd 20% nhua, o Z = first_pass_z (0.1):
 #                                  MIET nhua det ra, bam ban (in cham - Cura 'Initial Layer Speed')
+#   giua   - nang Z len first_pass_z + <Z goc layer 0> + pass2_z_extra (0.05):
+#            phan extra de nozzle KHONG ca vao lop nhua vua in cua pass 1.
+#            G92 van khai bao Z goc => khoang cach cac lop PHIA TREN khong doi.
 #   pass 2 @ M221 S<pass2_flow> -> mac dinh 100%: pass 2 da nam CAO HON pass 1
 #                                  dung mot chieu cao layer init (0.2) nen day la
 #                                  mot lop BINH THUONG, KHONG duoc giam flow
@@ -94,9 +97,9 @@ class FirstLayerTwice(Script):
                 "pass1_flow":
                 {
                     "label": "Flow lan 1 (%)",
-                    "description": "M221 S<so nay> truoc pass 1 - lop MIET BAM BAN (in o Z = first_pass_z, mong hon layer_height). Mac dinh 30%: tang neu lop 1 khong dinh ban, giam neu nhua trao/lem.",
+                    "description": "M221 S<so nay> truoc pass 1 - lop MIET BAM BAN (in o Z = first_pass_z, mong hon layer_height). Mac dinh 20%: tang neu lop 1 khong dinh ban, giam neu nhua trao/lem.",
                     "type": "int",
-                    "default_value": 30,
+                    "default_value": 20,
                     "minimum_value": 1,
                     "maximum_value": 100
                 },
@@ -115,6 +118,14 @@ class FirstLayerTwice(Script):
                     "description": "Pass 1 da in CHAM san (Cura dung 'Initial Layer Speed' cho CA layer 0), nen pass 2 duoc ep ve toc do in BINH THUONG o day. Chi ap cho cac buoc CO dun nhua (co ca X/Y va E); travel va Z-hop giu nguyen. 0 = khong doi gi.",
                     "type": "int",
                     "default_value": 60,
+                    "minimum_value": 0
+                },
+                "pass2_z_extra":
+                {
+                    "label": "Nang them Z giua 2 pass (mm)",
+                    "description": "Khi nhay tu pass 1 sang pass 2, nang Z them bao nhieu mm NGOAI mot chieu cao layer (mac dinh 0.05) de nozzle khong ca vao lop nhua vua in cua pass 1. G92 van khai bao Z goc cua layer 0, nen khoang cach cac lop PHIA TREN khong doi - chi khoang pass 1 -> pass 2 rong ra them dung so nay.",
+                    "type": "float",
+                    "default_value": 0.05,
                     "minimum_value": 0
                 },
                 "z_feedrate":
@@ -337,6 +348,7 @@ class FirstLayerTwice(Script):
         flow1 = int(self.getSettingValueByKey("pass1_flow"))
         flow2 = int(self.getSettingValueByKey("pass2_flow"))
         pass2_feedrate = int(self.getSettingValueByKey("pass2_feedrate"))
+        pass2_z_extra = float(self.getSettingValueByKey("pass2_z_extra"))
         z_feedrate = int(self.getSettingValueByKey("z_feedrate"))
         first_pass_z = float(self.getSettingValueByKey("first_pass_z"))
 
@@ -372,8 +384,8 @@ class FirstLayerTwice(Script):
             # 0.3) roi G92 khai bao lai day la layer_z -> body goc roi ve dung cho
             # cua no, va toa do tu day ve sau y het ban in binh thuong.
             jump += [
-                "G1 Z{0} F{1} ; nang Z len first_pass_z + Z goc cua layer 0".format(
-                    self._fmt_num(first_pass_z + layer_z), z_feedrate),
+                "G1 Z{0} F{1} ; nang Z len first_pass_z + Z goc + pass2_z_extra".format(
+                    self._fmt_num(first_pass_z + layer_z + pass2_z_extra), z_feedrate),
                 "G92 Z{0} ; khai bao lai day la Z goc cua layer 0".format(
                     self._fmt_num(layer_z)),
             ]

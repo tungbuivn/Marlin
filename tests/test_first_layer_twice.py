@@ -65,9 +65,10 @@ SETTINGS = {
     "enabled": True,
     "force_temperatures": False,
     "double_first_layer": True,
-    "pass1_flow": 30,
+    "pass1_flow": 20,
     "pass2_flow": 100,
     "pass2_feedrate": 60,
+    "pass2_z_extra": 0.05,
     "z_feedrate": 600,
     "first_pass_z": 0.1,
 }
@@ -148,7 +149,7 @@ def main():
     assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
 
     # moc M221
-    assert any("M221 S30" in l for l in lines[i1:i2]), "FAIL: thieu M221 S30 truoc pass 1"
+    assert any("M221 S20" in l for l in lines[i1:i2]), "FAIL: thieu M221 S20 truoc pass 1"
     assert any("M221 S100" in l for l in lines[i2:i3]), "FAIL: thieu M221 S100 truoc pass 2"
     assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
 
@@ -184,7 +185,7 @@ def main():
 
     # nang Z THAT len first_pass_z + Z goc layer 0 = 0.1 + 0.2 = 0.3, roi G92 ve 0.2
     # (ve Z GOC cua layer 0, de body goc roi dung cho va moi layer sau giu dung buoc 0.2)
-    assert any("G1 Z0.3 F600" in l for l in lines[i2:i3]), "FAIL: buoc nang Z sai"
+    assert any("G1 Z0.35 F600" in l for l in lines[i2:i3]), "FAIL: buoc nang Z sai (phai la 0.1+0.2+0.05=0.35)"
     assert any("G92 Z0.2" in l for l in lines[i2:i3]), "FAIL: thieu G92 Z0.2 (Z goc layer 0)"
     # reset extruder ve E dau layer 0 (trong gcode nay la -0.75, sau lenh retract)
     assert any("G92 E-0.75" in l for l in lines[i2:i3]), "FAIL: thieu G92 E dau layer 0"
@@ -208,11 +209,14 @@ def main():
     for k, (name, z) in enumerate(press):
         step = "" if k == 0 else "   buoc {0:.2f}".format(z - press[k - 1][1])
         print("    {0:8s} Z = {1:.2f}{2}".format(name, z, step))
+    # Buoc pass1 -> pass2 = layer_height + pass2_z_extra (co y do: nha them 0.05mm cho nozzle khoi
+    # ca vao lop nhua vua in). Cac buoc PHIA TREN van dung bang layer_height vi G92 giu nguyen Z goc.
+    expected_steps = [0.2 + 0.05, 0.2, 0.2]
     for k in range(1, len(press)):
         step = press[k][1] - press[k - 1][1]
-        assert abs(step - 0.2) < 1e-9, (
-            "FAIL: buoc {0} -> {1} = {2:.2f}, phai la 0.20 (chieu cao layer)".format(
-                press[k - 1][0], press[k][0], step))
+        assert abs(step - expected_steps[k - 1]) < 1e-9, (
+            "FAIL: buoc {0} -> {1} = {2:.2f}, phai la {3:.2f}".format(
+                press[k - 1][0], press[k][0], step, expected_steps[k - 1]))
 
     # doi chung: pass 2 dung lai body DA HA (Z = 0.1) thi buoc nay thanh 0.30
     old_step = (min(axis_values(CHUNK2.split("\n"), "Z")) + offset) - (min(z1) + offset)

@@ -43,13 +43,16 @@ import time
 #       layer init => no la mot lop binh thuong (giam flow chi lam lop do thieu nhua).
 #       pass2_feedrate = 60mm/s: pass 2 cung phai in o toc do BINH THUONG (Cura ap
 #       'Initial Layer Speed' cho ca layer 0 nen khong the de Cura tu quyet).
-#       pass1_flow = 30% la gia tri KHOI DAU cho lop miet bam ban - sau lan dong bo
+#       pass2_z_extra = 0.05mm: nha them khi nhay pass 1 -> pass 2 cho nozzle khoi
+#       ca vao lop nhua vua in.
+#       pass1_flow = 20% la gia tri KHOI DAU cho lop miet bam ban - sau lan dong bo
 #       nay ban van doi duoc trong giao dien Cura.
 OVERRIDES = {
     "FirstLayerTwice": {
-        "pass1_flow": "30",         # lop miet bam ban (mac dinh moi)
+        "pass1_flow": "20",         # lop miet bam ban (mac dinh moi)
         "pass2_flow": "100",        # lop 2 = lop binh thuong
         "pass2_feedrate": "60",     # pass 2 in o toc do binh thuong (mm/s), khong dung Initial Layer Speed
+        "pass2_z_extra": "0.05",    # nang them 0.05mm khi nhay pass 1 -> pass 2
     },
 }
 
