@@ -2,6 +2,13 @@
 
 Chay: python tests/test_clamp_feeds.py [duong_dan_gcode]
 
+ClampFeeds DA DUOC GO khoi profile ngay 2026-10-12 (firmware tu kep theo M203/M201
+nen script chi gay trung lap) - xem README muc 11.6. File van duoc giu o
+`cura_profile/scripts_disabled/ClampFeeds.py` de THAM CHIEU, va test nay van chay
+tren no de bao dam script con dung neu sau nay muon bat lai. Script trong
+`cura_profile/scripts/` (thu muc duoc `install-cura-profile.ps1` copy) KHONG con
+ClampFeeds.py.
+
 Khong truyen duong dan thi dung FIXTURE trong repo (`tests/fixtures/clean_raw.gcode`)
 de test tu chua. Fixture do sinh bang: python tests/_make_clean_fixture.py
 Neu fixture khong co thi lay file .gcode moi nhat trong D:\\0in -- nhung BO QUA file
@@ -17,7 +24,21 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(os.path.dirname(HERE), "cura_profile", "scripts", "ClampFeeds.py")
+ROOT = os.path.dirname(HERE)
+
+
+def _find_src():
+    """ClampFeeds.py nam trong `scripts_disabled` (da go); chap nhan ca `scripts`
+    neu sau nay duoc bat lai."""
+    for sub in ("scripts_disabled", "scripts"):
+        path = os.path.join(ROOT, "cura_profile", sub, "ClampFeeds.py")
+        if os.path.isfile(path):
+            return path
+    raise SystemExit(
+        "FAIL: khong thay ClampFeeds.py trong cura_profile/scripts_disabled|scripts")
+
+
+SRC = _find_src()
 FIXTURE = os.path.join(HERE, "fixtures", "clean_raw.gcode")
 
 
@@ -199,7 +220,9 @@ def main():
         print("  Chay lai lan hai se lam hong phep dem vi tri -> bao loi gia.")
         print("  Muon kiem mot file DA xu ly thi dung:")
         print("    python tests/verify_gcode.py <file.gcode>")
-        print("  Test nay can file CHUA qua ClampFeeds (tat ClampFeeds trong Cura roi slice).")
+        print("  Test nay can file CHUA qua ClampFeeds. ClampFeeds da duoc GO khoi")
+        print("  profile (2026-10-12) nen file slice MOI se khong con marker nay;")
+        print("  file cu thi phai slice lai voi ClampFeeds da tat.")
         return 1
 
     chunks = split_chunks(lines)

@@ -1,9 +1,14 @@
-"""Kiem tra nhanh file gcode xuat ra: FirstLayerTwice (M221) + ClampFeeds.
+"""Kiem tra nhanh file gcode xuat ra: FirstLayerTwice (M221) + ClampFeeds (tuy chon).
 
     python tests/verify_gcode.py <file.gcode> [--full]
 
 Doc setting THAT tu machine instance cua Cura (qua `_cura_stub`) de biet phai
 mong doi gi, thay vi hardcode: doi `first_pass_z` trong Cura thi cho nay theo.
+
+Phan audit ClampFeeds (feedrate/acceleration) nay la TUY CHON: ClampFeeds da duoc
+GO khoi profile ngay 2026-10-12 (firmware tu kep theo M203/M201 nen script chi gay
+trung lap - xem README muc 11.6), nen G-code slice moi khong con marker
+`[ClampFeeds]`. File khong co marker do thi BO QUA phan 2, khong bao loi.
 """
 import math
 import os
@@ -29,6 +34,7 @@ def pick_gcode(explicit=None):
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 GCODE = pick_gcode(_args[0] if _args else None)
 FULL = "--full" in sys.argv
+# Tran cua ClampFeeds - CHI dung khi file con marker [ClampFeeds] (xem audit_clamp).
 LIMIT = {"X": 150.0, "Y": 150.0, "Z": 10.0, "E": 25.0}
 MAX_ACCEL = 300.0
 # Dung sai khi so voi tran. KHONG dung 1e-6: ClampFeeds lam tron xuong 2 chu so
@@ -60,6 +66,114 @@ def show(name, values):
     else:
         print("  {0}: {1} gia tri, {2} ... {3}".format(
             name, len(values), values[:3], values[-2:]))
+
+
+def audit_clamp(lines):
+    """Audit feedrate/acceleration cua ClampFeeds. Tra ve danh sach van de.
+
+    CHI goi khi file con marker `[ClampFeeds]` (file cu, truoc 2026-10-12). File
+    slice moi khong con script nay thi bo qua hoan toan.
+    """
+    pos = {"X": 0.0, "Y": 0.0, "Z": 0.0, "E": 0.0}
+    abs_pos = abs_e = True
+    feed = 0.0
+    bad = []
+    axis_max = {k: 0.0 for k in LIMIT}
+    max_a = 0.0
+    mixed = []
+    split_marks = 0
+
+    for ln, raw in enumerate(lines, 1):
+        if "ClampFeeds: tach XY" in raw:
+            split_marks += 1
+        code = raw.split(";", 1)[0].strip()
+        if not code:
+            continue
+        word = code.split()[0].upper()
+        v = vals_of(code)
+        if word == "G90":
+            abs_pos = True; continue
+        if word == "G91":
+            abs_pos = False; continue
+        if word == "M82":
+            abs_e = True; continue
+        if word == "M83":
+            abs_e = False; continue
+        if word == "G92":
+            for a in ("X", "Y", "Z", "E"):
+                if a in v:
+                    pos[a] = v[a]
+            continue
+        if word == "M204":
+            for p in code.split()[1:]:
+                if p.startswith("S") and len(p) > 1:
+                    try:
+                        max_a = max(max_a, float(p[1:]))
+                    except ValueError:
+                        pass
+            continue
+        if word not in ("G0", "G1"):
+            continue
+        if ("X" in v or "Y" in v) and "Z" in v:
+            mixed.append((ln, raw))
+        if "F" in v:
+            feed = v["F"] / 60.0
+        if feed <= 0:
+            continue
+        d = {}
+        for a in ("X", "Y", "Z"):
+            d[a] = ((v[a] - pos[a]) if abs_pos else v[a]) if a in v else 0.0
+            if a in v:
+                pos[a] = pos[a] + (d[a] if abs_pos else v[a])
+        if "E" in v:
+            d["E"] = (v["E"] - pos["E"]) if abs_e else v["E"]
+            pos["E"] = pos["E"] + (d["E"] if abs_e else v["E"])
+        else:
+            d["E"] = 0.0
+        dxyz = math.sqrt(d["X"] ** 2 + d["Y"] ** 2 + d["Z"] ** 2)
+        if dxyz > 0:
+            t = dxyz / feed
+        elif abs(d["E"]) > 0:
+            t = abs(d["E"]) / feed
+        else:
+            continue
+        for a in LIMIT:
+            sp = abs(d[a]) / t
+            axis_max[a] = max(axis_max[a], sp)
+            if sp > LIMIT[a] + TOL:
+                bad.append((ln, word, feed * 60, a, sp))
+
+    print("")
+    print("=== 2) ClampFeeds ===")
+    for a in ("X", "Y", "Z", "E"):
+        print("  {0}: max {1:8.2f} mm/s (tran {2})".format(a, axis_max[a], LIMIT[a]))
+    print("  M204 S lon nhat      : {0} (tran {1})".format(max_a, MAX_ACCEL))
+    print("  buoc vuot tran       : {0}".format(len(bad)))
+    for b in bad[:5]:
+        print("    dong {0}: {1} F{2:.0f} -> {3} {4:.1f}".format(*b))
+    print("  buoc co ca XY lan Z  : {0}".format(len(mixed)))
+    for m in mixed[:5]:
+        print("    dong {0}: {1}".format(*m))
+    print("  moc 'tach XY'        : {0}".format(split_marks))
+
+    problems = []
+    if bad:
+        problems.append("{0} buoc vuot tran feedrate".format(len(bad)))
+    if max_a > MAX_ACCEL + 1e-6:
+        problems.append("M204 S{0} > {1}".format(max_a, MAX_ACCEL))
+    if mixed:
+        problems.append("{0} buoc co ca XY lan Z".format(len(mixed)))
+    return problems
+
+
+def skip_clamp():
+    print("")
+    print("=== 2) ClampFeeds ===")
+    print("  BO QUA: file khong co marker [ClampFeeds].")
+    print("  ClampFeeds da duoc GO khoi profile ngay 2026-10-12 (firmware da tu kep")
+    print("  theo M203/M201 nen script chi gay trung lap). G-code giu nguyen toc do")
+    print("  Cura xuat ra; firmware van kep theo M203 X/Y 150 va M201 X/Y 300.")
+    return []
 
 
 def main():
@@ -205,95 +319,11 @@ def main():
             print("  !! M221 nhan duoc: {0}".format(got))
             problems.append("chuoi M221 khac mong doi {0}".format(want_flows))
 
-    # ---------- 2) audit feed/accel cua ClampFeeds ----------
-    pos = {"X": 0.0, "Y": 0.0, "Z": 0.0, "E": 0.0}
-    abs_pos = abs_e = True
-    feed = 0.0
-    bad = []
-    axis_max = {k: 0.0 for k in LIMIT}
-    max_a = 0.0
-    mixed = []
-    split_marks = 0
-
-    for ln, raw in enumerate(lines, 1):
-        if "ClampFeeds: tach XY" in raw:
-            split_marks += 1
-        code = raw.split(";", 1)[0].strip()
-        if not code:
-            continue
-        word = code.split()[0].upper()
-        v = vals_of(code)
-        if word == "G90":
-            abs_pos = True; continue
-        if word == "G91":
-            abs_pos = False; continue
-        if word == "M82":
-            abs_e = True; continue
-        if word == "M83":
-            abs_e = False; continue
-        if word == "G92":
-            for a in ("X", "Y", "Z", "E"):
-                if a in v:
-                    pos[a] = v[a]
-            continue
-        if word == "M204":
-            for p in code.split()[1:]:
-                if p.startswith("S") and len(p) > 1:
-                    try:
-                        max_a = max(max_a, float(p[1:]))
-                    except ValueError:
-                        pass
-            continue
-        if word not in ("G0", "G1"):
-            continue
-        if ("X" in v or "Y" in v) and "Z" in v:
-            mixed.append((ln, raw))
-        if "F" in v:
-            feed = v["F"] / 60.0
-        if feed <= 0:
-            continue
-        d = {}
-        for a in ("X", "Y", "Z"):
-            d[a] = ((v[a] - pos[a]) if abs_pos else v[a]) if a in v else 0.0
-            if a in v:
-                pos[a] = pos[a] + (d[a] if abs_pos else v[a])
-        if "E" in v:
-            d["E"] = (v["E"] - pos["E"]) if abs_e else v["E"]
-            pos["E"] = pos["E"] + (d["E"] if abs_e else v["E"])
-        else:
-            d["E"] = 0.0
-        dxyz = math.sqrt(d["X"] ** 2 + d["Y"] ** 2 + d["Z"] ** 2)
-        if dxyz > 0:
-            t = dxyz / feed
-        elif abs(d["E"]) > 0:
-            t = abs(d["E"]) / feed
-        else:
-            continue
-        for a in LIMIT:
-            sp = abs(d[a]) / t
-            axis_max[a] = max(axis_max[a], sp)
-            if sp > LIMIT[a] + TOL:
-                bad.append((ln, word, feed * 60, a, sp))
-
-    print("")
-    print("=== 2) ClampFeeds ===")
-    for a in ("X", "Y", "Z", "E"):
-        print("  {0}: max {1:8.2f} mm/s (tran {2})".format(a, axis_max[a], LIMIT[a]))
-    print("  M204 S lon nhat      : {0} (tran {1})".format(max_a, MAX_ACCEL))
-    print("  buoc vuot tran       : {0}".format(len(bad)))
-    for b in bad[:5]:
-        print("    dong {0}: {1} F{2:.0f} -> {3} {4:.1f}".format(*b))
-    print("  buoc co ca XY lan Z  : {0}".format(len(mixed)))
-    for m in mixed[:5]:
-        print("    dong {0}: {1}".format(*m))
-    print("  moc 'tach XY'        : {0}".format(split_marks))
-
-    if bad:
-        problems.append("{0} buoc vuot tran feedrate".format(len(bad)))
-    if max_a > MAX_ACCEL + 1e-6:
-        problems.append("M204 S{0} > {1}".format(max_a, MAX_ACCEL))
-    if mixed:
-        problems.append("{0} buoc co ca XY lan Z".format(len(mixed)))
+    # ---------- 2) audit feed/accel cua ClampFeeds - TUY CHON ----------
+    # ClampFeeds da duoc GO khoi profile (2026-10-12). File slice tu do tro di
+    # KHONG con marker [ClampFeeds]; gap file cu thi van kiem nhu truoc.
+    has_clamp = "[ClampFeeds]" in "\n".join(lines) or any("ClampFeeds:" in l for l in lines)
+    problems += audit_clamp(lines) if has_clamp else skip_clamp()
 
     print("")
     if problems:

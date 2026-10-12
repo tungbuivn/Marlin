@@ -226,22 +226,24 @@ Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ 
 > `Configuration_adv.h` = **600 cho cả 6 trục**, khớp EEPROM. `M122` sau khi nạp: `Set current 600 ×6`,
 > `msteps 8 ×6`, `off time 3`, 6/6 `connection OK` — và **EEPROM giữ nguyên** qua lần flash này.
 >
-> ✅ **Cura / `ClampFeeds` nay KHỚP máy**: profile ghi `max_feedrate_xy 150`, `max_acceleration 300` —
-> đúng bằng `M203 X/Y 150` và `M201 X/Y 300` của máy, nên G-code Cura phát ra **không bị firmware kẹp**
-> và `verify_gcode.py` kiểm đúng trần thật. (Muốn dùng trần cao hơn 150/225 thì phải sửa cả 4 file
-> profile + `install-cura-profile.ps1` — xem cạm bẫy 26.)
+> ✅ **Trần tốc độ/gia tốc do FIRMWARE giữ** (`M203 X/Y 150`, `M201 X/Y 300`): G-code Cura phát ra
+> **giữ nguyên tốc độ Cura xuất ra**, và firmware tự kẹp theo trần đó — **không cần script hậu xử lý
+> nào**. Script `ClampFeeds` (từng kẹp feedrate/acceleration trong G-code) **đã được GỠ ngày
+> 2026-10-12** — xem §11.6. (Muốn dùng trần cao hơn 150/225 thì phải sửa các file profile Cura +
+> `install-cura-profile.ps1` — xem cạm bẫy 26.)
 
 **Hai chỗ phía Cura — ✅ ĐÃ SỬA (khớp với bản 1/16, xem cảnh báo ngay trên):**
 
 | Chỗ | Việc đã làm |
 |---|---|
 | **Container máy của Cura** | `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_x/y` → **300**, `machine_acceleration` → **300**, `machine_max_acceleration_z` → **200**, `_e` → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y` **kẹp giá trị mặc định 5000** của Cura xuống |
-| **`ClampFeeds`** | `max_feedrate_xy` **150**, `max_acceleration` **300** — sửa ở **cả** `ClampFeeds.py` **và** khối setting đang lưu trong Cura (xem cạm bẫy 26). Đã cài lại bằng `install-cura-profile.ps1` |
+| **`ClampFeeds`** | ~~`max_feedrate_xy` **150**, `max_acceleration` **300**~~ — **script đã được GỠ ngày 2026-10-12** (firmware tự kẹp theo `M203`/`M201` nên script chỉ gây trùng lặp). File giữ ở `cura_profile/scripts_disabled/ClampFeeds.py`; khối `[ClampFeeds]` đã bị xoá khỏi Cura. Xem §11.6 |
 
-> ✅ **Đã kiểm chứng sau khi cài**: container máy trong `%APPDATA%\cura\5.13\definition_changes\` giữ
-> `machine_max_feedrate_x/y = 150`, `machine_max_acceleration_x/y = 2000`; khối đang lưu của
-> `ClampFeeds` giữ `max_feedrate_xy = 150`, `max_acceleration = 2000`; `ClampFeeds.py` đã cài có
-> `default_value` 150 và 2000. `tests/test_clamp_feeds.py` PASS với trần mới.
+> ✅ **Đã kiểm chứng sau khi gỡ**: container máy trong `%APPDATA%\cura\5.13\definition_changes\` giữ
+> `machine_max_feedrate_x/y = 150`, `machine_max_acceleration_x = 300`; khối đang lưu trong
+> `machine_instances\*.global.cfg` **chỉ còn `[FirstLayerTwice]`** (không còn `[ClampFeeds]`), và
+> `%APPDATA%\cura\5.13\scripts\` **không còn `ClampFeeds.py`** (chỉ còn `FirstLayerTwice.py`).
+> `tests/test_clamp_feeds.py` vẫn PASS — nó chạy trên file giữ ở `scripts_disabled/`.
 
 > 📌 **Việc còn lại là SLICE LẠI.** File `D:\0in\V300_Part3_proj.gcode` hiện có là bản **cũ**
 > (`M204 S500`, `F18000` = 300 mm/s, và `FirstLayerTwice` theo cơ chế cũ). `tests/verify_gcode.py`
@@ -1081,8 +1083,9 @@ quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver q
 | `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
 | `cura_profile/extruder_user.inst.cfg` | **Profile Cura — container `user` của EXTRUDER** (tốc độ retract). Phải nằm ở đây, xem 11.6 |
 | `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
-| `install-cura-profile.ps1` | Áp cả 4 container + 2 script hậu xử lý + **đồng bộ setting đang lưu của script** vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**) |
-| `cura_profile/fix-pp-settings.py` | Đồng bộ các giá trị **đang lưu** của post-processing script trong `machine_instances\*.global.cfg` (chúng đè lên `default_value` của `.py` — xem cạm bẫy 26). Chạy tay: `python cura_profile/fix-pp-settings.py [--what-if]` |
+| `install-cura-profile.ps1` | Áp cả 4 container + script hậu xử lý + **đồng bộ setting đang lưu của script** vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**). Script copy `cura_profile\scripts\*.py` — nên `ClampFeeds.py` (đã gỡ, xem §11.6) **không** còn được cài |
+| `cura_profile/fix-pp-settings.py` | Đồng bộ các giá trị **đang lưu** của post-processing script trong `machine_instances\*.global.cfg` (chúng đè lên `default_value` của `.py` — xem cạm bẫy 26), **và xoá khối `[ClampFeeds]` đã gỡ** (`REMOVE = {"ClampFeeds"}`). Chạy tay: `python cura_profile/fix-pp-settings.py [--what-if]` |
+| `cura_profile/scripts_disabled/ClampFeeds.py` | `ClampFeeds` **đã gỡ** ngày 2026-10-12 (firmware tự kẹp theo `M203`/`M201`) — giữ lại **để tham chiếu**, không được `install-cura-profile.ps1` cài. Muốn bật lại: xem §11.6 |
 | `README.md` | tài liệu máy (file này) |
 | `.vscode/extensions.json`, `.gitignore` | cấu hình môi trường phát triển |
 
@@ -1161,9 +1164,43 @@ vào cả hai container.
 > đủ chuỗi `voron2_300` → `voron2_base` → `fdmprinter`. Script ghi vào đó và **merge** — giữ lại
 > các giá trị anh đã đặt tay (ví dụ `infill_pattern`, `infill_sparse_density`).
 
-### Script hậu xử lý — `ClampFeeds.py`
+### Script hậu xử lý — `ClampFeeds.py` — ❌ **ĐÃ GỠ (2026-10-12)**
 
-**Đây là script quan trọng nhất, và là cơ chế DUY NHẤT đã chứng minh chạy được trên máy này.**
+> ❌ **Script này KHÔNG còn được cài — đã gỡ ngày 2026-10-12.** Lý do: firmware **đã tự kẹp**
+> feedrate/acceleration theo `M203`/`M201` (bảng §3.3), nên `ClampFeeds` chỉ còn **gây trùng lặp** —
+> mọi con số nó sửa thì Marlin cũng sửa y hệt, mà G-code lại khó đọc hơn và thêm một tầng có thể sai.
+> Trước đó nó còn **kẹp SAI**: script khai cứng `150/300` trong khi trần **nên dùng** ở §3.3 là
+> **225 mm/s** cho X/Y (`M203`) và **5000+ mm/s²** cho gia tốc (`M201`) — nên nó kéo tốc độ/gia tốc
+> xuống **thấp hơn cả mức máy chịu được**: chậm hơn mà không được lợi gì.
+>
+> - File **được giữ lại** (không xoá hẳn, để tham chiếu): `cura_profile/scripts_disabled/ClampFeeds.py`.
+> - `install-cura-profile.ps1` chỉ copy `cura_profile\scripts\*.py` → nhờ vậy script **không** còn được
+>   cài vào `%APPDATA%\cura\<ver>\scripts\`.
+> - Khối setting đã lưu `[ClampFeeds]` trong `machine_instances\*.global.cfg` bị **XOÁ** bằng
+>   `cura_profile/fix-pp-settings.py` (`REMOVE = {"ClampFeeds"}`). File đã cài
+>   `%APPDATA%\cura\5.13\scripts\ClampFeeds.py` cũng đã **xoá**.
+> - **Cách bật lại:** copy `cura_profile/scripts_disabled/ClampFeeds.py` → `cura_profile/scripts/`, bỏ
+>   `"ClampFeeds"` khỏi `REMOVE` và thêm lại khối `"ClampFeeds"` vào `OVERRIDES` trong
+>   `fix-pp-settings.py`, rồi chạy `install-cura-profile.ps1` (**đóng Cura trước**) và bật lại script
+>   trong `Extensions` → `Post Processing`. Chỉ nên làm nếu firmware **ngừng** tự kẹp.
+>
+> **Hệ quả của việc gỡ:** G-code **giữ nguyên tốc độ Cura xuất ra** — không còn bị kẹp trong file.
+> Firmware vẫn kẹp theo `M203 X/Y 150` · `M201 X/Y 300` (và `M204 P500 R300 T500` bị `min()` với
+> `M201` → thực tế **300**). Riêng phần **kẹp feed/accel** thì hành vi in **không đổi** — chỉ khác là
+> con số trong file nay đúng bằng con số Cura thật sự muốn.
+>
+> ⚠️ Nhưng `ClampFeeds` còn làm **3 việc khác**, nên gỡ script là **mất luôn** chúng:
+> **(a)** tách bước gộp XY+Z — nay bước gộp (ví dụ đường purge viết tay trong Extruder Start G-code)
+> **giữ nguyên**, mà Marlin nội suy nên đầu in vừa chạy ngang vừa hạ dần;
+> **(b)** chèn bước **về tâm sau purge** (`after_purge_xy`) — không còn;
+> **(c)** ép `M204 S` — không còn (firmware tự `min()` với `M201`, xem §3.3).
+> Nếu thấy purge/travel **cào mặt bàn**, **đừng** bật lại script: sửa thẳng **Extruder Start G-code**
+> trong Cura cho tách XY/Z và nhấc Z đúng thứ tự (xem cảnh báo *"Đừng gộp XY và Z trong một lệnh
+> purge"* ở §11.6).
+
+#### Lịch sử — vì sao từng cần `ClampFeeds` *(đọc trước khi định bật lại)*
+
+**Đây từng là script quan trọng nhất, và là cơ chế DUY NHẤT đã chứng minh chạy được trên máy này.**
 
 Làm 4 việc, mỗi việc có setting riêng:
 
@@ -1182,7 +1219,11 @@ Kết quả đo trên `V300_Part3.gcode`:
 | `M204 S` lớn nhất | 5000 | **500** |
 | Bước có cả XY lẫn Z | 1 | **0** |
 
-Purge sau khi qua script:
+Purge **sau khi qua script** (ảnh chụp lịch sử trên `V300_Part3_proj.gcode`). Các dòng
+`; ClampFeeds: tach XY`, `; ClampFeeds: ha Z sau` và `; --- ClampFeeds: ve tam sau purge ---` là do
+**chính script này** chèn/sửa. Từ 2026-10-12 chúng **không còn** trong G-code mới — khối purge gốc
+(nếu có) chỉ còn do Extruder Start G-code quyết định, và bước "về tâm" do `after_purge_xy` chèn thì
+**mất hẳn**:
 
 ```gcode
 ; ----- Duong purge (chay sau Start G-code cua may) -----
@@ -1198,8 +1239,9 @@ G1 F6000 X152.5 Y152.5
 ;LAYER_COUNT:5
 ```
 
-**Bật:** `Extensions` → `Post Processing` → `Add a script` → **Clamp Feeds** → `Close`.
-Cura chỉ nạp script lúc khởi động nên phải **mở lại Cura**. Bật một lần là các lần slice sau tự chạy.
+> ~~**Bật:** `Extensions` → `Post Processing` → `Add a script` → **Clamp Feeds** → `Close`.~~
+> ~~Cura chỉ nạp script lúc khởi động nên phải **mở lại Cura**.~~ **Không còn áp dụng** — script đã gỡ
+> 2026-10-12; muốn bật lại thì theo "Cách bật lại" ở đầu mục này.
 
 > 🔵 **Vì sao dùng script mà không sửa profile Cura.** Đã đo bằng `cura.log` — log ghi **chính xác** setting gửi cho CuraEngine. Sau **ba** lần thử đặt vào `definition_changes`, container `user` của máy in, và container `user` của extruder, Cura **vẫn** gửi `acceleration_print = 5000` và purge cũ. Cura không đọc các file cấu hình ghi từ bên ngoài (nó ghi lại bằng trạng thái trong bộ nhớ).
 > Post-processing script thì luôn chạy — `FirstLayerTwice` đã đúng suốt từ đầu.
@@ -1209,7 +1251,7 @@ Cura chỉ nạp script lúc khởi động nên phải **mở lại Cura**. B�
 > - **Làm tròn LÊN khi kẹp sẽ vượt trần**: trần Z 10 mm/s → `F3648.9` làm tròn thành `F3649` = 10.0014 mm/s. Phải làm tròn **xuống**.
 > - **Z không đổi thì đừng phát bước Z**: nếu không sẽ sinh `G1 F1500 Z0.3` dài 0 mm — vô nghĩa và bị audit bắt lỗi.
 
-Test: `tests/test_clamp_feeds.py` — chạy trên file gcode thật, kiểm chứng lại từng trục sau khi sửa, và fail nếu còn bước vượt trần hoặc còn bước XY+Z.
+Test: `tests/test_clamp_feeds.py` — chạy trên file gcode thật, kiểm chứng lại từng trục sau khi sửa, và fail nếu còn bước vượt trần hoặc còn bước XY+Z. **Từ 2026-10-12 test này nạp file ở `cura_profile/scripts_disabled/ClampFeeds.py`** (đường dẫn mới) để bảo đảm script vẫn đúng nếu sau này bật lại — nó không có nghĩa là script đang được cài.
 
 ### Script hậu xử lý — `FirstLayerTwice.py`
 
@@ -1375,13 +1417,13 @@ khởi động** — thêm file xong phải mở lại Cura.
 
 #### Bộ công cụ kiểm tra ngoài Cura
 
-Cả hai script đều **không cần mở Cura** để kiểm tra. Ba lệnh:
+**Không cần mở Cura** để kiểm tra. Ba lệnh:
 
 | Lệnh | Việc |
 |---|---|
 | `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 **và `F`** (pass 2 = `F3600` = 60 mm/s; pass 1, Z-hop, retract **không** bị đổi tốc độ) |
-| `python tests\test_clamp_feeds.py` | Chạy `ClampFeeds` trên **file gcode thật** rồi audit lại từng trục |
-| `python tests\verify_gcode.py <file.gcode>` | Soi một file đã xuất: mốc `FirstLayerTwice` + audit feed/accel của `ClampFeeds` |
+| `python tests\test_clamp_feeds.py` | Test hồi quy `ClampFeeds` — chạy trên **file gcode thật** (mặc định fixture trong repo) rồi audit lại từng trục. ⚠️ `ClampFeeds` **đã gỡ**: test nạp file ở `cura_profile/scripts_disabled/ClampFeeds.py`, chỉ để bảo đảm script còn đúng nếu bật lại — **không** có nghĩa nó đang được cài |
+| `python tests\verify_gcode.py <file.gcode>` | Soi một file đã xuất: mốc `FirstLayerTwice` + **audit feed/accel của `ClampFeeds` (TUY CHỌN)** — file không có marker `[ClampFeeds]` thì **bỏ qua** phần đó, không tính là vấn đề |
 
 Thêm một harness để **xem trước kết quả** mà không phải slice qua giao diện:
 
@@ -1396,13 +1438,13 @@ của Cura (`%APPDATA%\cura\<ver>\machine_instances\*.global.cfg`), chia gcode t
 > ⚠️ **Gcode Cura lưu ra đĩa LUÔN là gcode đã qua hậu xử lý** (có `;POSTPROCESSED` + tên script
 > trong header), nên file đã slice vẫn còn marker trong đó. Harness **từ chối chạy** nếu file đã
 > có marker `; --- First Layer Twice:` — chạy lại lần hai sẽ chèn chồng hai khối lên nhau.
-> Muốn xem trước: **tắt** `FirstLayerTwice` trong Cura → slice → chạy harness trên file vừa sinh
-> (file đó chỉ còn `ClampFeeds`).
+> Muốn xem trước: **tắt** `FirstLayerTwice` trong Cura → slice → chạy harness trên file vừa sinh.
 
-> ℹ️ **Thứ tự script quan trọng.** Header ghi `;  [FirstLayerTwice]` rồi `;  [ClampFeeds]`, tức
-> `ClampFeeds` chạy **sau**, nên nó nhìn thấy cả bước nhấc Z do `FirstLayerTwice` chèn vào và kẹp
-> luôn (`G1 Z0.3 F600` = 600/60 = **10 mm/s**, đúng bằng trần Z nên hợp lệ). Nếu đảo thứ tự thì
-> bước nhấc đó **thoát** khỏi audit. `verify_gcode.py` cũng kiểm luôn điều kiện này.
+> ℹ️ **Thứ tự script.** Từ 2026-10-12 header chỉ còn **`;  [FirstLayerTwice]`** — `ClampFeeds` đã gỡ
+> nên **không còn script nào chạy sau** `FirstLayerTwice`. Trước đây `ClampFeeds` chạy sau và kẹp luôn
+> bước nhấc Z do `FirstLayerTwice` chèn vào (`G1 Z0.3 F600` = 600/60 = **10 mm/s**); nay bước đó
+> **giữ nguyên** trong file và firmware tự kẹp nếu cần. Vì vậy `verify_gcode.py` **bỏ qua** phần audit
+> feed/accel khi file không có marker `[ClampFeeds]` — đó là trạng thái **bình thường** của file mới.
 
 Hai file dùng chung (`test_first_layer_twice.py`, `run_first_layer_twice.py`, `verify_gcode.py`):
 
@@ -1447,8 +1489,10 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 > phát `M204 S500` — đó chính là nguồn gốc con số 500, **không phải** profile ghi 500.
 > Nay cả hai bên cùng ở **300**: `M201 X300 Y300` trong EEPROM **và**
 > `machine_max_acceleration_x/y = 300` + `machine_acceleration = 300` trong container máy của Cura.
-> Muốn nhanh hơn thì phải nâng **cả hai** cùng lúc, và **sửa cả `ClampFeeds.max_acceleration`** —
-> xem §3.3.
+> Muốn nhanh hơn thì phải nâng **cả hai** cùng lúc: `M201`/`M204` trong firmware **và**
+> `machine_max_acceleration_x/y` (+ `machine_acceleration`) trong profile Cura — xem §3.3.
+> (Trước đây còn phải sửa `ClampFeeds.max_acceleration`; `ClampFeeds` **đã gỡ** ngày 2026-10-12 nên
+> không còn tầng đó.)
 
 > 📐 **Các mức còn lại tự suy ra, không cần đặt tay.** Mọi `acceleration_*` khác của Cura đều tính từ
 > `acceleration_print` (hoặc từ `voron2_base`), nên khi `acceleration_print = 300` thì:
@@ -1471,8 +1515,9 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 > ```
 > Với `machine_max_feedrate_x/y = 500` → `round(500, -2) = 500` mm/s → Cura phát **`G0 F30000`**.
 > Với **300** → **`G0 F18000`**. Với **150** → `round(150, -2) = 200` mm/s → **`G0 F12000`**.
-> Con số 200 này **vượt trần 150**, nên `ClampFeeds` sẽ kéo về `F9000` — đó là lý do `ClampFeeds`
-> phải khai `max_feedrate_xy = 150` cho khớp.
+> Con số 200 này **vượt trần 150**. Từ khi `ClampFeeds` được **gỡ** (2026-10-12), file **giữ nguyên**
+> `G0 F12000` — firmware tự kẹp về trần 150 mm/s (`M203 X/Y 150`). (Trước đây `ClampFeeds` kéo con số
+> này về `F9000` ngay trong file — đó là lý do nó phải khai `max_feedrate_xy = 150` cho khớp.)
 >
 > **Đừng nhầm đơn vị:** g-code `F` là **mm/phút**, còn `M203` và Cura là **mm/giây**
 > (`fdmprinter.def.json` ghi `"unit": "mm/s"`). `30000 ÷ 60 = 500` — tức `F30000` **bằng đúng trần**,
@@ -1523,12 +1568,12 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
 | 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.3 ✓ → layer1 0.6 ✗`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: mọi bước phải đúng `layer_height`. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
 | 25 | **Pully tuột khỏi trục motor X/Y** | Pulley trượt trên trục → **chỉ một belt được kéo** → lệnh **Y** làm đầu in đi **CHÉO 45°** thay vì thẳng; `G28` không chạm công tắc → `kill()`. Cực dễ chẩn đoán nhầm thành lỗi firmware/`INVERT`/kinematics, vì code và cấu hình **hoàn toàn không đổi**. Triệu chứng đi kèm: lệnh X có vẻ vẫn đúng (hướng đó pulley còn bám), rồi một lệnh đột nhiên **không nhích gì** (tuột hẳn) | Siết lại **vít hãm pully** ở **cả hai** motor X/Y, rồi cân lại gantry + `G28` + `G29`. Kiểm tra bằng vít hãm + vạch bút dạ bắc qua pulley và trục. Khoanh vùng bằng **phép thử tách motor** ở §11.9 |
-| 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500 | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu. Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
-| 27 | **Đọc `post_processing_scripts` chỉ lấy một dòng vật lý** | Khối này **trải trên nhiều dòng** (Cura chèn newline thật, các dòng sau thụt đầu bằng TAB). Đọc mỗi dòng đầu thì **mất hẳn script thứ hai trở đi** — `ClampFeeds` trả về `None` dù nó **có** trong file, dẫn tới kết luận sai "Cura không lưu script đó" | Đọc tiếp các dòng thụt đầu (kieu INI continuation) — xem `read_cura_settings()` trong `tests/_cura_stub.py` |
+| 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500. ⚠️ **`ClampFeeds` đã được GỠ ngày 2026-10-12** — cạm bẫy này nay áp cho `FirstLayerTwice` (`pass1_flow` / `pass2_flow` / `pass2_feedrate`); và **cùng cơ chế đó khiến khối `[ClampFeeds]` vẫn nằm lại trong Cura** dù file `.py` đã bị gỡ | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu **và xoá khối của script đã gỡ** (`REMOVE = {"ClampFeeds"}` — Cura **không** tự xoá khối đã lưu khi file `.py` không còn). Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
+| 27 | **Đọc `post_processing_scripts` chỉ lấy một dòng vật lý** | Khối này **trải trên nhiều dòng** (Cura chèn newline thật, các dòng sau thụt đầu bằng TAB). Đọc mỗi dòng đầu thì **mất hẳn script thứ hai trở đi** — `ClampFeeds` trả về `None` dù nó **có** trong file, dẫn tới kết luận sai "Cura không lưu script đó" | Đọc tiếp các dòng thụt đầu (kieu INI continuation) — xem `read_cura_settings()` trong `tests/_cura_stub.py`. Từ 2026-10-12 khối này chỉ còn `[FirstLayerTwice]` (`ClampFeeds` đã gỡ), nhưng cách đọc vẫn phải đúng |
 | 28 | **🔴 `R` âm trong model MPC của EEPROM** | Số hiển thị **giảm** khi đang hâm nóng trong khi heater vẫn cấp điện; nhiệt độ **nhảy −10 °C**; "restart thì đúng lại". Nguy cơ **quá nhiệt/cháy**: MPC điều khiển theo **mô hình**, nên model hỏng làm bộ điều khiển ra lệnh sai và **che mất** lỗi cảm biến — bảo vệ nhiệt không cứu được kiểu này | Xem đầy đủ ở **§6.1**. `M306` phải có `R` **dương**; sửa bằng `M306 ... R0.1284 ...` + `M500` + **reset vật lý** (`M999` **không** đủ) |
 | 29 | **Tưởng `M999` là "khởi động lại"** | `M999.cpp:38-45` chỉ đặt `marlin_state = MF_RUNNING`, xả buffer serial, `ui.reset_alert_level()`. **RAM không bị đụng** → mọi trạng thái trong RAM (model MPC `modeled_*`, vị trí) **giữ nguyên**. Dùng `M999` để "làm mới" model MPC là **vô ích mà tưởng là xong** | Cần reset thật: nút RESET hoặc tắt/bật PSU |
 | 30 | **Bật heater trước khi xác nhận mọi thứ chạy được** | Một lỗi định dạng chuỗi trong script theo dõi (`"{3,+6:F2}"` — dấu `+` trong phần canh lề là **không hợp lệ** trong .NET) nổ ra **sau khi** `M104 S100` đã gửi → script chết, heater chạy một mình tới 73,9 °C | **Đọc và in `M105` phải xảy ra TRƯỚC khi gửi `M104`** — `monitor-temp.ps1` nay làm đúng vậy, và có `-ProbeOnly`. Tổng quát: đừng bao giờ gửi lệnh gia nhiệt từ một code path chưa chạy sạch |
-| 31 | **Chạy `test_clamp_feeds.py` lên file ĐÃ qua ClampFeeds** | Chạy ClampFeeds lần hai lên file đã xử lý làm **hỏng phép đếm vị trí** (bước XY+Z bị tách hai lần, bước "về tâm" bị chèn hai lần) → audit báo **hàng nghìn lỗi GIẢ**. Đã gặp thật: file 2,2 MB đã xử lý → **2481** "bước vượt trần", trong khi chính file đó chỉ có 6 dòng lệch biên | `test_clamp_feeds.py` nay **TỪ CHỐI** file có marker `ClampFeeds:` và trỏ sang `verify_gcode.py`. **File ĐÃ xử lý → dùng `verify_gcode.py`; file CHƯA xử lý → dùng `test_clamp_feeds.py`.** Mặc định test dùng fixture `tests/fixtures/clean_raw.gcode` |
+| 31 | **Chạy `test_clamp_feeds.py` lên file ĐÃ qua ClampFeeds** | Chạy ClampFeeds lần hai lên file đã xử lý làm **hỏng phép đếm vị trí** (bước XY+Z bị tách hai lần, bước "về tâm" bị chèn hai lần) → audit báo **hàng nghìn lỗi GIẢ**. Đã gặp thật: file 2,2 MB đã xử lý → **2481** "bước vượt trần", trong khi chính file đó chỉ có 6 dòng lệch biên | `test_clamp_feeds.py` nay **TỪ CHỐI** file có marker `ClampFeeds:` và trỏ sang `verify_gcode.py`. **File ĐÃ xử lý → dùng `verify_gcode.py`; file CHƯA xử lý → dùng `test_clamp_feeds.py`.** Mặc định test dùng fixture `tests/fixtures/clean_raw.gcode`. ⚠️ Từ 2026-10-12 `ClampFeeds` **đã gỡ** nên file slice **mới** không còn marker này — cạm bẫy chỉ còn gặp với **file cũ** |
 | 32 | **Ngưỡng so trần quá chặt gây lỗi oan** | Dùng `> LIMIT + 1e-6` cho feedrate: một bước `F9000` (= **đúng** trần 150 mm/s) tính lại ra `150,0000x` do sai số dấu phẩy động tích lũy → bị báo vượt trần **oan** (đã gặp: 6 dòng trên file 2,2 MB, tất cả đều `F9000`) | Dùng `TOL = 0,05 mm/s`. Vẫn bắt được mọi vi phạm thật (200 mm/s lệch 50 mm/s) |
 | 33 | **Thay thế chuỗi bằng PowerShell trên file có tiếng Việt** | `Get-Content -Raw` **không có `-Encoding`** đọc UTF-8 bằng ANSI → `WriteAllText` ghi lại thành UTF-8 **hỏng**: **916 dòng** tiếng Việt trong README nát thành mojibake (`trần cứng` → `tráº§n cá»©ng`). `Set-Content` không `-Encoding` còn ghi **CRLF** vào file vốn LF | **Sửa text bằng công cụ `edit`, không bằng `-replace` của PowerShell.** Nếu buộc phải dùng Python/PowerShell thì chỉ định encoding rõ ràng và `newline`. Khôi phục: `git checkout -- <file>` |
 | 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 đúng một chiều cao layer init (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về `pass2_feedrate` (mm/s, mặc định **60** → `F3600`), giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |

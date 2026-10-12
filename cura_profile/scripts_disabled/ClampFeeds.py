@@ -24,6 +24,13 @@ slicer (xem README cam bay 19 - Cura xoa setting khi ghi lai container), trong k
 post-processing script la co che da chung minh chay duoc tren may nay.
 
 Cura nap script theo quy tac: TEN CLASS PHAI TRUNG TEN FILE.
+
+TRANG THAI: DA GO khoi profile ngay 2026-10-12 - script nay KHONG duoc cai nua.
+Firmware da tu kep feedrate/acceleration theo M203/M201 nen no chi gay trung lap
+(truoc do con kep SAI vi khai 150/300 trong khi tran nen dung la 225/5000 - xem
+README muc 11.6). File duoc giu lai de THAM CHIEU: `install-cura-profile.ps1` chi
+copy `cura_profile/scripts/*.py` nen file nay khong duoc cai. Muon bat lai thi xem
+"Cach bat lai" trong README muc 11.6.
 """
 
 import math

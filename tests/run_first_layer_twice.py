@@ -73,7 +73,7 @@ def main():
         print("TU CHOI: file nay DA qua FirstLayerTwice (con marker trong file).")
         print("         Chay lai lan hai se chen chong hai khoi len nhau.")
         print("         Muon xem truoc: TAT FirstLayerTwice trong Cura, slice lai,")
-        print("         roi chay harness tren file vua sinh (file do chi con ClampFeeds).")
+        print("         roi chay harness tren file vua sinh (file do khong con hau xu ly nao).")
         return 1
 
     chunks = chunk_like_cura(text)

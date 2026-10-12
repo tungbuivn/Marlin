@@ -194,6 +194,8 @@ if (-not $AddAsNewPrinter) {
     # `post_processing_scripts` trong machine_instances\*.global.cfg. Gia tri dang
     # luu do DE LEN `default_value` trong file .py, nen copy .py la CHUA DU.
     # Da gap that: ClampFeeds.py doi 300->150 / 500->2000 nhung Cura van dung so cu.
+    # ClampFeeds da duoc GO (2026-10-12); khoi da luu cua no bi XOA bang REMOVE trong
+    # fix-pp-settings.py vi Cura KHONG tu xoa khoi da luu khi file .py khong con.
     # ------------------------------------------------------------------ #
     $ppTool = Join-Path $repoRoot "cura_profile\fix-pp-settings.py"
     if (Test-Path $ppTool) {
