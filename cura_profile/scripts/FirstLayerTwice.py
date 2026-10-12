@@ -36,8 +36,10 @@
 #   pass 2 @ M221 S<pass2_flow> -> mac dinh 100%: pass 2 da nam CAO HON pass 1
 #                                  dung mot chieu cao layer init (0.2) nen day la
 #                                  mot lop BINH THUONG, KHONG duoc giam flow
-#                                  + ep toc do in ve <pass2_feedrate> mm/s (vi Cura ap
-#                                  'Initial Layer Speed' cho ca layer 0)
+#                                  + ep toc do in ve <pass2_feedrate> mm/s, hoac TOT HON:
+#                                  tu lay F pho bien nhat cua layer 1 trong G-code
+#                                  (Cura ap 'Initial Layer Speed' cho ca layer 0 nen
+#                                   khong the de Cura tu quyet)
 #
 # Luu y: pass 1 + pass 2 KHONG con cong lai thanh 100% nhu ban cu (20+80) - hai
 # pass nay o HAI do cao khac nhau, nen luong nhua thuc te = pass1_flow% + 100%.
@@ -114,11 +116,18 @@ class FirstLayerTwice(Script):
                 },
                 "pass2_feedrate":
                 {
-                    "label": "Toc do in pass 2 (mm/s)",
-                    "description": "Pass 1 da in CHAM san (Cura dung 'Initial Layer Speed' cho CA layer 0), nen pass 2 duoc ep ve toc do in BINH THUONG o day. Chi ap cho cac buoc CO dun nhua (co ca X/Y va E); travel va Z-hop giu nguyen. 0 = khong doi gi.",
+                    "label": "Toc do in pass 2 - DU PHONG (mm/s)",
+                    "description": "Chi dung khi 'Tu lay toc do that cua layer 1' TAT hoac khong tim duoc F cua layer 1. 0 = khong doi gi.",
                     "type": "int",
                     "default_value": 60,
                     "minimum_value": 0
+                },
+                "pass2_feedrate_auto":
+                {
+                    "label": "Tu lay toc do that cua layer 1",
+                    "description": "BAT (khuyen nghi): quet cac buoc CO DUN NHUA (co X/Y va E) cua layer 1 - lop ngay tren layer 0 - trong chinh file G-code, lay gia tri F pho bien nhat roi ap cho pass 2 => luon khop toc do in binh thuong cua profile dang dung. Ly do: Cura KHONG cho script doc setting cua profile, nhung toc do that thi da nam san trong G-code cac layer tren.",
+                    "type": "bool",
+                    "default_value": true
                 },
                 "pass2_z_extra":
                 {
@@ -287,6 +296,34 @@ class FirstLayerTwice(Script):
             out.append(self.putValue(line, F=f))
         return out
 
+    def _layer_speed(self, data, number):
+        """Feedrate (mm/phut) PHO BIEN NHAT tren cac buoc CO DUN NHUA cua layer <number>.
+
+        Dung de pass 2 in dung toc do in binh thuong cua profile dang dung: Cura KHONG cho script
+        doc setting cua profile, nhung toc do do da nam ngay trong G-code cua cac layer tren.
+        Bo qua travel (khong E), Z-hop, retract/unretract (E nhung khong X/Y).
+        Tra ve 0 neu khong tim duoc.
+        """
+        index, _ = self._find_layer(data, number)
+        if index is None:
+            return 0.0
+        counts = {}
+        for line in data[index].split("\n"):
+            code = line.split(";", 1)[0].strip()
+            if not code or code.split()[0] not in ("G0", "G1"):
+                continue
+            if self.getValue(line, "E") is None:
+                continue
+            if self.getValue(line, "X") is None and self.getValue(line, "Y") is None:
+                continue
+            value = self.getValue(line, "F")
+            if value is None:
+                continue
+            counts[value] = counts.get(value, 0) + 1
+        if not counts:
+            return 0.0
+        return float(max(counts.items(), key=lambda kv: kv[1])[0])
+
     def _find_layer(self, data, number):
         """Tim chunk chua ';LAYER:<number>'. Tra ve (index, offset dong) hoac (None, None)."""
         want = ";LAYER:{0}".format(number)
@@ -369,7 +406,15 @@ class FirstLayerTwice(Script):
         pass1 = self._shift_z(body, layer_z - first_pass_z) if do_shift else body
 
         # --- pass 2: BODY GOC nhung in o TOC DO BINH THUONG (khong dung 'Initial Layer Speed') ---
-        pass2_body = self._set_speed(body, pass2_feedrate)
+        # Uu tien TOC DO THAT cua layer 1 (quet tu G-code); khong tim duoc thi dung pass2_feedrate.
+        speed, speed_src = 0.0, "theo setting"
+        if self.getSettingValueByKey("pass2_feedrate_auto"):
+            f_l1 = self._layer_speed(data, 1)
+            if f_l1 > 0:
+                speed, speed_src = f_l1 / 60.0, "lay tu layer 1"        # mm/phut -> mm/s
+        if speed <= 0:
+            speed = float(pass2_feedrate)
+        pass2_body = self._set_speed(body, speed)
 
         head = ["; --- First Layer Twice: bat dau pass 1 ({0}%) ---".format(flow1),
                 "M221 S{0} ; flow pass 1".format(flow1)]
@@ -397,7 +442,7 @@ class FirstLayerTwice(Script):
         jump += [
             "G92 E{0} ; reset extruder ve E dau layer 0".format(self._fmt_e(e_at_layer0)),
             "M221 S{0} ; flow pass 2".format(flow2),
-            "; --- First Layer Twice: bat dau pass 2 ({0}%) ---".format(flow2),
+            "; --- First Layer Twice: bat dau pass 2 ({0}%) | toc do {1:.0f} mm/s ({2}) ---".format(flow2, speed, speed_src),
         ]
 
         # --- pass 2: BODY GOC, khong ha. Xem giai thich o dau file. ---

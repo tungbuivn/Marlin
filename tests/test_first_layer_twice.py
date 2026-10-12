@@ -10,8 +10,9 @@ Kiem tra co che dung M221 flow thay vi nhan lai E:
             reset extruder ve E dau layer 0, M221 S100
   pass 2  - BODY GOC, khong ha -> nam CAO HON pass 1 dung mot chieu cao layer
             init => in nhu mot lop BINH THUONG, flow 100%;
-            va duoc EP TOC DO ve pass2_feedrate (60 mm/s = F3600) vi Cura ap
-            'Initial Layer Speed' cho CA layer 0
+            va duoc EP TOC DO ve TOC DO THAT cua layer 1 (quet F pho bien nhat
+            trong chunk ';LAYER:1'); neu khong tim duoc thi dung pass2_feedrate
+            (60 mm/s = F3600). Ly do: Cura ap 'Initial Layer Speed' cho CA layer 0
   ket thuc- M221 S100 (cho layer 1 tro len)
 
 Boi canh ba loi da gap:
@@ -58,7 +59,7 @@ CHUNK1 = "\n".join([
     "",
 ])
 
-CHUNK2 = ";LAYER:1\nM106 S85\nG1 F600 Z0.6\n;TYPE:SKIRT\nG1 F600 Z0.4\nG1 F900 E2\nG1 F1800 X40 Y40 E3\n;MESH:NONMESH\nG0 F600 Z0.6\n;TIME_ELAPSED:20\n"
+CHUNK2 = ";LAYER:1\nM106 S85\nG1 F600 Z0.6\n;TYPE:SKIRT\nG1 F600 Z0.4\nG1 F900 E2\nG1 F2400 X40 Y40 E3\n;MESH:NONMESH\nG0 F600 Z0.6\n;TIME_ELAPSED:20\n"
 CHUNK3 = ";LAYER:2\nM106 S85\nG1 F600 Z0.8\n;TYPE:SKIRT\nG1 F600 Z0.6\nG1 F900 E3\nG1 F1800 X50 Y50 E4\n;TIME_ELAPSED:30\n"
 
 SETTINGS = {
@@ -68,6 +69,7 @@ SETTINGS = {
     "pass1_flow": 20,
     "pass2_flow": 100,
     "pass2_feedrate": 60,
+    "pass2_feedrate_auto": True,
     "pass2_z_extra": 0.05,
     "z_feedrate": 600,
     "first_pass_z": 0.1,
@@ -174,11 +176,26 @@ def main():
     print("  buoc dun pass 1: {0}".format([l.strip() for l in ex1]))
     print("  buoc dun pass 2: {0}".format([l.strip() for l in ex2]))
     assert ex1 and ex2, "FAIL: khong tim thay buoc dun nao"
-    assert all("F3600" in l for l in ex2), "FAIL: pass 2 phai in o F3600 (60mm/s)"
+    # TU LAY TOC DO: layer 1 trong fixture co buoc dun 'G1 F2400 X40 Y40 E3' (40mm/s) => pass 2 = F2400
+    assert all("F2400" in l for l in ex2), "FAIL: pass 2 phai lay F cua layer 1 (F2400)"
     # pass 1: KHONG bi doi toc do. Cura bo bot F lap lai o buoc sau (dung chuan G-code), nen chi
-    # kiem: co it nhat 1 buoc mang F goc cua layer 0 va KHONG co buoc nao bi doi thanh F3600.
-    assert not any("F3600" in l for l in ex1), "FAIL: pass 1 bi doi toc do"
+    # kiem: co it nhat 1 buoc mang F goc cua layer 0 va KHONG co buoc nao bi doi thanh F2400.
+    assert not any("F2400" in l for l in ex1), "FAIL: pass 1 bi doi toc do"
     assert any("F1800" in l for l in ex1), "FAIL: pass 1 phai giu F1800 (toc do layer 0 cua Cura)"
+
+    # --- 4b) DU PHONG: layer 1 KHONG co F tren buoc dun -> dung pass2_feedrate (60mm/s = F3600) ---
+    chunk2_nof = ";LAYER:1\nM106 S85\nG1 F600 Z0.6\n;TYPE:SKIRT\nG1 F600 Z0.4\nG1 F900 E2\nG1 X40 Y40 E3\n;MESH:NONMESH\nG0 F600 Z0.6\n;TIME_ELAPSED:20\n"
+    fix2 = mod.FirstLayerTwice()
+    fix2._settings = dict(SETTINGS)
+    out_nof = fix2.execute([CHUNK0, CHUNK1, chunk2_nof, CHUNK3])
+    ln = out_nof[1].split("\n")
+    k1 = next(i for i, l in enumerate(ln) if "bat dau pass 1" in l)
+    k3 = next(i for i, l in enumerate(ln) if "bat dau pass 2" in l)
+    k4 = next(i for i, l in enumerate(ln) if "ket thuc layer 0" in l)
+    ex_nof = extruding_moves(ln[k3:k4])
+    print("")
+    print("  [du phong] layer 1 khong co F -> buoc dun pass 2: {0}".format([l.strip() for l in ex_nof]))
+    assert ex_nof and all("F3600" in l for l in ex_nof), "FAIL: phai dung pass2_feedrate (F3600)"
     # Z-hop / retract khong bi doi toc do
     assert any("F600 Z0.4" in l for l in lines[i3:i4]), "FAIL: Z-hop cua pass 2 bi doi toc do"
     assert any("F900 E0" in l for l in lines[i3:i4]), "FAIL: buoc E khong XY cua pass 2 bi doi toc do"

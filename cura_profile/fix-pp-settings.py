@@ -41,8 +41,9 @@ import time
 #   - FirstLayerTwice: khong phai gioi han firmware nhung co rang buoc VAT LY:
 #       pass2_flow PHAI la 100 vi pass 2 da nam cao hon pass 1 dung mot chieu cao
 #       layer init => no la mot lop binh thuong (giam flow chi lam lop do thieu nhua).
-#       pass2_feedrate = 60mm/s: pass 2 cung phai in o toc do BINH THUONG (Cura ap
-#       'Initial Layer Speed' cho ca layer 0 nen khong the de Cura tu quyet).
+#       pass2_feedrate = 60mm/s: chi la gia tri DU PHONG - mac dinh script TU LAY toc do
+#       that cua layer 1 trong G-code (pass2_feedrate_auto = true) nen khong can chinh
+#       khi doi profile.
 #       pass2_z_extra = 0.05mm: nha them khi nhay pass 1 -> pass 2 cho nozzle khoi
 #       ca vao lop nhua vua in.
 #       pass1_flow = 20% la gia tri KHOI DAU cho lop miet bam ban - sau lan dong bo
