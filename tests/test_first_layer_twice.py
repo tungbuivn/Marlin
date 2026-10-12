@@ -2,12 +2,14 @@
 
 Kiem tra co che dung M221 flow thay vi nhan lai E:
 
-  pass 1  - body da HA xuong first_pass_z (0.1), chi doi flow bang M221 S20
+  pass 1  - body da HA xuong first_pass_z (0.1) = lop MIET BAM BAN,
+            chi doi flow bang M221 S60 (pass1_flow, mac dinh 60%)
   giua    - nhac Z THAT len first_pass_z + <Z goc layer 0> (0.1 + 0.2 = 0.3),
             roi G92 khai bao lai day la <Z goc layer 0> (0.2), reset extruder ve
-            E dau layer 0, M221 S80
-  pass 2  - BODY GOC, khong ha -> E cua 2 pass phai GIONG HET NHAU
-  ket thuc- M221 S100
+            E dau layer 0, M221 S100
+  pass 2  - BODY GOC, khong ha -> nam CAO HON pass 1 dung mot chieu cao layer
+            init => in nhu mot lop BINH THUONG, flow 100%
+  ket thuc- M221 S100 (cho layer 1 tro len)
 
 Boi canh ba loi da gap:
   1) _find_layer_z() doi cu lay Z dau tien -> vuong Z-hop 0.4 -> sinh ra Z am.
@@ -60,8 +62,8 @@ SETTINGS = {
     "enabled": True,
     "force_temperatures": False,
     "double_first_layer": True,
-    "pass1_flow": 20,
-    "pass2_flow": 80,
+    "pass1_flow": 60,
+    "pass2_flow": 100,
     "z_feedrate": 600,
     "first_pass_z": 0.1,
 }
@@ -142,8 +144,8 @@ def main():
     assert e1 == e2, "FAIL: E cua hai pass phai giong het nhau\n  pass1={0}\n  pass2={1}".format(e1, e2)
 
     # moc M221
-    assert any("M221 S20" in l for l in lines[i1:i2]), "FAIL: thieu M221 S20 truoc pass 1"
-    assert any("M221 S80" in l for l in lines[i2:i3]), "FAIL: thieu M221 S80 truoc pass 2"
+    assert any("M221 S60" in l for l in lines[i1:i2]), "FAIL: thieu M221 S60 truoc pass 1"
+    assert any("M221 S100" in l for l in lines[i2:i3]), "FAIL: thieu M221 S100 truoc pass 2"
     assert any("M221 S100" in l for l in lines[i4:]), "FAIL: thieu M221 S100 sau layer 0"
 
     # nang Z THAT len first_pass_z + Z goc layer 0 = 0.1 + 0.2 = 0.3, roi G92 ve 0.2

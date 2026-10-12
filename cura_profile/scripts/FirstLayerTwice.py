@@ -2,11 +2,13 @@
 #
 # Cura post-processing script: in layer 0 hai lan.
 #
-#   pass 1 - body da HA xuong first_pass_z (mac dinh 0.1), flow rieng (20%)
+#   pass 1 - body da HA xuong first_pass_z (mac dinh 0.1) = lop MIET BAM BAN,
+#            flow do nguoi dung chon (pass1_flow, mac dinh 60%)
 #   giua   - nhac Z len first_pass_z + <Z goc cua layer 0>, roi G92 khai bao lai
 #            day la <Z goc cua layer 0>
-#   pass 2 - body GOC, KHONG ha, flow rieng (80%)
-#   ket thuc layer 0 - tra flow ve 100%
+#   pass 2 - body GOC, KHONG ha => nam CAO HON pass 1 dung mot chieu cao layer
+#            init (vd 0.2) => in nhu mot lop BINH THUONG, flow 100%
+#   ket thuc layer 0 - tra flow ve 100% (cho layer 1 tro len)
 #
 # Layer 1 tro len KHONG bi dung toi.
 #
@@ -26,9 +28,14 @@
 # `G92 E<e_dau_layer_0>` truoc pass 2 lam cho moi buoc cua pass 2 co delta E y het
 # pass 1. Marlin tu nhan E voi flow_percentage.
 #
-#   pass 1 @ M221 S20 -> 20% nhua
-#   pass 2 @ M221 S80 -> 80% nhua
-#   tong = 100% = dung mot lop binh thuong
+#   pass 1 @ M221 S<pass1_flow> -> vd 60% nhua, o Z = first_pass_z (0.1):
+#                                  MIET nhua det ra, bam ban
+#   pass 2 @ M221 S<pass2_flow> -> mac dinh 100%: pass 2 da nam CAO HON pass 1
+#                                  dung mot chieu cao layer init (0.2) nen day la
+#                                  mot lop BINH THUONG, KHONG duoc giam flow
+#
+# Luu y: pass 1 + pass 2 KHONG con cong lai thanh 100% nhu ban cu (20+80) - hai
+# pass nay o HAI do cao khac nhau, nen luong nhua thuc te = pass1_flow% + 100%.
 #
 # Cura nap script theo quy tac: TEN CLASS PHAI TRUNG TEN FILE.
 
@@ -85,18 +92,18 @@ class FirstLayerTwice(Script):
                 "pass1_flow":
                 {
                     "label": "Flow lan 1 (%)",
-                    "description": "M221 S<so nay> truoc pass 1.",
+                    "description": "M221 S<so nay> truoc pass 1 - lop MIET BAM BAN (in o Z = first_pass_z, mong hon layer_height). Mac dinh 60%: tang neu lop 1 khong dinh ban, giam neu nhua trao/lem.",
                     "type": "int",
-                    "default_value": 20,
+                    "default_value": 60,
                     "minimum_value": 1,
                     "maximum_value": 100
                 },
                 "pass2_flow":
                 {
                     "label": "Flow lan 2 (%)",
-                    "description": "M221 S<so nay> truoc pass 2. pass1_flow + pass2_flow nen bang 100.",
+                    "description": "M221 S<so nay> truoc pass 2. Pass 2 nam CAO HON pass 1 dung mot chieu cao layer init nen in nhu mot lop BINH THUONG => de 100%.",
                     "type": "int",
-                    "default_value": 80,
+                    "default_value": 100,
                     "minimum_value": 1,
                     "maximum_value": 100
                 },

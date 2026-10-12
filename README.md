@@ -1231,10 +1231,10 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 
 | Lượt | Body dùng | Z thực | Flow |
 |---|---|---|---|
-| Pass 1 | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) | `M221 S20` → 20% |
+| Pass 1 = lớp **miết bám bàn** | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) — mỏng hơn `layer_height` | `M221 S60` → **60 %** (bạn chọn, `pass1_flow`) |
 | ↕ giữa hai pass | — | `G1 Z0.3` = `first_pass_z` + `layer_z` (0.1 + 0.2), rồi `G92 Z0.2` → khai báo lại **Z gốc của layer 0** | — |
-| Pass 2 | body **GỐC**, không hạ | **0.3** (0.2 trong hệ đã lệch 0.1) | `M221 S80` → 80% |
-| Layer 1 trở lên | không đụng | 0.4 → **0.5** | `M221 S100` → 100% |
+| Pass 2 = lớp **bình thường** | body **GỐC**, không hạ | **0.3** (0.2 trong hệ đã lệch 0.1) — cao hơn pass 1 **đúng một chiều cao layer init** (0.2) | `M221 S100` → **100 %** |
+| Layer 1 trở lên | không đụng | 0.4 → **0.5** | `M221 S100` → 100 % |
 
 ```gcode
 ; --- First Layer Twice: ket thuc pass 1 ---
@@ -1243,8 +1243,8 @@ G90                         ; toa do tuyet doi
 G1 Z0.3 F600                ; nang Z len first_pass_z + Z goc cua layer 0 (0.1 + 0.2)
 G92 Z0.2                    ; khai bao lai day la Z goc cua layer 0
 G92 E-0.75                  ; reset extruder ve E dau layer 0
-M221 S80                    ; flow pass 2
-; --- First Layer Twice: bat dau pass 2 (80%) ---
+M221 S100                   ; flow pass 2 = 100% (da nang len 1 chieu cao layer init)
+; --- First Layer Twice: bat dau pass 2 (100%) ---
 ```
 
 > 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1; pass 2 ở `first_pass_z + <Z gốc của layer 0>`.**
@@ -1268,8 +1268,10 @@ M221 S80                    ; flow pass 2
 > đều đúng `layer_height`. Nhưng gốc toạ độ đã bị đẩy lên 0.1 mm, và điều đó là **đúng vật lý**:
 > pass 1 đã in ra nhựa thật. Nếu cần chi tiết lắp khít theo Z thì đừng dùng cách này.
 
-**Pass 1 và pass 2 ghi ra CÙNG một giá trị E** — không có phép nhân nào. Marlin tự nhân E với
-`flow_percentage`, nên 20% + 80% = **100%** = đúng một lớp bình thường.
+**Pass 1 và pass 2 ghi ra CÙNG một giá trị E** — không có phép nhân nào; Marlin tự nhân E với
+`flow_percentage`. **Hai pass KHÔNG còn cộng lại thành 100 %** (đó là cách của bản cũ 20 % + 80 %):
+nay pass 1 và pass 2 nằm ở **hai độ cao khác nhau**, nên lượng nhựa thực tế = **`pass1_flow` % + 100 %**
+— pass 1 là lớp miết mỏng bám bàn, pass 2 là **một lớp đầy đủ bình thường**.
 
 > **Vì sao `G92 E<e đầu layer 0>` là bắt buộc.** Trước layer 0 có thể có retract (đường purge kết
 > thúc bằng `G1 F900 E-0.75`), nên E lúc bắt đầu layer 0 **không phải 0**. Reset về 0 thì bước
@@ -1298,17 +1300,22 @@ M221 S80                    ; flow pass 2
 > như bị va** ở đầu bản in. Nhấc lên đúng `layer_z` thì pass 2 nằm **cách mặt lớp 1 đúng một
 > chiều cao lớp**, giống hệt in layer 1 bình thường, nên không còn cọ.
 >
-> Còn pass 1 để ở **0.1** (mỏng hơn `layer_height` 0.2) với **20% nhựa** là để **ép nhựa bám bàn**:
-> đầu in miết sát mặt bàn, nhựa dẹt ra và dính chắc — đúng vai trò "lớp dính bàn".
+> Vì pass 2 đã nằm **cao hơn pass 1 đúng một chiều cao layer init** (0.2), nó in y như một lớp bình
+> thường ⇒ **flow pass 2 để 100 %**; giảm flow ở đây chỉ làm lớp đó thiếu nhựa.
+>
+> Còn pass 1 để ở **0.1** (mỏng hơn `layer_height` 0.2) với **60 % nhựa** là để **ép nhựa bám bàn**:
+> đầu in miết sát mặt bàn, nhựa dẹt ra và dính chắc — đúng vai trò "lớp dính bàn". Con số này **do bạn
+> chọn** (`pass1_flow`): quá ít thì lớp 1 không dính, quá nhiều thì nhựa trào/lem.
 
-**Lượng nhựa:** không cần tính gì cả. `M221` nhân ở firmware, nên pass 1 đùn 20% và pass 2 đùn 80%
-của **cùng một bộ giá trị E** → tổng đúng 100% = một lớp bình thường.
+**Lượng nhựa:** không cần tính gì cả. `M221` nhân ở firmware, nên pass 1 đùn `pass1_flow` % (mặc định
+**60 %**) và pass 2 đùn **100 %** của **cùng một bộ giá trị E** → tổng **160 %** nhựa nằm trên **hai độ
+cao** (0.1 và 0.3): một lớp mỏng miết bám bàn + một lớp đầy đủ.
 
 > ℹ️ **Điểm hay của cách này so với cách cũ.** Cách cũ phải nhân lại từng giá trị E và phải phân biệt
 > bước có XY (nhân) với bước thuần E như retract (không nhân) — vì nhân retract với 20% sẽ biến nó
 > thành vô nghĩa. Dùng `M221` thì firmware lo hết, code đơn giản hơn nhiều. Nhược điểm duy nhất:
-> **retract trong layer 0 cũng bị nhân theo flow** (retract 0.75 mm ở 20% chỉ còn 0.15 mm) — với
-> layer 0 thì không đáng kể.
+> **retract trong layer 0 cũng bị nhân theo flow** — nhưng nay nhẹ hơn nhiều: retract 0.75 mm ở
+> pass 1 (60 %) còn 0.45 mm, còn ở **pass 2 (100 %) thì không bị ảnh hưởng gì**.
 
 | Tham số | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -1316,8 +1323,8 @@ của **cùng một bộ giá trị E** → tổng đúng 100% = một lớp bì
 | `hotend_temp` | 230 °C | `M104`/`M109` bị ép về số này |
 | `bed_temp` | 60 °C | `M140`/`M190` bị ép về số này |
 | `double_first_layer` | bật | In layer 0 hai lần |
-| `pass1_flow` | 20 % | `M221 S<so nay>` trước pass 1 |
-| `pass2_flow` | 80 % | `M221 S<so nay>` trước pass 2. Nên `pass1_flow + pass2_flow = 100` |
+| `pass1_flow` | **60 %** | `M221 S<so nay>` trước pass 1 — **lớp miết bám bàn** (in ở `first_pass_z`). Bạn chọn: tăng nếu lớp 1 không dính, giảm nếu nhựa trào |
+| `pass2_flow` | **100 %** | `M221 S<so nay>` trước pass 2 — **để 100 %**: pass 2 nằm cao hơn pass 1 đúng một chiều cao layer init nên in như lớp bình thường |
 | `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
 | `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` |
 | `z_mode` / `z_raise` / `layer0_z` | — | **Không dùng nữa.** Giữ lại trong khai báo để config cũ trong Cura không báo lỗi; script bỏ qua |
@@ -1325,6 +1332,12 @@ của **cùng một bộ giá trị E** → tổng đúng 100% = một lớp bì
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
 Script nằm ở `%APPDATA%\cura\<version>\scripts\FirstLayerTwice.py` và **chỉ được nạp lúc Cura
 khởi động** — thêm file xong phải mở lại Cura.
+
+> ⚠️ **Giá trị ĐANG LƯU trong Cura đè lên `default_value` của script.** Cura lưu cả khối
+> `[FirstLayerTwice]` vào `machine_instances\*.global.cfg`, nên **sửa default trong `.py` là CHƯA ĐỦ** —
+> đã gặp thật 2026-10-12: `.py` đổi 20→60 nhưng khối đang lưu vẫn là `20`/`80`.
+> `cura_profile/fix-pp-settings.py` nay **đồng bộ luôn** `pass1_flow = 60` và `pass2_flow = 100`
+> (được gọi tự động trong `install-cura-profile.ps1`), và sau khi chạy phải **mở lại Cura**.
 
 > Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
 > `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.

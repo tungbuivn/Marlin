@@ -14,9 +14,10 @@ Da gap that: doi `ClampFeeds.max_feedrate_xy` 300 -> 150 va `max_acceleration`
 500 -> 2000 trong `ClampFeeds.py`, nhung khoi da luu van giu 300/500, nen G-code
 xuat ra van bi kep sai.
 
-Cach lam o day: chi dong bo nhung gia tri **phai khop gioi han cua firmware**
-(M203/M201). Cac gia tri khac de nguyen de khong de len phan ban da tinh chinh
-trong giao dien Cura.
+Cach lam o day: chi dong bo nhung gia tri **phai khop** - hoac voi gioi han cua
+firmware (M203/M201), hoac voi rang buoc vat ly cua chinh thuat toan (pass 2 cua
+FirstLayerTwice phai la 100%). Cac gia tri khac de nguyen de khong de len phan ban
+da tinh chinh trong giao dien Cura.
 
 Chay:
     python cura_profile/fix-pp-settings.py
@@ -30,11 +31,21 @@ import shutil
 import sys
 import time
 
-# key -> gia tri dung. Chi gom gia tri bi rang buoc boi firmware.
+# key -> gia tri dung.
+#   - ClampFeeds: bi rang buoc boi FIRMWARE (M203/M201) -> luon phai khop.
+#   - FirstLayerTwice: khong phai gioi han firmware nhung co rang buoc VAT LY:
+#       pass2_flow PHAI la 100 vi pass 2 da nam cao hon pass 1 dung mot chieu cao
+#       layer init => no la mot lop binh thuong (giam flow chi lam lop do thieu
+#       nhua). pass1_flow la gia tri KHOI DAU cho lop miet bam ban (60%) - sau lan
+#       dong bo nay ban van doi duoc trong giao dien Cura.
 OVERRIDES = {
     "ClampFeeds": {
         "max_feedrate_xy": "150",   # = M203 X/Y
         "max_acceleration": "300",  # = M201 X/Y
+    },
+    "FirstLayerTwice": {
+        "pass1_flow": "60",         # lop miet bam ban (mac dinh moi)
+        "pass2_flow": "100",        # lop 2 = lop binh thuong
     },
 }
 
