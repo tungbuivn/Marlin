@@ -1299,7 +1299,7 @@
 //#define MICROSTEP32 HIGH,LOW,HIGH
 
 // Microstep settings (Requires a board with pins named X_MS1, X_MS2, etc.)
-#define MICROSTEP_MODES { 16, 16, 16, 16, 16, 16 } // [1,2,4,8,16]
+#define MICROSTEP_MODES { 8, 8, 8, 8, 8, 8 } // [1,2,4,8,16]  // 2026-10-10: 16 -> 8 cho ca 6 driver (X Y Z Z2 Z3 E0)
 
 /**
  *  @section  stepper motor current

@@ -1204,7 +1204,9 @@
 // this char is apply to no-micro step, so to keep high current then decrease speed
 #define TTL_MAX_MOTOR_RPM  30
 #define TTL_MOTOR_ANGLE (18/10) /*1.8 deg*/
-#define TTL_MICROSTEP 16
+#define TTL_MICROSTEP 8   // 2026-10-10: 16 -> 8 (ca 6 driver: X Y Z Z2 Z3 E). INTERPOLATE=true
+                          // nen TMC van noi suy len 1/256 -> do muot khong doi, chi giam tan so
+                          // xung mot nua. PHAI doi M92 xuong mot nua cung luc (40/40/400/207.5).
 #define TTL_XY_TEETH 20
 #define TTL_Z_TEETH 20 /*can using 16 teeth or 20 teeth*/
 #define TTL_BELT_PITCH 2
@@ -1217,7 +1219,7 @@
 
 #define TTL_Z_GEAR_FACTOR (80/TTL_Z_TEETH)
 
-#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*3200*/
+#define TTL_TOTAL_STEPS_PER_REV (TTL_BASE_MOTOR_STEP*TTL_MICROSTEP) /*1600*/
 
 // nema 48mm max step per second is 4 rev at 0.8a current 24v
 // https://en.nanotec.com/products/366-st4118l0804-a
@@ -1240,10 +1242,10 @@
 // https://www.bondtech.se/wp-content/uploads/2018/08/Bondtech-Creality-CR-10-Installation-Guide-V1.0.pdf
 // 80 is microstep x4, bondtech gear 7.71mm per rev, 40,40,10,207.50000000000003
 // Z: nema17 direct-drive, SFU1204 lead screw (4mm lead), 16 microsteps -> 200*16/4 = 800
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {80, \
-                                      80, \
-                                      800, \
-                                      415  \
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {40, \
+                                      40, \
+                                      400, \
+                                      207.5 \
                                       }
 
 /**
@@ -1251,14 +1253,16 @@
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// X/Y = 150 mm/s: tran do DIEN CAM cua motor (17 mH @ 24 V -> ~225 mm/s), va vi
-// stealthChop dang bat toan dai (HYBRID_THRESHOLD bi comment) nen tran thuc dung
-// chi con ~100-150 mm/s. Xem README 3.3. EEPROM dang giu dung bo nay.
+// 2026-10-10: microstep 16 -> 8 => giam van toc con MOT NUA: X/Y 150 -> 75 mm/s,
+// Z 10 -> 5, E 25 -> 12 (E cham co the gay stringing - theo doi khi retract).
+// Ghi chu cu: tran do DIEN CAM cua motor (17 mH @ 24 V -> ~225 mm/s) va stealthChop
+// dang bat toan dai (HYBRID_THRESHOLD bi comment) => tran thuc dung ~100-150 mm/s.
+// Xem README 3.3/11.4b. EEPROM phai khop: M203 X75 Y75 Z5 E12 + M500.
 #define DEFAULT_MAX_FEEDRATE          { \
-  150, \
-  150, \
-  10, \
-  25 }
+  75, \
+  75, \
+  5, \
+  12 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
@@ -1271,11 +1275,11 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// X/Y 2000 mm/s2: mo-men con du 10-50 lan (F = 2*tau/r ~ 126 N tren tai quy doi
-// 1,2 kg), nen gioi han that la RINGING chu khong phai mo-men. May KHONG co input
-// shaping (SanityCheck.h:4332 chan tren COREXY) nen day la diem khoi dau, tang dan
-// bang thap gia toc. Z 100 -> 200 (gantry nang, tang tu tu). Xem README 3.3.
-#define DEFAULT_MAX_ACCELERATION      { 2000, 2000, 200, 1000 }
+// 2026-10-10: theo yeu cau giam van toc, ha tran gia toc goc ve 150 mm/s2 cho X/Y
+// (Z 100, E 500). Ghi chu cu: mo-men con du 10-50 lan (F = 2*tau/r ~ 126 N tren tai
+// quy doi 1,2 kg) nen gioi han that la RINGING chu khong phai mo-men; may KHONG co
+// input shaping (SanityCheck.h:4332 chan tren COREXY). Xem README 3.3/11.4b.
+#define DEFAULT_MAX_ACCELERATION      { 150, 150, 100, 500 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -1290,9 +1294,9 @@
  *   M204 R    Retract Acceleration
  *   M204 T    Travel Acceleration
  */
-#define DEFAULT_ACCELERATION          1500    // X, Y, Z and E acceleration for printing moves
-#define DEFAULT_RETRACT_ACCELERATION  1500    // E acceleration for retracts (M204 R) - dong bo voi EEPROM
-#define DEFAULT_TRAVEL_ACCELERATION   2000    // X, Y, Z acceleration for travel (non printing) moves
+#define DEFAULT_ACCELERATION          150     // X, Y, Z and E acceleration for printing moves (2026-10-10: 1500 -> 150)
+#define DEFAULT_RETRACT_ACCELERATION  150     // E acceleration for retracts (M204 R) - dong bo voi EEPROM
+#define DEFAULT_TRAVEL_ACCELERATION   150     // X, Y, Z acceleration for travel (non printing) moves
 
 /**
  * Default Jerk limits (mm/s)
