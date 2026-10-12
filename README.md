@@ -192,50 +192,44 @@ thì vẫn `~10 000 mm/s²`.
 
 Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ `stealthChop` toàn dải**.
 
-> 🟢 **2026-10-12 — ĐÃ ÁP "TRẦN NÊN DÙNG" (theo yêu cầu).** Bảng dưới ghi **trạng thái đang chạy**:
-> microstep **1/8** cho cả 6 driver (nên `M92` chia đôi) + vận tốc/gia tốc **đã lên mức trần khuyến
-> nghị**, riêng **dòng motor hạ về 500 mA cho cả 6 trục** (62 % định mức 0,8 A). Chi tiết + cách xác
-> nhận: **§11.4b**.
->
-> ⚠️ `M203 X/Y 225` **chỉ bền vững nếu bật `HYBRID_THRESHOLD`** — với `stealthChop` toàn dải thì trần
-> thực tế ~100–150 mm/s (xem ghi chú ngay dưới bảng). Nếu travel nhanh mà thấy **layer shift** thì xử
-> lý theo thứ tự: **bật hybrid threshold** → kiểm `M906` → cuối cùng mới hạ gia tốc.
+> 🟢 **2026-10-12 (cuối ngày) — QUAY VỀ BỘ "TRƯỚC (1/16)"**, chỉ quy đổi phần **phụ thuộc microstep**:
+> `M92` = **40 / 40 / 400 / 207.5** (bản 1/16 là 80/80/800/415). Vận tốc · gia tốc · jerk giữ nguyên như
+> bản 1/16 vì đơn vị là mm/s · mm/s² — **không liên quan microstep**; riêng **dòng motor đặt 600 mA cho
+> cả 6 trục** (không lấy 800/600/400 của cột 1/16). Đã ghi EEPROM (`M500`, crc 6571) → **verify lại sau
+> khi reset board** → và sửa **giá trị mặc định** trong `Configuration.h` / `Configuration_adv.h` cho khớp
+> (phần dòng motor **chưa flash**, xem ghi chú dưới bảng).
 
 | Lệnh | Trước (1/16) | **Máy đang là (1/8)** | Trần nên dùng | Vì sao |
 |---|---|---|---|---|
-| `M92 X/Y/Z/E` | 80 / 80 / 800 / 415 | **40 / 40 / 400 / 207.5** | — | hệ quả trực tiếp của microstep 1/8 |
-| `M203 X/Y` | 150 | **225** = trần | 225 | mốc điện cảm; **chỉ bền vững nếu bật hybrid threshold** |
-| `M203 Z` | 10 | **15** = trần | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
-| `M203 E` | 25 | **25** = trần | 25 | BMG |
-| `M201 X/Y` | 300 | **5000** = trần | 5000+ | mô-men dư 10–50×; trần thật là ringing |
-| `M201 Z` | 200 | **500** = trần | 500 | gantry nặng — theo dõi ringing |
-| `M201 E` | 1000 | **1000** = trần | 1000 | |
-| `M204 P` (in) | 500 | **3000** | 3000 | `P ≤ M201` → `M503` khớp thực tế |
-| `M204 R` (retract) | 300 | **1500** | 1500 | |
-| `M204 T` (travel) | 500 | **2500** | 2500 | `T ≤ M201` → khớp thực tế |
-| `M205 X/Y` (jerk) | 8 | **10** | 10–12 | ⚠️ **không có input shaping** → tăng nữa là tăng ringing |
-| `M205 Z / E` | 0,4 / 5 | giữ | | |
-| `M906` (dòng, **cả 6 trục**) | X/Y 800 · Z 600 · E 400 | **500** | 500 | ✅ 62 % định mức 0,8 A — mát hơn hẳn; mô-men vẫn dư |
+| `M92 X/Y/Z/E` | 80 / 80 / 800 / 415 | **40 / 40 / 400 / 207.5** | — | **chỗ DUY NHẤT phải quy đổi** cho microstep 1/8 |
+| `M203 X/Y` | 150 | **150** | 225 | mốc điện cảm — 150 là mức chạy tốt với stealthChop toàn dải |
+| `M203 Z` | 10 | **10** | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
+| `M203 E` | 25 | **25** | 25 | BMG |
+| `M201 X/Y` | 300 | **300** | 5000+ | mô-men dư 10–50×; trần thật là ringing |
+| `M201 Z` | 200 | **200** | 500 | gantry nặng |
+| `M201 E` | 1000 | **1000** | 1000 | |
+| `M204 P` (in) | 500 | **500** | 3000 | ⚠️ `P > M201 X/Y 300` ⇒ Marlin kẹp `min()` → thực tế **300** |
+| `M204 R` (retract) | 300 | **300** | 1500 | |
+| `M204 T` (travel) | 500 | **500** | 2500 | ⚠️ thực tế bị kẹp còn **300** |
+| `M205 X/Y` (jerk) | 8 | **8** | 10–12 | ⚠️ **không có input shaping** → tăng là tăng ringing |
+| `M205 Z / E` | 0,4 / 5 | **0,4 / 5** | | |
+| `M906` (dòng) | X/Y 800 · Z 600 · E 400 | **600 cho CẢ 6 trục** | 500 | ✅ 600 mA = 75 % định mức 0,8 A — vẫn nên kiểm nhiệt `≤ 80 °C` |
 
-> ✅ **"`M204` nói dối" đã hết.** `M204 P3000` và `T2500` đều **≤** `M201 X/Y 5000` ⇒ Marlin **không**
-> kẹp `min()` nữa, con số trong `M503` **đúng bằng thực tế**.
-
-> ✅ **Dòng motor nay 500 mA cho cả 6 trục** (62 % định mức 0,8 A của ST4118L0804-A) — mát hơn nhiều so
-> với mức 800 mA trước đây. Vẫn kiểm sau ~30 phút in (`≤ 80 °C` là tốt). Nếu tăng `M201` thêm mà thấy
-> **mất bước** (layer shift) thì **nâng dòng trước khi hạ gia tốc**: `M906 X600 Y600` + `M500`.
-
-> ⚠️ **CURA ĐANG THẤP HƠN MÁY (2026-10-12).** Profile Cura và `ClampFeeds` vẫn ghi trần của bản cũ
-> (**150 mm/s · 300 mm/s²**) trong khi firmware nay cho **225 · 5000**. Hệ quả: **Cura tự kẹp** — bản in
-> vẫn chạy như trước (≤ 150 mm/s) dù máy đã cho phép nhanh hơn. Muốn dùng hết trần thì sửa:
+> ⚠️ **`M204 P/T` lại lớn hơn `M201 X/Y`, nên `M503` "nói dối" trở lại** (Marlin lấy `min()`): gia tốc
+> in thật là **300**, không phải 500. Không sai về hành vi — chỉ gây hiểu nhầm khi đọc số. Muốn số khớp
+> thực tế thì `M204 P300 R300 T300` + `M500`.
 >
-> | File | Sửa thành |
-> |---|---|
-> | `cura_profile/scripts/ClampFeeds.py` | `max_feedrate_xy` **225**, `max_acceleration` **5000** |
-> | `cura_profile/machine_definition_changes.inst.cfg` | `machine_max_feedrate_x/y` **225**, `_z` **15**, `_e` **25**; `machine_max_acceleration_x/y` **5000**, `_z` **500**, `_e` **1000**; `machine_acceleration` **3000** |
-> | `tests/verify_gcode.py`, `tests/test_clamp_feeds.py` | trần tương ứng 225 / 5000 |
-> | `cura_profile/fix-pp-settings.py` | `OVERRIDES` tương ứng |
+> ✅ **Dòng motor nay 600 mA cho CẢ 6 trục** (75 % định mức 0,8 A của ST4118L0804-A) — mát hơn mức
+> 800 mA trước đây, và E dùng 600 thay vì 400. Vẫn kiểm sau ~30 phút in (`≤ 80 °C` là tốt). Muốn thêm
+> mô-men thì nâng `M906` (tối đa 800 = 100 % định mức); nóng quá thì hạ.
+> ℹ️ **Giá trị này chưa nằm trong firmware đang chạy** (default trong `Configuration_adv.h` đã sửa
+> thành 600 cho cả 6 nhưng **chưa flash** — theo yêu cầu): EEPROM đang giữ 600, nên máy chạy đúng 600;
+> chỉ khi nào EEPROM bị reset thì mới cần bản firmware mới.
 >
-> Rồi chạy `install-cura-profile.ps1` (**phải đóng Cura trước**) — xem cạm bẫy 26.
+> ✅ **Cura / `ClampFeeds` nay KHỚP máy**: profile ghi `max_feedrate_xy 150`, `max_acceleration 300` —
+> đúng bằng `M203 X/Y 150` và `M201 X/Y 300` của máy, nên G-code Cura phát ra **không bị firmware kẹp**
+> và `verify_gcode.py` kiểm đúng trần thật. (Muốn dùng trần cao hơn 150/225 thì phải sửa cả 4 file
+> profile + `install-cura-profile.ps1` — xem cạm bẫy 26.)
 
 **Hai chỗ phía Cura — ✅ ĐÃ SỬA (khớp với bản 1/16, xem cảnh báo ngay trên):**
 
@@ -349,9 +343,9 @@ mắt hay bằng thước.
 | Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:150`, `menu_tramming.cpp:144` |
 | Mốc vật lý | **`z_home` = `base_home_pos(Z_AXIS)`** — khung Z của lần `G28 Z` (Z_SAFE_HOMING probe ở tâm bàn). **Không probe thêm tâm bàn** |
 | Mốc để vặn vít | **MẶT PHẲNG TRUNG BÌNH** của các góc đã đo: `delta = chiều_cao − TB` — đây mới là số cần đưa về 0 |
-| Tính gì | `chiều_cao = z_probe − z_home`, `delta = chiều_cao − TB`, rồi `số_vòng = |delta| ÷ bước_ren` — **luôn DƯƠNG** (`tramming_turns()`, `tramming.h:67-69`); **chiều vặn là chuyện riêng**, do `tramming_turn_cw()` quyết định (`tramming.h:61-64`) |
-| Bước ren | `TRAMMING_SCREW_THREAD 40` → M4 × **0.7 mm/vòng** (`threads_factor = {0.5 M3, 0.7 M4, 0.8 M5}`) |
-| Kết quả | `Turn <góc>: van CW/CCW by N turns and M minutes \| lech x.xxxmm (cao z.zzzmm)` — **CW = vặn để hạ góc đó xuống, CCW = vặn để nâng lên** |
+| Tính gì | `chiều_cao = z_probe − z_home`, `delta = chiều_cao − TB`. **Số cần chỉnh in theo MM, KHÔNG phải vòng**: vặn vít đi `X` mm thì góc đó lên/xuống đúng `X` mm ⇒ **lượng cần vặn = `|delta|` mm** (không chia cho bước ren). **Chiều vặn là chuyện riêng**, do `tramming_turn_cw()` quyết định (`tramming.h:61-64`) |
+| Bước ren | `TRAMMING_SCREW_THREAD 40` → M4 × **0.7 mm/vòng** (`threads_factor = {0.5 M3, 0.7 M4, 0.8 M5}`). **Từ 2026-10-12 KHÔNG dùng để tính số hiển thị nữa** (hiển thị theo mm); mã `S` vẫn có tác dụng: ren ngược chiều thì khai `S` lẻ để **đảo chiều vặn** |
+| Kết quả | `Turn <góc>: van CW/CCW x.xxxmm \| lech x.xxxmm (cao z.zzzmm)` — **CCW = vặn để HẠ góc đó xuống, CW = vặn để NÂNG lên** (đã **đảo lại 2026-10-12**, xem ghi chú dưới) |
 
 > ℹ️ **Vì sao `chiều_cao = z_probe − z_home` mà không cần probe tâm bàn:** Z home bằng chính
 > probe này, nên lúc trigger ở tâm bàn firmware gán `current_position.z = base_home_pos(Z) − probe.offset.z`
@@ -370,13 +364,14 @@ mắt hay bằng thước.
 > TB = (2.000+2.000+2.000+2.030)/4 = 2.0075
 > delta = -0.0075 / -0.0075 / -0.0075 / +0.0225   ->  chỉ cần chỉnh 1 góc ~0.022mm
 > ```
-> `delta > 0` = góc **cao hơn** mặt phẳng trung bình ⇒ phải **hạ xuống** (vặn **CW**); `delta < 0` ⇒ **nâng lên** (vặn **CCW**). Tổng 4 delta luôn = 0 nên **vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại** — 1 vòng là xong.
+> `delta > 0` = góc **cao hơn** mặt phẳng trung bình ⇒ phải **hạ xuống** (vặn **CCW**); `delta < 0` ⇒ **nâng lên** (vặn **CW**). Tổng 4 delta luôn = 0 nên **vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại** — 1 vòng là xong.
 >
-> 🔧 **Chiều vặn đã được đo lại trên máy này:** *vặn CW thì delta Z **giảm*** (góc đó **hạ xuống**),
-> *vặn CCW thì delta Z **tăng*** (góc đó **nâng lên**) — đầu vít nằm **trên** bàn, vít M4 ren phải.
-> Vì vậy `tramming_turn_cw()` (`src/feature/tramming.h`) được viết theo đúng quy luật đó:
-> **delta > 0 (góc cao) → CW**, **delta < 0 (góc thấp) → CCW**. Công thức gốc của Marlin
-> (`(screw_thread & 1) == (adjust > 0)`) cho kết quả **ngược lại** trên máy này, nên đã bỏ.
+> 🔧 **Chiều vặn — ĐÃ ĐẢO LẠI ngày 2026-10-12 (kiểm chứng bằng cách vặn thử trên máy):**
+> *vặn CW (kim đồng hồ) thì delta Z **TĂNG*** (góc đó **NÂNG lên**), *vặn CCW thì delta Z **giảm***
+> (góc đó **HẠ xuống**) — đầu vít nằm **trên** bàn, vít M4. Ghi chú cũ trong tài liệu này ghi ngược lại
+> (CW = hạ) và **SAI** — người dùng phát hiện khi làm theo hướng dẫn của `G35`.
+> `tramming_turn_cw()` (`src/feature/tramming.h`) nay viết theo quy luật đúng:
+> **delta > 0 (góc cao) → CCW** (hạ xuống), **delta < 0 (góc thấp) → CW** (nâng lên).
 > Nếu sau này thay loại vít **ren ngược chiều** thì chỉ cần khai báo mã `S` **lẻ** (`TRAMMING_SCREW_THREAD 41`
 > hoặc `G35 S41`) — code tự đảo chiều, không phải sửa gì thêm.
 
@@ -393,7 +388,7 @@ Khác nhau giữa hai cách:
 
 | | `G35` | Tramming Wizard (menu) |
 |---|---|---|
-| Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số vòng | Đo **từng góc một**; mốc để vặn vít vẫn là **MẶT PHẲNG TRUNG BÌNH** của các góc đã đo (giống `G35`, `tramming_mean()` `menu_tramming.cpp:118-123`), **không** lấy một góc làm gốc |
+| Cách chạy | Đo **cả 4 điểm một lượt** rồi in ra bảng số mm cần vặn | Đo **từng góc một**; mốc để vặn vít vẫn là **MẶT PHẲNG TRUNG BÌNH** của các góc đã đo (giống `G35`, `tramming_mean()` `menu_tramming.cpp:118-123`), **không** lấy một góc làm gốc |
 | Sau khi vặn ốc | Phải chạy `G35` lại từ đầu | Bấm đo lại đúng góc đó, lặp tới khi ≈ 0 |
 | Phù hợp | Vít đã gần đúng, muốn một bảng số đầy đủ | Vặn từng góc, cần phản hồi ngay |
 
@@ -435,7 +430,7 @@ Khác nhau giữa hai cách:
 ```
 1. Siết đều 4 vít lò xo (~50% hành trình)     ; bàn không xê dịch khi in
 2. G28                                        ; home
-3. G35  (hoặc Motion > Tramming Wizard)       ; vặn vít theo số vòng Marlin báo
+3. G35  (hoặc Motion > Tramming Wizard)       ; vặn vít theo số mm Marlin báo
 4. G34 Q99                                    ; căn gantry; lặp tới khi sai số <= 0.02
 5. G29 P1 -> G29 P3 -> G29 S0                 ; đo + lưu mesh vào slot 0
 6. G29 A -> M500                              ; bật leveling + lưu -> tự bật mỗi lần khởi động
@@ -790,10 +785,10 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; 2026-10-12 (microstep 1/8 + tran nen dung): M92 X40 Y40 Z400 E207.5
-            ; M203 X225 Y225 Z15 E25 / M201 X5000 Y5000 Z500 E1000
-            ; M204 P3000 R1500 T2500 / M205 X10 Y10 Z0.40 E5
-            ; M906 X500 Y500 Z500 (I1/I2 Z500) / T0 E500
+M503        ; 2026-10-12 (cuoi ngay - bo "Truoc (1/16)" quy doi cho 1/8):
+            ; M92 X40 Y40 Z400 E207.5 / M203 X150 Y150 Z10 E25
+            ; M201 X300 Y300 Z200 E1000 / M204 P500 R300 T500 / M205 X8 Y8 Z0.40 E5
+            ; M906 X600 Y600 Z600 (I1/I2 Z600) / T0 E600      <- 600 mA ca 6 truc
             ; M851 X0 Y0 Z0.70
 M122        ; msteps 8 (ca 6 driver) + off time 3 + blank time 24 + interp true
             ; => tmc_init() DA ghi duoc vao driver.
@@ -835,6 +830,10 @@ Nếu mục nào sai sau khi nạp → xem **11.7** trước khi sửa code.
 >    (`M503` đọc từ **RAM**, không đọc lại chip).
 >
 > **Quy tắc: sau mỗi lần flash, luôn `M503` đối chiếu, và đối chiếu lại một lần nữa sau khi reset.**
+> ℹ️ **Đã gặp lần 2 trong cùng ngày 2026-10-12:** sau khi flash bản mới, `M906` đọc ra **600/600/600**
+> trong khi EEPROM vừa được ghi và verify là **800/800/600** trước đó ⇒ đúng kiểu "flash làm đổi/đọc
+> nhầm một phần EEPROM". Vì vậy **thứ tự an toàn là: FLASH TRƯỚC → ghi EEPROM (`M500`) → verify sau
+> reset**, chứ không phải ngược lại.
 
 ---
 
@@ -869,10 +868,10 @@ git diff up-2.1.2 HEAD --stat
 | Cân Z offset | `PROBE_OFFSET_WIZARD` + `PROBE_OFFSET_WIZARD_START_Z 0` + `PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }` (thêm mới) |
 | Hướng extruder | **`INVERT_E0_DIR false`** — Bondtech BMG là extruder có hộp số (từng để `true` → extruder quay ngược) |
 | Trục Z | `Z2_DRIVER_TYPE` + `Z3_DRIVER_TYPE` = TMC2209 → `NUM_Z_STEPPERS` **tự suy ra = 3** (`Conditionals_LCD.h:726-734`), `Z_STEPPER_AUTO_ALIGN` (**G34**) |
-| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, **`*_MICROSTEPS 8`** (2026-10-11 — **cả 6 driver**, xem §11.4b), **`*_CURRENT 500`** cho **cả 6** (X Y Z Z2 Z3 E0 — 2026-10-12, 62 % định mức 0,8 A), `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
+| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, **`*_MICROSTEPS 8`** (2026-10-11 — **cả 6 driver**, xem §11.4b), **`*_CURRENT 600`** cho **cả 6** (X Y Z Z2 Z3 E0 — 2026-10-12; 75 % định mức 0,8 A), `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
-| Chuyển động | **2026-10-12 — "trần nên dùng" + microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, **`DEFAULT_MAX_FEEDRATE { 225, 225, 15, 25 }`**, **`DEFAULT_MAX_ACCELERATION { 5000, 5000, 500, 1000 }`**, `DEFAULT_ACCELERATION 3000`, `DEFAULT_RETRACT_ACCELERATION 1500`, `DEFAULT_TRAVEL_ACCELERATION 2500`, `DEFAULT_XJERK/DEFAULT_YJERK 10.0` (`ZJERK 0.4`, `EJERK 5.0`). *(Bản 1/16 trước đó: `{80,80,800,415}` · `{150,150,10,25}` · `{2000,2000,200,1000}` · 1500/2000/1500 · jerk 8.)* **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
+| Chuyển động | **2026-10-12 — về bộ "Trước (1/16)", chỉ quy đổi `M92` cho microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, `DEFAULT_MAX_FEEDRATE { 150, 150, 10, 25 }`, `DEFAULT_MAX_ACCELERATION { 300, 300, 200, 1000 }`, `DEFAULT_ACCELERATION 500`, `DEFAULT_RETRACT_ACCELERATION 300`, `DEFAULT_TRAVEL_ACCELERATION 500`, `DEFAULT_XJERK/DEFAULT_YJERK 8.0` (`ZJERK 0.4`, `EJERK 5.0`). **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
 | Khác | `EEPROM_SETTINGS`, `SDSUPPORT`, `FILAMENT_RUNOUT_SENSOR`, `HOST_ACTION_COMMANDS` |
 
 ### 11.2 `Marlin/Configuration_adv.h` — cấu hình nâng cao
@@ -908,8 +907,8 @@ git diff up-2.1.2 HEAD --stat
 | `src/lcd/marlinui.cpp`, `marlinui.h` | thêm `pin_test_active` + `pin_test_update()` — in **mức điện thô** `READ(X_MIN_PIN/Y_MIN_PIN/Z_MIN_PIN)` lên status line (bỏ qua logic endstop của Marlin) |
 | `src/lcd/menu/menu_advanced.cpp` | thêm 2 menu: **Reboot to DFU** (tắt heater + `planner.finish_and_disable()` rồi `flashFirmware(0)`) và **Endstop Pins** |
 | `src/lcd/menu/menu_z_align.cpp` **(file mới)**, `menu_motion.cpp` | menu **Motion → Z ALIGN MANUAL**: màn hình dịch tay Z1/Z2/Z3 từng bước 0.01mm + probe lại từng điểm. Xem §11.8b |
-| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard: mốc vật lý = Z-home** (`base_home_pos(Z_AXIS)`, **bỏ lần probe tâm bàn**) và **mốc để vặn vít = mặt phẳng trung bình** (`delta = chiều_cao − TB`, in 3 số lẻ, kèm **chiều vặn `CW`/`CCW`** theo quy luật đo trên máy: CW = hạ góc xuống, CCW = nâng lên); probe lỗi 1 góc không mất cả phép đo; wizard **6 nút**: `PROBE` (đo lại góc đang đứng) / `PREV` / `NEXT` (sang góc khác để vặn tiếp, **tự probe**) / `MAX->MIN` (đổi góc đang chỉnh) / `HOME+PROBE` (home lại Z + đo lại cả 4 góc) / `DONE` |
-| `src/feature/tramming.h` (helper `tramming_pitch/turn_cw/turns`) | Gộp công thức bước ren + **chiều vặn** vào một chỗ để `G35` và wizard dùng chung (trước đây mỗi nơi một kiểu, và công thức gốc của Marlin báo **ngược chiều** trên máy này) |
+| `src/gcode/bedlevel/G35.cpp`, `src/lcd/menu/menu_tramming.cpp` | Xem §11.8c — **G35/wizard: mốc vật lý = Z-home** (`base_home_pos(Z_AXIS)`, **bỏ lần probe tâm bàn**); **mốc để vặn vít = mặt phẳng trung bình**, và từ **2026-10-12 mốc này được CHỐT (đóng băng)** sau lần đo đủ 4 góc đầu tiên của wizard (`z_ref_mean`/`z_ref_set`) ⇒ **`PROBE` lại 1 góc chỉ đổi số của góc đó**; số cần vặn in theo **mm** (`\|delta\|`, không phải vòng) và **chiều vặn đã ĐẢO LẠI: CCW = hạ góc xuống, CW = nâng lên**; probe lỗi 1 góc không mất cả phép đo; wizard **6 nút**: `PROBE` (đo lại góc đang đứng) / `PREV` / `NEXT` (sang góc khác để vặn tiếp, **tự probe**) / `MAX->MIN` (đổi góc đang chỉnh) / `HOME+PROBE` (home lại Z + đo lại cả 4 góc + **chốt mốc mới**) / `DONE` |
+| `src/feature/tramming.h` (helper `tramming_pitch/turn_cw/turns`) | Gộp **chiều vặn** + bước ren vào một chỗ để `G35` và wizard dùng chung. **2026-10-12: ĐẢO CHIỀU** (`tramming_turn_cw()`: **CW = nâng, CCW = hạ** — đo lại trên máy, ghi chú cũ ghi ngược và sai) và **bỏ số vòng khỏi phần hiển thị** (in theo `\|delta\|` mm; `tramming_turns()` chỉ còn để tham chiếu) |
 | `src/feature/tramming.h`, `tramming.cpp`, `src/module/settings.cpp`, `src/lcd/menu/menu_motion.cpp` | **`tramming_worst_max`** (góc đang chỉnh = MAX cao nhất / MIN thấp nhất): menu **`Motion` → `WORST POINT = MAX`** + nút **`MAX->MIN`** trong wizard, **lưu EEPROM** trong ô `z_offset` của khối MBL (MBL đang tắt nên ô đó trống) → **không đổi kích thước/CRC EEPROM** nên không xoá cấu hình đang có. Xem §11.8c |
 | `Marlin/Configuration_adv.h` (`TRAMMING_POINT_NAME_1..4`) | **sửa tên 4 góc cho khớp toạ độ** — trước đây bị ngược 180° nên G35/wizard chỉ sai góc cần vặn |
 | `src/lcd/language/language_en.h` | thêm `MSG_REBOOT_TO_DFU`, `MSG_PIN_TEST` |
@@ -932,12 +931,13 @@ git diff up-2.1.2 HEAD --stat
 > xung ra MCU giảm một nửa** ở cùng tốc độ mm/s. Trần vật lý (điện cảm ~225 mm/s) **không đổi** theo
 > microstep — xem §3.3.
 
-> 🟢 **Cập nhật 2026-10-12 — bảng trên (75/150) chỉ còn là mốc lịch sử của bước 1/8.** Ngay sau đó các
-> trần đã được nâng lên **"trần nên dùng"**: `M203 225/225/15/25`, `M201 5000/5000/500/1000`,
-> `M204 3000/1500/2500`, `M205 X10 Y10`, và **dòng motor 500 mA cho cả 6 trục**. Đã ghi EEPROM
-> (`M500`) → **verify lại sau khi mở lại cổng COM (reset)** → clean rebuild + flash
-> (`Marlin 2.1.2 (Oct 12 2026 18:23:22)`); `M122` xác nhận `Set current 500 ×6` + `msteps 8 ×6` +
-> `off time 3` + `blank time 24`. Trạng thái đang chạy: xem bảng ở **§3.3**.
+> 🟢 **Cập nhật 2026-10-12 — trạng thái CUỐI CÙNG: quay về bộ "Trước (1/16)", chỉ quy đổi `M92`.**
+> Diễn biến trong ngày: (1) 1/8 + giảm nửa vận tốc/gia tốc → (2) nâng lên "trần nên dùng"
+> (`M203 225`, `M201 5000`, **500 mA** cả 6 trục) → (3) hạ lại → (4) **chốt: bộ "Trước (1/16)"** —
+> `M203 150/150/10/25`, `M201 300/300/200/1000`, `M204 500/300/500`, `M205 X8 Y8`,
+> **`M906 X/Y 800 · Z 600 · E 400`**, `M92 40/40/400/207.5`. Đã ghi EEPROM (`M500`, crc 41178) →
+> verify qua reset → đồng bộ **default trong `Configuration*.h`** → clean rebuild + flash.
+> Bảng dưới giữ lại làm mốc lịch sử của bước 1/8; **trạng thái đang chạy xem §3.3**.
 
 **Thứ tự thực hiện — quan trọng, và đã làm đúng thứ tự này:**
 
@@ -1641,26 +1641,26 @@ TURN .01 CLICK PROBE     <- dòng hướng dẫn, đổi theo chế độ
 
 **Lệnh `G35`** (không tương tác): **không probe tâm bàn** → probe 4 góc → in
 **chiều cao** (`z_probe − z_home`) **và độ lệch so với mặt phẳng trung bình** (`delta = chiều_cao − TB`)
-+ số vòng vít. Không tự di chuyển đi đâu sau khi xong (không park).
++ số mm cần vặn. Không tự di chuyển đi đâu sau khi xong (không park).
 
 ```
 G35 moc = Z-HOME (khung Z sau G28 Z)  Z=0.000
 Chieu cao TB cac goc = 2.007mm  |  Do lech max-min = 0.030mm
 Moc de van vit = MAT PHANG TRUNG BINH. delta = chieu_cao - TB; KHONG phu thuoc Z-offset.
-Chieu van: CW = HA goc do xuong, CCW = NANG goc do len.
-Turn Back-Right: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
-Turn Back-Left: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
-Turn Front-Left: van CCW by 0 turns  | lech -0.007mm  (cao 2.000mm)
-Turn Front-Right: van CW by 0 turns and 1 minutes  | lech 0.022mm  (cao 2.030mm)
-Chinh truoc: Front-Right (lech 0.022mm) -> van CW
+Chieu van: CCW = HA goc do xuong, CW = NANG goc do len.
+Turn Back-Right: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
+Turn Back-Left: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
+Turn Front-Left: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
+Turn Front-Right: van CCW 0.022mm  | lech 0.022mm  (cao 2.030mm)
+Chinh truoc: Front-Right (lech 0.022mm) -> van CCW
 ```
 
 > 🔴 **Vì sao phải trừ TRUNG BÌNH:** 4 góc `2.000/2.000/2.000/2.030` đều "cao +2mm so với Z-home" —
 > nhìn như cả bàn bị nâng 2mm, nhưng thực ra **4 góc chỉ lệch nhau 0.030mm** (gần như đã phẳng).
 > "Chiều cao so với Z-home" chỉ là **độ lệch của cả mặt bàn so với mốc**, nó phụ thuộc `M851 Z offset`,
 > độ võng tâm bàn và lần home — **không nói gì về độ phẳng**. `delta = chiều_cao − TB` mới là phần
-> **cần vặn**, và firmware nói luôn **vặn chiều nào**: `delta > 0` = góc cao hơn mặt phẳng TB ⇒ **vặn CW** (hạ xuống);
-> `delta < 0` ⇒ **vặn CCW** (nâng lên). Tổng 4 delta luôn = 0 ⇒ vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại.
+> **cần vặn**, và firmware nói luôn **vặn chiều nào**: `delta > 0` = góc cao hơn mặt phẳng TB ⇒ **vặn CCW** (hạ xuống);
+> `delta < 0` ⇒ **vặn CW** (nâng lên). Tổng 4 delta luôn = 0 ⇒ vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại.
 > |delta| < 0.002mm thì in `DAT (khong can van)` — dưới ngưỡng nhiễu, vặn nữa là vô nghĩa.
 
 **Wizard `Motion → Tramming Wizard`** — vòng lặp tự động:
@@ -1679,7 +1679,7 @@ Chinh truoc: Front-Right (lech 0.022mm) -> van CW
 ```
 *RB -0.007 LB -0.007       <- '*' = goc nozzle dang dung (goc dang chinh)
  FL -0.007 FR +0.013       <- so la CON LAI (lech so voi MAT PHANG TRUNG BINH, 3 so le = 0.001mm)
->PROBE CW con +0.013       <- PROBE: target con lai + chieu van cho goc dang dung
+>PROBE CCW con +0.013       <- PROBE: target con lai + chieu van cho goc dang dung
  PREV  NEXT  MAX->MIN      <- PREV/NEXT: sang goc khac van tiep (tu probe) | MAX->MIN: doi goc dang chinh
  HOME+PROBE  DONE          <- HOME+PROBE: home lai Z + do lai CA 4 GOC | DONE: thoat
 ```
@@ -1699,9 +1699,9 @@ Chinh truoc: Front-Right (lech 0.022mm) -> van CW
 
 - Quay encoder = chọn 1 trong **6 mục**, theo đúng thứ tự trên màn hình:
   **PROBE → PREV → NEXT → MAX->MIN → HOME+PROBE → DONE**; bấm = chạy mục đang chọn. Mặc định chọn **PROBE**.
-- **Dòng `PROBE` hiện luôn hướng vặn cho góc đang đứng.** Trước khi bấm: `CW 0.43 vong` = vặn CW
-  0.43 vòng (`CW` = vặn để **hạ** góc đó xuống, `CCW` = vặn để **nâng** lên); lệch < 1/100 vòng thì
-  hiện `CW nhe` (vặn nhẹ một nấc). Sau khi bấm: `CW con +0.013` = vặn tiếp **CW**, **còn lệch
+- **Dòng `PROBE` hiện luôn hướng vặn cho góc đang đứng.** Trước khi bấm: `CCW 0.150mm` = vặn CCW
+  0.150 mm (`CCW` = vặn để **hạ** góc đó xuống, `CW` = vặn để **nâng** lên); lệch < 0.01 mm thì
+  hiện `CCW nhe` (vặn nhẹ một nấc). Sau khi bấm: `CCW con +0.013` = vặn tiếp **CCW**, **còn lệch
   +0.013mm** (target). |delta| < 0.002mm thì hiện `DAT` (đã đạt, dưới ngưỡng nhiễu).
 - **Sau mỗi lần `PROBE` chỉ lấy `z` CUỐI** (giá trị probe mới nhất, cùng khung Z vì không home lại)
   ⇒ hiện ngay **target còn lại**. Đây là cách tự kiểm tra chiều vặn: vặn **đúng** chiều thì target
@@ -1732,9 +1732,9 @@ Chinh truoc: Front-Right (lech 0.022mm) -> van CW
   trung bình, 3 số lẻ, cùng dấu với 4 số ở 2 dòng trên) — chỉ lấy **`z` cuối**, **không cộng dồn**.
   `DAT` = đã trong ngưỡng nhiễu (|delta| < 0.002mm).
 - **Chiều vặn (CW/CCW) lấy từ đâu:** hàm `tramming_turn_cw()` trong `src/feature/tramming.h`, theo đúng
-  quy luật đo trên máy: **CW = hạ góc đó xuống**, **CCW = nâng góc đó lên** (xem §5). Trên **màn hình wizard**
-  chỉ có `CW`/`CCW` (nhãn nút ngắn), nhưng **`G35` vẫn in thêm 1 dòng giải thích**:
-  `Chieu van: CW = HA goc do xuong, CCW = NANG goc do len.` (`G35.cpp:194`) — vì khi vặn ốc thì chiều vặn là
+  quy luật **đo lại trên máy (2026-10-12)**: **CCW = hạ góc đó xuống**, **CW = nâng góc đó lên** (xem §5).
+  Trên **màn hình wizard** chỉ có `CW`/`CCW` + **số mm**, nhưng **`G35` in thêm 1 dòng giải thích**:
+  `Chieu van: CCW = HA goc do xuong, CW = NANG goc do len.` (`G35.cpp:194`) — vì khi vặn ốc thì chiều vặn là
   thứ cần hình dung.
 - **Ba chuyển động Z quanh một lần probe** — **không cái nào là `probe.offset.z`**:
   1. *(nhấc rất nhỏ, trước khi probe)* firmware đưa nozzle về đúng `Z_CLEARANCE_BETWEEN_PROBES` = 5mm. Lần probe trước kết thúc ở `trigger + 5mm`; nếu bàn ở góc đó cao/thấp hơn 0 một chút thì bước này chỉ nhích vài phần mười mm — đây chính là cú "nhấc lên một đoạn rất nhỏ" thấy trước khi probe.
@@ -1748,12 +1748,31 @@ Chinh truoc: Front-Right (lech 0.022mm) -> van CW
 
 #### Điều chỉnh nhiều góc — số của các góc khác có bị đổi không?
 
-**Có, và đổi theo 2 nguyên nhân khác nhau.** Không phải lỗi — nhưng phải biết để không bị "số nhảy" làm hoang mang:
+> 🟢 **Từ 2026-10-12: KHÔNG đổi.** Mốc được **CHỐT (đóng băng)** ngay sau lần đo **đủ 4 góc đầu tiên**
+> (lúc vào menu, hoặc sau `HOME+PROBE`) và **không tính lại nữa**. Nên **`PROBE` lại 1 góc CHỈ làm đổi số
+> của chính góc đó**; 3 góc kia giữ nguyên.
+>
+> **Trước đây đổi là vì** mốc cũ = "trung bình các góc đã đo" **tính lại mỗi lần vẽ màn hình**: probe lại
+> góc `i` thấy cao/thấp hơn `Δ` ⇒ trung bình đổi `Δ/4` ⇒ **3 số kia mỗi số dịch `−Δ/4`** (ngược dấu, bằng
+> 1/4) dù chưa hề vặn gì. Cộng thêm độ lặp của probe (σ ≈ 2 µm; 20 lần đo chênh 7–10 µm) nên `Δ` luôn
+> khác 0 ⇒ các số kia cứ "nhảy" vài phần nghìn mm mỗi lần bấm `PROBE`.
 
-| Nguyên nhân | Số đổi thế nào | Đánh giá |
-|---|---|---|
-| **(1) Mốc = trung bình 4 góc** (toán học) | Vặn hạ góc `i` đi `Δ` ⇒ trung bình giảm `Δ/4` ⇒ **3 góc kia mỗi góc tăng `+Δ/4`**, còn góc `i` giảm `0.75Δ` | **Đúng**, không phải lỗi. Ba góc kia giờ nằm cao hơn mặt phẳng trung bình mới. Đây cũng chính là lý do quy tắc "vặn đúng bằng số đang hiện" chỉ giảm **75%** mỗi vòng |
-| **(2) Cơ khí: bàn là một tấm liền, 4 góc có lò xo** | Vặn ốc một góc **kéo các góc khác nhích theo một chút** (bao nhiêu tuỳ độ cứng tấm bàn / độ nén lò xo). Số **cũ** của các góc đó vì thế không còn đúng | Firmware không thể biết — nó **giữ nguyên số cũ** cho tới khi bạn đo lại góc đó (`PROBE`/`PREV`/`NEXT`) hoặc `HOME+PROBE` |
+**Cách hiểu đúng bây giờ:**
+
+| Điều | Ý nghĩa |
+|---|---|
+| 4 số ở 2 dòng đầu | "**góc này còn cao/thấp hơn MỐC bao nhiêu mm**" — đích là đưa **từng số về 0** |
+| `PROBE` | **chỉ cập nhật số của góc đang đứng** = còn phải vặn bao nhiêu mm nữa để góc đó về mốc |
+| 3 góc kia | số **không tự đổi** — nhưng **thực tế đã dịch** khi bạn vặn (bàn là một tấm liền, 4 vít liên kết với nhau). Muốn số mới thì `PROBE`/`PREV`/`NEXT` tới góc đó |
+| `HOME+PROBE` | đo lại **cả 4 góc** trong khung Z mới ⇒ **chốt MỐC MỚI** — nút "làm lại từ đầu" |
+
+> ⚠️ **Hệ quả phải nhớ:** vì mốc không đổi, sau khi vặn một góc thì 3 số còn lại là **số CŨ** (không còn
+> đúng vật lý) — đừng cộng dồn; hãy `PROBE` lại góc cần kiểm tra, hoặc `HOME+PROBE` để đo lại tất cả.
+> Đổi lại: bạn luôn biết **chính xác từng góc cần lên/xuống bao nhiêu mm** so với mốc ban đầu, và số của
+> một góc **không nhảy** chỉ vì bạn vừa probe một góc khác.
+>
+> ℹ️ **`G35` không bị ảnh hưởng:** nó đo cả 4 góc trong **một lần chạy** rồi in báo cáo ngay ⇒ mốc của
+> nó đã đúng nghĩa "một lần đo đủ 4 góc".
 
 **Màn hình không hiện ký hiệu gì thêm** (chỉ `*` = góc đang đứng và `---` = góc chưa có số trong khung Z này) — số nào cũng dùng được để định hướng. Quy tắc duy nhất cần nhớ:
 
@@ -1787,7 +1806,7 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
 
 | Hiển thị | Nghĩa |
 |---|---|
-| `CW con +0.013` (dòng `PROBE` sau khi bấm) | **Target còn lại** của góc đang đứng: còn lệch `+0.013mm` so với mặt phẳng trung bình, phải vặn tiếp **CW** |
+| `CCW con +0.013` (dòng `PROBE` sau khi bấm) | **Target còn lại** của góc đang đứng: còn lệch `+0.013mm` so với **MỐC**, phải vặn tiếp **CCW** |
 | `+0.013` (số ở dòng có dấu `*`) | Cùng con số đó, nằm trong bảng 4 góc (3 số lẻ) — cập nhật ngay sau mỗi lần probe |
 | `DAT` | \|delta\| < 0.002mm — đã đạt, dưới ngưỡng nhiễu |
 
@@ -1797,9 +1816,10 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
   khung Z** ⇒ so sánh trực tiếp, và **không** phụ thuộc `M851`/Z-home.
 - Bấm `PROBE` liên tục mà **không vặn gì**: số đứng yên ⇒ nhìn là biết không nhích. Chênh lệch giữa 2
   lần bấm khi đó chính là **độ lặp lại của probe** (±0.005–0.01mm).
-- **Quy tắc vặn cho nhanh tới đích:** cứ vặn **đúng bằng số đang hiện**. Vặn góc đó một lượng `x` làm cả
-  mặt phẳng trung bình dịch theo `x/4`, nên phần lệch chỉ **giảm 75%** mỗi vòng:
-  `con_mới = 0.25 × con_cũ`. Vài vòng là dưới ngưỡng nhiễu.
+- **Quy tắc vặn cho nhanh tới đích:** cứ vặn **đúng bằng số đang hiện** — vì **mốc đã đóng băng**, vặn
+  một đoạn `x` mm thì số của **chính góc đó giảm đúng `x` mm** (không còn kiểu "chỉ giảm 75 % mỗi vòng"
+  như hồi mốc còn tính lại). Thực tế nên vặn ~80–90 % con số rồi `PROBE` lại: bàn là **một tấm liền** nên
+  vặn một góc sẽ kéo 3 góc kia nhích theo một chút.
 - **Số của 3 góc kia là số CŨ** khi bạn chỉ `PROBE` 1 góc (bàn thật đã nghiêng đi một chút khi vặn) ⇒
   chúng chỉ để tham khảo; **bấm `PREV`/`NEXT` để sang góc khác (máy probe luôn góc đó)**, hoặc
   `HOME+PROBE` nếu muốn cả 4 số cùng "mới" trong một khung Z mới.
@@ -1814,20 +1834,20 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
 
 **Không ngược.** Nút `WORST` **chỉ đổi góc mà đầu in chạy tới**, không đụng tới phép tính:
 `delta = chiều_cao − TB` và chiều vặn `CW/CCW` luôn theo **cùng một quy ước** ở cả 2 chế độ —
-`delta > 0` = góc **cao hơn** mặt phẳng TB ⇒ **vặn CW** (hạ xuống); `delta < 0` ⇒ **vặn CCW** (nâng lên).
+`delta > 0` = góc **cao hơn** mặt phẳng TB ⇒ **vặn CCW** (hạ xuống); `delta < 0` ⇒ **vặn CW** (nâng lên).
 
 Vì tổng 4 delta luôn = 0 nên luôn có **ít nhất 1 góc ≥ 0 và 1 góc ≤ 0**, do đó:
 
-- `MAX` luôn chọn góc có `delta ≥ 0` → hướng dẫn sẽ là **vặn CW** (hạ góc đó xuống).
-- `MIN` luôn chọn góc có `delta ≤ 0` → hướng dẫn sẽ là **vặn CCW** (nâng góc đó lên).
+- `MAX` luôn chọn góc có `delta ≥ 0` → hướng dẫn sẽ là **vặn CCW** (hạ góc đó xuống).
+- `MIN` luôn chọn góc có `delta ≤ 0` → hướng dẫn sẽ là **vặn CW** (nâng góc đó lên).
 
-Nhìn thì thấy "ngược" (MAX → CW, MIN → CCW) nhưng thực ra bạn chỉ đang đứng ở **góc đối diện**;
+Nhìn thì thấy "ngược" (MAX → CCW, MIN → CW) nhưng thực ra bạn chỉ đang đứng ở **góc đối diện**;
 quy ước **không hề đổi**. `CW/CCW` luôn nói về **chiều vặn ốc**, không phụ thuộc chế độ MAX/MIN.
 
 > 🔧 **Hai điều thực dụng khi dùng `MIN` (vít góc cao đã hết hành trình):**
 > - Chiến lược "chỉ nâng các góc thấp" hội tụ về **mặt phẳng của góc cao nhất** (không phải về trung
->   bình): mỗi vòng khoảng cách `max−min` co lại ~25%, nên cần vài vòng — cứ bấm `HOME+PROBE` rồi làm theo
->   delta mới (delta luôn được tính lại theo mặt phẳng trung bình mới).
+>   bình): nâng mỗi góc thấp lên đúng số mm đang hiện là chúng về cùng mặt phẳng mốc — **một vòng là gần
+>   xong** (mốc đóng băng nên không còn kiểu co 25 % mỗi vòng). Cứ bấm `HOME+PROBE` rồi làm theo delta mới.
 > - Nâng/hạ **cả mặt phẳng** không làm sai `Z offset`: mỗi lần `G28` máy probe lại tâm bàn nên mốc Z
 >   đi theo bàn. Chỉ cần để ý **hành trình Z** còn đủ.
 

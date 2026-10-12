@@ -191,7 +191,7 @@ void GcodeSuite::G35() {
     SERIAL_ECHO_F(h_spread, 3);
     SERIAL_ECHOLNPGM("mm");
     SERIAL_ECHOLNPGM("Moc de van vit = MAT PHANG TRUNG BINH. delta = chieu_cao - TB; KHONG phu thuoc Z-offset.");
-    SERIAL_ECHOLNPGM("Chieu van: CW = HA goc do xuong, CCW = NANG goc do len.");
+    SERIAL_ECHOLNPGM("Chieu van: CCW = HA goc do xuong, CW = NANG goc do len.");
     if (n_probed < G35_PROBE_COUNT)
       SERIAL_ECHOLNPGM("CANH BAO: chi do duoc ", n_probed, "/", G35_PROBE_COUNT, " diem -> TB tinh tren ", n_probed, " diem.");
 
@@ -215,13 +215,12 @@ void GcodeSuite::G35() {
         SERIAL_ECHOPGM("mm");
       }
       else {
-        // Chieu van: CW = HA goc do xuong, CCW = NANG goc do len (xem tramming.h)
-        const float turns = tramming_turns(delta, screw_thread);
-        const int full_turns = trunc(turns);
-        const int minutes = trunc((turns - float(full_turns)) * 60.0f);
-
-        SERIAL_ECHOPGM(": van ", tramming_turn_cw(delta, screw_thread) ? "CW" : "CCW", " by ", full_turns, " turns");
-        if (minutes) SERIAL_ECHOPGM(" and ", minutes, " minutes");
+        // Chieu van: CCW = HA goc do xuong, CW = NANG goc do len (xem tramming.h).
+        // So can chinh in theo MM, KHONG phai vong: chinh vit di X mm thi goc do len/xuong
+        // dung X mm => can chinh dung bang |delta| (khong chia cho buoc ren).
+        SERIAL_ECHOPGM(": van ", tramming_turn_cw(delta, screw_thread) ? "CW" : "CCW", " ");
+        SERIAL_ECHO_F(ABS(delta), 3);
+        SERIAL_ECHOPGM("mm");
         SERIAL_ECHOPGM("  | lech ");
         SERIAL_ECHO_F(delta, 3);
         SERIAL_ECHOPGM("mm");

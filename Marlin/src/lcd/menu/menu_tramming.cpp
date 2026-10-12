@@ -89,7 +89,7 @@
 #define BTN_COUNT 6
 
 // Ket qua lan PROBE gan nhat
-#define PR_NONE   0   // chua probe lai o goc nay -> hien huong van (CW/CCW + so vong)
+#define PR_NONE   0   // chua probe lai o goc nay -> hien huong van (CW/CCW + so mm)
 #define PR_RESULT 1   // da probe lai -> hien TARGET con lai (z cuoi) + huong van
 #define PR_FAILED 2
 
@@ -101,6 +101,8 @@ static uint8_t tram_state;                 // TR_*
 static bool    tram_busy;                  // chan tai nhap: blocking move goi idle() -> screen chay lai
 static uint8_t btn_sel;                    // BTN_*
 static uint8_t probe_state;                // PR_*
+static float   z_ref_mean;                 // MOC: trung binh 4 goc cua LAN DO DAU TIEN (dong bang)
+static bool    z_ref_set;                  // da chot moc chua (false = dang trong lan do dau)
 
 // ---------------------------------------------------------------------------
 // Tien ich
@@ -113,13 +115,35 @@ static void tram_tag(const uint8_t i, char * const out) {
   out[2] = '\0';
 }
 
-// Trung binh cac goc DA probe duoc = "mat phang quy chieu" (xem G35.cpp).
-// Day moi la moc de biet can nang len / ha xuong bao nhieu, KHONG phai Z-home.
-static float tramming_mean() {
+// MOC = "mat phang quy chieu" (xem G35.cpp): trung binh cac goc DA probe duoc.
+//
+// Duoc tinh DUNG MOT LAN, ngay sau khi do xong CA 4 GOC lan dau (sau khi home), roi DONG BANG:
+//   - so cua 1 goc = z do duoc - MOC  => chinh xac "goc nay can nang/ha bao nhieu mm"
+//   - PROBE lai 1 goc CHI lam doi SO CUA GOC DO; 3 goc kia GIU NGUYEN (vi MOC khong doi).
+//     (Truoc 2026-10-12 moc duoc tinh lai moi lan ve man hinh, nen probe lai 1 goc lam
+//      ca 3 so kia dich di -Delta/4, gay hieu nham la cac goc khac vua thay doi.)
+//   - HOME+PROBE (hoac vao lai menu) do lai ca 4 goc -> MOC MOI.
+//
+// Cac gia tri do lai bang nut PROBE vi vay chi co mot y nghia: con phai van bao nhieu mm nua
+// thi goc do ve dung MOC. Neu chua co moc (dang trong lan do dau, hoac do loi <3 goc) thi tam
+// tinh dong de man hinh van co so ma hien.
+static float tramming_mean_probed() {
   float sum = 0;
   uint8_t n = 0;
   LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) { sum += z_delta[i]; ++n; }
   return n ? sum / n : 0;
+}
+
+static float tramming_mean() {
+  return z_ref_set ? z_ref_mean : tramming_mean_probed();
+}
+
+// Chot moc tu cac goc vua do. Chi nhan khi du >= 3 goc (cung nguong voi G35).
+static void tramming_set_ref() {
+  uint8_t n = 0;
+  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) ++n;
+  if (n >= 3) { z_ref_mean = tramming_mean_probed(); z_ref_set = true; }
+  DEBUG_ECHOLNPGM("tramming: chot MOC = ", z_ref_mean, " (", n, " goc)");
 }
 
 // "+0.023" / "-0.008" / "  ---" : do lech so voi MAT PHANG TRUNG BINH (khong phai so voi Z-home).
@@ -217,6 +241,7 @@ static void tramming_goto_point(const int8_t dir) {
 // -> di toi goc "lech nhat". Day la nut reset moc cho ca ban.
 static void tramming_restart() {
   LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  z_ref_set = false;                     // se CHOT MOC MOI sau khi do lai du 4 goc
   probe_state = PR_NONE;
   set_axis_never_homed(Z_AXIS);          // de all_axes_homed() = false cho toi khi G28 Z xong
   queue.inject(F("G28 Z"));
@@ -256,7 +281,7 @@ static void tramming_draw() {
 
   char line[40], d0[12], d1[12];
 
-  // Dong 0-1: do lech 2 goc mot dong, so voi MAT PHANG TRUNG BINH cua 4 goc (xem tram_fmt_delta)
+  // Dong 0-1: do lech 2 goc mot dong, so voi MOC (trung binh 4 goc cua lan do dau - dong bang)
   const float mean = tramming_mean();
   LOOP_L_N(r, 2) {
     const uint8_t i0 = r * 2, i1 = i0 + 1;
@@ -273,7 +298,7 @@ static void tramming_draw() {
   // Dong 2: nut PROBE + ket qua lan probe vua roi.
   //   PR_RESULT: "CW con +0.013" = van tiep CW, con lech +0.013mm (target) - chi lay z CUOI,
   //              khong cong don. Van dung chieu thi so nay GIAM, van sai thi TANG.
-  //   PR_NONE  : chua probe lai -> "CW 0.43 vong" (huong + so vong can van)
+  //   PR_NONE  : chua probe lai -> "CCW 0.150mm" (huong + so MM can van)
   //   "DAT" khi |delta| < 0.002mm (duoi nguong nhieu). Tat ca in 3 so le (0.001mm).
   switch (probe_state) {
     case PR_RESULT: {
@@ -294,7 +319,8 @@ static void tramming_draw() {
       break;
     default: {
       // Chua probe lai o goc nay -> huong dan luon cho goc dang dung:
-      //   "CW 0.43 vong" = van CW 0.43 vong (CW = ha goc xuong, CCW = nang goc len)
+      //   "CCW 0.150mm" = van CCW 0.150 mm (CCW = ha goc xuong, CW = nang goc len).
+      //   So can chinh la MM, KHONG phai vong: vit di X mm => goc len/xuong X mm.
       const uint8_t i = worst_index;
       if (!z_ok[i])
         snprintf_P(line, sizeof(line), PSTR("%cPROBE goc nay"), btn_sel == BTN_PROBE ? '>' : ' ');
@@ -302,17 +328,14 @@ static void tramming_draw() {
         const float delta = z_delta[i] - mean;   // mean da tinh o tren (mat phang trung binh)
         if (ABS(delta) < 0.002f)
           snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
+        else if (ABS(delta) < 0.01f)             // duoi 1/100 mm -> chi can van nhe
+          snprintf_P(line, sizeof(line), PSTR("%cPROBE %s nhe"),
+            btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW");
         else {
-          const float turns = tramming_turns(delta, TRAMMING_SCREW_THREAD);
           char num[10];
-          if (turns < 0.01f)
-            snprintf_P(line, sizeof(line), PSTR("%cPROBE %s nhe"),
-              btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW");
-          else {
-            dtostrf(turns, 1, 2, num);
-            snprintf_P(line, sizeof(line), PSTR("%cPROBE %s %s vong"),
-              btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW", num);
-          }
+          dtostrf(ABS(delta), 1, 3, num);        // 0.150 = can chinh 0.150 mm
+          snprintf_P(line, sizeof(line), PSTR("%cPROBE %s %smm"),
+            btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW", num);
         }
       }
     } break;
@@ -348,7 +371,11 @@ static void _lcd_tramming() {
       break;
 
     case TR_PROBE:
-      if (step_index >= G35_PROBE_COUNT) { tram_state = TR_GOTO; break; }
+      if (step_index >= G35_PROBE_COUNT) {
+        tramming_set_ref();                   // do xong CA 4 GOC -> CHOT MOC (dong bang tu day)
+        tram_state = TR_GOTO;
+        break;
+      }
       tram_busy = true;
       z_ok[step_index] = tramming_probe_xy(tramming_points[step_index].x, tramming_points[step_index].y, z_delta[step_index]);
       tram_busy = false;
@@ -424,6 +451,7 @@ void goto_tramming_wizard() {
   ui.defer_status_screen();
 
   LOOP_L_N(i, G35_PROBE_COUNT) z_ok[i] = false;
+  z_ref_set = false;                          // moc se duoc CHOT sau lan do 4 goc dau tien
   worst_index = 0; step_index = 0;
   tram_busy = false;
   btn_sel = BTN_PROBE; probe_state = PR_NONE;

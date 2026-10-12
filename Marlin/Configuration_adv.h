@@ -2760,7 +2760,9 @@
   #define INTERPOLATE      true
 
   #if AXIS_IS_TMC_CONFIG(X)
-    #define X_CURRENT       500        // (mA) RMS current. 2026-10-12: 600 -> 500 (dong bo M906 X500).
+    #define X_CURRENT       600        // (mA) RMS current. 2026-10-12 (cuoi ngay): 600 mA cho CA 6 truc
+                                       // (dong bo M906 X600). 600 mA = 75% dinh muc 0,8 A cua
+                                       // ST4118L0804-A -> van nen kiem nhiet motor <= 80 C. Xem README 3.3.
                                        // Motor ST4118L0804-A dinh muc 0,8 A -> con du dia;
                                        // kiem nhiet do motor <= 80 C. Xem README 3.3.
     #define X_CURRENT_HOME  X_CURRENT  // (mA) RMS current for sensorless homing
@@ -2782,7 +2784,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Y)
-    #define Y_CURRENT       500        // 2026-10-12: 600 -> 500 (dong bo M906 Y500 trong EEPROM)
+    #define Y_CURRENT       600        // 2026-10-12 (cuoi ngay): 600 mA cho CA 6 truc (dong bo M906 Y600)
     #define Y_CURRENT_HOME  Y_CURRENT
     #define Y_MICROSTEPS     X_MICROSTEPS
     #define Y_RSENSE          0.11
@@ -2802,7 +2804,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z)
-    #define Z_CURRENT       500        // Dong bo voi M906 Z500 trong EEPROM (3 vit me Z/Z2/Z3)
+    #define Z_CURRENT       600        // Dong bo voi M906 Z600 trong EEPROM (3 vit me Z/Z2/Z3)
     #define Z_CURRENT_HOME  Z_CURRENT
     #define Z_MICROSTEPS     X_MICROSTEPS
     #define Z_RSENSE          0.11
@@ -2812,7 +2814,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z2)
-    #define Z2_CURRENT      500        // Dong bo voi M906 I1 Z500 trong EEPROM
+    #define Z2_CURRENT      600        // Dong bo voi M906 I1 Z600 trong EEPROM
     #define Z2_CURRENT_HOME Z2_CURRENT
     #define Z2_MICROSTEPS    Z_MICROSTEPS
     #define Z2_RSENSE         0.11
@@ -2822,7 +2824,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Z3)
-    #define Z3_CURRENT      500        // Dong bo voi M906 I2 Z500 trong EEPROM
+    #define Z3_CURRENT      600        // Dong bo voi M906 I2 Z600 trong EEPROM
     #define Z3_CURRENT_HOME Z3_CURRENT
     #define Z3_MICROSTEPS    Z_MICROSTEPS
     #define Z3_RSENSE         0.11
@@ -2902,7 +2904,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(E0)
-    #define E0_CURRENT      500        // 2026-10-12: 400 -> 500 (dong bo M906 T0 E500)
+    #define E0_CURRENT      600        // 2026-10-12 (cuoi ngay): 600 mA cho CA 6 truc (dong bo M906 T0 E600)
     #define E0_MICROSTEPS    X_MICROSTEPS
     #define E0_RSENSE         0.11
     #define E0_CHAIN_POS     -1
