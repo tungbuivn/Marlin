@@ -114,21 +114,21 @@ void GcodeSuite::G35() {
   //         chieu_cao[i] = z_probe[i] - z_home              (z_home = base_home_pos(Z_AXIS))
   //     -> KHONG can probe them tam ban (vua mat ~10s, vua cong sai so cua lan do do vao ca 4 so).
   //
-  //  2. MOC DE VAN VIT = MAT PHANG TRUNG BINH cua cac goc da do (khong phai Z-home).
-  //     "Chieu cao so voi Z-home" mot minh KHONG noi duoc gi ve do phang: vi du 4 goc
-  //     cao 2.00 / 2.00 / 2.00 / 2.03 mm deu "cao 2mm so voi Z-home", nhin nhu ca ban bi
-  //     nang 2mm - nhung thuc te 4 goc chi lech nhau co 0.03mm, tuc la gan nhu da phang.
-  //     Cai can quan tam la cac goc LECH NHAU bao nhieu:
-  //         delta[i] = chieu_cao[i] - trung_binh
-  //     delta > 0 : goc CAO hon mat phang trung binh -> phai HA xuong
-  //     delta < 0 : goc THAP hon                      -> phai NANG len
-  //     Muc tieu: moi delta = 0 (4 goc cung nam tren mot mat phang).
+  //  2. MOC DE VAN VIT = Z-MIN hoac Z-MAX cua cac goc da do (khong phai Z-home, cung KHONG phai
+  //     trung binh). Chon theo che do "goc lech nhat" dang luu trong EEPROM:
+  //         tramming_worst_max = true  (che do MAX - mac dinh) -> MOC = Z-MIN (goc THAP nhat)
+  //             delta[i] = chieu_cao[i] - Z_MIN  >= 0  -> phai HA xuong (van CCW)
+  //         tramming_worst_max = false (che do MIN)            -> MOC = Z-MAX (goc CAO nhat)
+  //             delta[i] = chieu_cao[i] - Z_MAX  <= 0  -> phai NANG len  (van CW)
+  //     Muc tieu: moi delta = 0, tuc la 4 goc cung nam tren MAT PHANG CUA GOC CUC TRI da chon.
   //
-  //     Trung binh chinh la hinh chieu cua MAT PHANG BINH PHUONG-TOI-THIEU xuong tam ban
-  //     (mat phang LS luon di qua trong tam cua tap diem), nen day la moc "it sai nhat":
-  //       - tong cac delta = 0 va |delta| lon nhat la nho nhat co the
-  //       - KHONG phu thuoc vao Z-home, vao M851 (probe.offset.z) hay lan home nao
-  //         -> so lieu van dung ke ca khi Z offset chua can chuan
+  //     Chien luoc MOT CHIEU: hoac chi HA cac goc cao xuong bang goc thap nhat, hoac chi NANG
+  //     cac goc thap len bang goc cao nhat -> khong bao gio phai vua nang vua ha mot goc.
+  //     So lieu KHONG phu thuoc Z-home / M851 (probe.offset.z) / lan home nao, vi moi gia tri
+  //     deu bi tru di cung mot moc.
+  //
+  //     (Truoc 2026-10-12 dung TRUNG BINH lam moc: tong delta = 0 va |delta| max la nho nhat co
+  //      the, nhung he qua la van mot goc thi so cua 3 goc kia cung dich theo -Delta/4.)
   //
   const float z_home = base_home_pos(Z_AXIS);
 
@@ -184,18 +184,27 @@ void GcodeSuite::G35() {
     }
     const float h_mean = h_sum / n_probed, h_spread = h_max - h_min;
 
-    SERIAL_ECHOLNPGM("G35 moc = Z-HOME (khung Z sau G28 Z)  Z=", z_home);
+    // MOC SO SANH = Z-MIN hoac Z-MAX (KHONG phai trung binh) - giong Tramming Wizard:
+    //   che do MAX (mac dinh) -> moc = Z-MIN: HA cac goc cao xuong bang goc thap nhat
+    //   che do MIN            -> moc = Z-MAX: NANG cac goc thap len bang goc cao nhat
+    // Nho vay chien luoc luon MOT CHIEU (chi ha hoac chi nang), khong dung tới Z-home.
+    const float h_ref = tramming_worst_max ? h_min : h_max;
+
+    SERIAL_ECHOLNPGM("G35 moc vat ly = Z-HOME (khung Z sau G28 Z)  Z=", z_home);
     SERIAL_ECHOPGM("Chieu cao TB cac goc = ");
     SERIAL_ECHO_F(h_mean, 3);
     SERIAL_ECHOPGM("mm  |  Do lech max-min = ");
     SERIAL_ECHO_F(h_spread, 3);
     SERIAL_ECHOLNPGM("mm");
-    SERIAL_ECHOLNPGM("Moc de van vit = MAT PHANG TRUNG BINH. delta = chieu_cao - TB; KHONG phu thuoc Z-offset.");
+    SERIAL_ECHOPGM("MOC SO SANH = ", tramming_worst_max ? "Z-MIN (goc thap nhat)" : "Z-MAX (goc cao nhat)", " = ");
+    SERIAL_ECHO_F(h_ref, 3);
+    SERIAL_ECHOPGM("mm");
+    SERIAL_ECHOLNPGM("  -> chien luoc: ", tramming_worst_max ? "HA cac goc cao xuong (van CCW)" : "NANG cac goc thap len (van CW)");
     SERIAL_ECHOLNPGM("Chieu van: CCW = HA goc do xuong, CW = NANG goc do len.");
     if (n_probed < G35_PROBE_COUNT)
-      SERIAL_ECHOLNPGM("CANH BAO: chi do duoc ", n_probed, "/", G35_PROBE_COUNT, " diem -> TB tinh tren ", n_probed, " diem.");
+      SERIAL_ECHOLNPGM("CANH BAO: chi do duoc ", n_probed, "/", G35_PROBE_COUNT, " diem -> moc tinh tren ", n_probed, " diem.");
 
-    // Tung goc: chieu + so vong vit, va do lech so voi mat phang trung binh
+    // Tung goc: chieu van + so MM can chinh, va do lech so voi MOC (Z-MIN / Z-MAX)
     LOOP_L_N(i, G35_PROBE_COUNT) {
       SERIAL_ECHOPGM("Turn ");
       SERIAL_ECHOPGM_P((char *)pgm_read_ptr(&tramming_point_name[i]));
@@ -206,7 +215,7 @@ void GcodeSuite::G35() {
       }
 
       const float height = z_measured[i] - z_home,              // chieu cao so voi Z-home
-                  delta  = height - h_mean;                     // > 0 = goc CAO hon mat phang TB -> phai HA xuong
+                  delta  = height - h_ref;                      // so voi Z-MIN (che do MAX) hoac Z-MAX (che do MIN)
 
       if (ABS(delta) < 0.002f) {
         // Trong nguong nhieu cua probe -> khong can van
@@ -238,7 +247,7 @@ void GcodeSuite::G35() {
 
     // Goc lech nhieu nhat -> chinh goc do truoc (kem luon chieu van)
     if (worst_abs >= 0.002f) {
-      const float worst_delta = z_measured[z_worst] - z_home - h_mean;
+      const float worst_delta = z_measured[z_worst] - z_home - h_ref;
       SERIAL_ECHOPGM("Chinh truoc: ");
       SERIAL_ECHOPGM_P((char *)pgm_read_ptr(&tramming_point_name[z_worst]));
       SERIAL_ECHOPGM(" (lech ");

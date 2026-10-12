@@ -46,7 +46,7 @@ extern bool tramming_worst_max;
 // CHIEU VAN VIT - DO LAI TREN MAY NAY (2026-10-12; ban Voron, vit M4, dau vit o TREN):
 //     van CW  (chieu kim dong ho)   -> goc do NANG LEN  (delta Z tang)
 //     van CCW (nguoc kim dong ho)   -> goc do HA XUONG  (delta Z giam)
-// => goc co delta > 0 (cao hon mat phang trung binh) phai van CCW de ha xuong.
+// => goc co delta > 0 (cao hon MOC = Z-MIN) phai van CCW de ha xuong.
 //
 // (Truoc 2026-10-12 code ghi nguoc lai: gia dinh "CW = ha goc xuong" la SAI tren may nay -
 //  nguoi dung da van thu va doi chieu. Neu doi sang loai vit ren nguoc chieu thi khai bao

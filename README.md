@@ -343,7 +343,7 @@ mắt hay bằng thước.
 | Đo bằng gì | `probe.probe_at_point(tramming_points[i], …)` — `G35.cpp:150`, `menu_tramming.cpp:144` |
 | Mốc vật lý | **`z_home` = `base_home_pos(Z_AXIS)`** — khung Z của lần `G28 Z` (Z_SAFE_HOMING probe ở tâm bàn). **Không probe thêm tâm bàn** |
 | Mốc để vặn vít | **MẶT PHẲNG TRUNG BÌNH** của các góc đã đo: `delta = chiều_cao − TB` — đây mới là số cần đưa về 0 |
-| Tính gì | `chiều_cao = z_probe − z_home`, `delta = chiều_cao − TB`. **Số cần chỉnh in theo MM, KHÔNG phải vòng**: vặn vít đi `X` mm thì góc đó lên/xuống đúng `X` mm ⇒ **lượng cần vặn = `|delta|` mm** (không chia cho bước ren). **Chiều vặn là chuyện riêng**, do `tramming_turn_cw()` quyết định (`tramming.h:61-64`) |
+| Tính gì | `chiều_cao = z_probe − z_home`, **mốc so sánh = `Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc đã đo ⇒ `delta = chiều_cao − mốc`. **Số cần chỉnh in theo MM, KHÔNG phải vòng**: vặn vít đi `X` mm thì góc đó lên/xuống đúng `X` mm ⇒ **lượng cần vặn = `\|delta\|` mm** (không chia cho bước ren). **Chiều vặn là chuyện riêng**, do `tramming_turn_cw()` quyết định (`tramming.h:61-64`) |
 | Bước ren | `TRAMMING_SCREW_THREAD 40` → M4 × **0.7 mm/vòng** (`threads_factor = {0.5 M3, 0.7 M4, 0.8 M5}`). **Từ 2026-10-12 KHÔNG dùng để tính số hiển thị nữa** (hiển thị theo mm); mã `S` vẫn có tác dụng: ren ngược chiều thì khai `S` lẻ để **đảo chiều vặn** |
 | Kết quả | `Turn <góc>: van CW/CCW x.xxxmm \| lech x.xxxmm (cao z.zzzmm)` — **CCW = vặn để HẠ góc đó xuống, CW = vặn để NÂNG lên** (đã **đảo lại 2026-10-12**, xem ghi chú dưới) |
 
@@ -354,17 +354,25 @@ mắt hay bằng thước.
 > "z_probe − z_home"**. Probe lại tâm bàn chỉ tốn ~10 giây và **cộng sai số của lần đo đó vào cả 4 số**.
 > (Nếu vặn vít rồi mà không home lại thì mốc vẫn là mốc cũ — giống wizard: bấm `HOME+PROBE` để home lại Z.)
 
-> 🔴 **Vì sao phải trừ TRUNG BÌNH, không dùng thẳng "chiều cao so với Z-home":** ví dụ 4 góc đo được
-> `2.000 / 2.000 / 2.000 / 2.030 mm`. Nhìn "chiều cao so với Z-home" thì cả 4 góc đều ≈ **+2mm** —
-> trông như cả bàn bị nâng 2mm, nhưng thực ra **4 góc chỉ lệch nhau 0.030mm**, tức là gần như đã
-> phẳng. Con số 2mm chỉ là **độ lệch của cả mặt bàn so với mốc Z-home** (nó phụ thuộc `M851 Z offset`,
-> độ võng tâm bàn, lần home…) và **không nói lên điều gì về độ phẳng**.
-> Trừ trung bình đi thì được đúng phần cần vặn:
+> 🔴 **Vì sao KHÔNG dùng thẳng "chiều cao so với Z-home":** ví dụ 4 góc đo được `2.000 / 2.000 /
+> 2.000 / 2.030 mm`. Nhìn "chiều cao so với Z-home" thì cả 4 góc đều ≈ **+2mm** — trông như cả bàn bị
+> nâng 2mm, nhưng thực ra **4 góc chỉ lệch nhau 0.030mm**. Con số 2mm chỉ là **độ lệch của cả mặt bàn
+> so với mốc Z-home** (phụ thuộc `M851`, độ võng tâm bàn, lần home…) và **không nói gì về độ phẳng**.
+>
+> 🎯 **Mốc so sánh = `Z-MIN` hoặc `Z-MAX` của các góc đã đo** (không phải trung bình):
 > ```
-> TB = (2.000+2.000+2.000+2.030)/4 = 2.0075
-> delta = -0.0075 / -0.0075 / -0.0075 / +0.0225   ->  chỉ cần chỉnh 1 góc ~0.022mm
+> chế độ MAX (mặc định) -> mốc = Z-MIN = 2.000
+>     delta = 0.000 / 0.000 / 0.000 / +0.030  -> chỉ vặn 1 góc 0.030mm, và chỉ VẶN XUỐNG (CCW)
+> chế độ MIN            -> mốc = Z-MAX = 2.030
+>     delta = -0.030 / -0.030 / -0.030 / 0.000 -> chỉ vặn 3 góc kia, và chỉ VẶN LÊN (CW)
 > ```
-> `delta > 0` = góc **cao hơn** mặt phẳng trung bình ⇒ phải **hạ xuống** (vặn **CCW**); `delta < 0` ⇒ **nâng lên** (vặn **CW**). Tổng 4 delta luôn = 0 nên **vặn đúng thì mặt phẳng không đổi, chỉ nghiêng lại** — 1 vòng là xong.
+> Nhờ vậy **chiến lược luôn MỘT CHIỀU**: hoặc chỉ **hạ** các góc cao xuống bằng góc thấp nhất, hoặc chỉ
+> **nâng** các góc thấp lên bằng góc cao nhất — **không bao giờ phải vừa nâng vừa hạ**. Đổi chế độ bằng
+> nút `MAX->MIN` trong wizard hoặc `Motion → WORST POINT = MAX`; mốc (`Z-MIN` và `Z-MAX`) được **chốt
+> ngay sau lần đo đủ 4 góc đầu tiên** và không tính lại, nên `PROBE` lại 1 góc chỉ đổi số của góc đó.
+>
+> `delta > 0` (chế độ MAX) = góc **cao hơn** mốc ⇒ phải **hạ xuống** (vặn **CCW**); `delta < 0` (chế độ
+> MIN) ⇒ **nâng lên** (vặn **CW**).
 >
 > 🔧 **Chiều vặn — ĐÃ ĐẢO LẠI ngày 2026-10-12 (kiểm chứng bằng cách vặn thử trên máy):**
 > *vặn CW (kim đồng hồ) thì delta Z **TĂNG*** (góc đó **NÂNG lên**), *vặn CCW thì delta Z **giảm***
@@ -1648,11 +1656,14 @@ G35 moc = Z-HOME (khung Z sau G28 Z)  Z=0.000
 Chieu cao TB cac goc = 2.007mm  |  Do lech max-min = 0.030mm
 Moc de van vit = MAT PHANG TRUNG BINH. delta = chieu_cao - TB; KHONG phu thuoc Z-offset.
 Chieu van: CCW = HA goc do xuong, CW = NANG goc do len.
-Turn Back-Right: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
-Turn Back-Left: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
-Turn Front-Left: van CW 0.007mm  | lech -0.007mm  (cao 2.000mm)
-Turn Front-Right: van CCW 0.022mm  | lech 0.022mm  (cao 2.030mm)
-Chinh truoc: Front-Right (lech 0.022mm) -> van CCW
+G35 moc vat ly = Z-HOME (khung Z sau G28 Z)  Z=2.000
+Chieu cao TB cac goc = 2.007mm  |  Do lech max-min = 0.030mm
+MOC SO SANH = Z-MIN (goc thap nhat) = 2.000mm  -> chien luoc: HA cac goc cao xuong (van CCW)
+Turn Back-Right: DAT (khong can van)  | lech 0.000mm  (cao 2.000mm)
+Turn Back-Left: DAT (khong can van)  | lech 0.000mm  (cao 2.000mm)
+Turn Front-Left: DAT (khong can van)  | lech 0.000mm  (cao 2.000mm)
+Turn Front-Right: van CCW 0.030mm  | lech 0.030mm  (cao 2.030mm)
+Chinh truoc: Front-Right (lech 0.030mm) -> van CCW
 ```
 
 > 🔴 **Vì sao phải trừ TRUNG BÌNH:** 4 góc `2.000/2.000/2.000/2.030` đều "cao +2mm so với Z-home" —
@@ -1748,9 +1759,10 @@ Chinh truoc: Front-Right (lech 0.022mm) -> van CCW
 
 #### Điều chỉnh nhiều góc — số của các góc khác có bị đổi không?
 
-> 🟢 **Từ 2026-10-12: KHÔNG đổi.** Mốc được **CHỐT (đóng băng)** ngay sau lần đo **đủ 4 góc đầu tiên**
-> (lúc vào menu, hoặc sau `HOME+PROBE`) và **không tính lại nữa**. Nên **`PROBE` lại 1 góc CHỈ làm đổi số
-> của chính góc đó**; 3 góc kia giữ nguyên.
+> 🟢 **Từ 2026-10-12: KHÔNG đổi.** Mốc = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)** của các góc,
+> được **CHỐT (đóng băng)** ngay sau lần đo **đủ 4 góc đầu tiên** (lúc vào menu, hoặc sau `HOME+PROBE`)
+> và **không tính lại nữa**. Nên **`PROBE` lại 1 góc CHỈ làm đổi số của chính góc đó**; 3 góc kia giữ
+> nguyên. Đổi `MAX <-> MIN` chỉ là **đổi lấy mốc kia** (cả hai mốc đều đã chốt), không đo lại gì.
 >
 > **Trước đây đổi là vì** mốc cũ = "trung bình các góc đã đo" **tính lại mỗi lần vẽ màn hình**: probe lại
 > góc `i` thấy cao/thấp hơn `Δ` ⇒ trung bình đổi `Δ/4` ⇒ **3 số kia mỗi số dịch `−Δ/4`** (ngược dấu, bằng
@@ -1832,14 +1844,18 @@ Ca dùng thật: vặn một nấc **không đạt** ngay giá trị cần, nên
 
 #### Chọn điểm `MIN` thì chiều vặn có ngược với `MAX` không?
 
-**Không ngược.** Nút `WORST` **chỉ đổi góc mà đầu in chạy tới**, không đụng tới phép tính:
-`delta = chiều_cao − TB` và chiều vặn `CW/CCW` luôn theo **cùng một quy ước** ở cả 2 chế độ —
-`delta > 0` = góc **cao hơn** mặt phẳng TB ⇒ **vặn CCW** (hạ xuống); `delta < 0` ⇒ **vặn CW** (nâng lên).
+**Không ngược.** Nút `WORST` **chỉ đổi góc mà đầu in chạy tới VÀ đổi mốc so sánh**, không đụng tới phép
+tính: `delta = chiều_cao − mốc`, với **`mốc = Z-MIN` ở chế độ MAX** và **`mốc = Z-MAX` ở chế độ MIN**;
+chiều vặn luôn theo **cùng một quy ước** ở cả 2 chế độ — `delta > 0` = góc **cao hơn** mốc ⇒ **vặn CCW**
+(hạ xuống); `delta < 0` ⇒ **vặn CW** (nâng lên).
 
-Vì tổng 4 delta luôn = 0 nên luôn có **ít nhất 1 góc ≥ 0 và 1 góc ≤ 0**, do đó:
+Vì mốc là một **cực trị** của chính 4 góc nên:
 
-- `MAX` luôn chọn góc có `delta ≥ 0` → hướng dẫn sẽ là **vặn CCW** (hạ góc đó xuống).
-- `MIN` luôn chọn góc có `delta ≤ 0` → hướng dẫn sẽ là **vặn CW** (nâng góc đó lên).
+- `MAX` (mốc = `Z-MIN`) → **mọi** `delta ≥ 0`, hướng dẫn luôn là **vặn CCW** (hạ các góc cao xuống).
+- `MIN` (mốc = `Z-MAX`) → **mọi** `delta ≤ 0`, hướng dẫn luôn là **vặn CW** (nâng các góc thấp lên).
+
+Nói cách khác mỗi chế độ là **một chiến lược một chiều**: MAX = "hạ tất cả về mức thấp nhất", MIN = "nâng
+tất cả lên mức cao nhất". `CW/CCW` vẫn luôn nói về **chiều vặn ốc**, không phụ thuộc chế độ.
 
 Nhìn thì thấy "ngược" (MAX → CCW, MIN → CW) nhưng thực ra bạn chỉ đang đứng ở **góc đối diện**;
 quy ước **không hề đổi**. `CW/CCW` luôn nói về **chiều vặn ốc**, không phụ thuộc chế độ MAX/MIN.
