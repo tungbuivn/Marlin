@@ -192,49 +192,47 @@ thì vẫn `~10 000 mm/s²`.
 
 Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ `stealthChop` toàn dải**.
 
-> 🔴 **2026-10-11 — TOÀN BỘ ĐÃ GIẢM MỘT NỬA** (theo yêu cầu): microstep 16 → **1/8** cho **cả 6
-> driver**, nên `M92` và mọi trần vận tốc/gia tốc trong bảng dưới đã chia đôi. Cột **"Trần nên dùng"
-> KHÔNG đổi** — đó là giới hạn **vật lý** (điện cảm motor), không liên quan microstep; đổi microstep
-> chỉ làm **giảm tần số xung** mà Marlin phải phát ra. Nghĩa là máy đang chạy **rất xa dưới trần**.
-> Chi tiết + cách xác nhận: **§11.4b**.
+> 🟢 **2026-10-12 — ĐÃ ÁP "TRẦN NÊN DÙNG" (theo yêu cầu).** Bảng dưới ghi **trạng thái đang chạy**:
+> microstep **1/8** cho cả 6 driver (nên `M92` chia đôi) + vận tốc/gia tốc **đã lên mức trần khuyến
+> nghị**, riêng **dòng motor hạ về 500 mA cho cả 6 trục** (62 % định mức 0,8 A). Chi tiết + cách xác
+> nhận: **§11.4b**.
+>
+> ⚠️ `M203 X/Y 225` **chỉ bền vững nếu bật `HYBRID_THRESHOLD`** — với `stealthChop` toàn dải thì trần
+> thực tế ~100–150 mm/s (xem ghi chú ngay dưới bảng). Nếu travel nhanh mà thấy **layer shift** thì xử
+> lý theo thứ tự: **bật hybrid threshold** → kiểm `M906` → cuối cùng mới hạ gia tốc.
 
 | Lệnh | Trước (1/16) | **Máy đang là (1/8)** | Trần nên dùng | Vì sao |
 |---|---|---|---|---|
 | `M92 X/Y/Z/E` | 80 / 80 / 800 / 415 | **40 / 40 / 400 / 207.5** | — | hệ quả trực tiếp của microstep 1/8 |
-| `M203 X/Y` | 150 | **75** | 225 | mốc điện cảm; chỉ lên 200–225 nếu **bật hybrid threshold** |
-| `M203 Z` | 10 | **5** | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
-| `M203 E` | 25 | **12** | 25 | BMG — 12 hơi chậm cho retract, theo dõi stringing |
-| `M201 X/Y` | 300 | **150** | 5000+ | mô-men dư 10–50×; trần thật là ringing |
-| `M201 Z` | 200 | **100** | 500 | gantry nặng — tăng từ từ |
-| `M201 E` | 1000 | **500** | 1000 | |
-| `M204 P` (in) | 500 | **150** | 3000 | nay `P` = `M201` → **hết "nói dối"** |
-| `M204 R` (retract) | 300 | **150** | 1500 | |
-| `M204 T` (travel) | 500 | **150** | 2500 | nay `T` = `M201` → khớp thực tế |
-| `M205 X/Y` (jerk) | 8 | **8** | 10–12 | ⚠️ **không có input shaping** → tăng là tăng ringing |
+| `M203 X/Y` | 150 | **225** = trần | 225 | mốc điện cảm; **chỉ bền vững nếu bật hybrid threshold** |
+| `M203 Z` | 10 | **15** = trần | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
+| `M203 E` | 25 | **25** = trần | 25 | BMG |
+| `M201 X/Y` | 300 | **5000** = trần | 5000+ | mô-men dư 10–50×; trần thật là ringing |
+| `M201 Z` | 200 | **500** = trần | 500 | gantry nặng — theo dõi ringing |
+| `M201 E` | 1000 | **1000** = trần | 1000 | |
+| `M204 P` (in) | 500 | **3000** | 3000 | `P ≤ M201` → `M503` khớp thực tế |
+| `M204 R` (retract) | 300 | **1500** | 1500 | |
+| `M204 T` (travel) | 500 | **2500** | 2500 | `T ≤ M201` → khớp thực tế |
+| `M205 X/Y` (jerk) | 8 | **10** | 10–12 | ⚠️ **không có input shaping** → tăng nữa là tăng ringing |
 | `M205 Z / E` | 0,4 / 5 | giữ | | |
-| `M906 X/Y` (dòng) | 800 mA | **800 mA** | 800 mA | 🔴 **= 100 % định mức** của motor 0,8 A — **bắt buộc kiểm nhiệt `≤ 80 °C`** |
+| `M906` (dòng, **cả 6 trục**) | X/Y 800 · Z 600 · E 400 | **500** | 500 | ✅ 62 % định mức 0,8 A — mát hơn hẳn; mô-men vẫn dư |
 
-> ✅ **Vấn đề "`M204` nói dối" đã hết.** Trước đây `M204 P500 T500` > `M201 X300` ⇒ Marlin lấy `min()`
-> nên gia tốc in thật là 300 chứ không phải 500. Nay `M204 P150 T150` = `M201 X/Y150` → con số trong
-> `M503` **đúng bằng thực tế**.
+> ✅ **"`M204` nói dối" đã hết.** `M204 P3000` và `T2500` đều **≤** `M201 X/Y 5000` ⇒ Marlin **không**
+> kẹp `min()` nữa, con số trong `M503` **đúng bằng thực tế**.
 
-> 🔴 **`M906 X800 Y800` là 100 % dòng định mức.** Motor Nanotec ST4118L0804-A định mức **0,8 A**;
-> 800 mA RMS là chạy hết công suất → motor sẽ **rất nóng** (bình thường với stepper 3D printer, nhưng
-> phải kiểm). Sau 30 phút in, sờ motor: `≤ 80 °C` là được; nóng hơn thì hạ về 600–700 mA.
-> Đây là đánh đổi lấy mô-men để tăng gia tốc — nhưng với `M201` chỉ 300 thì **chưa dùng hết** phần
-> mô-men đó.
+> ✅ **Dòng motor nay 500 mA cho cả 6 trục** (62 % định mức 0,8 A của ST4118L0804-A) — mát hơn nhiều so
+> với mức 800 mA trước đây. Vẫn kiểm sau ~30 phút in (`≤ 80 °C` là tốt). Nếu tăng `M201` thêm mà thấy
+> **mất bước** (layer shift) thì **nâng dòng trước khi hạ gia tốc**: `M906 X600 Y600` + `M500`.
 
-> ⚠️ **CHƯA KHỚP LẠI SAU KHI GIẢM MỘT NỬA (2026-10-11).** Profile Cura và `ClampFeeds` bên dưới vẫn
-> ghi trần của bản **1/16** (**150 mm/s · 300 mm/s²**), trong khi firmware nay kẹp ở **75 · 150**.
-> Hệ quả: G-code do Cura phát ra vẫn xin `F9000`/`M204 S300` → **firmware tự kẹp xuống 75/150**, bản
-> in không đổi, nhưng **con số trong file G-code không còn đúng thực tế** và `ClampFeeds` /
-> `verify_gcode.py` sẽ **không còn bắt được** bước vượt trần thật. Cần sửa (khi nào rảnh):
+> ⚠️ **CURA ĐANG THẤP HƠN MÁY (2026-10-12).** Profile Cura và `ClampFeeds` vẫn ghi trần của bản cũ
+> (**150 mm/s · 300 mm/s²**) trong khi firmware nay cho **225 · 5000**. Hệ quả: **Cura tự kẹp** — bản in
+> vẫn chạy như trước (≤ 150 mm/s) dù máy đã cho phép nhanh hơn. Muốn dùng hết trần thì sửa:
 >
 > | File | Sửa thành |
 > |---|---|
-> | `cura_profile/scripts/ClampFeeds.py` | `max_feedrate_xy` **75**, `max_acceleration` **150** |
-> | `cura_profile/machine_definition_changes.inst.cfg` | `machine_max_feedrate_x/y` **75**, `_z` **5**, `_e` **12**; `machine_max_acceleration_x/y` **150**, `_z` **100**, `_e` **500**; `machine_acceleration` **150** |
-> | `tests/verify_gcode.py`, `tests/test_clamp_feeds.py` | trần tương ứng 75 / 150 |
+> | `cura_profile/scripts/ClampFeeds.py` | `max_feedrate_xy` **225**, `max_acceleration` **5000** |
+> | `cura_profile/machine_definition_changes.inst.cfg` | `machine_max_feedrate_x/y` **225**, `_z` **15**, `_e` **25**; `machine_max_acceleration_x/y` **5000**, `_z` **500**, `_e` **1000**; `machine_acceleration` **3000** |
+> | `tests/verify_gcode.py`, `tests/test_clamp_feeds.py` | trần tương ứng 225 / 5000 |
 > | `cura_profile/fix-pp-settings.py` | `OVERRIDES` tương ứng |
 >
 > Rồi chạy `install-cura-profile.ps1` (**phải đóng Cura trước**) — xem cạm bẫy 26.
@@ -792,10 +790,11 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 
 ```
 M115        ; phien ban firmware + timestamp build
-M503        ; 2026-10-11 (microstep 1/8): M92 X40 Y40 Z400 E207.5 / M203 X75 Y75 Z5 E12
-            ; M201 X150 Y150 Z100 E500 / M204 P150 R150 T150 / M205 X8 Y8 Z0.40 E5
-            ; M906 X800 Y800 Z600 (I1/I2 Z600) / T0 E400
-            ; M851 X0 Y0 Z0.80
+M503        ; 2026-10-12 (microstep 1/8 + tran nen dung): M92 X40 Y40 Z400 E207.5
+            ; M203 X225 Y225 Z15 E25 / M201 X5000 Y5000 Z500 E1000
+            ; M204 P3000 R1500 T2500 / M205 X10 Y10 Z0.40 E5
+            ; M906 X500 Y500 Z500 (I1/I2 Z500) / T0 E500
+            ; M851 X0 Y0 Z0.70
 M122        ; msteps 8 (ca 6 driver) + off time 3 + blank time 24 + interp true
             ; => tmc_init() DA ghi duoc vao driver.
             ; Neu thay off time 0 / msteps 256 / blank time 16 / Enabled false
@@ -814,7 +813,7 @@ M420 V      ; mesh 7x7, bien (15,15) .. (290,290)
 | Firmware mới thật chưa | `M115` | timestamp khớp giờ build |
 | Sau `G28` nozzle có được nâng | `G28` → `M114` | **`Z:10.00`** (`Z_AFTER_PROBING 10`) |
 | Chiều extruder | `M83` · `G1 E10 F100` | **đẩy ra**, không phải rút vào |
-| Offset probe còn không | `M851` | Z ≈ **0.80** (số đang lưu; bản ghi cũ là 0.70 — nếu nghi ngờ thì cân lại bằng `PROBE_OFFSET_WIZARD`) |
+| Offset probe còn không | `M851` | Z ≈ **0.70** (giá trị đang lưu; 2026-10-11 có lúc đọc ra 0.80 → nếu không rõ thì cân lại bằng `PROBE_OFFSET_WIZARD`) |
 | Điểm G34 còn không | `M422` | `S3 X152.50 Y25` |
 | Mesh còn không | `M420 V` | hiện `Storage slot -1` + `Bed Leveling OFF` (mesh đã bị `G29 P0` xoá có chủ ý, 2026-10-11) — chỉ mong đợi `Mesh is valid` + `slot 0` **sau khi** đã probe lại UBL |
 
@@ -870,10 +869,10 @@ git diff up-2.1.2 HEAD --stat
 | Cân Z offset | `PROBE_OFFSET_WIZARD` + `PROBE_OFFSET_WIZARD_START_Z 0` + `PROBE_OFFSET_WIZARD_XY_POS { X_CENTER, Y_CENTER }` (thêm mới) |
 | Hướng extruder | **`INVERT_E0_DIR false`** — Bondtech BMG là extruder có hộp số (từng để `true` → extruder quay ngược) |
 | Trục Z | `Z2_DRIVER_TYPE` + `Z3_DRIVER_TYPE` = TMC2209 → `NUM_Z_STEPPERS` **tự suy ra = 3** (`Conditionals_LCD.h:726-734`), `Z_STEPPER_AUTO_ALIGN` (**G34**) |
-| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, **`*_MICROSTEPS 8`** (2026-10-11 — **cả 6 driver**, xem §11.4b), **`X/Y_CURRENT 600`**, **`Z/Z2/Z3_CURRENT 500`**, `E0_CURRENT 400` (⚠️ EEPROM đang đặt cao hơn mặc định: `M906 X/Y 800`, `Z/Z2/Z3 600`, `E 400`), `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
+| Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, **`*_MICROSTEPS 8`** (2026-10-11 — **cả 6 driver**, xem §11.4b), **`*_CURRENT 500`** cho **cả 6** (X Y Z Z2 Z3 E0 — 2026-10-12, 62 % định mức 0,8 A), `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
-| Chuyển động | **2026-10-11 — giảm một nửa theo microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, **`DEFAULT_MAX_FEEDRATE { 75, 75, 5, 12 }`**, **`DEFAULT_MAX_ACCELERATION { 150, 150, 100, 500 }`**, `DEFAULT_ACCELERATION 150`, `DEFAULT_TRAVEL_ACCELERATION 150`, **`DEFAULT_RETRACT_ACCELERATION 150`**. *(Bản 1/16 trước đó: `{80,80,800,415}` · `{150,150,10,25}` · `{2000,2000,200,1000}` · 1500/2000/1500.)* `DEFAULT_XJERK/DEFAULT_YJERK 8.0` (`ZJERK 0.4`, `EJERK 5.0`) — **jerk là mm/s nên KHÔNG đổi** theo microstep, **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
+| Chuyển động | **2026-10-12 — "trần nên dùng" + microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, **`DEFAULT_MAX_FEEDRATE { 225, 225, 15, 25 }`**, **`DEFAULT_MAX_ACCELERATION { 5000, 5000, 500, 1000 }`**, `DEFAULT_ACCELERATION 3000`, `DEFAULT_RETRACT_ACCELERATION 1500`, `DEFAULT_TRAVEL_ACCELERATION 2500`, `DEFAULT_XJERK/DEFAULT_YJERK 10.0` (`ZJERK 0.4`, `EJERK 5.0`). *(Bản 1/16 trước đó: `{80,80,800,415}` · `{150,150,10,25}` · `{2000,2000,200,1000}` · 1500/2000/1500 · jerk 8.)* **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
 | Khác | `EEPROM_SETTINGS`, `SDSUPPORT`, `FILAMENT_RUNOUT_SENSOR`, `HOST_ACTION_COMMANDS` |
 
 ### 11.2 `Marlin/Configuration_adv.h` — cấu hình nâng cao
@@ -930,8 +929,15 @@ git diff up-2.1.2 HEAD --stat
 | `DEFAULT_ACCELERATION` / `_RETRACT_` / `_TRAVEL_` | 1500 / 1500 / 2000 | **150 / 150 / 150** |
 
 > ℹ️ **`INTERPOLATE` vẫn bật** → TMC2209 nội suy lên 1/256, nên **độ mượt không đổi**, chỉ **tần số
-> xung ra MCU giảm một nửa** ở cùng tốc độ mm/s. Giảm vận tốc/gia tốc là **lựa chọn của người dùng**,
-> không phải yêu cầu kỹ thuật — trần vật lý (điện cảm ~225 mm/s) **không đổi**, xem §3.3.
+> xung ra MCU giảm một nửa** ở cùng tốc độ mm/s. Trần vật lý (điện cảm ~225 mm/s) **không đổi** theo
+> microstep — xem §3.3.
+
+> 🟢 **Cập nhật 2026-10-12 — bảng trên (75/150) chỉ còn là mốc lịch sử của bước 1/8.** Ngay sau đó các
+> trần đã được nâng lên **"trần nên dùng"**: `M203 225/225/15/25`, `M201 5000/5000/500/1000`,
+> `M204 3000/1500/2500`, `M205 X10 Y10`, và **dòng motor 500 mA cho cả 6 trục**. Đã ghi EEPROM
+> (`M500`) → **verify lại sau khi mở lại cổng COM (reset)** → clean rebuild + flash
+> (`Marlin 2.1.2 (Oct 12 2026 18:23:22)`); `M122` xác nhận `Set current 500 ×6` + `msteps 8 ×6` +
+> `off time 3` + `blank time 24`. Trạng thái đang chạy: xem bảng ở **§3.3**.
 
 **Thứ tự thực hiện — quan trọng, và đã làm đúng thứ tự này:**
 

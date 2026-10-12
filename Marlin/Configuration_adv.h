@@ -2760,7 +2760,7 @@
   #define INTERPOLATE      true
 
   #if AXIS_IS_TMC_CONFIG(X)
-    #define X_CURRENT       600        // (mA) RMS current. Dong bo voi M906 X600 trong EEPROM.
+    #define X_CURRENT       500        // (mA) RMS current. 2026-10-12: 600 -> 500 (dong bo M906 X500).
                                        // Motor ST4118L0804-A dinh muc 0,8 A -> con du dia;
                                        // kiem nhiet do motor <= 80 C. Xem README 3.3.
     #define X_CURRENT_HOME  X_CURRENT  // (mA) RMS current for sensorless homing
@@ -2782,7 +2782,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(Y)
-    #define Y_CURRENT       600        // Dong bo voi M906 Y600 trong EEPROM
+    #define Y_CURRENT       500        // 2026-10-12: 600 -> 500 (dong bo M906 Y500 trong EEPROM)
     #define Y_CURRENT_HOME  Y_CURRENT
     #define Y_MICROSTEPS     X_MICROSTEPS
     #define Y_RSENSE          0.11
@@ -2902,7 +2902,7 @@
   #endif
 
   #if AXIS_IS_TMC_CONFIG(E0)
-    #define E0_CURRENT      400
+    #define E0_CURRENT      500        // 2026-10-12: 400 -> 500 (dong bo M906 T0 E500)
     #define E0_MICROSTEPS    X_MICROSTEPS
     #define E0_RSENSE         0.11
     #define E0_CHAIN_POS     -1

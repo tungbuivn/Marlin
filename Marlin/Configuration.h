@@ -1253,16 +1253,15 @@
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// 2026-10-10: microstep 16 -> 8 => giam van toc con MOT NUA: X/Y 150 -> 75 mm/s,
-// Z 10 -> 5, E 25 -> 12 (E cham co the gay stringing - theo doi khi retract).
-// Ghi chu cu: tran do DIEN CAM cua motor (17 mH @ 24 V -> ~225 mm/s) va stealthChop
-// dang bat toan dai (HYBRID_THRESHOLD bi comment) => tran thuc dung ~100-150 mm/s.
-// Xem README 3.3/11.4b. EEPROM phai khop: M203 X75 Y75 Z5 E12 + M500.
+// 2026-10-12: ap "TRAN NEN DUNG" (README 3.3) - moc DIEN CAM cua motor 17 mH @ 24 V:
+// X/Y 225 mm/s (chi ben vung neu BAT HYBRID_THRESHOLD; stealthChop toan dai thi thuc te
+// chi ~100-150 mm/s), Z 15 (150 RPM o vit me 4 mm), E 25 (BMG).
+// Xem README 3.3/11.4b. EEPROM phai khop: M203 X225 Y225 Z15 E25 + M500.
 #define DEFAULT_MAX_FEEDRATE          { \
-  75, \
-  75, \
-  5, \
-  12 }
+  225, \
+  225, \
+  15, \
+  25 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
@@ -1275,11 +1274,12 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
-// 2026-10-10: theo yeu cau giam van toc, ha tran gia toc goc ve 150 mm/s2 cho X/Y
-// (Z 100, E 500). Ghi chu cu: mo-men con du 10-50 lan (F = 2*tau/r ~ 126 N tren tai
-// quy doi 1,2 kg) nen gioi han that la RINGING chu khong phai mo-men; may KHONG co
-// input shaping (SanityCheck.h:4332 chan tren COREXY). Xem README 3.3/11.4b.
-#define DEFAULT_MAX_ACCELERATION      { 150, 150, 100, 500 }
+// 2026-10-12: ap "TRAN NEN DUNG" (README 3.3): X/Y 5000 mm/s2, Z 500, E 1000.
+// Mo-men con du 10-50 lan (F = 2*tau/r ~ 126 N tren tai quy doi 1,2 kg) => gioi han that
+// la RINGING chu khong phai mo-men; may KHONG co input shaping (SanityCheck.h:4332 chan
+// tren COREXY) nen hay tang dan bang thap gia toc. Xem README 3.3/11.4b.
+// EEPROM phai khop: M201 X5000 Y5000 Z500 E1000 + M500.
+#define DEFAULT_MAX_ACCELERATION      { 5000, 5000, 500, 1000 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -1294,9 +1294,9 @@
  *   M204 R    Retract Acceleration
  *   M204 T    Travel Acceleration
  */
-#define DEFAULT_ACCELERATION          150     // X, Y, Z and E acceleration for printing moves (2026-10-10: 1500 -> 150)
-#define DEFAULT_RETRACT_ACCELERATION  150     // E acceleration for retracts (M204 R) - dong bo voi EEPROM
-#define DEFAULT_TRAVEL_ACCELERATION   150     // X, Y, Z acceleration for travel (non printing) moves
+#define DEFAULT_ACCELERATION          3000    // X, Y, Z and E acceleration for printing moves (2026-10-12: tran nen dung)
+#define DEFAULT_RETRACT_ACCELERATION  1500    // E acceleration for retracts (M204 R) - dong bo voi EEPROM
+#define DEFAULT_TRAVEL_ACCELERATION   2500    // X, Y, Z acceleration for travel (non printing) moves
 
 /**
  * Default Jerk limits (mm/s)
@@ -1308,8 +1308,8 @@
  */
 #define CLASSIC_JERK
 #if ENABLED(CLASSIC_JERK)
-  #define DEFAULT_XJERK 8.0
-  #define DEFAULT_YJERK 8.0
+  #define DEFAULT_XJERK 10.0    // 2026-10-12: 8 -> 10 (tran nen dung 10-12; may KHONG co input shaping)
+  #define DEFAULT_YJERK 10.0
   #define DEFAULT_ZJERK  0.4
   //#define DEFAULT_IJERK  0.3
   //#define DEFAULT_JJERK  0.3
