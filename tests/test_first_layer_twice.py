@@ -3,11 +3,11 @@
 Kiem tra co che dung M221 flow thay vi nhan lai E:
 
   pass 1  - body da HA xuong first_pass_z (0.1) = lop MIET BAM BAN,
-            chi doi flow bang M221 S30 (pass1_flow, mac dinh 30%); toc do GIU NGUYEN
+            chi doi flow bang M221 S20 (pass1_flow, mac dinh 20%); toc do GIU NGUYEN
             (Cura 'Initial Layer Speed')
-  giua    - nhac Z THAT len first_pass_z + <Z goc layer 0> (0.1 + 0.2 = 0.3),
-            roi G92 khai bao lai day la <Z goc layer 0> (0.2), reset extruder ve
-            E dau layer 0, M221 S100
+  giua    - nhac Z THAT len first_pass_z + <Z goc layer 0> + pass2_z_extra
+            (0.1 + 0.2 + 0.05 = 0.35), roi G92 khai bao lai day la <Z goc layer 0> (0.2),
+            reset extruder ve E dau layer 0, M221 S100
   pass 2  - BODY GOC, khong ha -> nam CAO HON pass 1 dung mot chieu cao layer
             init => in nhu mot lop BINH THUONG, flow 100%;
             va duoc EP TOC DO ve pass2_feedrate (60 mm/s = F3600) vi Cura ap

@@ -1285,30 +1285,30 @@ Cả `S` lẫn `R` (bản "chờ nguội" của `M109`/`M190`) đều bị ép.
 
 | Lượt | Body dùng | Z thực | Flow |
 |---|---|---|---|
-| Pass 1 = lớp **miết bám bàn** | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) — mỏng hơn `layer_height` | `M221 S30` → **30 %** (`pass1_flow`, mặc định 30 %); **tốc độ giữ nguyên** tốc độ chậm của Cura (`speed_print_layer_0` = "Initial Layer Speed") |
-| ↕ giữa hai pass | — | `G1 Z0.3` = `first_pass_z` + `layer_z` (0.1 + 0.2), rồi `G92 Z0.2` → khai báo lại **Z gốc của layer 0** | — |
-| Pass 2 = lớp **bình thường** | body **GỐC**, không hạ | **0.3** (0.2 trong hệ đã lệch 0.1) — cao hơn pass 1 **đúng một chiều cao layer init** (0.2) | `M221 S100` → **100 %**, và `F` của các bước **có X/Y + E** bị ép về `pass2_feedrate` (**60 mm/s** = `F3600`) |
-| Layer 1 trở lên | không đụng | 0.4 → **0.5** | `M221 S100` → 100 % |
+| Pass 1 = lớp **miết bám bàn** | body **đã hạ** `layer_z − first_pass_z` | **0.1** (`first_pass_z`) — mỏng hơn `layer_height` | `M221 S20` → **20 %** (`pass1_flow`, mặc định 20 %); **tốc độ giữ nguyên** tốc độ chậm của Cura (`speed_print_layer_0` = "Initial Layer Speed") |
+| ↕ giữa hai pass | — | `G1 Z0.35` = `first_pass_z` + `layer_z` + `pass2_z_extra` (0.1 + 0.2 + 0.05), rồi `G92 Z0.2` → khai báo lại **Z gốc của layer 0** (hệ quy chiếu lệch **0.15**) | — |
+| Pass 2 = lớp **bình thường** | body **GỐC**, không hạ | **0.35** (0.2 trong hệ đã lệch 0.15) — cao hơn pass 1 **`layer_height` + `pass2_z_extra` = 0.25** (cố ý nhả thêm 0.05 mm để nozzle không cà vào lớp nhựa vừa in của pass 1) | `M221 S100` → **100 %**, và `F` của các bước **có X/Y + E** bị ép về `pass2_feedrate` (**60 mm/s** = `F3600`) |
+| Layer 1 trở lên | không đụng | 0.4 → **0.55** (cách pass 2 đúng `layer_height` = 0.20) | `M221 S100` → 100 % |
 
 ```gcode
-; --- First Layer Twice: bat dau pass 1 (30%) ---
-M221 S30                    ; flow pass 1 = 30% (lop miet bam ban)
+; --- First Layer Twice: bat dau pass 1 (20%) ---
+M221 S20                    ; flow pass 1 = 20% (lop miet bam ban)
 G1 F1800 X20 Y20 E1         ; pass 1: GIU nguyen toc do cham cua Cura ("Initial Layer Speed")
 
 ; --- First Layer Twice: ket thuc pass 1 ---
 M400                        ; doi in xong lop thu nhat
 G90                         ; toa do tuyet doi
-G1 Z0.3 F600                ; nang Z len first_pass_z + Z goc cua layer 0 (0.1 + 0.2)
+G1 Z0.35 F600               ; nang Z len first_pass_z + Z goc cua layer 0 + pass2_z_extra (0.1 + 0.2 + 0.05)
 G92 Z0.2                    ; khai bao lai day la Z goc cua layer 0
 G92 E-0.75                  ; reset extruder ve E dau layer 0
-M221 S100                   ; flow pass 2 = 100% (da nang len 1 chieu cao layer init)
+M221 S100                   ; flow pass 2 = 100% (da nang len layer_height + pass2_z_extra)
 ; --- First Layer Twice: bat dau pass 2 (100%) ---
 G1 F3600 X20 Y20 E1         ; pass 2: buoc CO X/Y + E -> ep ve pass2_feedrate (60 mm/s)
 G0 F600 Z0.4                ; travel / Z-hop: GIU nguyen F do Cura dat
 G1 F900 E-0.75              ; retract (co E, khong X/Y): GIU nguyen F do Cura dat
 ```
 
-> 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1; pass 2 ở `first_pass_z + <Z gốc của layer 0>`.**
+> 🔵 **Pass 1 LUÔN ở `first_pass_z` = 0.1; pass 2 ở `first_pass_z + <Z gốc của layer 0> + pass2_z_extra`.**
 > `first_pass_z` **không** phụ thuộc `layer_height`. Script **dịch body của layer 0 xuống**
 > bằng `_shift_z(body, layer_z - first_pass_z)` cho **pass 1**, còn **pass 2 dùng lại body GỐC**
 > — đây là điểm mấu chốt, xem cảnh báo ngay dưới.
@@ -1318,16 +1318,21 @@ G1 F900 E-0.75              ; retract (co E, khong X/Y): GIU nguyen F do Cura da
 > layer 0 lên layer 1 thành **0.3**, tức **hở 0.1 mm không khí** giữa hai layer. Đã đo được trên
 > file sạch bằng `tests/_z_report.py`:
 > ```
-> pass 2 dung body DA HA :  pass1 0.1 -> pass2 0.3 (0.2 ✓) -> layer1 0.6 (0.30 ✗)
-> pass 2 dung body GOC   :  pass1 0.1 -> pass2 0.3 (0.2 ✓) -> layer1 0.5 (0.20 ✓) -> layer2 0.7 (0.20 ✓)
+> pass 2 dung body DA HA :  pass1 0.1 -> pass2 0.25 (0.15 ✗) -> layer1 0.55 (0.30 ✗)
+> pass 2 dung body GOC   :  pass1 0.1 -> pass2 0.35 (0.25 ✓) -> layer1 0.55 (0.20 ✓) -> layer2 0.75 (0.20 ✓)
 > ```
+> Bước `pass 1 → pass 2` = **`layer_height` + `pass2_z_extra`** (0.25) là **cố ý** — nhả thêm
+> 0.05 mm để nozzle **không cà vào lớp nhựa vừa in của pass 1**; vì `G92` vẫn giữ nguyên **Z gốc
+> của layer 0**, nên **các bước phía trên vẫn đúng 0.20 mm** (`pass 2 → layer 1 → layer 2` = 0.20 ✓).
 > Chỉ đổi `G92` **không** sửa được lỗi này — phải đổi cả body. Test hồi quy có phép thử đối
 > chứng cho đúng trường hợp sai (`tests/test_first_layer_twice.py`, mục 2b).
 
-> ⚠️ **Hệ quả: cả bản in cao hơn model đúng `first_pass_z` (0.1 mm).** Pass 2 dùng lại body gốc
-> với `G92 Z0.2`, nên từ đó về sau chương trình là **y hệt bản in bình thường** — mọi bước layer
-> đều đúng `layer_height`. Nhưng gốc toạ độ đã bị đẩy lên 0.1 mm, và điều đó là **đúng vật lý**:
-> pass 1 đã in ra nhựa thật. Nếu cần chi tiết lắp khít theo Z thì đừng dùng cách này.
+> ⚠️ **Hệ quả: cả bản in cao hơn model đúng `first_pass_z + pass2_z_extra` (0.15 mm).** Pass 2 dùng lại
+> body gốc với `G92 Z0.2`, nên từ đó về sau chương trình là **y hệt bản in bình thường** — **các bước
+> giữa các layer đều đúng `layer_height`** (chỉ riêng bước `pass 1 → pass 2` rộng ra
+> `layer_height + pass2_z_extra` = 0.25, cố ý). Nhưng gốc toạ độ đã bị đẩy lên 0.15 mm: **0.1 mm là
+> đúng vật lý** (pass 1 đã in ra nhựa thật), còn **0.05 mm là khoảng nhả cố ý** để nozzle không cà
+> vào lớp nhựa vừa in của pass 1. Nếu cần chi tiết lắp khít theo Z thì đừng dùng cách này.
 
 **Pass 1 và pass 2 ghi ra CÙNG một giá trị E** — không có phép nhân nào; Marlin tự nhân E với
 `flow_percentage`. **Hai pass KHÔNG còn cộng lại thành 100 %** (đó là cách của bản cũ 20 % + 80 %):
@@ -1352,27 +1357,29 @@ tốc độ: xem `pass2_feedrate`).
 > ```
 > Lấy nhầm `0.4` làm `layer_z` thì độ dịch thành `0.4 − 0.1 = 0.3`, đường in thật của pass 1 rơi
 > xuống **`Z-0.1`** → Marlin kẹp về 0 (`motion.cpp:960`) và **đầu in cày trên mặt bàn**; bước nhấc
-> Z cũng thành `G1 Z0.5`. Trong một layer, mọi Z-hop đều **cao hơn** chiều cao layer, nên `min()`
+> Z cũng thành `G1 Z0.55`. Trong một layer, mọi Z-hop đều **cao hơn** chiều cao layer, nên `min()`
 > luôn đúng.
 > Xem cạm bẫy 17 và test hồi quy `tests/test_first_layer_twice.py` (có phép thử đối chứng mô phỏng
 > lại đúng cách sai này để chắc rằng test thật sự bắt được lỗi).
 
-> 🔵 **Vì sao pass 2 phải nâng lên một chiều cao lớp.** Nếu in cả hai pass ở **cùng một Z** thì
-> đầu in của pass 2 **cày xuyên qua** lớp nhựa vừa in của pass 1 — đó chính là tiếng **tạch tạch
-> như bị va** ở đầu bản in. Nhấc lên đúng `layer_z` thì pass 2 nằm **cách mặt lớp 1 đúng một
-> chiều cao lớp**, giống hệt in layer 1 bình thường, nên không còn cọ.
+> 🔵 **Vì sao pass 2 phải nâng lên một chiều cao lớp (và thêm `pass2_z_extra`).** Nếu in cả hai pass ở
+> **cùng một Z** thì đầu in của pass 2 **cày xuyên qua** lớp nhựa vừa in của pass 1 — đó chính là tiếng
+> **tạch tạch như bị va** ở đầu bản in. Nhấc lên `layer_height` **+ `pass2_z_extra`** (0.2 + 0.05 = 0.25)
+> thì pass 2 nằm **cách mặt lớp pass 1 đúng một chiều cao lớp, cộng thêm 0.05 mm nhả cố ý** để nozzle
+> **không cà vào lớp nhựa vừa in của pass 1** (lớp miết 20 % vẫn có nhựa thật, không phẳng tuyệt đối);
+> `G92` vẫn giữ nguyên Z gốc của layer 0 nên **các layer phía trên không bị ảnh hưởng**.
 >
-> Vì pass 2 đã nằm **cao hơn pass 1 đúng một chiều cao layer init** (0.2), nó in y như một lớp bình
+> Vì pass 2 đã nằm **cao hơn pass 1 `layer_height` + `pass2_z_extra`** (0.25), nó in y như một lớp bình
 > thường ⇒ **flow pass 2 để 100 %** (và tốc độ ép về `pass2_feedrate`, xem khối 🔵 bên dưới); giảm flow
 > ở đây chỉ làm lớp đó thiếu nhựa.
 >
-> Còn pass 1 để ở **0.1** (mỏng hơn `layer_height` 0.2) với **30 % nhựa** là để **ép nhựa bám bàn**:
+> Còn pass 1 để ở **0.1** (mỏng hơn `layer_height` 0.2) với **20 % nhựa** là để **ép nhựa bám bàn**:
 > đầu in miết sát mặt bàn, nhựa dẹt ra và dính chắc — đúng vai trò "lớp dính bàn". Con số này **do bạn
-> chọn** (`pass1_flow`, mặc định **30 %**): quá ít thì lớp 1 không dính, quá nhiều thì nhựa trào/lem.
+> chọn** (`pass1_flow`, mặc định **20 %**): quá ít thì lớp 1 không dính, quá nhiều thì nhựa trào/lem.
 
 > 🔵 **Tốc độ: pass 1 chậm theo Cura, pass 2 bị ép về `pass2_feedrate`.** Cura áp
 > `speed_print_layer_0` (**"Initial Layer Speed"**) cho **toàn bộ** chunk layer 0 — cả pass 1 **lẫn**
-> pass 2 — nên để nguyên thì pass 2 (đã nằm cao hơn pass 1 đúng một chiều cao layer init, tức là một
+> pass 2 — nên để nguyên thì pass 2 (đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra`, tức là một
 > lớp **bình thường**) vẫn bị in **chậm**. Script sửa `F` của **các bước CÓ đùn nhựa** (có cả `X`/`Y`
 > **và** `E`) trong pass 2 về `pass2_feedrate × 60` mm/phút (`_set_speed()`, mặc định 60 mm/s →
 > `F3600`). **Giữ nguyên**: travel (không `E`), Z-hop, và retract/unretract (có `E` nhưng không
@@ -1380,14 +1387,14 @@ tốc độ: xem `pass2_feedrate`).
 > `pass2_feedrate = 0` nghĩa là không đổi gì.
 
 **Lượng nhựa:** không cần tính gì cả. `M221` nhân ở firmware, nên pass 1 đùn `pass1_flow` % (mặc định
-**30 %**) và pass 2 đùn **100 %** của **cùng một bộ giá trị E** → tổng **130 %** nhựa nằm trên **hai độ
-cao** (0.1 và 0.3): một lớp mỏng miết bám bàn + một lớp đầy đủ.
+**20 %**) và pass 2 đùn **100 %** của **cùng một bộ giá trị E** → tổng **120 %** nhựa nằm trên **hai độ
+cao** (0.1 và 0.35): một lớp mỏng miết bám bàn + một lớp đầy đủ.
 
 > ℹ️ **Điểm hay của cách này so với cách cũ.** Cách cũ phải nhân lại từng giá trị E và phải phân biệt
 > bước có XY (nhân) với bước thuần E như retract (không nhân) — vì nhân retract với 20% sẽ biến nó
 > thành vô nghĩa. Dùng `M221` thì firmware lo hết, code đơn giản hơn nhiều. Nhược điểm duy nhất:
 > **retract trong layer 0 cũng bị nhân theo flow** — nhưng nay nhẹ hơn nhiều: retract 0.75 mm ở
-> pass 1 (30 %) còn 0.225 mm, còn ở **pass 2 (100 %) thì không bị ảnh hưởng gì**.
+> pass 1 (20 %) còn 0.15 mm, còn ở **pass 2 (100 %) thì không bị ảnh hưởng gì**.
 
 | Tham số | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -1395,11 +1402,12 @@ cao** (0.1 và 0.3): một lớp mỏng miết bám bàn + một lớp đầy đ
 | `hotend_temp` | 230 °C | `M104`/`M109` bị ép về số này |
 | `bed_temp` | 60 °C | `M140`/`M190` bị ép về số này |
 | `double_first_layer` | bật | In layer 0 hai lần |
-| `pass1_flow` | **30 %** | `M221 S<so nay>` trước pass 1 — **lớp miết bám bàn** (in ở `first_pass_z`). Mặc định **30 %**: **tăng** nếu lớp 1 không dính, **giảm** nếu nhựa trào/lem. Tốc độ pass 1 giữ nguyên tốc độ chậm của Cura |
-| `pass2_flow` | **100 %** | `M221 S<so nay>` trước pass 2 — **để 100 %**: pass 2 nằm cao hơn pass 1 đúng một chiều cao layer init nên in như lớp bình thường |
+| `pass1_flow` | **20 %** | `M221 S<so nay>` trước pass 1 — **lớp miết bám bàn** (in ở `first_pass_z`). Mặc định **20 %**: **tăng** nếu lớp 1 không dính, **giảm** nếu nhựa trào/lem. Tốc độ pass 1 giữ nguyên tốc độ chậm của Cura |
+| `pass2_flow` | **100 %** | `M221 S<so nay>` trước pass 2 — **để 100 %**: pass 2 nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` nên in như lớp bình thường |
 | `pass2_feedrate` | **60 mm/s** | **Ép tốc độ in của pass 2 (mm/s); 0 = không đổi.** Cần vì Cura áp `speed_print_layer_0` ("Initial Layer Speed") cho **cả** layer 0 nên pass 2 cũng bị in chậm; chỉ áp cho bước **có X/Y + E** (travel, Z-hop, retract giữ nguyên) |
+| `pass2_z_extra` | **0.05 mm** | **Nâng thêm khi nhảy pass 1 → pass 2 để nozzle không cà vào lớp nhựa vừa in của pass 1** (0 = không thêm). Bước nhảy thành `first_pass_z + <Z gốc layer 0> + 0.05` = `G1 Z0.35`; **`G92` giữ nguyên Z gốc (0.2)** nên hệ quy chiếu lệch 0.15 và **các lớp phía trên vẫn cách nhau đúng `layer_height`** (chỉ bước pass 1 → pass 2 rộng ra `layer_height + pass2_z_extra` = 0.25, cố ý) |
 | `z_feedrate` | 600 mm/min | Tốc độ nhấc Z giữa hai pass |
-| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` |
+| `first_pass_z` | 0.1 mm | **Z của pass 1 — cố định, không phụ thuộc `layer_height`.** Pass 2 dùng body gốc nên in ở `first_pass_z + <Z gốc của layer 0>` + `pass2_z_extra` |
 | `z_mode` / `z_raise` / `layer0_z` | — | **Không dùng nữa.** Giữ lại trong khai báo để config cũ trong Cura không báo lỗi; script bỏ qua |
 
 **Bật trong Cura:** `Extensions` → `Post Processing` → `Add a script` → **First Layer Twice**.
@@ -1409,8 +1417,9 @@ khởi động** — thêm file xong phải mở lại Cura.
 > ⚠️ **Giá trị ĐANG LƯU trong Cura đè lên `default_value` của script.** Cura lưu cả khối
 > `[FirstLayerTwice]` vào `machine_instances\*.global.cfg`, nên **sửa default trong `.py` là CHƯA ĐỦ** —
 > đã gặp thật 2026-10-12: `.py` đổi 20→60 nhưng khối đang lưu vẫn là `20`/`80`.
-> `cura_profile/fix-pp-settings.py` nay **đồng bộ luôn** `pass1_flow = 30`, `pass2_flow = 100` và
-> `pass2_feedrate = 60` (được gọi tự động trong `install-cura-profile.ps1`), và sau khi chạy phải **mở lại Cura**.
+> `cura_profile/fix-pp-settings.py` nay **đồng bộ luôn** `pass1_flow = 20`, `pass2_flow = 100`,
+> `pass2_feedrate = 60` và `pass2_z_extra = 0.05` (được gọi tự động trong `install-cura-profile.ps1`),
+> và sau khi chạy phải **mở lại Cura**.
 
 > Cura yêu cầu **tên class trùng tên file** (`PostProcessingPlugin.py:215`:
 > `getattr(loaded_script, script_name)`). Đặt tên khác là Cura báo *"not a recognised script type"*.
@@ -1421,7 +1430,7 @@ khởi động** — thêm file xong phải mở lại Cura.
 
 | Lệnh | Việc |
 |---|---|
-| `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 **và `F`** (pass 2 = `F3600` = 60 mm/s; pass 1, Z-hop, retract **không** bị đổi tốc độ) |
+| `python tests\test_first_layer_twice.py` | Test hồi quy `FirstLayerTwice`: dựng gcode giả theo đúng cấu trúc Cura rồi khẳng định Z/E/M221 **và `F`** (pass 2 = `F3600` = 60 mm/s; pass 1, Z-hop, retract **không** bị đổi tốc độ). Kèm `pass2_z_extra` — khẳng định `G1 Z0.35 F600`, `M221 S20`, và bước Z **pass 1 → pass 2 = 0.25**, **các bước trên = 0.20** |
 | `python tests\test_clamp_feeds.py` | Test hồi quy `ClampFeeds` — chạy trên **file gcode thật** (mặc định fixture trong repo) rồi audit lại từng trục. ⚠️ `ClampFeeds` **đã gỡ**: test nạp file ở `cura_profile/scripts_disabled/ClampFeeds.py`, chỉ để bảo đảm script còn đúng nếu bật lại — **không** có nghĩa nó đang được cài |
 | `python tests\verify_gcode.py <file.gcode>` | Soi một file đã xuất: mốc `FirstLayerTwice` + **audit feed/accel của `ClampFeeds` (TUY CHỌN)** — file không có marker `[ClampFeeds]` thì **bỏ qua** phần đó, không tính là vấn đề |
 
@@ -1442,7 +1451,7 @@ của Cura (`%APPDATA%\cura\<ver>\machine_instances\*.global.cfg`), chia gcode t
 
 > ℹ️ **Thứ tự script.** Từ 2026-10-12 header chỉ còn **`;  [FirstLayerTwice]`** — `ClampFeeds` đã gỡ
 > nên **không còn script nào chạy sau** `FirstLayerTwice`. Trước đây `ClampFeeds` chạy sau và kẹp luôn
-> bước nhấc Z do `FirstLayerTwice` chèn vào (`G1 Z0.3 F600` = 600/60 = **10 mm/s**); nay bước đó
+> bước nhấc Z do `FirstLayerTwice` chèn vào (`G1 Z0.35 F600` = 600/60 = **10 mm/s**); nay bước đó
 > **giữ nguyên** trong file và firmware tự kẹp nếu cần. Vì vậy `verify_gcode.py` **bỏ qua** phần audit
 > feed/accel khi file không có marker `[ClampFeeds]` — đó là trạng thái **bình thường** của file mới.
 
@@ -1559,16 +1568,16 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 15 | **Build lỗi `*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified`** | Build dir hỏng → PlatformIO không tạo lại được thư mục wrapper, build fail ngay | **Xoá `.pio\build\mks_monster8` rồi build lại** — đã gặp và sửa trong 38 s |
 | 15b | **Build TĂNG DẦN sau khi sửa `Configuration*.h` cho ra firmware STALE** | `pio run` báo `SUCCESS`, `M115` ra timestamp mới, và một phần cấu hình mới **có** vào (nếu nó nằm ở translation unit được biên dịch lại) — nhưng phần khác thì **không**, nên firmware là "nửa cũ nửa mới". Đã gặp thật khi hoàn tác microstep: `DEFAULT_AXIS_STEPS_PER_UNIT` về 80 nhưng `X_MICROSTEPS` vẫn 8 → trục chạy **gấp đôi** mà trông như đã đúng | Sau khi sửa `Configuration.h` / `Configuration_adv.h`: **`Remove-Item -Recurse -Force .pio\build\mks_monster8`** rồi `pio run`. Đừng tin `SUCCESS` + timestamp. Kiểm chứng bằng `M122` (xem `blank time` = 24 hay 36) và bằng cách tìm mảng hằng số trong `.bin` |
 | 16 | **`G34 I<n>` không có tác dụng** | `G34()` gọi `InfiniteG34(3)` với `nloop=3` cứng, nên `parser.intval('I', …)` không bao giờ được đọc | Giới hạn số vòng bằng `G34 Q<n>`; đổi ngưỡng bằng `G34 T<acc>` |
-| 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2`. Lấy nhầm `layer_z = 0.4` thì độ dịch thành `0.4 − first_pass_z = 0.3`, đường in thật của pass 1 rơi xuống **`Z-0.1`** (Marlin kẹp về 0 → **đầu in cày trên mặt bàn**), và bước nhấc thành `G1 Z0.5` | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` (có cả phép thử đối chứng mô phỏng lại cách sai này) |
+| 17 | **`FirstLayerTwice` đọc nhầm Z-hop thành chiều cao layer** | `voron2_base` bật Z-hop 0.2 → bước `G0/G1` đầu tiên của layer 0 là `Z0.4` (hop) chứ không phải `Z0.2`. Lấy nhầm `layer_z = 0.4` thì độ dịch thành `0.4 − first_pass_z = 0.3`, đường in thật của pass 1 rơi xuống **`Z-0.1`** (Marlin kẹp về 0 → **đầu in cày trên mặt bàn**), và bước nhấc thành `G1 Z0.55` | `_find_layer_z()` phải lấy **min** Z trong body, không lấy Z đầu tiên. Test hồi quy: `tests/test_first_layer_twice.py` (có cả phép thử đối chứng mô phỏng lại cách sai này) |
 | 20 | **`FirstLayerTwice` quét E thiếu phần đầu của chính chunk layer 0** | Start G-code và đường purge nằm **cùng chunk** với `;LAYER:0`, nên quét `data[:index]` sẽ bỏ sót retract `E-0.75` cuối cùng. `G92 E0` khi đó sai → pass 2 **mất một lần unretract** | Quét E qua **cả `prefix`** của chunk layer 0: `_scan_mode_and_e(data[:index] + [prefix])`. Test đã bắt được lỗi này |
 | 18 | **Thấy `G0 F30000` tưởng vượt trần máy** | G-code `F` là **mm/phút** còn `M203`/Cura là **mm/giây** — `F30000` = 500 mm/s, đúng bằng trần chứ không vượt. Và `speed_travel` của Cura **suy ra từ `machine_max_feedrate_x/y`** nên đổi trần là đổi luôn con số này | Đổi đơn vị trước khi kết luận (`mm/s × 60`). Marlin **kẹp** feedrate chứ không báo lỗi (`planner.cpp:2419`) |
 | 19 | **Đặt setting sai container → Cura XOÁ ÂM THẦM khi ghi lại** | 11 key bị xoá khỏi `definition_changes` (container cấp **MÁY**): `acceleration_print`, `acceleration_travel`, `jerk_print`, `jerk_travel`, `machine_steps_per_mm_x/y/z/e`, `machine_endstop_positive_direction_x/y/z`. Chúng **chỉ có tác dụng cho lần slice ĐẦU** sau khi cài, rồi biến mất. Hệ quả thật: `acceleration_print` rơi về mặc định **5000** của `voron2_base` → G-code chứa `M204 S5000`; `machine_endstop_positive_direction_*` mất nên Cura tưởng máy home về MAX | Đặt đúng container: `settable_per_mesh: true` (print setting) → container `user` của máy in; `settable_per_extruder: true` → container **extruder**. Cura cũng tự làm đúng như vậy (`cura/Settings/MachineManager.py:976-992`). Xem §11.6 |
-| 21 | **Cộng số thực ra `0.30000000000000004` trong G-code** | `first_pass_z + layer_z` = `0.1 + 0.2` → Python ghi `G1 Z0.30000000000000004 F600`. Marlin vẫn hiểu đúng nên **máy không sai**, nhưng test hồi quy so khớp chuỗi `"G1 Z0.3 F600"` **fail**, và G-code đọc rất khó chịu | Dùng `_fmt_num()` (`"{0:.5f}".format(v).rstrip("0").rstrip(".")`) cho mọi giá trị Z ghi ra, đừng dùng `str()`/`format()` trần |
+| 21 | **Cộng số thực ra `0.35000000000000003` trong G-code** | `first_pass_z + layer_z + pass2_z_extra` = `0.1 + 0.2 + 0.05` → Python ghi `G1 Z0.35000000000000003 F600`. Marlin vẫn hiểu đúng nên **máy không sai**, nhưng test hồi quy so khớp chuỗi `"G1 Z0.35 F600"` **fail**, và G-code đọc rất khó chịu | Dùng `_fmt_num()` (`"{0:.5f}".format(v).rstrip("0").rstrip(".")`) cho mọi giá trị Z ghi ra, đừng dùng `str()`/`format()` trần |
 | 22 | **Đọc setting từ `global.cfg` ra rỗng** | Cura escape newline bằng **ba** dấu `\` + `n`, không phải hai. Khớp cứng hai dấu `\` để lại một `\` lụng ở đầu mỗi dòng → tiêu đề `[FirstLayerTwice]` thành `[FirstLayerTwice]\` → không nhận ra → dict rỗng, tool im lặng bỏ qua mọi phép kiểm phụ thuộc setting | Khớp **cả cụm** bằng regex: `re.sub(r"\\+n", "\n", raw)` (`tests/_cura_stub.py`) |
 | 23 | **Chạy lại script hậu xử lý trên file đã xuất** | Gcode Cura lưu ra đĩa **luôn** đã qua hậu xử lý (header có `;POSTPROCESSED`), nên file cũ vẫn còn marker. Chạy lại lần hai sẽ **chèn chồng** hai khối `FirstLayerTwice` lên nhau | `tests/run_first_layer_twice.py` **từ chối** nếu thấy marker. Muốn xem trước thì tắt script trong Cura rồi slice lại |
-| 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.3 ✓ → layer1 0.6 ✗`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: mọi bước phải đúng `layer_height`. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
+| 24 | **Pass 2 của `FirstLayerTwice` dùng lại body ĐÃ HẠ** | Toạ độ Z của pass 2 thành `first_pass_z` (0.1) trong khi layer 1 của Cura là `0.4` → bước từ layer 0 lên layer 1 là **0.3**, tức **hở 0.1 mm không khí**. Đo được: `pass1 0.1 → pass2 0.25 (0.15 ✗) → layer1 0.55 (0.30 ✗)`. **Chỉ đổi `G92` không sửa được** — đổi `G92` chỉ dịch cả hệ, khoảng cách vẫn sai | Pass 2 phải dùng **body GỐC**, `G92 Z<Z gốc layer 0>`. Đo lại bằng `tests/_z_report.py`: **các bước Z phải đúng `layer_height`**, riêng bước `pass 1 → pass 2` = `layer_height + pass2_z_extra` (0.25) là **cố ý** để nozzle không cà lớp pass 1. Test hồi quy: mục 2b của `tests/test_first_layer_twice.py` (có phép thử đối chứng cho đúng cách sai) |
 | 25 | **Pully tuột khỏi trục motor X/Y** | Pulley trượt trên trục → **chỉ một belt được kéo** → lệnh **Y** làm đầu in đi **CHÉO 45°** thay vì thẳng; `G28` không chạm công tắc → `kill()`. Cực dễ chẩn đoán nhầm thành lỗi firmware/`INVERT`/kinematics, vì code và cấu hình **hoàn toàn không đổi**. Triệu chứng đi kèm: lệnh X có vẻ vẫn đúng (hướng đó pulley còn bám), rồi một lệnh đột nhiên **không nhích gì** (tuột hẳn) | Siết lại **vít hãm pully** ở **cả hai** motor X/Y, rồi cân lại gantry + `G28` + `G29`. Kiểm tra bằng vít hãm + vạch bút dạ bắc qua pulley và trục. Khoanh vùng bằng **phép thử tách motor** ở §11.9 |
-| 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500. ⚠️ **`ClampFeeds` đã được GỠ ngày 2026-10-12** — cạm bẫy này nay áp cho `FirstLayerTwice` (`pass1_flow` / `pass2_flow` / `pass2_feedrate`); và **cùng cơ chế đó khiến khối `[ClampFeeds]` vẫn nằm lại trong Cura** dù file `.py` đã bị gỡ | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu **và xoá khối của script đã gỡ** (`REMOVE = {"ClampFeeds"}` — Cura **không** tự xoá khối đã lưu khi file `.py` không còn). Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
+| 26 | **Sửa `default_value` trong script hậu xử lý mà Cura vẫn dùng số cũ** | Khi bật một script, Cura **chép toàn bộ setting của nó vào khối `post_processing_scripts`** trong `machine_instances\*.global.cfg`, và **giá trị đang lưu đó đè lên `default_value`** trong file `.py`. Sửa `.py` rồi cài lại **không có tác dụng gì**. Đã gặp thật: `ClampFeeds` đổi 150/2000 trong `.py` nhưng Cura vẫn gửi 300/500. ⚠️ **`ClampFeeds` đã được GỠ ngày 2026-10-12** — cạm bẫy này nay áp cho `FirstLayerTwice` (`pass1_flow` / `pass2_flow` / `pass2_feedrate` / `pass2_z_extra`); và **cùng cơ chế đó khiến khối `[ClampFeeds]` vẫn nằm lại trong Cura** dù file `.py` đã bị gỡ | Chạy **`cura_profile/fix-pp-settings.py`** (đã được gọi tự động trong `install-cura-profile.ps1`) để đồng bộ khối đang lưu **và xoá khối của script đã gỡ** (`REMOVE = {"ClampFeeds"}` — Cura **không** tự xoá khối đã lưu khi file `.py` không còn). Kiểm bằng `read_cura_settings()` trong `tests/_cura_stub.py` |
 | 27 | **Đọc `post_processing_scripts` chỉ lấy một dòng vật lý** | Khối này **trải trên nhiều dòng** (Cura chèn newline thật, các dòng sau thụt đầu bằng TAB). Đọc mỗi dòng đầu thì **mất hẳn script thứ hai trở đi** — `ClampFeeds` trả về `None` dù nó **có** trong file, dẫn tới kết luận sai "Cura không lưu script đó" | Đọc tiếp các dòng thụt đầu (kieu INI continuation) — xem `read_cura_settings()` trong `tests/_cura_stub.py`. Từ 2026-10-12 khối này chỉ còn `[FirstLayerTwice]` (`ClampFeeds` đã gỡ), nhưng cách đọc vẫn phải đúng |
 | 28 | **🔴 `R` âm trong model MPC của EEPROM** | Số hiển thị **giảm** khi đang hâm nóng trong khi heater vẫn cấp điện; nhiệt độ **nhảy −10 °C**; "restart thì đúng lại". Nguy cơ **quá nhiệt/cháy**: MPC điều khiển theo **mô hình**, nên model hỏng làm bộ điều khiển ra lệnh sai và **che mất** lỗi cảm biến — bảo vệ nhiệt không cứu được kiểu này | Xem đầy đủ ở **§6.1**. `M306` phải có `R` **dương**; sửa bằng `M306 ... R0.1284 ...` + `M500` + **reset vật lý** (`M999` **không** đủ) |
 | 29 | **Tưởng `M999` là "khởi động lại"** | `M999.cpp:38-45` chỉ đặt `marlin_state = MF_RUNNING`, xả buffer serial, `ui.reset_alert_level()`. **RAM không bị đụng** → mọi trạng thái trong RAM (model MPC `modeled_*`, vị trí) **giữ nguyên**. Dùng `M999` để "làm mới" model MPC là **vô ích mà tưởng là xong** | Cần reset thật: nút RESET hoặc tắt/bật PSU |
@@ -1576,7 +1585,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 31 | **Chạy `test_clamp_feeds.py` lên file ĐÃ qua ClampFeeds** | Chạy ClampFeeds lần hai lên file đã xử lý làm **hỏng phép đếm vị trí** (bước XY+Z bị tách hai lần, bước "về tâm" bị chèn hai lần) → audit báo **hàng nghìn lỗi GIẢ**. Đã gặp thật: file 2,2 MB đã xử lý → **2481** "bước vượt trần", trong khi chính file đó chỉ có 6 dòng lệch biên | `test_clamp_feeds.py` nay **TỪ CHỐI** file có marker `ClampFeeds:` và trỏ sang `verify_gcode.py`. **File ĐÃ xử lý → dùng `verify_gcode.py`; file CHƯA xử lý → dùng `test_clamp_feeds.py`.** Mặc định test dùng fixture `tests/fixtures/clean_raw.gcode`. ⚠️ Từ 2026-10-12 `ClampFeeds` **đã gỡ** nên file slice **mới** không còn marker này — cạm bẫy chỉ còn gặp với **file cũ** |
 | 32 | **Ngưỡng so trần quá chặt gây lỗi oan** | Dùng `> LIMIT + 1e-6` cho feedrate: một bước `F9000` (= **đúng** trần 150 mm/s) tính lại ra `150,0000x` do sai số dấu phẩy động tích lũy → bị báo vượt trần **oan** (đã gặp: 6 dòng trên file 2,2 MB, tất cả đều `F9000`) | Dùng `TOL = 0,05 mm/s`. Vẫn bắt được mọi vi phạm thật (200 mm/s lệch 50 mm/s) |
 | 33 | **Thay thế chuỗi bằng PowerShell trên file có tiếng Việt** | `Get-Content -Raw` **không có `-Encoding`** đọc UTF-8 bằng ANSI → `WriteAllText` ghi lại thành UTF-8 **hỏng**: **916 dòng** tiếng Việt trong README nát thành mojibake (`trần cứng` → `tráº§n cá»©ng`). `Set-Content` không `-Encoding` còn ghi **CRLF** vào file vốn LF | **Sửa text bằng công cụ `edit`, không bằng `-replace` của PowerShell.** Nếu buộc phải dùng Python/PowerShell thì chỉ định encoding rõ ràng và `newline`. Khôi phục: `git checkout -- <file>` |
-| 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 đúng một chiều cao layer init (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về `pass2_feedrate` (mm/s, mặc định **60** → `F3600`), giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |
+| 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về `pass2_feedrate` (mm/s, mặc định **60** → `F3600`), giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
