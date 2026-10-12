@@ -81,18 +81,27 @@
 #define TR_GOTO   3   // dang di toi goc lech nhat
 #define TR_POINT  4   // dang di toi goc CAN CHINH ke tiep (nut DONE)
 
-// 2026-10-12: bo nut PREV / NEXT / HOME+PROBE -> con 3 nut. DONE gio lo ca hai viec:
-//   - tu di toi goc CAN CHINH ke tiep (bo qua goc MOC va cac goc da DAT) + probe luon goc do
+// 2026-10-12: bo nut PREV / NEXT / HOME+PROBE -> con 4 nut:
+//   - DONE tu di toi goc CAN CHINH ke tiep (bo qua goc MOC va cac goc da DAT) + probe luon goc do
 //   - khi khong con goc nao -> tu HOME lai Z + probe lai CA 4 GOC (vong moi, moc moi)
+//   - BACK: thoat ve man hinh chinh
+// "DAT" (auto-done) khi |delta| <= TRAM_DONE_MM (0.01mm) - nguong nhieu cua probe.
 #define BTN_PROBE 0   // probe lai goc dang dung
 #define BTN_WORST 1   // doi chien luoc: MAX (moc = Z-MIN) <-> MIN (moc = Z-MAX)
-#define BTN_DONE  2   // di toi goc can chinh ke tiep; het goc -> home lai + probe lai 4 goc
-#define BTN_COUNT 3
+#define BTN_BACK  2   // thoat ve man hinh chinh
+#define BTN_DONE  3   // di toi goc can chinh ke tiep; het goc -> home lai + probe lai 4 goc
+#define BTN_COUNT 4
 
 // Ket qua lan PROBE gan nhat
 #define PR_NONE   0   // chua probe lai o goc nay -> hien huong van (CW/CCW + so mm)
 #define PR_RESULT 1   // da probe lai -> hien TARGET con lai (z cuoi) + huong van
 #define PR_FAILED 2
+
+// Nguong "auto DAT": |delta| <= so nay (mm) thi coi nhu goc do da xong
+//   - hien "DAT" tren man hinh
+//   - DONE bo qua goc do khi di tim goc can chinh ke tiep
+// 0.01mm = muc nhieu that cua probe (do lai 20 lan lech 7-10um), duoi muc nay van nua la vo nghia.
+#define TRAM_DONE_MM 0.01f
 
 static float   z_delta[G35_PROBE_COUNT];   // (mm) gia tri probe GAN NHAT (moc vat ly = Z-home)
 static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
@@ -250,7 +259,7 @@ static void tramming_goto_index(const uint8_t i) {
 
 // Goc i co CON phai chinh khong?
 //   - goc dinh nghia MOC (Z-MIN o che do MAX, Z-MAX o che do MIN) thi KHONG: no chinh la chuan
-//   - goc da trong nguong nhieu (|delta| < 0.002mm) thi KHONG
+//   - goc da trong nguong nhieu (|delta| <= TRAM_DONE_MM = 0.01mm) thi KHONG -> coi nhu "auto DAT"
 static bool tramming_need_adjust(const uint8_t i) {
   if (!z_ok[i]) return true;                      // chua do duoc -> van phai toi kiem tra
   if (z_ref_set) {
@@ -258,7 +267,7 @@ static bool tramming_need_adjust(const uint8_t i) {
                                            : (z_delta[i] >= z_ref_max - 0.0005f);
     if (is_ref) return false;
   }
-  return ABS(z_delta[i] - tramming_ref()) >= 0.002f;
+  return ABS(z_delta[i] - tramming_ref()) > TRAM_DONE_MM;
 }
 
 // Chon goc CAN CHINH ke tiep (di vong tron tu goc hien tai, bo qua goc MOC / goc da DAT).
@@ -340,7 +349,7 @@ static void tramming_draw() {
       // Chi lay z CUOI: delta so voi MOC = con phai van bao nhieu mm nua de goc do ve moc.
       // Van dung chieu -> so nay giam; van sai chieu -> so nay tang.
       const float delta = z_delta[worst_index] - ref;
-      if (ABS(delta) < 0.002f)
+      if (ABS(delta) <= TRAM_DONE_MM)
         snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
       else {
         char num[12];
@@ -361,9 +370,9 @@ static void tramming_draw() {
         snprintf_P(line, sizeof(line), PSTR("%cPROBE goc nay"), btn_sel == BTN_PROBE ? '>' : ' ');
       else {
         const float delta = z_delta[i] - ref;    // ref = MOC da tinh o tren
-        if (ABS(delta) < 0.002f)
+        if (ABS(delta) <= TRAM_DONE_MM)
           snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
-        else if (ABS(delta) < 0.01f)             // duoi 1/100 mm -> chi can van nhe
+        else if (ABS(delta) < 0.02f)             // duoi 2/100 mm -> chi can van nhe
           snprintf_P(line, sizeof(line), PSTR("%cPROBE %s nhe"),
             btn_sel == BTN_PROBE ? '>' : ' ', tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW");
         else {
@@ -377,16 +386,14 @@ static void tramming_draw() {
   }
   tram_row(2, line);
 
-  // Dong 3: doi chien luoc MAX <-> MIN  +  DONE (di tiep goc can chinh / home lai)  - 3 muc
-  snprintf_P(line, sizeof(line), PSTR("%c%s->%s %cDONE"),
+  // Dong 3: doi chien luoc MAX <-> MIN | BACK (thoat) | DONE (di tiep goc can chinh / home lai)
+  // 21 ky tu: ">MAX->MIN >BACK >DONE"
+  snprintf_P(line, sizeof(line), PSTR("%c%s->%s %cBACK %cDONE"),
     btn_sel == BTN_WORST ? '>' : ' ',
     tramming_worst_max ? "MAX" : "MIN", tramming_worst_max ? "MIN" : "MAX",
+    btn_sel == BTN_BACK ? '>' : ' ',
     btn_sel == BTN_DONE ? '>' : ' ');
   tram_row(3, line);
-
-  // Dong 4: nhac y nghia nut DONE (khong con nut nao khac)
-  snprintf_P(line, sizeof(line), PSTR("DONE=di tiep/home lai"));
-  tram_row(4, line);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +486,10 @@ static void _lcd_tramming() {
               return;
             }
             break;
+          case BTN_BACK:
+            // BACK = thoat ve man hinh chinh (danh dau Z chua home vi vua van vit)
+            tramming_exit();
+            return;
           default:
             tramming_exit();
             return;
