@@ -721,6 +721,23 @@ dfu-util -d 0483:df11 -a 0 -s 0x0800C000:leave -t 2048 -D .pio\build\mks_monster
 > `board_build.offset = 0xC000` và `board_upload.offset_address = 0x0800C000` trong `ini/stm32f4.ini`.
 > Kiểm chứng bằng `dfu-util --list`: `@Internal Flash /0x08000000/04*016Kg,...` → 3 sector 16KB đầu = 48KB = `0xC000`.
 
+### Nạp qua thẻ TF/SD (và USB) — KHÔNG cần ST-Link/DFU
+
+Monster8 **tự nạp firmware từ thẻ TF (microSD) hoặc USB** bằng **bootloader MKS** (không phải Marlin):
+
+1. Copy **`mks_monster8.bin`** vào **thư mục gốc** của thẻ TF (FAT32) hoặc USB.
+2. Cắm thẻ/USB vào board → **nhấn RESET** (hoặc tắt/bật nguồn).
+3. Bootloader nạp rồi khởi động firmware mới.
+
+(Nguồn: MKS wiki *[TF card or Udisk update](https://github.com/makerbase-mks/MKS-Monster8/wiki/TF_UDISK_update)* — nguyên văn: *"Copy your compiled **mks_monster8.bin** firmware to tf card or udisk. Insert to board and reset board update firmware"*. Tên file khớp đúng output build của repo này: `board_build.rename = mks_monster8.bin`.)
+
+| | |
+|---|---|
+| Thông báo trên màn hình? | **Không.** Bootloader chạy **trước** Marlin nên không điều khiển được Mini12864 hay màn LVGL (2 màn đó do Marlin vẽ). Tuỳ chọn `SD_FIRMWARE_UPDATE` của Marlin (có menu + thông báo) **chỉ dành cho ATmega2560** — `SanityCheck.h:3929` chặn trên STM32. Cách kiểm chứng đã nạp xong: gọi `M115` (xem version) hoặc nhìn màn hình sau khi board chạy lại |
+| Địa chỉ ghi | Vẫn là `0x0800C000` (file build của repo này đã đúng offset) |
+| Cài đặt có mất không? | **Không.** EEPROM là chip I2C 4K trên board (`I2C_EEPROM`, `MARLIN_EEPROM_SIZE 0x1000`, chân PB8/PB9 — `pins_MKS_MONSTER8_common.h:44-47`) nên `M851`/mesh UBL/`M203`… giữ nguyên qua mọi cách nạp |
+| Nếu nạp thẻ lỗi | Bootloader vẫn còn nguyên (vùng `0x08000000–0x0800BFFF`) → cứu bằng DFU/ST-Link bình thường |
+
 ### Tốc độ nạp DFU — đo thực tế
 
 Cùng một file 254 KB (`mks_monster8.bin`), board cắm **trực tiếp** vào PC:
