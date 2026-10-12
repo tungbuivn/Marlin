@@ -335,8 +335,11 @@ static void tramming_draw() {
 
   char line[40], d0[12], d1[12];
 
-  // Dong 0-1: do lech 2 goc mot dong, so voi MOC (Z-MIN hoac Z-MAX cua lan do dau - dong bang)
-  const float ref = tramming_ref();
+  // Dong 0-1: do lech 2 goc mot dong.
+  //   Binh thuong: so voi MOC (Z-MIN hoac Z-MAX cua lan do dau - dong bang).
+  //   Khi CA 4 GOC DA DAT: hien delta-Z so voi TAM BAN (= diem home Z, base_home_pos) de biet
+  //   moi goc CAO HON hay THAP HON tam (so DUONG = goc cao hon tam).
+  const float ref = tram_all_dat ? base_home_pos(Z_AXIS) : tramming_ref();
   LOOP_L_N(r, 2) {
     const uint8_t i0 = r * 2, i1 = i0 + 1;
     char t0[3], t1[3];
@@ -355,8 +358,10 @@ static void tramming_draw() {
   //   PR_NONE  : chua probe lai -> "CCW 0.150mm" (huong + so MM can van)
   //   "DAT" khi |delta| < 0.002mm (duoi nguong nhieu). Tat ca in 3 so le (0.001mm).
   if (tram_all_dat) {
-    // CA 4 GOC da dat -> khong con gi de van: chi con nut BACK
-    snprintf_P(line, sizeof(line), PSTR("TAT CA DAT"));
+    // CA 4 GOC da dat -> khong con gi de van: chi con nut BACK.
+    // 4 so o 2 dong tren luc nay la delta-Z SO VOI TAM BAN (diem home Z):
+    // duong = goc CAO hon tam, am = goc THAP hon tam.
+    snprintf_P(line, sizeof(line), PSTR("DAT - lech so voi tam"));
     tram_row(2, line);
   }
   else switch (probe_state) {
