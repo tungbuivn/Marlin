@@ -222,9 +222,9 @@ Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ 
 > ✅ **Dòng motor nay 600 mA cho CẢ 6 trục** (75 % định mức 0,8 A của ST4118L0804-A) — mát hơn mức
 > 800 mA trước đây, và E dùng 600 thay vì 400. Vẫn kiểm sau ~30 phút in (`≤ 80 °C` là tốt). Muốn thêm
 > mô-men thì nâng `M906` (tối đa 800 = 100 % định mức); nóng quá thì hạ.
-> ℹ️ **Giá trị này chưa nằm trong firmware đang chạy** (default trong `Configuration_adv.h` đã sửa
-> thành 600 cho cả 6 nhưng **chưa flash** — theo yêu cầu): EEPROM đang giữ 600, nên máy chạy đúng 600;
-> chỉ khi nào EEPROM bị reset thì mới cần bản firmware mới.
+> ✅ **Đã nạp vào firmware** (`Marlin 2.1.2 (Oct 12 2026 19:49:38)`): default trong
+> `Configuration_adv.h` = **600 cho cả 6 trục**, khớp EEPROM. `M122` sau khi nạp: `Set current 600 ×6`,
+> `msteps 8 ×6`, `off time 3`, 6/6 `connection OK` — và **EEPROM giữ nguyên** qua lần flash này.
 >
 > ✅ **Cura / `ClampFeeds` nay KHỚP máy**: profile ghi `max_feedrate_xy 150`, `max_acceleration 300` —
 > đúng bằng `M203 X/Y 150` và `M201 X/Y 300` của máy, nên G-code Cura phát ra **không bị firmware kẹp**
@@ -943,8 +943,9 @@ git diff up-2.1.2 HEAD --stat
 > Diễn biến trong ngày: (1) 1/8 + giảm nửa vận tốc/gia tốc → (2) nâng lên "trần nên dùng"
 > (`M203 225`, `M201 5000`, **500 mA** cả 6 trục) → (3) hạ lại → (4) **chốt: bộ "Trước (1/16)"** —
 > `M203 150/150/10/25`, `M201 300/300/200/1000`, `M204 500/300/500`, `M205 X8 Y8`,
-> **`M906 X/Y 800 · Z 600 · E 400`**, `M92 40/40/400/207.5`. Đã ghi EEPROM (`M500`, crc 41178) →
-> verify qua reset → đồng bộ **default trong `Configuration*.h`** → clean rebuild + flash.
+> **`M906` 600 mA cho CẢ 6 trục**, `M92 40/40/400/207.5`. Đã ghi EEPROM (`M500`, crc 6571) → verify
+> qua reset → đồng bộ **default trong `Configuration*.h`** → clean rebuild + flash
+> (`Marlin 2.1.2 (Oct 12 2026 19:49:38)`, cùng bản có **mốc `Z-MIN`/`Z-MAX`** + sửa lỗi nhận nút).
 > Bảng dưới giữ lại làm mốc lịch sử của bước 1/8; **trạng thái đang chạy xem §3.3**.
 
 **Thứ tự thực hiện — quan trọng, và đã làm đúng thứ tự này:**
