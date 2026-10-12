@@ -35,9 +35,11 @@ import time
 #   - ClampFeeds: bi rang buoc boi FIRMWARE (M203/M201) -> luon phai khop.
 #   - FirstLayerTwice: khong phai gioi han firmware nhung co rang buoc VAT LY:
 #       pass2_flow PHAI la 100 vi pass 2 da nam cao hon pass 1 dung mot chieu cao
-#       layer init => no la mot lop binh thuong (giam flow chi lam lop do thieu
-#       nhua). pass1_flow la gia tri KHOI DAU cho lop miet bam ban (60%) - sau lan
-#       dong bo nay ban van doi duoc trong giao dien Cura.
+#       layer init => no la mot lop binh thuong (giam flow chi lam lop do thieu nhua).
+#       pass2_feedrate = 60mm/s: pass 2 cung phai in o toc do BINH THUONG (Cura ap
+#       'Initial Layer Speed' cho ca layer 0 nen khong the de Cura tu quyet).
+#       pass1_flow = 30% la gia tri KHOI DAU cho lop miet bam ban - sau lan dong bo
+#       nay ban van doi duoc trong giao dien Cura.
 OVERRIDES = {
     "ClampFeeds": {
         "max_feedrate_xy": "150",   # = M203 X/Y
