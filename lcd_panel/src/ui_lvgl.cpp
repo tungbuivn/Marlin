@@ -567,7 +567,7 @@ enum {
   // P2/P7 - JOG (tat dong co, home tung truc, sua probe Z bang lop phu)
   A_STEPPERS_OFF, A_HOME_X, A_HOME_Y, A_HOME_Z, A_EDIT_PROBE_Z,
   // P3/P8/P9 - EEPROM + xac nhan + DFU (A_STOP_NOW la buoc da xac nhan cua A_STOP)
-  A_EEPROM_LOAD, A_EEPROM_RESET, A_STOP_NOW, A_REBOOT_DFU,
+  A_EEPROM_RESET, A_STOP_NOW, A_REBOOT_DFU,
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
@@ -634,8 +634,11 @@ static void do_action(const int a) {
 
     // ---- P2/P8 ----
     case A_EDIT_PROBE_Z: ov_open_id(PANEL_SET_PROBE_OFFSET_Z); break;   // mo lop phu sua M851 Z
-    case A_EEPROM_LOAD:  ui_confirm("M501 LOAD", "Nap lai thong so tu EEPROM?", (uint8_t)A_EEPROM_LOAD, 1); break;
-    case A_EEPROM_RESET: ui_confirm("M502 RESET", "Tra ve thong so MAC DINH?",   (uint8_t)A_EEPROM_RESET, 1); break;
+    // M502 tra thong so trong RAM ve MAC DINH cua firmware -> XAC NHAN 2 BUOC (giong REBOOT DFU)
+    // vi bam nham roi bam tiep SAVE EEPROM se ghi de vinh vien len chip EEPROM I2C.
+    case A_EEPROM_RESET: ui_confirm("M502 RESET",
+                                    "Tra thong so trong RAM ve MAC DINH?\nChi ghi vao EEPROM neu sau do bam SAVE",
+                                    (uint8_t)A_EEPROM_RESET, 2); break;
     case A_REBOOT_DFU:   ui_confirm("REBOOT DFU", "Nhay vao ROM DFU bootloader?", (uint8_t)A_REBOOT_DFU, 2); break;
     case A_FILAMENT_CHANGE: panel_link_send_gcode("M600 B0"); break;   // doi filament, khong lui dai
     case A_RUNOUT_TOGGLE: break;                                        // xu ly rieng (xem cb_runout_toggle)
@@ -651,14 +654,10 @@ static void do_action(const int a) {
   }
 }
 
-// 2 nut EEPROM/M502 va Reboot DFU can chay lenh THAT SU sau khi nguoi dung xac nhan
-// (A_EEPROM_LOAD/A_EEPROM_RESET/A_REBOOT_DFU o tren chi mo hop xac nhan).
+// Nut M502 RESET va Reboot DFU can chay lenh THAT SU sau khi nguoi dung xac nhan du so buoc
+// (A_EEPROM_RESET/A_REBOOT_DFU o tren chi mo hop xac nhan).
 static void do_confirmed(const uint8_t act) {
   switch (act) {
-    case A_EEPROM_LOAD:
-      panel_link_send_gcode("M501");
-      panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
-      break;
     case A_EEPROM_RESET:
       panel_link_send_gcode("M502");
       panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
@@ -1713,10 +1712,11 @@ static void page_settings_create(lv_obj_t *p) {
   mk_btn_grow(rb, "DOWN",        28, cb_scroll_table, (void *)(intptr_t)(48));
   mk_btn_grow(rb, "SAVE EEPROM", 28, cb_action, (void *)(intptr_t)A_SAVE);
 
-  // P3: nap lai / tra ve mac dinh - moi nut co hop xac nhan (xem do_action)
+  // M502 RESET: tra thong so trong RAM ve mac dinh cua firmware. XAC NHAN 2 BUOC (xem do_action).
+  // Da BO nut "M501 LOAD" (2026-10-13, theo yeu cau): M501 chi doc lai thong so tu EEPROM vao RAM
+  // (hoan tac thay doi chua luu) chu khong "load" tu file nao -> nhan "LOAD" gay hieu nham.
   lv_obj_t *r2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
-  mk_btn_grow(r2, "M501 LOAD",  28, cb_action, (void *)(intptr_t)A_EEPROM_LOAD);
-  mk_btn_grow(r2, "M502 RESET", 28, cb_action, (void *)(intptr_t)A_EEPROM_RESET);
+  mk_btn_grow(r2, "M502 RESET (ve mac dinh)", 28, cb_action, (void *)(intptr_t)A_EEPROM_RESET);
 }
 
 static void page_settings_update(void) {

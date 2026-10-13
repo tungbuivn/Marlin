@@ -716,3 +716,14 @@ Sau khi sinh **phai sua tay khoi include** o dau file thanh `#include "lvgl.h"` 
 `<lvgl-src>` vao duong include -> loi bien dich).
 Nho: linker `--gc-sections` TU BO du lieu glyph cua font khong duoc tham chieu, nen giu ca 2 file
 font trong `src/` khong ton them Flash (do lai: 484 061 B = 36.9%).
+
+## EEPROM tren trang SETTINGS (doi 2026-10-13)
+- **Da BO nut `M501 LOAD`** theo yeu cau: M501 chi DOC LAI toan bo thong so tu chip EEPROM I2C
+  vao RAM (tuc la HOAN TAC cac thay doi chua luu ke tu lan SAVE gan nhat) - no khong "load" tu
+  file nao ca, nen nhan "LOAD" gay hieu nham. Neu can lai chuc nang hoan tac thi them 1 nut voi
+  nhan ro nghia, vi du `HOAN TAC (M501)`.
+- `M502 RESET (ve mac dinh)` chiem ca hang, **XAC NHAN 2 BUOC** (giong REBOOT DFU): bam OK lan 1
+  doi text thanh "Chac chan? Bam OK lan nua", bam OK lan 2 moi gui `M502` + xin lai bang thong so.
+  Ly do phai 2 buoc: M502 tra thong so TRONG RAM ve mac dinh cua firmware; neu sau do bam
+  `SAVE EEPROM` (M500) thi mac dinh bi ghi VINH VIEN len chip EEPROM.
+- Nho thu tu dung: `M502` (mac dinh) -> chinh lai -> `SAVE EEPROM` (M500).
