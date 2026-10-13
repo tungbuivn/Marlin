@@ -92,7 +92,23 @@
       const char ch = (char)Serial.read();
       if (ch == '\r' || ch == '\n') {
         s_fwd[s_fwd_len] = '\0';
-        if (s_fwd_len) snprintf(s_forward_pending, sizeof(s_forward_pending), "%s", s_fwd);
+        if (s_fwd_len) {
+          // LENH RIENG CUA PANEL (khong gui sang Marlin): dieu khien che do nhan file qua BT.
+          //   BTUP ON   -> bat (tu dong bat san theo PANEL_BT_UPLOAD_AUTOSTART=1)
+          //   BTUP OFF  -> tam khoa (tat BT, tra ~100 KB heap)
+          //   BTUP?     -> in trang thai (BT/WiFi/the TF/token)
+          if (strncmp(s_fwd, "BTUP", 4) == 0) {
+            const char *arg = s_fwd + 4;
+            while (*arg == ' ') arg++;
+            if (strncmp(arg, "ON", 2) == 0)       panel_bt_upload_set_enabled(true);
+            else if (strncmp(arg, "OFF", 3) == 0) panel_bt_upload_set_enabled(false);
+            Serial.printf("[BTUP] lenh console: '%s' -> enabled=%d, the TF=%d, heap=%u B\n",
+                          s_fwd, (int)panel_bt_upload_enabled(), (int)panel_bt_upload_sd_ready(),
+                          (unsigned)ESP.getFreeHeap());
+          } else {
+            snprintf(s_forward_pending, sizeof(s_forward_pending), "%s", s_fwd);
+          }
+        }
         s_fwd_len = 0;
         continue;
       }

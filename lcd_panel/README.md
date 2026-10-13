@@ -738,32 +738,51 @@ SD của Marlin** (khác với `GET /files`, thứ sẽ giành bus SPI của th�
 Thêm nữa `ESPmDNS` kéo thêm DRAM biến tĩnh (xem 9.8: trần DRAM của CYD chỉ còn ~2,5 KB). Khi cần,
 bật bằng `-DPANEL_ESP3D_USE_MDNS=1` — nhưng **phải build kiểm lại** vì có thể tràn DRAM.
 
-### 9.3 Gửi file từ điện thoại — 2 kiểu
+### 9.3 Gửi file — cú pháp header (BẮT BUỘC có token) + các dòng panel trả lời
 
-| Kiểu | Định dạng | Kết thúc phiên |
+**Token** (`PANEL_BT_TOKEN` trong `panel_config.h`, đang là **`TBT-3D-up`**) là **lớp bảo mật chính**:
+ai trong tầm Bluetooth cũng thấy `TBT-PANEL` và pair được, nhưng **phải biết token mới gửi được file**.
+
+| Dạng header (dòng ĐẦU của phiên) | Khi nào dùng | Kết thúc phiên |
 |---|---|---|
-| **Có header** (ưu tiên) | dòng `PUT <ten_file> <so_byte>` + `\n`, rồi đúng `<so_byte>` byte nhị phân | đủ số byte (thiếu quá 8 s → `ERR`) |
-| **Gửi thô** (app kiểu "Serial Bluetooth Terminal") | dữ liệu ngay từ byte đầu | không còn byte nào trong **3 giây** |
+| `PUT <token> <ten_file> <so_byte>` | **ưu tiên** — app biết trước kích thước (script PC tự tính) | đủ đúng số byte (thiếu quá 8 s → `ERR`) |
+| `PUT <token> <ten_file> *` | app **không** biết/không muốn gõ số byte | không còn byte nào trong **3 giây** |
+| `PUT <token> <ten_file>` | như dạng `*` | như dạng `*` |
+| ~~dữ liệu thô ngay từ byte đầu~~ | **KHÔNG còn được nhận** (không có chỗ đặt token). Chỉ khi build với `-DPANEL_BT_ALLOW_RAW=1` (mặc định 0) — khi đó **mất lớp token** | 3 giây im lặng |
 
-* Kiểu thô lấy tên mặc định `PANEL_BT_DEF_NAME` = `bt_upload.gco`; tên không có phần mở rộng thì
-  tự thêm `.gco`; mọi ký tự lạ/đường dẫn bị loại.
-* Tên file (kiểu header) tối đa 31 ký tự, chỉ `[A-Za-z0-9._-]`.
+Ví dụ thật (token mặc định):
+```
+PUT TBT-3D-up benchy.gco 1234567
+PUT TBT-3D-up benchy.gco *
+PUT TBT-3D-up benchy.gco
+```
+
+* Tên file tối đa 31 ký tự, chỉ `[A-Za-z0-9._-]`; không có phần mở rộng thì tự thêm `.gco`.
 * **Chỉ nhận khi Marlin không đang in** (`panel.flags & PANEL_SF_SD_PRINTING` hoặc state
   PRINTING/PAUSED/HOMING/LEVELING/RUNOUT/KILLED) — vì lúc đẩy file ESP3D sẽ giành bus SPI của thẻ
-  SD (xem 9.6), đang in mà giành bus là hỏng bản in. Đang in → `ERR dang in`.
-* Không cho 2 phiên chồng nhau: trong lúc nhận/đẩy, byte mới tới chỉ bị bỏ và trả `ERR`.
-* Heap < `PANEL_BT_HEAP_MIN` (20 KB) → `ERR heap thap`.
+  SD (xem 9.6), đang in mà giành bus là hỏng bản in.
+* Không cho 2 phiên chồng nhau; byte mới tới trong lúc đang nhận/đẩy chỉ bị bỏ và trả `ERR`.
+* Sai/thiếu token ⇒ **`ERR sai ma token`**, **không nhận byte nào**, không tạo file tạm, và log
+  `[BTUP] TU CHOI phien: sai token (tu <MAC>)`.
+* Heap < `PANEL_BT_HEAP_MIN` (20 KB) ⇒ `ERR heap thap`; thẻ chưa sẵn sàng ⇒ `ERR the TF chua san sang`;
+  chế độ nhận file bị khoá (API) ⇒ `ERR chua bat che do nhan file`.
 
-**Trả lời qua BT** (app đọc được, mỗi dòng kết thúc `\n`):
+**Panel trả lời qua BT** (mỗi dòng kết thúc `\n`, app/script đọc được):
 
 ```
-OK <ten> <so_byte>     phiên kiểu header được nhận
-OK <ten> RAW           phiên kiểu thô được nhận
-PROG <so_byte_da_nhan> mỗi ~64 KB
-POST <so_byte>         đã nhận xong, bắt đầu đẩy lên ESP3D (bắt đầu KHÓA UI)
-DONE <so_byte>         POST thành công, đã gửi M22/M21 + xin lại danh sách file
-ERR <lý do>            lỗi (không gửi M22/M21)
+OK <ten> <so_byte>      đã nhận phiên kiểu header CÓ số byte
+OK <ten> *              đã nhận phiên kiểu header KHÔNG số byte (kết thúc khi im 3 s)
+OK <ten> RAW            đã nhận phiên kiểu thô (chỉ khi PANEL_BT_ALLOW_RAW=1)
+OK <ten> <so_byte>      (gửi LẦN 2) đã NHẬN XONG file, chuẩn bị tắt BT để đẩy lên ESP3D
+PROG <so_byte_da_nhan>  tiến độ, mỗi ~64 KB
+DONE <so_byte>          POST thành công + đã gửi M22/M21 + xin lại danh sách file
+ERR <lý do>             lỗi (KHÔNG gửi M22/M21). Vd: sai ma token / dang in /
+                        the TF chua san sang / thieu RAM cho WiFi / ESP3D tra HTTP 500 / ...
 ```
+
+> ⚠️ **Lúc đẩy lên ESP3D thì BT đã TẮT** (để nhường ~100 KB RAM cho WiFi — xem 9.11), nên app sẽ
+> **mất kết nối** trong khoảng vài chục giây đến vài phút. `DONE`/`ERR` được **lưu lại** và **gửi
+> lại ngay khi app kết nối lại** (hoặc khi BT bật lại xong). App cứ kết nối lại là biết kết quả.
 
 ### 9.4 Endpoint upload thật của ESP3D (đọc từ `D:\arduino\ESP3D-direct-sd\`)
 
@@ -1020,6 +1039,101 @@ sau này muốn WiFi thường trực: bật lại trong `panel_bt_upload_begin(
 ⇒ TFT_eSPI chạy **HSPI**; nhánh CYD của `ui_lvgl_port.cpp` chỉ dùng `s_lcd` (TFT_eSPI) + cảm ứng
 bit-bang 25/32/39/33/36, còn `SPI.beginTransaction` ở `ui_lvgl_port.cpp:117` nằm trong nhánh **STM32**
 (`#endif // !PANEL_BOARD_CYD` ở `:121`) ⇒ thẻ TF trên VSPI 18/19/23/5 là bus riêng.
+
+### 9.11 BT và WiFi CHẠY TUẦN TỰ (không bao giờ bật đồng thời)
+
+**Số đo thật (COM7, 2026-10-14, thẻ đã cắm):**
+
+```
+[BTUP] the TF OK @ 20 MHz: cardType=3, tong 15257584 KB, da dung 40 KB
+[BTUP] truoc khi bat BT Classic: heap=124324 B, khoi lien tuc lon nhat=90100 B
+[BTUP] BT SPP "TBT-PANEL" san sang  heap=24840 B, khoi lien tuc=15348 B
+```
+⇒ **Bluedroid Classic ăn ~99,5 KB** (124.324 → 24.840 B). WiFi STA cần thêm ~40–50 KB ⇒ **không thể
+bật cùng lúc**. Vì pha 1 (nhận BT) và pha 2 (POST WiFi) là **nối tiếp**, firmware làm:
+
+1. Hết pha 1 → gửi `OK <tên> <số_byte>` cho app (**báo đã nhận xong**) → `SerialBT.end()`.
+2. Ghi log `[BTUP] ket thuc pha 1 -> TAT BT (lan N): heap A -> B B (+X B), khoi lien tuc=...`;
+   `SerialBT.end()` **thực sự trả bộ nhớ**: `_stop_bt()` gọi `esp_spp_deinit()` +
+   `esp_bluedroid_disable/deinit()` + `btStop()` (`BluetoothSerial.cpp:710-751`), và `btStop()` gọi
+   `esp_bt_controller_disable/deinit()` (`esp32-hal-bt.c:62-88`). Nếu lần nào `+X` < 60 KB thì log
+   `!! CANH BAO` để biết mà cắt DRAM tĩnh (chưa từng thấy trên máy thật).
+3. **Cửa an toàn WiFi** (heap ≥ `PANEL_WIFI_MIN_HEAP` 72 KB **và** khối liên tục ≥
+   `PANEL_WIFI_MIN_BLOCK` 32 KB) — không đạt ⇒ `ERR thieu RAM cho WiFi`, xoá file tạm, **bật lại BT**,
+   **KHÔNG** cố bật WiFi.
+4. POST lên ESP3D (BT đang TẮT, chỉ WiFi chạy).
+5. Xong ⇒ `WiFi.disconnect(true); WiFi.mode(WIFI_OFF)` (log heap) → `SerialBT.begin()` lại (có cửa an
+   toàn RAM như lúc boot) → `M22`/`M21` + 800 ms + `PIN_REQ_FILES` + xoá file tạm → gửi `DONE`.
+6. Kết quả `DONE`/`ERR` được **lưu lại** và **gửi lại** khi app kết nối lại (`result_try_send()` mỗi
+   vòng lặp — không cần app làm gì đặc biệt).
+
+⚠️ Vì `end()` xoá `_spp_rx_queue`, firmware **tạm dừng task hút BT** (cờ `s_bt_pump_pause` +
+handshake `s_bt_pump_parked`) trước khi gọi `end()` — nếu không, task có thể đang nằm trong
+`xQueueReceive` trên queue vừa bị xoá.
+
+### 9.12 THE TF NÓNG: rút ra / cắm vào không cần reset
+
+| Việc | Chi tiết |
+|---|---|
+| Kiểm thẻ còn đó | mỗi **1 s** (`PANEL_SD_CHECK_MS`), **chỉ khi rảnh** (`ST_IDLE`/`ST_NOTE`) — **không** kiểm giữa lúc đang nhận/đang POST để không tranh SPI |
+| Phép kiểm | `SD.exists("/")` = **1 lần `f_stat` thư mục gốc** (~0,3–1 ms SPI, ~0,1 % CPU ở nhịp 1 s). **Không** dùng `SD.cardType()` vì nó trả giá trị cache |
+| Rút thẻ | `[BTUP] MAT THE TF (rut ra?): ...` + `SD.end()` (ép unmount — nếu không, `SD.begin()` lần sau trả `true` ngay mà không mount lại) + nếu đang có phiên thì `stage_flush` fail ⇒ phiên bị huỷ + xoá file tạm |
+| Cắm lại | tự thử mount lại mỗi **2,5 s** (`PANEL_SD_RETRY_MS`), log khi thành công; thất bại thì **im lặng** (chỉ log lần đầu + mỗi lần đổi trạng thái, không spam) |
+| Khi bắt đầu phiên BT | thử mount **ngay**; không được ⇒ `ERR the TF chua san sang` |
+| Cho UI | `panel_bt_upload_sd_ready()` (cache, không SPI) và `panel_bt_upload_sd_retry()` (chỉ bật cờ, mount thật chạy ở vòng lặp sau — không chặn UI) |
+| Log 1 Hz | có thêm cờ `sd=1/0` |
+
+Các lệnh nhận file vẫn luôn kiểm: thẻ phải mount được, còn chỗ (chừa 256 KB, và khi **không biết
+trước kích thước** thì kiểm lại mỗi ~128 KB, chừa 512 KB), Marlin không đang in.
+
+### 9.13 BẢO MẬT: token (chính) + PIN (phụ) + luôn DISCOVERABLE
+
+* **Token bắt buộc**: `PANEL_BT_TOKEN` (đang `"TBT-3D-up"`) — xem cú pháp ở §9.3. Ai không biết token
+  ⇒ `ERR sai ma token`, **không nhận byte nào**; MAC của client được log để truy vết.
+* **RAW mặc định TẮT** (`PANEL_BT_ALLOW_RAW 0`) vì gửi thô không có chỗ đặt token. Bật lên = **bỏ lớp
+  token**; firmware in cảnh báo lúc khởi động.
+* **PIN** `PANEL_BT_PIN` (đang `"74196328"`, tối đa 16 byte) đặt trước **mọi** lần `begin()`.
+  ⚠️ Nếu điện thoại pair bằng **SSP** thì **không hỏi PIN** (`PANEL_BT_JUST_WORKS 1` đặt IO capability
+  = `NONE` để pair kiểu "Just Works"; core 2.0.17 mặc định bật SSP với IO cap `IO`,
+  `BluetoothSerial.cpp:896,694`) — nên **PIN chỉ là lớp phụ**, token mới là lớp chính.
+* **Luôn DISCOVERABLE**: `esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE)`
+  ngay khi BT khởi động ⇒ **bất kỳ điện thoại nào cũng thấy `TBT-PANEL` và pair được bất cứ lúc nào**
+  (đổi máy / pair lại sau khi "quên" thiết bị đều được, **không cần bật gì**). Vì vậy mới cần token.
+* **Tự động nhận file từ lúc boot**: `PANEL_BT_UPLOAD_AUTOSTART 1` (mặc định) — không có nút bật/tắt.
+  API vẫn có sẵn nếu sau này muốn khoá tạm: `panel_bt_upload_set_enabled(false)` (tắt BT + trả
+  ~100 KB heap) / `panel_bt_upload_set_enabled(true)`, `panel_bt_upload_enabled()`. Từ **console COM7**
+  (không phải console G-code của Marlin) gõ `BTUP ON` / `BTUP OFF` / `BTUP?`.
+  Đổi `PANEL_BT_UPLOAD_AUTOSTART 0` để quay lại hành vi "phải bật tay".
+
+### 9.14 Upload từ WINDOWS (script có sẵn) và từ ANDROID
+
+**Windows — `lcd_panel/tools/bt-upload.ps1`:**
+
+```powershell
+# 1) Pair (1 lan): Settings -> Bluetooth & devices -> Add device -> "TBT-PANEL"
+#    Neu Windows hoi ma PIN: 74196328
+# 2) Chay (script tu do cong SPP neu bo -Port):
+cd D:\Marlin
+.\lcd_panel\tools\bt-upload.ps1 -Token TBT-3D-up -File .\benchy.gco
+.\lcd_panel\tools\bt-upload.ps1 -Port COM8 -Token TBT-3D-up -File .\benchy.gco -Name B2.gco
+.\lcd_panel\tools\bt-upload.ps1 -Token TBT-3D-up -File .\big.gco -NoSize -ChunkKB 2
+```
+Tham số: `-Port` (bỏ trống = tự dò), `-Token` (**bắt buộc**), `-File` (**bắt buộc**), `-Name`,
+`-ChunkKB` (mặc định 1), `-NoSize` (gửi `*`), `-TimeoutSec` (mặc định 600), `-Baud` (mặc định
+115200 — **SPP không quan tâm baud**, chỉ cần một giá trị).
+Script tự tính số byte, gửi theo khối, in tiến độ % + KB/s và in **mọi dòng panel trả lời**
+(`OK`/`PROG`/`DONE`/`ERR`), thoát khi thấy `DONE`/`ERR`.
+
+⚠️ Sau khi pair Windows thường tạo **2 cổng COM** (Incoming + Outgoing) — phải dùng cổng **Outgoing**
+(thường có tên chứa `TBT-PANEL`); script liệt kê `Get-PnpDevice -Class Ports` để bạn chọn.
+
+**Android (app BT serial, ví dụ "Serial Bluetooth Terminal"):** pair `TBT-PANEL` (PIN `74196328` nếu
+được hỏi) → mở kết nối → gõ và gửi dòng `PUT TBT-3D-up ten.gco *` → rồi dùng chức năng **Send file**
+của app để gửi file (panel tự kết thúc khi im 3 giây). Nếu app cho nhập số byte thì điền cho chắc
+(`PUT TBT-3D-up ten.gco 1234567`). ⚠️ **Đừng ngắt kết nối BT giữa lúc đang gửi** — panel coi đó là lỗi
+(`ERR BT mat ket noi giua pha 1`) và xoá file tạm. Trong lúc panel đẩy lên ESP3D, BT sẽ **tự tắt** một
+lúc (§9.11) → app mất kết nối là bình thường; kết nối lại để nhận `DONE`.
+
 
 ## Cap nhat 2026-10-13 (protocol v2 + UI mo rong)
 Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).

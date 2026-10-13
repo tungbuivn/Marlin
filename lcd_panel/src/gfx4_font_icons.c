@@ -15,22 +15,33 @@
  *     U+E001  <-  U+E648  'wifi_off'                 fan + gach cheo = WiFi tat / khong co
  *     U+E002  <-  U+EBE1  'network_wifi_three_bar'   fan vien, 3 vach = dang thu / dang ket noi
  *     U+E003  <-  U+EBE4  'network_wifi_one_bar'     fan vien, 1 vach = song yeu
+ *     U+E004  <-  U+E623  'sd_card'                  the nho (than dac, khac o goc tren trai)
+ *     U+E005  <-  U+F057  'sd_card_alert'            the nho + dau '!' = the loi / khong co the
+ *     U+E006  <-  U+E1C2  'sd_storage'               *** TRUNG BYTE voi U+E004 *** (xem duoi)
  *
- * (Chi U+E000 va U+E001 la bat buoc theo hop dong; U+E002/U+E003 la them cho tien.)
+ *   'sd_card_off' va 'sdcard' KHONG co trong font v1.017 (da tra bang ligature GSUB), nen
+ *   U+E005 dung 'sd_card_alert' (co that trong font).
+ *   ⚠️ U+E006 'sd_storage' cho ra bitmap GIONG HET BYTE U+E004 'sd_card' (2 thiet ke Material
+ *   trung nhau o co 14 px / 4bpp) -> U+E006 chi la BI DANH, khong them hinh moi. Muon bo thi
+ *   doi --last 0xE005 va bo --map 0xE006=..., tiet kiem 60 byte bitmap.
  *
  * SO DO (do chinh tool in ra):
- *   size 14 px, 4bpp, xAdvance 14 px, yAdvance 11 px, base_line 0, --yshift +2
- *   box_h max 11, box_w max 14, ascender 11, descender 0
- *   1 dai, 4 o, 4 glyph co net, 287 byte bitmap (~330 byte ca bang glyph + GFXfont)
+ *   size 14 px, 4bpp, xAdvance 14 px, yAdvance 12 px, base_line 1, --yshift +2
+ *   box_h max 12, box_w max 14, ascender 11, descender 1
+ *   1 dai, 7 o, 7 glyph co net, 467 byte bitmap (~545 byte ca bang glyph + GFXfont + ranges)
  *   -> CAO <= 14 px va RONG <= 14 px (cho hien tai la cham 12x12 trong header cao 26).
  *
- * VI SAO yAdvance 11 / base_line 0 (khac font chu gfx4_font_robotomono la 17/3)?
+ * yAdvance 11 -> 12 khi them 3 glyph the nho: ca 3 deu cao 12 px va net cham xuong 1 px DUOI
+ * baseline (yoff -11, h 12), nen hop dong 11 px se CAT mat 1 px do. Doi yAdvance 12 (base_line
+ * 1) giu BASELINE VAN O HANG 11 nhu cu -> 4 glyph WiFi khong doi du lieu VA khong doi vi tri
+ * tren man (kiem bang tools/cmp_font_headers.py: 4 dong glyph + 287 byte bitmap dau GIONG HET).
+ *
+ * VI SAO yAdvance KHIT NET (12) chu khong phai 17 nhu font chu?
  *   Driver tu tinh base_line = yAdvance - ascender (KHONG nhan base_line tu header), nen voi
  *   font chi gom icon, net LUON nam sat MEP TREN hop dong. Vi vay chieu cao hop dong chinh la
- *   thu quyet dinh vi tri: dat yAdvance = dung chieu cao net (11) thi hop dong KHIT net, nen
- *   khi UI canh giua label trong header 26 px thi ICON CUNG DUOC CANH GIUA theo
- *   (net o hang 7..17, trung voi hang chu 9..17 cua font chu).
- *   Neu de yAdvance 17 nhu font chu thi hop dong thua 6 px o duoi -> canh giua label se keo
+ *   thu quyet dinh vi tri: dat yAdvance = dung chieu cao net thi hop dong KHIT net, nen khi UI
+ *   canh giua label trong header 26 px thi ICON CUNG DUOC CANH GIUA theo.
+ *   Neu de yAdvance 17 nhu font chu thi hop dong thua nhieu px o duoi -> canh giua label se keo
  *   icon LEN CAO ~4 px so voi chu. (Muon icon nam dung baseline chu thi phai cho driver nhan
  *   base_line tu header - hien driver CHUA ho tro, xem bao cao.)
  *
@@ -41,7 +52,7 @@
  *        lv_obj_t *l = lv_label_create(header);
  *        lv_label_set_text(l, "\xEE\x80\x80");            // U+E000 (wifi)  [UTF-8]
  *        lv_obj_set_style_text_font(l, gfx4_font_icons_get(), 0);
- *      U+E001 = "\xEE\x80\x81", U+E002 = "\xEE\x80\x82", U+E003 = "\xEE\x80\x83".
+ *      U+E001..U+E006 = "\xEE\x80\x81" .. "\xEE\x80\x86".
  *
  *   (Cach tuong duong, khong can ham tien loi -- giong het kieu dang dung cho font chu:)
  *        extern const GFXfont *const gfx4_font_icons_ranges[];
@@ -49,16 +60,18 @@
  *                                                     GFX4_FONT_ICONS_RANGE_COUNT,
  *                                                     LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4);
  *
- * KIEM TRA OFFLINE (khong can nap - in ASCII art + dem pixel co net):
+ * KIEM TRA OFFLINE (khong can nap - in ASCII art + dem pixel co net cho CA 7 glyph):
  *   python tools/test_gfxfont_layout.py --header src/gfx4_font_icons.h --no-compare \
- *       --cps 0xE000,0xE001,0xE002,0xE003
+ *       --cps 0xE000,0xE001,0xE002,0xE003,0xE004,0xE005,0xE006
+ *   python tools/cmp_font_headers.py <header_cu.h> src/gfx4_font_icons.h 4   # glyph cu co doi?
  *
  * SINH LAI (header nay CHI duoc include o DUNG file .c nay, vi mang bitmap/glyph la `static`
  * con cac doi tuong GFXfont co linkage ngoai):
  *   python tools/ttf2gfxfont.py --font D:/fonts/gfxfont/material/MaterialIcons-Regular.ttf \
- *       --size 14 --bpp 4 --name gfx4_font_icons --first 0xE000 --last 0xE003 \
- *       --range-names pua --advance 14 --yadvance 11 --yshift 2 \
+ *       --size 14 --bpp 4 --name gfx4_font_icons --first 0xE000 --last 0xE006 \
+ *       --range-names pua --advance 14 --yadvance 12 --yshift 2 \
  *       --map 0xE000=0xE63E --map 0xE001=0xE648 --map 0xE002=0xEBE1 --map 0xE003=0xEBE4 \
+ *       --map 0xE004=0xE623 --map 0xE005=0xF057 --map 0xE006=0xE1C2 \
  *       -o src/gfx4_font_icons.h
  */
 #include "panel_config.h"

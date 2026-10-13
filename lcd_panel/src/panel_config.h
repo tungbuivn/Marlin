@@ -196,6 +196,47 @@
 #ifndef PANEL_BT_NAME
   #define PANEL_BT_NAME "TBT-PANEL"  // ten thiet bi thay khi dien thoai quet Bluetooth
 #endif
+// Ma PIN khi dien thoai doi ma luc pair (4..16 ky tu; Bluedroid esp_bt_pin_code_t cho toi 16 byte).
+// Dat bang SerialBT.setPin() TRUOC SerialBT.begin() (core doc _pin_len/_pin_code trong begin() -
+// BluetoothSerial.cpp:686-688). ⚠️ NEU dien thoai pair bang SSP thi DIEN THOAI KHONG HOI PIN (core
+// dat SSP + IO cap) => PIN chi la LOP PHU; lop chinh la TOKEN ben duoi.
+#ifndef PANEL_BT_PIN
+  #define PANEL_BT_PIN "74196328"
+#endif
+// ===========================================================================
+// BAO MAT - tranh nguoi khac gui file khong mong muon (xem README 9.13)
+//   Lop 1 (chinh): TOKEN bat buoc trong dong header. Phien chi duoc chap nhan khi dong DAU la
+//       `PUT <token> <ten_file> <so_byte>`; sai/thieu token => ERR sai ma token, KHONG nhan byte
+//       nao, khong tao file tam. De "" neu muon TAT lop nay (khong khuyen nghi).
+//   Lop 2: PIN khi pair (tren) - chi co tac dung voi thiet bi legacy (khong SSP).
+//   Lop 3: sau lan client ket noi thanh cong dau tien => NON-DISCOVERABLE (dien thoai la khong
+//       quet thay nua); chi DISCOVERABLE lai khi nguoi dung CHU DONG bat che do nhan file.
+//   Lop 4: mac dinh KHONG tu bat che do nhan file (PANEL_BT_UPLOAD_AUTOSTART 0) - UI phai goi
+//       panel_bt_upload_set_enabled(true), va tu tat sau PANEL_BT_ENABLE_MIN phut khong co phien.
+// ===========================================================================
+#ifndef PANEL_BT_TOKEN
+  #define PANEL_BT_TOKEN "TBT-3D-up"     // doi tuy y (KHONG de trong neu muon co bao mat)
+#endif
+// Kieu gui THO (khong header) KHONG the mang token => mac dinh TAT. Bat len la BO lop token.
+#ifndef PANEL_BT_ALLOW_RAW
+  #define PANEL_BT_ALLOW_RAW 0
+#endif
+// 1 = TU DONG san sang nhan file tu luc khoi dong (mac dinh - nguoi dung khong phai bam gi; TOKEN
+// moi la cong chan that). 0 = phai bat bang panel_bt_upload_set_enabled(true) (nut UI/console).
+#ifndef PANEL_BT_UPLOAD_AUTOSTART
+  #define PANEL_BT_UPLOAD_AUTOSTART 1
+#endif
+// Ghi chu: KHONG con cua so "tu tat sau N phut" va KHONG con "an thiet bi sau khi pair" - thiet bi
+// LUON DISCOVERABLE de bat ky dien thoai nao cung pair duoc bat cu luc nao (yeu cau nguoi dung);
+// bao mat nam o TOKEN + RAW tat + chi nhan khi may khong in.
+// SSP "Just Works": core 2.0.17 BAT SSP mac dinh (_enableSSP = true, BluetoothSerial.cpp:896) va dat
+// IO capability = ESP_BT_IO_CAP_IO (BluetoothSerial.cpp:694) => nhieu dien thoai hien hop thoai
+// doi/so sanh ma 6 so (chinh la "doi ma" nguoi dung gap). Dat = 1 de ghi de IO cap thanh
+// ESP_BT_IO_CAP_NONE cho pair KHONG can ma; PIN o tren van duoc dat de dung cho thiet bi legacy.
+// LUU Y: Just Works = khong xac thuc nguoi dung => lop bao mat that su la TOKEN.
+#ifndef PANEL_BT_JUST_WORKS
+  #define PANEL_BT_JUST_WORKS 1
+#endif
 
 // ---------------------------------------------------------------------------
 // WiFi + module ESP3D
@@ -301,9 +342,33 @@
 #ifndef PANEL_BT_MIN_BLOCK
   #define PANEL_BT_MIN_BLOCK   (48u * 1024u)    // khoi LIEN TUC lon nhat toi thieu (chong phan manh)
 #endif
-// WiFi: chi bat khi vao PHA 2 (day file), tat lai khi ranh -> pha 1 (nhan BT) chay MOT MINH.
+// ---------------------------------------------------------------------------
+// CHAY TUAN TU BT <-> WiFi (KHONG BAO GIO bat dong thoi) - do THAT tren may (2026-10-14):
+//   Bluedroid Classic an ~99,5 KB (heap 124.324 -> 24.840 B ngay sau SerialBT.begin()).
+//   Vi pha 1 (nhan BT) va pha 2 (POST WiFi) la NOI TIEP, het pha 1 thi goi SerialBT.end() de TRA
+//   ~100 KB, roi moi bat WiFi de POST; xong thi tat WiFi va bat lai BT. SerialBT.end() THUC SU tra
+//   bo nho: no goi esp_spp_deinit + esp_bluedroid_disable/deinit + btStop()
+//   (BluetoothSerial.cpp:710-751; btStop -> esp_bt_controller_disable/deinit o esp32-hal-bt.c:62-88).
+// ---------------------------------------------------------------------------
+#ifndef PANEL_WIFI_MIN_HEAP
+  #define PANEL_WIFI_MIN_HEAP  (72u * 1024u)    // heap toi thieu TRUOC khi bat WiFi STA
+#endif
+#ifndef PANEL_WIFI_MIN_BLOCK
+  #define PANEL_WIFI_MIN_BLOCK (32u * 1024u)    // khoi LIEN TUC lon nhat toi thieu cho lwip/WiFi
+#endif
+#ifndef PANEL_BT_END_MIN_GAIN
+  #define PANEL_BT_END_MIN_GAIN (60u * 1024u)   // SerialBT.end() phai tra >= muc nay (chi de CANH BAO)
+#endif
+// The TF: theo doi nong (rut ra / cam vao) - xem README 9.12
+#ifndef PANEL_SD_CHECK_MS
+  #define PANEL_SD_CHECK_MS    1000u            // nhip kiem the con do (chi khi IDLE/NOTE)
+#endif
+#ifndef PANEL_SD_RETRY_MS
+  #define PANEL_SD_RETRY_MS    2500u            // nhip thu mount lai khi dang mat the
+#endif
+// WiFi: giu lai bao lau sau lan day cuoi roi tat (0 = tat ngay sau moi lan POST)
 #ifndef PANEL_ESP3D_KEEP_MS
-  #define PANEL_ESP3D_KEEP_MS  60000u           // giu WiFi sau lan day cuoi bao lau (0 = giu mai)
+  #define PANEL_ESP3D_KEEP_MS  0u               // 0 = tat WiFi ngay sau khi POST xong
 #endif
 // 2 buffer lam viec lay tu HEAP (khong phai bien tinh - xem panel_bt_upload.cpp):
 //   vong dem BT -> loop (PHAI la luy thua cua 2) + khoi ghi xuong the TF.
