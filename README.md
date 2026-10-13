@@ -292,7 +292,7 @@ Cảm biến **Voron Tap** — probe **chính là nozzle**, kèm mạch enable q
 | Tín hiệu probe | **PB13** (header `Z-`), `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN` + `USE_PROBE_FOR_Z_HOMING` |
 | Enable probe | **PA8** (`PROBE_ENABLE_PIN`, header servo) — `1` = bật mạch cảm biến, `0` = tắt |
 | Điều khiển | **`M401`** = deploy (PA8 HIGH) · **`M402`** = stow (PA8 LOW) |
-| Offset nozzle→probe | `M851 X0.00 Y0.00 Z0.70` — **XY = 0 vì probe là chính nozzle (Voron Tap)**. Số Z là kết quả cân thực tế, có thể đổi mỗi lần cân lại |
+| Offset nozzle→probe | `M851 X0.00 Y0.00 Z0.75` — **XY = 0 vì probe là chính nozzle (Voron Tap)**. Số Z là kết quả cân thực tế, có thể đổi mỗi lần cân lại. **Đọc từ EEPROM 2026-10-13: `Z0.75`** (tài liệu cũ ghi 0.70; 0.80 là giá trị từng đọc trong RAM, **chưa bao giờ nằm trong EEPROM**) |
 | Cân Z offset | **`Motion` → `Probe Offset Wizard`** (hoặc `Advanced Settings` → `Z Probe Offsets` → `Probe Offset Wizard`) |
 | `PROBING_MARGIN` | 15 mm |
 | Logic | `Z_MIN_ENDSTOP_INVERTING false` |
@@ -803,7 +803,7 @@ M503        ; 2026-10-12 (cuoi ngay - bo "Truoc (1/16)" quy doi cho 1/8):
             ; M92 X40 Y40 Z400 E207.5 / M203 X150 Y150 Z10 E25
             ; M201 X300 Y300 Z200 E1000 / M204 P500 R300 T500 / M205 X8 Y8 Z0.40 E5
             ; M906 X600 Y600 Z600 (I1/I2 Z600) / T0 E600      <- 600 mA ca 6 truc
-            ; M851 X0 Y0 Z0.70
+            ; M851 X0 Y0 Z0.75
 M122        ; msteps 8 (ca 6 driver) + off time 3 + blank time 24 + interp true
             ; => tmc_init() DA ghi duoc vao driver.
             ; Neu thay off time 0 / msteps 256 / blank time 16 / Enabled false
@@ -822,7 +822,7 @@ M420 V      ; mesh 7x7, bien (15,15) .. (290,290)
 | Firmware mới thật chưa | `M115` | timestamp khớp giờ build |
 | Sau `G28` nozzle có được nâng | `G28` → `M114` | **`Z:10.00`** (`Z_AFTER_PROBING 10`) |
 | Chiều extruder | `M83` · `G1 E10 F100` | **đẩy ra**, không phải rút vào |
-| Offset probe còn không | `M851` | Z ≈ **0.70** (giá trị đang lưu; 2026-10-11 có lúc đọc ra 0.80 → nếu không rõ thì cân lại bằng `PROBE_OFFSET_WIZARD`) |
+| Offset probe còn không | `M851` | Z = **0.75** (đọc từ EEPROM 2026-10-13; tài liệu cũ ghi 0.70/0.80 là giá trị từng đọc trong RAM) |
 | Điểm G34 còn không | `M422` | `S3 X152.50 Y25` |
 | Mesh còn không | `M420 V` | hiện `Storage slot -1` + `Bed Leveling OFF` (mesh đã bị `G29 P0` xoá có chủ ý, 2026-10-11) — chỉ mong đợi `Mesh is valid` + `slot 0` **sau khi** đã probe lại UBL |
 | **Khoảng cách thực** (driver 1/8 ⇄ `M92`) | `G28` → `G1 X100 F600` / `G1 Y100 F600` → **đo bằng thước** | ✅ **đã test OK ngày 2026-10-12**: chạy **100 mm**, đo thực tế **khớp** ⇒ `M92 40/40/400/207.5` + microstep 1/8 **chính xác** (xem §11.4b) |
@@ -843,6 +843,12 @@ Nếu mục nào sai sau khi nạp → xem **11.7** trước khi sửa code.
 > 2. **Mở lại cổng COM (board tự reset) rồi đọc `M503` lần nữa.** Chỉ khi số **còn đúng sau reset** thì
 >    mới coi là đã lưu — `M500` báo `Settings Stored (684 bytes; crc …)` **không** bảo đảm điều đó
 >    (`M503` đọc từ **RAM**, không đọc lại chip).
+> 3. ⚠️ **Đính chính cơ chế (2026-10-13) — hiện tượng trên KHÔNG do flash ghi đè EEPROM:** board dùng
+>    **`I2C_EEPROM`** (`pins_MKS_MONSTER8_common.h:44-47`: chip rời 4K ở **PB8/PB9**,
+>    `FLASH_EEPROM_EMULATION` đang **comment**) ⇒ EEPROM nằm **ngoài** flash MCU nên `dfu-util`
+>    **không thể** chạm tới. Số đọc ra "như ảnh cũ" chính là **nội dung thật của chip** (lần `M500`
+>    trước đó không thực sự ghi, hoặc chỉ mới nằm trong RAM). Mesh UBL **luôn** còn nguyên
+>    (`Mesh is valid`, slot 0). Xem thêm cạm bẫy **36**.
 >
 > **Quy tắc: sau mỗi lần flash, luôn `M503` đối chiếu, và đối chiếu lại một lần nữa sau khi reset.**
 > ℹ️ **Đã gặp lần 2 trong cùng ngày 2026-10-12:** sau khi flash bản mới, `M906` đọc ra **600/600/600**
@@ -1070,9 +1076,14 @@ quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver q
    là **hợp lý** với một sai lệch giữa X và Y, dù cả hai đều khai 8.
 3. Khác biệt hành vi của TMC2209 ở MRES=8 khi có `INTERPOLATE true`.
 
-> ℹ️ **Flash KHÔNG xoá EEPROM** (đã kiểm chứng hai lần): sau khi nạp, `M851 Z0.70`,
-> `M205 X8 Y8 Z0.40 E5` và **mesh UBL** vẫn còn (`M420 V` → `Mesh is valid`). Marlin chỉ xoá EEPROM
-> khi `EEPROM_VERSION` đổi. Đổi lại: `M92`/`M201`/`M203` cũ **vẫn đè** mặc định mới.
+> ℹ️ **Flash KHÔNG xoá EEPROM** — và điều này đúng **theo cơ chế**, không chỉ theo thực nghiệm:
+> board dùng **`I2C_EEPROM`** (`pins_MKS_MONSTER8_common.h:44-47`: chip 4K ở **PB8/PB9**,
+> `FLASH_EEPROM_EMULATION` đang **comment**) ⇒ EEPROM nằm **ngoài** flash MCU nên `dfu-util`
+> **không thể** chạm tới. Sau khi nạp 2026-10-13: **mesh UBL còn nguyên** (`M420 V` → `Mesh is valid`,
+> slot 0) ✓. Marlin chỉ xoá EEPROM khi `EEPROM_VERSION` đổi.
+> ⚠️ **Nhưng `M503` đọc RAM, không đọc chip** — xem cạm bẫy **36**: `M500` rồi đọc lại **ngay trong cùng
+> lần mở cổng** KHÔNG chứng minh được gì (mở COM4 làm board reset do CDC, chỉ lần mở cổng **sau** đó mới
+> thật sự nạp từ EEPROM). Đổi lại: `M92`/`M201`/`M203` cũ **vẫn đè** mặc định mới.
 
 ### 11.5 File mới của dự án
 
@@ -1571,7 +1582,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | # | Cạm bẫy | Hệ quả | Cách đúng |
 |---|---|---|---|
 | 1 | **EEPROM đè lên code.** `M851`, `M422`, `M92`, `M203`, `M201`, `M204`, `M205` đều lưu trong EEPROM | Sửa `Configuration.h` rồi flash mà giá trị vẫn cũ | Sửa cả hai: code **và** gửi lệnh tương ứng + `M500` |
-| 2 | **Đừng dùng `M502` để "nạp lại mặc định"** | Xoá luôn `M851 Z0.70` (offset đã cân), mesh, điểm G34 | Dùng `M422` / `M851` cho từng giá trị |
+| 2 | **Đừng dùng `M502` để "nạp lại mặc định"** | Xoá luôn `M851 Z0.75` (offset đã cân), mesh, điểm G34 | Dùng `M422` / `M851` cho từng giá trị |
 | 3 | **Hướng extruder chỉ nằm trong firmware** (`INVERT_E0_DIR`) | Cura không có setting nào đảo chiều, sửa Cura vô ích | Sửa firmware + flash |
 | 4 | **`Z_AFTER_PROBING` bị comment → `move_z_after_probing()` rỗng** | `G28` kết thúc với nozzle **nằm trên bàn**, lệnh XY sau đó **kéo nozzle quét mặt bàn** | Bật `Z_AFTER_PROBING` |
 | 5 | **Marlin lấy `min(M204 P, M201 trục)`** | Cura khai 5000 mà `M201 X/Y` = 500 → máy vẫn chỉ chạy 500, con số trong Cura thành vô nghĩa | Cho **hai bên bằng nhau**. Máy này chặn ở **500**: `M201 X500 Y500` + `M500` (không cần flash) và hạ toàn bộ `acceleration_*` của Cura về 500 |
@@ -1611,7 +1622,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | 33 | **Thay thế chuỗi bằng PowerShell trên file có tiếng Việt** | `Get-Content -Raw` **không có `-Encoding`** đọc UTF-8 bằng ANSI → `WriteAllText` ghi lại thành UTF-8 **hỏng**: **916 dòng** tiếng Việt trong README nát thành mojibake (`trần cứng` → `tráº§n cá»©ng`). `Set-Content` không `-Encoding` còn ghi **CRLF** vào file vốn LF | **Sửa text bằng công cụ `edit`, không bằng `-replace` của PowerShell.** Nếu buộc phải dùng Python/PowerShell thì chỉ định encoding rõ ràng và `newline`. Khôi phục: `git checkout -- <file>` |
 | 34 | **Pass 2 của `FirstLayerTwice` bị in CHẬM theo "Initial Layer Speed"** | Cura áp `speed_print_layer_0` cho **toàn bộ** chunk layer 0, không tách pass 1/pass 2, nên dù pass 2 đã nằm cao hơn pass 1 `layer_height` + `pass2_z_extra` (một lớp **bình thường**) thì `F` của nó vẫn là tốc độ layer 0 — in chậm không cần thiết | `_layer_speed()` lấy `F` **phổ biến nhất** trên các bước đùn của `;LAYER:1` trong chính G-code, `_set_speed()` ép `F` của **bước có X/Y + E** trong pass 2 về tốc độ đó (`pass2_feedrate_auto`, mặc định bật) ⇒ khớp tốc độ in thật của profile. Vì Cura **không** cho script đọc setting của profile nên phải lấy từ G-code; `pass2_feedrate` (**60** mm/s → `F3600`) chỉ còn là **dự phòng** khi tắt auto hoặc layer 1 không có `F`. Giữ nguyên travel / Z-hop / retract. Test: `tests/test_first_layer_twice.py` |
 | 35 | **`upload-dfu.ps1` báo `SUCCESS` giả, board vẫn nằm trong DFU** | Khi `dfu-util` **không có trong PATH**, script lấy `$dfu.Source` của một `FileInfo` ⇒ `$null`; lệnh `& $dfuExe @dfuArgs` ném lỗi, `$LASTEXITCODE` **giữ nguyên 0 của `pio`** ⇒ in `SUCCESS: DFU upload completed!` + SHA256 trong khi **không ghi một byte nào**. Gặp thật 2026-10-13: gửi `M997` xong tưởng đã flash, thực tế board **mắc kẹt ở DFU** (mất COM4). Phép kiểm "No DFU devices detected" cũng luôn báo sai vì tìm chuỗi `STM32` — `dfu-util --list` in `[0483:df11]`/`Found DFU`, **không** có chữ `STM32` | Đã sửa: lấy `$dfu.FullName` (kèm `Test-Path`), `$dfuExit = -1` trước khi gọi (khác hẳn `0`), và nhận diện thiết bị bằng `Found DFU\|0483:df11`. Kiểm tra độc lập: `dfu-util --list` phải thấy `Found DFU: [0483:df11]`; sau flash **phải** thấy `File downloaded successfully` + `Transitioning to dfuMANIFEST state`. Nhắc lại: **gửi `M997` trước** (hoặc giữ BOOT0 + RESET) rồi mới chạy `.\upload-dfu.ps1 -NoPrompt` |
-| 36 | **Flash DFU làm MỘT PHẦN EEPROM revert về giá trị cũ** | `dfu-util` ghi cả vùng flash chứa **EEPROM mô phỏng**; một trong hai bank bị hỏng ⇒ Marlin nạp lại bank cũ, nên **chỉ vài giá trị** quay về đời trước (gặp thật 2026-10-13: `M201` Z200→**Z50**, `M204` 500/300/500→**300/300/300**, `M851` 0.80→**0.75**, trong khi `M92`/`M203`/`M906` **vẫn đúng**). Mesh UBL slot 0 **không mất** (`Mesh is valid`) | Sau **mỗi** lần flash: đọc lại `M503` + `M420 V`, đối chiếu bảng giá trị chuẩn (§3.3), ghi lại phần lệch rồi `M500`. `M503` đọc **RAM** nên muốn kiểm chứng thật phải mở lại cổng COM (board reset do CDC) rồi đọc lần nữa |
+| 36 | **Tưởng "flash làm revert EEPROM" — thật ra là `M503` đọc RAM** | Flash lại 2026-10-13 rồi đọc ra `M201` Z50, `M204` 300/300/300, `M851` Z0.75 trong khi tài liệu ghi Z200 / 500-300-500 / 0.80 → trông y như flash phá EEPROM. **Không phải**: board dùng **`I2C_EEPROM`** (chip rời 4K ở **PB8/PB9**, `FLASH_EEPROM_EMULATION` comment) nên flash **không chạm tới được**; mấy giá trị "đúng" kia chỉ từng nằm trong **RAM** (lần trước đọc lại ngay trong cùng phiên mở cổng, hoặc `M500` không thực sự ghi). Bằng chứng cùng lúc: `M92`/`M203`/`M906` **vẫn đúng** và mesh UBL **còn nguyên** (`Mesh is valid`) | Muốn biết EEPROM thật có gì: ghi (`M500` → **phải** in `Settings Stored (… bytes; crc …)`) rồi **mở lại cổng COM** — mở cổng làm board reset do CDC ⇒ nạp lại từ **chip**, chỉ lần đọc **sau** đó mới có giá trị. `M501` cũng nạp lại từ chip. Đã làm đúng vậy cho `M201`/`M204`: đọc lại sau reset vẫn đúng ⇒ thật sự đã vào EEPROM. (Và vì EEPROM là chip rời: `M503` cũ ≠ "mất dữ liệu", đừng ghi lại hàng loạt rồi `M500` khi chưa xác minh) |
 
 ### 11.8 `G34 Q<n>` — lặp căn gantry tới khi đạt
 
@@ -1897,7 +1908,7 @@ DAT - lech so voi tam      <- tat ca da dat -> khong con gi de van | + = goc CAO
   1. *(nhấc rất nhỏ, trước khi probe)* firmware đưa nozzle về đúng `Z_CLEARANCE_BETWEEN_PROBES` = 5mm. Lần probe trước kết thúc ở `trigger + 5mm`; nếu bàn ở góc đó cao/thấp hơn 0 một chút thì bước này chỉ nhích vài phần mười mm — đây chính là cú "nhấc lên một đoạn rất nhỏ" thấy trước khi probe.
   2. *(5mm)* `MULTIPLE_PROBING 2`: giữa lần chạm **nhanh** và lần chạm **chậm**, firmware nhấc lên `Z_CLEARANCE_MULTI_PROBE` = 5mm (`probe.cpp:737`).
   3. *(5mm)* sau khi probe xong: nhấc `Z_CLEARANCE_BETWEEN_PROBES` = 5mm (`PROBE_PT_RAISE`, `probe.cpp:898`) — **giữ nguyên**.
-- `probe.offset.z` (`M851 Z0.70`) **không tạo ra chuyển động nào**: nó chỉ vào phép tính (`measured_z = run_z_probe() + offset.z`, `probe.cpp:891`) và vào giới hạn `z_probe_low_point = -offset.z + Z_PROBE_LOW_POINT` (`probe.cpp:721`).
+- `probe.offset.z` (`M851 Z0.75`) **không tạo ra chuyển động nào**: nó chỉ vào phép tính (`measured_z = run_z_probe() + offset.z`, `probe.cpp:891`) và vào giới hạn `z_probe_low_point = -offset.z + Z_PROBE_LOW_POINT` (`probe.cpp:721`).
 - `Z_HOMING_HEIGHT` (`Configuration.h:1754`) đang **tắt**, nhưng `G28` vẫn nâng Z: cuối quá trình home Z, nozzle được đưa lên `Z_AFTER_PROBING` = 10mm (quan sát `M114` sau `G28`: `Z:10.00`).
 - Nhãn 2 ký tự (`L/R` theo X, `F/B` theo Y) **suy ra từ toạ độ**, không hard-code thứ tự điểm.
 - **Nút thoát là `BACK`** (mục thứ 3 trên dòng 3, giữa `MAX->MIN` và `DONE`): bấm là gọi `tramming_exit()` —
