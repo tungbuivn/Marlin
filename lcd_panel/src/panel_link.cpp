@@ -13,6 +13,11 @@ static panel_rx_t  s_rx;
 static panel_tx_t  s_tx;
 static uint32_t    s_next_ping_ms = 0;
 static bool        s_want_full = true;         // xin FULL ngay khi lien ket duoc
+// Anh cua bo dem loi 16-bit trong panel_protocol.h (panel_rx_t.errors) o lan doc truoc, de biet
+// "VUA co loi moi" ma khong phai sua panel_protocol.h (file do phai giu byte-identical voi ban
+// Marlin). Chi so sanh KHAC NHAU, khong cong don: bo dem 16-bit co the tran ve 0 sau 65 536 loi
+// nhung 65535 -> 0 van la "khac" -> van bat duoc co panel.rx_errors.
+static uint16_t    s_err_seen = 0;
 
 // ---------------------------------------------------------------------------
 // Gui frame (frame cua panel rat ngan: PING 7 byte, GCODE/RQUEST < 40 byte)
@@ -298,8 +303,10 @@ static void handle_frame() {
     default:
       break;
   }
-  panel.rx_frames = s_rx.frames;
-  panel.rx_errors = s_rx.errors;
+  // handle_frame() CHI duoc goi khi panel_rx_byte() da kiem CRC OK -> day la 1 frame HOP LE.
+  // Bat CO MOT CHIEU (khong bao gio ve false): vua de man INFO hien "RX: OK", vua de TAT SNIFFER
+  // TRAM vinh vien trong panel_link_task() - xem panel_data_t.rx_frames.
+  panel.rx_frames = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +315,8 @@ static void handle_frame() {
 void panel_link_begin(const uint32_t baud) {
   PANEL_LINK_BEGIN(baud);
   panel_rx_init(&s_rx);
-  memset(&panel, 0, sizeof(panel));
+  memset(&panel, 0, sizeof(panel));    // xoa ca 2 CO panel.rx_frames / panel.rx_errors ve false
+  s_err_seen = 0;                      // anh bo dem loi cua panel_protocol.h cung phai ve 0
   tram_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
   s_want_full = true;
   s_next_ping_ms = 0;
@@ -326,14 +334,20 @@ void panel_link_task() {
     //
     // 2026-10-13: che do PUSH (PANEL_SERIAL_UI) gui dong TRAM trong frame PANEL_F_TRAM -> payload
     // CUA FRAME chua chinh chuoi "TRAM ...". Neu van chay bo sniff thi no se "an" cac byte do lam
-    // frame hong (da gap that: byte tang ~500 B/s nhung panel.linked=0, rx_frames=0).
-    // => Da nhan duoc frame PUSH hop le dau tien (panel.rx_frames > 0) thi TAT sniff VINH VIEN.
+    // frame hong (da gap that: byte tang ~500 B/s nhung panel.linked=0, khong nhan duoc frame nao).
+    // => Da nhan duoc frame PUSH hop le dau tien thi TAT sniff VINH VIEN. Dung CO MOT CHIEU
+    //    panel.rx_frames (KHONG dung bo dem nhu truoc: bo dem tran ve 0 se bat lai sniff giua chung).
     uint8_t n;
     if (panel.rx_frames) { fwd[0] = c; n = 1; }
     else                 n = tram_link_feed(c, fwd);
     for (uint8_t k = 0; k < n; k++)
       if (panel_rx_byte(&s_rx, fwd[k])) handle_frame();
   }
+
+  // BAT CO LOI MOT CHIEU: panel_protocol.h tang `errors` khi CRC sai hoac payload qua dai
+  // (panel_rx_byte), nhung bo dem do la uint16_t nen khong dung lam tong duoc. Ta chi can biet
+  // "da tung co loi" -> so sanh voi gia tri lan truoc, khac la bat co (tran cung khong sai).
+  if (s_rx.errors != s_err_seen) { s_err_seen = s_rx.errors; panel.rx_errors = true; }
 
   tram_link_task();                  // cap nhat co `tram.linked`
 

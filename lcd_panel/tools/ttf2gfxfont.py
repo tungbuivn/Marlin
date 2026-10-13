@@ -100,11 +100,33 @@ def default_suffix(first, last, index):
     return "u%04X" % first
 
 
-class Glyph(object):
-    __slots__ = ("cp", "offset", "w", "h", "adv", "xoff", "yoff", "bits", "present", "ink")
+def parse_maps(specs):
+    """['0xE000=0xE63E', ...] -> {0xE000: 0xE63E}  (codepoint DICH -> codepoint NGUON).
 
-    def __init__(self, cp):
+    Can cho font ICON: font nguon (vd Material Icons) khong co glyph o U+E000, ma lai co
+    o U+E63E, nen phai doi codepoint de bang glyph cua ta doc lap voi font nguon.
+    """
+    m = {}
+    for s in specs:
+        if "=" not in s:
+            raise ValueError("--map phai co dang DICH=NGUON, vd 0xE000=0xE63E (gap: %r)" % s)
+        t, src = s.split("=", 1)
+        tgt_cp, src_cp = int(t, 0), int(src, 0)
+        if not (0 <= tgt_cp <= 0xFFFF and 0 <= src_cp <= 0xFFFF):
+            raise ValueError("--map: codepoint ngoai BMP: %s" % s)
+        if tgt_cp in m and m[tgt_cp] != src_cp:
+            raise ValueError("--map: U+%04X duoc anh xa 2 lan khac nhau" % tgt_cp)
+        m[tgt_cp] = src_cp
+    return m
+
+
+class Glyph(object):
+    __slots__ = ("cp", "offset", "w", "h", "adv", "xoff", "yoff", "bits", "present", "ink",
+                 "src_cp")
+
+    def __init__(self, cp, src_cp=None):
         self.cp = cp
+        self.src_cp = cp if src_cp is None else src_cp
         self.offset = 0
         self.w = self.h = 0
         self.adv = 0
@@ -212,9 +234,10 @@ def c_byte_array(name, data, per_line=12):
 def c_glyph_array(name, glyphs):
     lines = ["static const GFXglyph %s[] PROGMEM = {" % name]
     for g in glyphs:
-        label = printable_label(g.cp)
-        lines.append("  { %5d, %2d, %2d, %2d, %3d, %3d },  // 0x%02X %s"
-                     % (g.offset, g.w, g.h, g.adv, g.xoff, g.yoff, g.cp, label))
+        label = printable_label(g.src_cp)
+        src = "" if g.src_cp == g.cp else " <- U+%04X" % g.src_cp
+        lines.append("  { %5d, %2d, %2d, %2d, %3d, %3d },  // 0x%02X%s %s"
+                     % (g.offset, g.w, g.h, g.adv, g.xoff, g.yoff, g.cp, src, label))
     lines.append("};")
     return "\n".join(lines)
 
@@ -250,6 +273,22 @@ def main():
                     help="ten phu cho tung dai, vd ascii,vn1,vn2 (mac dinh: ascii/uXXXX)")
     ap.add_argument("--yadvance", type=int, default=0,
                     help="chieu cao dong; 0 = tu tinh (= ascender + descender thuc te)")
+    ap.add_argument("--baseline", type=int, default=0,
+                    help="base_line = khoang cach tu DAY hop dong len baseline; 0 = tu tinh "
+                         "(= yAdvance - ascender). Dat bang base_line cua font chu (vd 3) neu "
+                         "muon ICON thang hang baseline voi chu trong cung mot dong.")
+    ap.add_argument("--yshift", type=int, default=0,
+                    help="cong them N px vao yOffset cua MOI glyph (N > 0 = dich bitmap XUONG). "
+                         "CHI co tac dung khi --yadvance hoac --baseline duoc dat ro: driver tinh "
+                         "base_line = yAdvance - ascender, ma --yshift dich ca hai nhu nhau nen "
+                         "voi che do tu dong (auto) no KHONG doi vi tri ve. Dung kem --yadvance "
+                         "nho hon de 'thu' hop dong lai cho khit net (xem gfx4_font_icons).")
+    ap.add_argument("--advance", type=int, default=0,
+                    help="ep xAdvance (px) cho moi glyph; 0 = do tu font (font chu: advance mono)")
+    ap.add_argument("--map", action="append", default=[], metavar="DICH=NGUON",
+                    help="doi codepoint: xuat glyph cua codepoint NGUON vao o codepoint DICH "
+                         "(vd --map 0xE000=0xE63E). Can cho font ICON vi font nguon khong co "
+                         "glyph o U+E000. Dung duoc nhieu lan.")
     ap.add_argument("--threshold", type=int, default=128,
                     help="nguong 1-bit hoa anti-alias (0..255, mac dinh 128). CHI dung cho --bpp 1")
     ap.add_argument("--bpp", type=int, default=1, choices=(1, 4),
@@ -276,6 +315,10 @@ def main():
     if names and len(names) != len(ranges):
         sys.exit("--range-names co %d ten nhung co %d dai" % (len(names), len(ranges)))
     suffixes = names if names else [default_suffix(a, b, i) for i, (a, b) in enumerate(ranges)]
+    try:
+        cp_map = parse_maps(args.map)
+    except ValueError as e:
+        sys.exit(str(e))
 
     # ---- do phu codepoint (fontTools) : phan biet 'khong co trong font' vs 'rong' ----
     tt = TTFont(args.font, fontNumber=0)
@@ -287,7 +330,7 @@ def main():
     font = ImageFont.truetype(args.font, args.size)
     # advance cua font mono: do tren vai ky tu, phai giong nhau
     advs = [font.getlength(c) for c in "M0iW."]
-    mono_adv = int(round(max(advs)))
+    mono_adv = args.advance if args.advance else int(round(max(advs)))
     adv_spread = max(advs) - min(advs)
     if not (0 < mono_adv < 256):
         sys.exit("xAdvance %d khong hop le (GFXglyph.xAdvance la uint8_t)" % mono_adv)
@@ -295,14 +338,22 @@ def main():
     print("=" * 78)
     print("ttf2gfxfont: %s" % args.font)
     print("  size (px)      : %d      unitsPerEm %d" % (args.size, upem))
-    print("  xAdvance       : %d px  (do lech giua cac ky tu = %.3f px -> %s)"
-          % (mono_adv, adv_spread, "MONO that" if adv_spread < 0.01 else "CANH BAO: khong deu!"))
+    if args.advance:
+        print("  xAdvance       : %d px  (EP bang --advance)" % mono_adv)
+    else:
+        print("  xAdvance       : %d px  (do lech giua cac ky tu = %.3f px -> %s)"
+              % (mono_adv, adv_spread, "MONO that" if adv_spread < 0.01 else "CANH BAO: khong deu!"))
     print("  bpp            : %d  (%s)" % (
         args.bpp,
         "Adafruit GFXfont, moi hang canh dau byte -> driver REPACK" if args.bpp == 1 else
         "16 muc xam, kieu LVGL LIEN TUC -> driver tra con tro THANG (khong phai Adafruit)"))
     if args.bpp == 1:
         print("  nguong 1-bit   : %d" % args.threshold)
+    if args.yshift:
+        print("  yshift         : %+d px (dich bitmap)" % args.yshift)
+    if cp_map:
+        print("  doi codepoint  : %s"
+              % ", ".join("U+%04X<-U+%04X" % (t, s) for t, s in sorted(cp_map.items())))
 
     # ---- sinh tung dai ----
     blocks = []
@@ -315,9 +366,10 @@ def main():
         glyphs = []
         bitmap = bytearray()
         for cp in range(lo, hi + 1):
-            g = Glyph(cp)
-            if cp not in cmap:
-                missing_in_ttf.append(cp)
+            src_cp = cp_map.get(cp, cp)          # codepoint NGUON (font icon: doi codepoint)
+            g = Glyph(cp, src_cp)
+            if src_cp not in cmap:
+                missing_in_ttf.append(src_cp)
                 g.w = g.h = 0
                 g.adv = args.gap_advance
                 g.xoff = g.yoff = 0
@@ -325,16 +377,17 @@ def main():
             else:
                 g.present = True
                 g.adv = mono_adv
-                ras = rasterize(font, chr(cp), args.threshold, args.bpp)
+                ras = rasterize(font, chr(src_cp), args.threshold, args.bpp)
                 if ras is None:
                     g.w = g.h = 0
                     g.xoff = g.yoff = 0
                 else:
                     gw, gh, xoff, yoff, rows = ras
                     if gw > 255 or gh > 255:
-                        sys.exit("glyph U+%04X qua lon: %dx%d" % (cp, gw, gh))
+                        sys.exit("glyph U+%04X qua lon: %dx%d" % (src_cp, gw, gh))
+                    yoff += args.yshift
                     if not (-128 <= xoff <= 127) or not (-128 <= yoff <= 127):
-                        sys.exit("glyph U+%04X offset ngoai int8: x=%d y=%d" % (cp, xoff, yoff))
+                        sys.exit("glyph U+%04X offset ngoai int8: x=%d y=%d" % (src_cp, xoff, yoff))
                     g.w, g.h, g.xoff, g.yoff = gw, gh, xoff, yoff
                     g.bits = pack_rows(rows, gw, gh) if args.bpp == 1 else pack_nibbles(rows, gw, gh)
                     g.ink = True
@@ -359,12 +412,27 @@ def main():
         sys.exit("khong co glyph nao co net!")
     asc_eff = max(-g.yoff for g in all_ink_glyphs)                  # so hang can TREN baseline
     desc_eff = max(g.yoff + g.h for g in all_ink_glyphs)            # so hang can DUOI baseline
-    need = asc_eff + desc_eff
+    # Chieu cao dong toi thieu. LUU Y: driver dat base_line = yAdvance - ascender va KHONG am,
+    # nen phai co yAdvance >= ascender. Khi MOI net nam TREN baseline (desc_eff < 0, vd font
+    # icon) thi yAdvance = ascender la du; cong them phan descender chi khi desc_eff > 0.
+    need = asc_eff + (desc_eff if desc_eff > 0 else 0)
     yadv = args.yadvance if args.yadvance else need
     if yadv < need:
         warnings.append("yAdvance %d < %d hang can thiet (ascender %d + descender %d) -> "
                         "net se bi cat" % (yadv, need, asc_eff, desc_eff))
-    base_line = yadv - asc_eff
+    if args.baseline:
+        base_line = args.baseline
+        # baseline nam o (yAdvance - base_line) tu mep tren dong
+        above = yadv - base_line
+        if asc_eff > above:
+            warnings.append("base_line %d: chi con %d hang TREN baseline nhung glyph can %d -> "
+                            "dinh glyph bi cat %d px" % (base_line, above, asc_eff, asc_eff - above))
+        if desc_eff > base_line:
+            warnings.append("base_line %d: chi con %d hang DUOI baseline nhung glyph can %d -> "
+                            "day glyph bi cat %d px" % (base_line, base_line, desc_eff,
+                                                        desc_eff - base_line))
+    else:
+        base_line = yadv - asc_eff
     if base_line < 0:
         warnings.append("base_line am (%d) -> ep ve 0" % base_line)
         base_line = 0
@@ -380,21 +448,38 @@ def main():
     print("  descender (hang duoi baseline) : %d" % desc_eff)
     print("  => chieu cao dong toi thieu    : %d" % need)
     print("  yAdvance dung                  : %d %s" % (yadv, "(auto)" if not args.yadvance else ""))
-    print("  base_line = yAdvance - ascender: %d" % base_line)
+    if args.baseline:
+        print("  base_line                      : %d  (EP bang --baseline; auto se la %d)"
+              % (base_line, yadv - asc_eff))
+    else:
+        print("  base_line = yAdvance - ascender: %d" % base_line)
+    print("  baseline o %d tu mep tren dong, %d tu mep duoi" % (yadv - base_line, base_line))
     print("  box_h max / box_w max          : %d / %d" % (max_h, max_w))
     print("  |xOffset| max                  : %d" % max_xoff)
     print("  TONG: %d o, %d glyph co net, %d byte bitmap" % (total_glyphs, total_ink, total_bytes))
 
     # ---- tu kiem tra ----
+    # CHI kiem cac codepoint tieng Viet NAM TRONG dai duoc yeu cau: font icon (vung PUA) se
+    # khong bi canh bao "thieu dau tieng Viet" nua.
     ink_cps = set(g.cp for g in all_ink_glyphs)
-    miss_mand = [cp for cp in MANDATORY if cp not in ink_cps]
+    requested = set()
+    for lo, hi in ranges:
+        requested.update(range(lo, hi + 1))
+    mand_in_range = [cp for cp in MANDATORY if cp in requested]
+    miss_mand = [cp for cp in mand_in_range if cp not in ink_cps]
     if miss_mand:
         warnings.append("THIEU NET cho %d codepoint tieng Viet bat buoc: %s"
                         % (len(miss_mand), " ".join("U+%04X" % c for c in miss_mand[:16])))
-    not_in_ttf_mand = [cp for cp in miss_mand if cp not in cmap]
+    not_in_ttf_mand = [cp for cp in miss_mand if cp_map.get(cp, cp) not in cmap]
     if not_in_ttf_mand:
         warnings.append("trong do %d codepoint KHONG co trong TTF: %s"
                         % (len(not_in_ttf_mand), " ".join("U+%04X" % c for c in not_in_ttf_mand[:16])))
+    if args.map:
+        # Voi font icon: moi codepoint DICH phai CO NET, neu khong la loi anh xa.
+        empty_mapped = [t for t in sorted(cp_map) if t not in ink_cps]
+        if empty_mapped:
+            warnings.append("--map nhung KHONG co net: %s"
+                            % " ".join("U+%04X<-U+%04X" % (t, cp_map[t]) for t in empty_mapped))
     if missing_in_ttf:
         print("  codepoint khong co trong TTF (o trong, xAdvance=%d): %d"
               % (args.gap_advance, len(missing_in_ttf)))
@@ -403,19 +488,31 @@ def main():
     guard = args.name.upper() + "_H"
     out = []
     out.append("/*")
-    out.append(" * %s -- font 1-bit mono sinh tu TTF bang tools/ttf2gfxfont.py" % os.path.basename(args.out))
+    out.append(" * %s -- font sinh tu TTF bang tools/ttf2gfxfont.py" % os.path.basename(args.out))
     out.append(" *")
     out.append(" *   font    : %s" % os.path.basename(args.font))
     out.append(" *   size    : %d px (em size FreeType)%s"
                % (args.size, "   nguong 1-bit: %d" % args.threshold if args.bpp == 1 else
                   "   16 muc xam (4 bit/pixel), KHONG threshold"))
     out.append(" *   bpp     : %d" % args.bpp)
-    out.append(" *   xAdvance: %d px (mono)   yAdvance: %d px   base_line: %d px" % (mono_adv, yadv, base_line))
+    out.append(" *   xAdvance: %d px %s  yAdvance: %d px   base_line: %d px"
+               % (mono_adv, "(mono)" if not args.advance else "(EP)", yadv, base_line))
     out.append(" *   do dai  : %d dai, %d o, %d glyph co net, %d byte bitmap"
                % (len(blocks), total_glyphs, total_ink, total_bytes))
     out.append(" *")
+    if cp_map:
+        out.append(" * DOI CODEPOINT (font icon: font nguon khong co glyph o codepoint dich):")
+        for t, s in sorted(cp_map.items()):
+            out.append(" *   U+%04X  <-  U+%04X  (font nguon)" % (t, s))
+        out.append(" *")
+    if args.yshift:
+        out.append(" * yOffset da duoc cong %+d px (--yshift) cho moi glyph." % args.yshift)
     out.append(" * yOffset = tu BASELINE len mep tren bitmap (am = o TREN baseline).")
     out.append(" * yAdvance = chieu cao dong; baseline nam o (yAdvance - base_line) tu mep tren dong.")
+    if args.baseline:
+        out.append(" * base_line duoc EP bang --baseline de TRUNG voi font chu")
+        out.append(" * (gfx4_font_robotomono: yAdvance 17 / base_line 3), nho vay icon thang")
+        out.append(" * hang baseline voi chu khi nam trong cung mot dong.")
     out.append(" *")
     if args.bpp == 1:
         out.append(" * DINH DANG: Adafruit GFXfont (xem mau that consola9pt7b.h)")
@@ -497,6 +594,11 @@ def main():
     out.append("#define %s_RANGE_COUNT %d" % (args.name.upper(), len(blocks)))
     out.append("")
     out.append("#define %s_BPP %d" % (args.name.upper(), args.bpp))
+    out.append("#define %s_YADVANCE %d" % (args.name.upper(), yadv))
+    out.append("#define %s_BASELINE %d" % (args.name.upper(), base_line))
+    out.append("#define %s_ASCENDER %d" % (args.name.upper(), asc_eff))
+    out.append("#define %s_DESCENDER %d" % (args.name.upper(), desc_eff))
+    out.append("#define %s_XADVANCE %d" % (args.name.upper(), mono_adv))
     out.append("")
     out.append("#endif /* %s */" % guard)
     out.append("")

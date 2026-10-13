@@ -58,7 +58,8 @@
  *   MESH    : bang luoi bed mesh (panel.mesh[col][row]), o cao = xanh, o thap = do,
  *             REFRESH -> PANEL_REQ_MESH; khong co PANEL_HAS_MESH thi bao "khong ho tro".
  *   CUSTOM  : 2 nut nhu menu cu cua Marlin: G34 Bed (G34 Q99) + Init SD (M22 roi M21).
- *   INFO    : ten firmware, proto, marlin_fw, so frame/loi, phien ban UI.
+ *   INFO    : 11 dong thong tin THAT (khong co nut REFRESH FULL nua): FW/BOARD/UI(LVGL + font
+ *             mono)/WIFI/PROTO/MARLIN/LINK/RX-ERR (2 co mot chieu)/SD + mesh/SYS (uptime + heap).
  *   TRAM    : Bed Tramming Wizard cua Marlin (4 so do lech + huong dan van vit + 4 nut
  *             PROBE / MAX<->MIN / BACK / DONE). KHONG dung frame PUSH: Marlin chi can bat
  *             #define PANEL_TRAM_LINK la du (link ASCII tren USART1 - xem tram_link.h), nho vay
@@ -86,6 +87,59 @@
 #include "tram_link.h"              // Bed Tramming Wizard cua Marlin (link ASCII, xem tram_link.h)
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
 #include "lv_font_gfxfont.h"        // driver font 1-bit Adafruit GFXfont (che do UI_MONO_FONT 4)
+#include "net_upload.h"             // net_wifi_state(): trang thai WiFi de ve icon o header
+
+// Trang thai WiFi cho icon o dong tieu de. net_upload.h la "hop dong giao dien" voi nhanh module
+// WiFi/BT (panel_bt_upload.cpp): 0 = WiFi tat/chua cau hinh, 1 = dang ket noi, 2 = da ket noi.
+//
+// VI SAO phai khai bao lai voi `weak`: module do CO THE CHUA duoc build (ho dang lam song song,
+// hoac board khac khong co WiFi). Voi `weak`:
+//   - thieu dinh nghia -> symbol tro thanh "weak undefined", ELF cho phep -> KHONG loi link,
+//     icon chi hien mau xam (trang thai 0);
+//   - module xuat hien -> tu dong bind vao dinh nghia that (extern "C" nhu trong net_upload.h).
+// BAT BUOC phai co `weak`: neu khai bao thuong thi `-Wall` se canh bao
+//   "the address of 'net_wifi_state' will never be NULL [-Waddress]"
+// ngay tai cho ta kiem tra con tro truoc khi goi (da kiem chung bang chinh toolchain xtensa).
+extern "C" uint8_t net_wifi_state(void) __attribute__((weak));
+
+// GOM 1 CHO: ca icon o header (wifi_icon_mark) lan dong "WIFI:" o man INFO deu goi ham nay.
+static uint8_t wifi_state_now(void) {
+  // Module WiFi co the CHUA duoc build -> con tro ham = NULL -> coi nhu trang thai 0.
+  return net_wifi_state ? net_wifi_state() : 0;
+}
+
+// ---------------------------------------------------------------------------
+//  Font ICON cho header: gfx4_font_icons.h/.c do nhanh font sinh ra, 2 ma bat buoc:
+//    U+E000 = wifi (dang/da ket noi)      U+E001 = wifi_off (tat / chua cau hinh)
+//    (font con U+E002 'network_wifi_three_bar' = dang thu, U+E003 'one_bar' = song yeu - chua dung)
+//  Font mono KHONG co 2 ma nay nen icon phai ve bang font rieng (bpp4, xAdvance 14, yAdvance 11).
+//
+//  DUONG LUI (BAT BUOC): nhanh font co the CHUA merge -> dung __has_include de quyet dinh.
+//  Khong co header thi UI_HAVE_ICON_FONT = 0 -> van giu CHAM TRON 12x12 nhu truoc, build SUCCESS.
+//
+//  KHONG include "gfx4_font_icons.h" o day: mang bitmap/glyph trong header la `static` va header
+//  chi duoc include o DUNG gfx4_font_icons.c (include them se nhan doi du lieu flash).
+//  Thay vao do dung ham tien loi cua chinh ho (dinh nghia trong .c, linkage C):
+//      const lv_font_t *gfx4_font_icons_get(void);
+// ---------------------------------------------------------------------------
+#if defined(__has_include)
+  #if __has_include("gfx4_font_icons.h")
+    #define UI_HAVE_ICON_FONT 1
+  #endif
+#endif
+#if !defined(UI_HAVE_ICON_FONT)
+  #define UI_HAVE_ICON_FONT 0
+#endif
+
+#if UI_HAVE_ICON_FONT
+  // Tra descriptor lv_font_t cua font icon. Driver lv_font_gfxfont nho san descriptor (goi lai
+  // khong cap phat them) va co 2 slot: 1 cho font chu mono, 1 cho font icon nay -> khong day nhau.
+  extern "C" const lv_font_t *gfx4_font_icons_get(void);
+  // 3 ma dung theo trang thai (U+E003 'network_wifi_one_bar' = song yeu, chua dung):
+  #define WIFI_GLYPH_ON    "\xEE\x80\x80"   // U+E000 wifi        -> DA ket noi
+  #define WIFI_GLYPH_CONN  "\xEE\x80\x82"   // U+E002 3 vach      -> DANG ket noi
+  #define WIFI_GLYPH_OFF   "\xEE\x80\x81"   // U+E001 wifi_off    -> WiFi tat / chua cau hinh
+#endif
 
 // Font co DAU tieng Viet (sinh bang lv_font_conv, cung thong so: size 14, bpp 4):
 // font Montserrat co san cua LVGL KHONG co U+1EA0..U+1EF9 nen chu co dau se ra o vuong.
@@ -654,7 +708,7 @@ static lv_obj_t *mk_page(lv_obj_t *parent) {
 enum {
   A_NONE = 0,
   A_BACK, A_PAUSE, A_RESUME, A_STOP, A_SAVE, A_INITSD, A_G34, A_HOME,
-  A_REQ_FILES, A_REQ_UP, A_REQ_MESH, A_REQ_SETTINGS, A_REQ_FULL, A_COOLDOWN,
+  A_REQ_FILES, A_REQ_UP, A_REQ_MESH, A_REQ_SETTINGS, A_COOLDOWN,
   A_GOTO_MENU, A_GOTO_TEMP, A_GOTO_JOG, A_GOTO_FILES, A_GOTO_SETTINGS, A_GOTO_RATE,
   // P1 - UBL bed leveling (G29)
   A_G29_P1, A_G29_FILL, A_G29_FT, A_G29_ON, A_G29_OFF, A_G29_SAVE,
@@ -718,7 +772,6 @@ static void do_action(const int a) {
     case A_REQ_UP:        panel_link_request((uint8_t)PANEL_REQ_FILES_UP); break;
     case A_REQ_MESH:      panel_link_request((uint8_t)PANEL_REQ_MESH); break;
     case A_REQ_SETTINGS:  panel_link_request((uint8_t)PANEL_REQ_SETTINGS); break;
-    case A_REQ_FULL:      panel_link_request((uint8_t)PANEL_REQ_FULL); break;
     case A_REQ_ENDSTOPS:  panel_link_request((uint8_t)PANEL_REQ_ENDSTOPS); break;
 
     // ---- P1 UBL ----
@@ -1693,11 +1746,19 @@ static uint8_t ov_step_default(const uint8_t i) {
   return (dec >= 2) ? 0 : (uint8_t)(2 - dec);
 }
 
-// To nut buoc dang chon (giong cach jg_axis[] to COL_ACCENT)
+// To nut buoc dang chon (giong cach jg_axis[] to COL_ACCENT).
+// Cung quy uoc voi jg_axis[] man JOG: "dang chon" = NEN COL_ACCENT, "focus" = VIEN (focus_mark
+// bo qua doi nen voi vat co LV_OBJ_FLAG_USER_1 -> focus roi di KHONG tra nen nut ve COL_BTN).
 static void ov_marks(void) {
-  for (uint8_t k = 0; k < 4; k++)
-    if (ov_step_btn[k])
-      lv_obj_set_style_bg_color(ov_step_btn[k], (k == ov_step_k) ? COL_ACCENT : COL_BTN, 0);
+  for (uint8_t k = 0; k < 4; k++) {
+    if (!ov_step_btn[k]) continue;
+    const lv_color_t want = (k == ov_step_k) ? COL_ACCENT : COL_BTN;
+    // Chi set khi mau THAT SU doi: ham nay duoc goi moi chu ky cap nhat cua man SETTINGS
+    // (400 ms) va lv_obj_set_style_bg_color() luon invalidate vat -> goi vo dieu kien se
+    // lam lop phu nhap nhay va ton bang thong SPI.
+    if (lv_obj_get_style_bg_color(ov_step_btn[k], 0).full != want.full)
+      lv_obj_set_style_bg_color(ov_step_btn[k], want, 0);
+  }
 }
 
 // Tim dong khai bao cua 1 id (de in so dung so le nhu bang dang hien)
@@ -1900,6 +1961,10 @@ static void ov_create(void) {
   lv_obj_t *rs = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
   for (uint8_t k = 0; k < 4; k++)
     ov_step_btn[k] = mk_btn_grow(rs, OV_STEP_TXT[k], OV_BTN_H, cb_se_ov_step, OV_STEP(k));
+  // 4 nut buoc TU QUAN LY NEN (LV_OBJ_FLAG_USER_1): giong 3 nut truc man JOG - focus_mark()
+  // chi ve VIEN (mau sang MR_FRAME) cho chung, KHONG doi nen -> nen COL_ACCENT cua buoc dang
+  // chon khong bi ghi de khi focus chuyen sang nut khac trong lop phu.
+  for (uint8_t k = 0; k < 4; k++) lv_obj_add_flag(ov_step_btn[k], LV_OBJ_FLAG_USER_1);
 
   // Dong 4: - | + | OK | Huy
   lv_obj_t *rb = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
@@ -2020,16 +2085,28 @@ static void page_settings_update(void) {
   }
   snprintf(b, sizeof(b), "cham 1 dong de SUA - %u/%u thong so", (unsigned)se_n, (unsigned)SET_NROWS);
   set_text(se_info, b);
+
+  // Lop phu SUA co the dang mo -> ve lai dau "buoc dang chon" moi chu ky (giong jog_axis_mark()
+  // o man JOG): focus va "dang chon" la 2 trang thai doc lap, ov_marks() chi ghi khi mau doi.
+  // Chay ca khi lop phu dang AN: ov_step_btn[] khong doi, khong ton gi them.
+  ov_marks();
 }
 
 // ===========================================================================
-//  MESH  (16 + 104 + 16 + 2*GAP = 140 <= 142)
-//  Bang luoi ben trai (cao 104 <= 124, cuon duoc) + REFRESH + chu thich ben phai
+//  MESH -- luoi bed mesh dung HET be rong + 2 hang nut UBL (G29)
+//    info 17 + luoi 124 + hang nut 28 + hang nut 28 + 3*GAP 6 = 203 <= PAGE_INN_H 206
+//  Da BO theo yeu cau:
+//    - nut REFRESH (Marlin TU day lai luoi khi mesh doi / khi link hoi phuc; enum A_REQ_MESH
+//      van giu lai trong do_action() cho gon, hien khong con nut nao dung),
+//    - 3 dong chu thich mau o cot phai ("xanh = cao" / "do = thap" / "+-0.05mm"),
+//    - dong chu thich duoi luoi ("- o ghi mm - REFRESH = xin lai luoi").
+//  Nho bo cot phai, luoi rong tu 214 -> 312 px (o rong hon ~45%) va cao 104 -> 124 px (o cao
+//  hon ~19%: voi luoi 7x7 la 30x15 -> 44x18 px). Tong 203 <= 206 nen KHONG tran -> thanh day
+//  PREV/NEXT khong hien (bot_sync van chay dung nhu moi man khac).
 // ===========================================================================
-#define MESH_TABLE_H 104
-#define MESH_BTN_W   96
-#define MESH_TABLE_W (PAGE_INN_W - MESH_BTN_W - GAP)   // 214
-#define MESH_CELL_W  38                                // be rong toi thieu 1 o: du "-0.20" (33 px) + 2*2 pad
+#define MESH_TABLE_H 124
+#define MESH_TABLE_W PAGE_INN_W                         // 312: luoi dung het be rong
+#define MESH_CELL_W  38                                 // be rong toi thieu 1 o: du "-0.20" (33 px) + 2*2 pad
 
 static lv_obj_t *me_table, *me_info, *me_note;
 static uint8_t   s_mesh_nx = 0, s_mesh_ny = 0;
@@ -2070,9 +2147,8 @@ static void page_mesh_create(lv_obj_t *p) {
 
   me_info = mk_label_w(p, "mesh -", COL_TXT, PAGE_INN_W);
 
-  lv_obj_t *row = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, MESH_TABLE_H, 0, GAP);
-
-  me_table = lv_table_create(row);
+  // Luoi la CON TRUC TIEP cua trang (da bo cot nut ben phai) -> rong het 312 px.
+  me_table = lv_table_create(p);
   lv_obj_set_size(me_table, MESH_TABLE_W, MESH_TABLE_H);
   lv_table_set_col_cnt(me_table, 1);
   lv_table_set_row_cnt(me_table, 1);
@@ -2090,16 +2166,9 @@ static void page_mesh_create(lv_obj_t *p) {
   lv_obj_add_event_cb(me_table, mesh_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
   if (s_group) lv_group_add_obj(s_group, me_table);       // de encoder co the focus/cuon
 
-  lv_obj_t *cb = mk_flex(row, LV_FLEX_FLOW_COLUMN, MESH_BTN_W, MESH_TABLE_H, 0, GAP);
-  mk_btn(cb, "REFRESH", MESH_BTN_W, 30, cb_action, (void *)(intptr_t)A_REQ_MESH);
-  mk_label_w(cb, "xanh = cao", COL_DIM, MESH_BTN_W);
-  mk_label_w(cb, "do = thap", COL_DIM, MESH_BTN_W);
-  mk_label_w(cb, "+-0.05mm", COL_DIM, MESH_BTN_W);
-
-  mk_label_w(p, "- o ghi mm -  REFRESH = xin lai luoi", COL_DIM, PAGE_INN_W);
+  // Da bo: nut REFRESH + 3 dong chu thich mau (cot phai) va dong chu thich duoi luoi.
 
   // P1 - UBL: 2 hang x 3 nut (G29 P1 / P3T0 / P4RT roi bat-tat UBL + luu slot 0)
-  // Tong man: 16 + 104 + 16 + 28 + 28 + 4*GAP = 200 <= 206
   lv_obj_t *ru1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
   mk_btn_grow(ru1, "G29 P1",   28, cb_action, (void *)(intptr_t)A_G29_P1);
   mk_btn_grow(ru1, "G29 P3T0", 28, cb_action, (void *)(intptr_t)A_G29_FILL);
@@ -2246,60 +2315,118 @@ static void page_endstop_update(void) {
 }
 
 // ===========================================================================
-//  INFO  (cot thong tin 198 px + cot nut 112 px "REFRESH FULL"; 7 dong = 124,
-//  roi 1 dong chu thich -> 124 + GAP + ROW_H = 142 <= PAGE_INN_H)
+//  INFO -- 11 dong thong tin THAT (moi dong 1 label rong het PAGE_INN_W)
+//
+//  Chieu cao: 11 dong * 17 px (font mono che do 4: line_height 17) + 10 * INFO_ROW_GAP(1) = 197
+//  <= PAGE_INN_H 206 -> KHONG tran, thanh day PREV/NEXT khong hien. (Neu line_height la 16 - che
+//  do font khac - thi 186, van thua cho.)
+//
+//  Truoc day: cot 7 dong cao CO DINH 124 + nut REFRESH FULL + 1 dong chu thich. Da bo nut va dong
+//  chu thich (theo yeu cau) va bo luon KHUNG CAO CO DINH: nay cac label la CON TRUC TIEP cua
+//  trang, ma mk_page da bat LV_OBJ_FLAG_SCROLLABLE -> noi dung dai hon man thi trang TU CUON duoc
+//  va bot_sync() se hien thanh day phan trang. Khong tu chan cuon o dau.
 // ===========================================================================
-#define INFO_BTN_W  112
-#define INFO_W      (PAGE_INN_W - INFO_BTN_W - GAP)       // 198
-#define INFO_COL_H  (7 * ROW_H + 6 * GAP)                 // 124
+#define INFO_ROW_GAP 1     // GAP chuan cua mk_page la 2: 11 dong se thanh 207 > 206 (cat 1 px)
 
-static lv_obj_t *in_fw, *in_proto, *in_marlin, *in_rx, *in_stat, *in_board, *in_ui;
+static lv_obj_t *in_fw, *in_board, *in_ui, *in_font, *in_wifi, *in_proto, *in_marlin, *in_stat,
+                *in_rx, *in_sd, *in_sys;
 
 static void page_info_create(lv_obj_t *p) {
-  lv_obj_t *row = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, INFO_COL_H, 0, GAP);
-  lv_obj_t *cl  = mk_flex(row, LV_FLEX_FLOW_COLUMN, INFO_W, INFO_COL_H, 0, GAP);
-  lv_obj_t *cr  = mk_flex(row, LV_FLEX_FLOW_COLUMN, INFO_BTN_W, INFO_COL_H, 0, GAP);
+  // Rieng man nay cach nhau 1 px (11 dong) - xem INFO_ROW_GAP.
+  lv_obj_set_style_pad_row(p, INFO_ROW_GAP, 0);
 
-  in_fw     = mk_label_w(cl, "FW: -", COL_TXT, INFO_W);
-  in_board  = mk_label_w(cl, "BOARD: -", COL_TXT, INFO_W);
-  in_proto  = mk_label_w(cl, "PROTO: -", COL_DIM, INFO_W);
-  in_marlin = mk_label_w(cl, "MARLIN: -", COL_DIM, INFO_W);
-  in_stat   = mk_label_w(cl, "LINK: -", COL_DIM, INFO_W);
-  in_rx     = mk_label_w(cl, "RX: -", COL_DIM, INFO_W);
-  in_ui     = mk_label_w(cl, "UI: LVGL 8.3 / ui_lvgl 1.0", COL_DIM, INFO_W);
-
-  mk_btn(cr, "REFRESH FULL", INFO_BTN_W, 32, cb_action, (void *)(intptr_t)A_REQ_FULL);
-
-  mk_label_w(p, "REFRESH FULL = PANEL_REQ_FULL", COL_DIM, PAGE_INN_W);
+  // Thu tu tao = thu tu hien (mk_page la flex COLUMN).
+  in_fw     = mk_label_w(p, "FW: -",     COL_TXT, PAGE_INN_W);
+  in_board  = mk_label_w(p, "BOARD: -",  COL_TXT, PAGE_INN_W);
+  in_ui     = mk_label_w(p, "UI: -",     COL_DIM, PAGE_INN_W);
+  in_font   = mk_label_w(p, "FONT: -",   COL_DIM, PAGE_INN_W);
+  in_wifi   = mk_label_w(p, "WIFI: -",   COL_DIM, PAGE_INN_W);
+  in_proto  = mk_label_w(p, "PROTO: -",  COL_DIM, PAGE_INN_W);
+  in_marlin = mk_label_w(p, "MARLIN: -", COL_DIM, PAGE_INN_W);
+  in_stat   = mk_label_w(p, "LINK: -",   COL_DIM, PAGE_INN_W);
+  in_rx     = mk_label_w(p, "RX: -",     COL_DIM, PAGE_INN_W);
+  in_sd     = mk_label_w(p, "SD: -",     COL_DIM, PAGE_INN_W);
+  in_sys    = mk_label_w(p, "SYS: -",    COL_DIM, PAGE_INN_W);
 }
 
 static void page_info_update(void) {
-  char b[48];
+  char b[64], t[16];
+
   // Ten may: o che do PUSH lay tu goi HELLO cua Marlin. O che do TRAM khong co HELLO
   // (link chi gui dong "TRAM ...") nen dung ten khai trong panel_config.h.
   snprintf(b, sizeof(b), "FW: %s", panel.name[0] ? panel.name
            : (tram.ever ? PANEL_MACHINE_NAME " (TRAM link)" : "(chua co HELLO)"));
   set_text(in_fw, b);
 
-  snprintf(b, sizeof(b), "BOARD: %s %dx%d", PANEL_NAME, UI_LCD_HOR_RES, UI_LCD_VER_RES);
+  // Board + do phan giai + so heater/quat MA MARLIN BAO trong HELLO (chua co HELLO thi thoi,
+  // khong in so 0 gia).
+  int n = snprintf(b, sizeof(b), "BOARD: %s %dx%d", PANEL_NAME, UI_LCD_HOR_RES, UI_LCD_VER_RES);
+  if (n > 0 && (size_t)n < sizeof(b) && (panel.n_heaters || panel.n_fans_max))
+    snprintf(b + n, sizeof(b) - (size_t)n, " h%u f%u",
+             (unsigned)panel.n_heaters, (unsigned)panel.n_fans_max);
   set_text(in_board, b);
 
-  snprintf(b, sizeof(b), "PROTO: %u (panel %u)", (unsigned)panel.proto, (unsigned)PANEL_PROTO_VERSION);
+  // Phien ban LVGL THAT (macro cua lvgl.h - truoc day ghi cung "LVGL 8.3", sai vi dang la 8.4)
+  // + kieu dau vao dang dung (encoder/touch) + che do font mono.
+  snprintf(b, sizeof(b), "UI: LVGL %d.%d %s mono%d", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR,
+           ui_port_input_is_encoder() ? "encoder" : "touch", UI_MONO_FONT);
+  set_text(in_ui, b);
+
+  // Font mono che do 4: bpp + so dai glyph + ket qua TU KIEM TRA driver luc khoi dong
+  // (s_gfx_mono NULL = driver loi -> UI dang dung lui ve Montserrat 14).
+#if UI_MONO_FONT == 4
+  snprintf(b, sizeof(b), "FONT: mono4 %dbpp %d dai %s", UI_MONO_GFX_BPP, (int)UI_GFX_RANGE_COUNT,
+           s_gfx_mono ? "OK" : "LOI->MS14");
+#else
+  snprintf(b, sizeof(b), "FONT: che do %d", UI_MONO_FONT);
+#endif
+  set_text(in_font, b);
+
+  // Trang thai WiFi - CUNG NGUON voi icon o header (wifi_state_now(), xem dau file).
+  static const char *const WIFI_TXT[3] = { "OFF", "DANG KET NOI", "DA KET NOI" };
+  const uint8_t ws = wifi_state_now();
+  snprintf(b, sizeof(b), "WIFI: %s", WIFI_TXT[ws <= 2 ? ws : 0]);
+  set_text(in_wifi, b);
+
+  // Phien ban protocol PUSH: cua Marlin (gui trong HELLO) / cua panel + co nang luc (hello_flags).
+  snprintf(b, sizeof(b), "PROTO: %u/%u cap 0x%02X", (unsigned)panel.proto,
+           (unsigned)PANEL_PROTO_VERSION, (unsigned)panel.hello_flags);
   set_text(in_proto, b);
 
-  snprintf(b, sizeof(b), "MARLIN fw: 0x%04X", (unsigned)panel.marlin_fw);
+  // marlin_fw (u16 trong HELLO) + SHORT_BUILD_VERSION neu Marlin gui (proto >= 2).
+  if (panel.marlin_ver[0])
+    snprintf(b, sizeof(b), "MARLIN: 0x%04X %s", (unsigned)panel.marlin_fw, panel.marlin_ver);
+  else
+    snprintf(b, sizeof(b), "MARLIN: 0x%04X", (unsigned)panel.marlin_fw);
   set_text(in_marlin, b);
 
-  snprintf(b, sizeof(b), "LINK: %s%s  state %s", link_ok() ? "OK" : "NO",
-           tram.ever ? " (TRAM)" : (panel.linked ? " (PUSH)" : ""), state_name(panel.state));
+  // Link (PUSH/TRAM) + trang thai may.
+  snprintf(b, sizeof(b), "LINK: %s %s %s", link_ok() ? "OK" : "NO",
+           tram.ever ? "(TRAM)" : (panel.linked ? "(PUSH)" : ""), state_name(panel.state));
   set_text(in_stat, b);
 
-  snprintf(b, sizeof(b), "RX: %u frame / %u loi  0x%02X",
-           (unsigned)panel.rx_frames, (unsigned)panel.rx_errors, (unsigned)panel.hello_flags);
+  // RX/ERR: 2 CO MOT CHIEU (panel_link.h) - khong con bo dem nen KHONG BAO GIO tran:
+  //   rx_frames = da nhan duoc it nhat 1 frame hop le; rx_errors = da tung gap frame loi.
+  snprintf(b, sizeof(b), "RX: %s  ERR: %s", panel.rx_frames ? "OK" : "--",
+           panel.rx_errors ? "co" : "khong");
   set_text(in_rx, b);
 
-  snprintf(b, sizeof(b), "UI: LVGL 8.3 + %s", ui_port_input_is_encoder() ? "encoder" : "touch");
-  set_text(in_ui, b);
+  // Danh sach file SD + luoi bed mesh (ca 2 deu lay tu du lieu Marlin da gui).
+  if (panel.mesh_valid)
+    snprintf(b, sizeof(b), "SD: %u file  mesh %ux%u", (unsigned)panel.n_files,
+             (unsigned)panel.mesh_nx, (unsigned)panel.mesh_ny);
+  else
+    snprintf(b, sizeof(b), "SD: %u file  mesh -", (unsigned)panel.n_files);
+  set_text(in_sd, b);
+
+  // Thoi gian chay cua panel + heap tu do (chi ESP32 moi co ESP.getFreeHeap()).
+  fmt_time(t, sizeof(t), ui_port_millis() / 1000U);
+#if defined(ARDUINO_ARCH_ESP32)
+  snprintf(b, sizeof(b), "SYS: up %s heap %lu", t, (unsigned long)ESP.getFreeHeap());
+#else
+  snprintf(b, sizeof(b), "SYS: up %s", t);
+#endif
+  set_text(in_sys, b);
 }
 
 // ===========================================================================
@@ -2786,6 +2913,73 @@ static void show_page(uint8_t p) {
 }
 
 // ===========================================================================
+//  Icon trang thai WiFi o dong tieu de (ngay SAU ten may in / s_link)
+//   wifi_state_now(): 0 = WiFi tat / chua cau hinh / khong co module
+//                     1 = DANG ket noi (ke ca dang thu lai) -> DO
+//                     2 = DA ket noi                         -> XANH
+//  Co font icon (UI_HAVE_ICON_FONT): ve bang GLYPH U+E000 (wifi) / U+E001 (wifi_off).
+//  Chua co font icon: lui ve CHAM TRON 12x12 nhu truoc (build van chay).
+// ===========================================================================
+#if UI_HAVE_ICON_FONT
+  // Glyph rong 14 px (xAdvance cua font icon) + 4 px khoang cach flex = 18 px -> giam s_link tu
+  // 96 xuong 78 de TONG be rong co dinh cua dong tieu de KHONG doi (nut BACK khong bi day ra).
+  #define LINK_LBL_W 78
+#else
+  #define WIFI_ICON_SZ 12            // duong lui: cham tron 12x12 + 4 px khoang cach = 16 -> 80
+  #define LINK_LBL_W  80
+#endif
+// "LINK ERR" chi can 8x8 = 64 px (font mono advance 8) nen 78/80 px van hien du; ten may dai hon
+// thi tu cuon vong nhu truoc (xem mk_label_w).
+static lv_obj_t  *s_wifi;                  // label glyph (hoac hinh tron khi khong co font icon)
+static uint8_t    s_wifi_drawn = 0xFF;     // trang thai dang ve (0xFF = chua ve lan nao)
+
+// Vat chi bao: KHONG cho bam (khong nhan touch) va KHONG vao group encoder.
+static lv_obj_t *mk_wifi_icon(lv_obj_t *parent) {
+#if UI_HAVE_ICON_FONT
+  lv_obj_t *l = lv_label_create(parent);
+  lv_obj_set_style_text_font(l, gfx4_font_icons_get(), 0);   // font icon cua nhanh font
+  lv_obj_set_style_text_color(l, COL_DIM, 0);               // mac dinh: xam = WiFi tat
+  lv_label_set_text(l, WIFI_GLYPH_OFF);
+  // KHONG dat be rong: label tu co theo glyph (advance 14, yAdvance 11 -> thua trong header 26).
+  lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(l, LV_OBJ_FLAG_SCROLLABLE);
+  return l;
+#else
+  lv_obj_t *o = lv_obj_create(parent);
+  lv_obj_set_size(o, WIFI_ICON_SZ, WIFI_ICON_SZ);
+  lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(o, COL_DIM, 0);      // mac dinh: xam = WiFi tat (KHONG phai mau loi)
+  lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(o, 0, 0);
+  lv_obj_set_style_shadow_width(o, 0, 0);
+  lv_obj_set_style_pad_all(o, 0, 0);
+  lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(o, LV_OBJ_FLAG_CLICKABLE);
+  return o;
+#endif
+}
+
+// Cap nhat icon. Goi o nhip CHAM cua ui_lvgl_task (~400 ms), KHONG phai moi vong lap, va
+// CHI ghi style khi trang thai DOI (giong s_bot_nav / jog_axis_mark) -> khong invalidate header
+// lien tuc. Giu icon LUON HIEN (khong an khi trang thai 0) de flex cua dong tieu de khong phai
+// xep lai moi lan WiFi bat/tat; mau xam mo the hien "khong co WiFi", khong phai "loi".
+static void wifi_icon_mark(void) {
+  if (!s_wifi) return;
+  const uint8_t st = wifi_state_now();       // cung nguon voi dong "WIFI:" o man INFO
+  if (st == s_wifi_drawn) return;
+  s_wifi_drawn = st;
+  // 1 = dang ket noi -> DO, 2 = da ket noi -> XANH, 0 = tat / chua cau hinh -> XAM.
+  const lv_color_t col = (st == 2) ? COL_OK : ((st == 1) ? COL_ERR : COL_DIM);
+#if UI_HAVE_ICON_FONT
+  lv_obj_set_style_text_color(s_wifi, col, 0);
+  // Glyph theo TRANG THAI: 2 = wifi (fan dac), 1 = 3 vach (dang thu), 0 = wifi_off (gach cheo).
+  lv_label_set_text(s_wifi, (st == 2) ? WIFI_GLYPH_ON : ((st == 1) ? WIFI_GLYPH_CONN : WIFI_GLYPH_OFF));
+#else
+  lv_obj_set_style_bg_color(s_wifi, col, 0);
+#endif
+}
+
+// ===========================================================================
 //  Dong tieu de cho cac man con: [ten man] ...... [LINK] [BACK]
 //  (STATUS/MENU khong dung: chung co bo cuc rieng theo Marlin)
 // ===========================================================================
@@ -2827,8 +3021,12 @@ static void build_chrome(void) {
   lv_obj_set_style_text_font(s_title, &lv_font_montserrat_14, 0);
 #endif
   mk_spacer(s_bar, 0, 1, 1);                     // an het cho trong -> day 2 vat sau ve phai
-  // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de
-  s_link  = mk_label_w(s_bar, "NO LINK", COL_ERR, 96);
+  // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de.
+  // 80 px (truoc la 96): nhuong cho cho icon WiFi 12 px + 4 px khoang cach flex, xem LINK_LBL_W.
+  s_link  = mk_label_w(s_bar, "NO LINK", COL_ERR, LINK_LBL_W);
+  // Icon trang thai WiFi: ngay SAU ten may in, TRUOC 2 nut PAUSE/STOP va BACK. La CON CUA s_bar
+  // nen tu an/hien cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
+  s_wifi = mk_wifi_icon(s_bar);
   // P9: 2 nut nho PAUSE / STOP - mac dinh AN, chi hien khi dang in (xem ui_lvgl_task)
   s_btn_pause = mk_btn(s_bar, "II", 26, 20, cb_action, (void *)(intptr_t)A_PAUSE);
   s_btn_stop  = mk_btn(s_bar, "[]", 26, 20, cb_action, (void *)(intptr_t)A_STOP);
@@ -3149,6 +3347,11 @@ void ui_lvgl_task(void) {
   // man nang (bang/danh sach): cap nhat cham hon cho do ton SPI
   if (now - s_slow_ms >= 400U) {
     s_slow_ms = now;
+
+    // Icon WiFi o dong tieu de: nhip CHAM (~400 ms), chi ghi style khi trang thai DOI.
+    // Nam ngoai switch(s_page_act) vi icon thuoc dong tieu de, dung chung cho moi man.
+    wifi_icon_mark();
+
     switch (s_page_act) {
       case PG_FILES:    page_files_update();    break;
       case PG_SETTINGS: page_settings_update(); break;

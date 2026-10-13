@@ -70,8 +70,20 @@ typedef struct {
   // ---- danh sach file SD ----
   panel_file_t files[PANEL_MAX_FILES]; uint8_t n_files; bool files_done, files_pending;
 
-  // ---- thong ke loi ----
-  uint16_t rx_frames, rx_errors;
+  // ---- thong ke loi: 2 CO MOT CHIEU (chi bat true, KHONG BAO GIO ve false) ----
+  // Truoc day la 2 BO DEM uint16_t: nhip that ~4 frame/s -> TRAN sau 65 536 frame (~4,5 gio).
+  // Tran ve 0 khong chi lam hien thi sai ma con lam dieu kien TAT SNIFFER TRAM trong
+  // panel_link.cpp (`if (panel.rx_frames)`) tro nen SAI -> sniffer bat lai giua chung va co the
+  // an byte cua frame chua "TRAM" (dung loi da tung gap). Dung CO thi khong con so de tran.
+  //
+  // VI SAO GIU TEN CU (rx_frames/rx_errors) chu khong doi thanh rx_ok/rx_err: main.cpp - dong log
+  // debug "[CYD] ... rx=%d err=%d" - van doc panel.rx_frames / panel.rx_errors (ep (int), xem
+  // main.cpp:63-65), ma main.cpp KHONG duoc sua (nhanh upload dang sua song song, sua vao la ghi
+  // de code cua ho). Gia tri in ra van dung: rx=1 khi da nhan duoc frame hop le / 0 khi chua;
+  // err=1 khi da tung gap frame loi. Muon doi ten cho dep thi phai sua them 2 dong trong main.cpp
+  // (panel.rx_ok / panel.rx_err) - luc do moi doi ten o day duoc.
+  bool rx_frames;    // CO: da nhan duoc it nhat 1 frame PUSH hop le
+  bool rx_errors;    // CO: da tung gap frame loi (CRC sai hoac do dai payload qua lon)
 } panel_data_t;
 
 extern panel_data_t panel;

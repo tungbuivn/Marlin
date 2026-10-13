@@ -653,6 +653,374 @@ Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
 * Sau khi xong, build/nạp bình thường:
   `pio run -d D:\Marlin\lcd_panel -e panel_esp32_cyd -t upload --upload-port COM3`.
 
+---
+
+## 9. Nhận file G-code qua Bluetooth (BT SPP) → thẻ TF của panel → ESP3D → thẻ SD của Marlin
+
+> Chỉ có ở **env `panel_esp32_cyd`** (board CYD = ESP32). Tắt/mở bằng `PANEL_BT_UPLOAD` trong
+> `src/panel_config.h` (hoặc `-DPANEL_BT_UPLOAD=0` trong `platformio.ini`). Code nằm ở
+> `src/panel_bt_upload.cpp` + `src/panel_bt_upload.h`; **không** đụng `ui_lvgl.cpp` /
+> `panel_protocol.h` / `panel_link.cpp`.
+
+### 9.1 Luồng (2 pha + 1 bước cuối)
+
+```
+Điện thoại --BT SPP--> CYD --(ghi)--> /btup/<ten>.tmp trên thẻ TF của CYD
+                                        |
+                                        +--(pha 2, KHÓA UI)--> HTTP POST multipart --> ESP3D
+                                                                  (module WiFi, ghi thẳng
+                                                                   thẻ SD của Monster8)
+                                        |
+                                        +--> M22 + M21 (init lại thẻ cho Marlin) --> chờ 800 ms
+                                             --> PANEL_REQ_FILES --> xóa file tạm --> DONE (BT)
+```
+
+* **Pha 1** (nhận qua BT) chạy trong `loop()` → UI vẫn dùng được bình thường (chỉ hiện 1 khung nhỏ).
+* **Pha 2** (đẩy lên ESP3D) **blocking + khóa UI**: lớp phủ toàn màn hình trên `lv_layer_top()`
+  và tắt mọi input device (`lv_indev_get_next()` + `lv_indev_enable(i,false)`), nên **không cần
+  sửa `ui_lvgl.cpp`**. Mọi đường thoát (thành công/lỗi/timeout) đều mở khóa lại (`ui_lock(false)`)
+  và xóa lớp phủ.
+* Vì file đã nằm trên thẻ nên **biết trước `Content-Length`** → dùng `Content-Length` +
+  `multipart/form-data`, **không cần chunked**.
+
+### 9.2 Bật và tên thiết bị BT
+
+| Việc | Ở đâu |
+|---|---|
+| Bật/tắt tính năng | `PANEL_BT_UPLOAD` — mặc định **1** với board CYD (`panel_config.h`) |
+| Tên thiết bị khi quét BT | `PANEL_BT_NAME` = **`"TBT-PANEL"`** (`panel_config.h`) |
+| WiFi + IP module ESP3D | `PANEL_ESP3D_SSID` / `PANEL_ESP3D_PASS` / `PANEL_ESP3D_HOST` / `PANEL_ESP3D_PORT` |
+
+```c
+// panel_config.h -- giá trị ĐANG DÙNG (khớp D:\arduino\ESP3D-direct-sd\esp3d\config.h)
+#define PANEL_ESP3D_SSID "Voron2308"        // AP của module ESP3D   (config.h:370 DEFAULT_AP_SSID)
+#define PANEL_ESP3D_PASS "v0r0n24s3cur3"    //                       (config.h:371 DEFAULT_AP_PASSWORD)
+#define PANEL_ESP3D_HOST "192.168.0.1"      // AP IP STATIC của module (config.h:376 DEFAULT_IP_VALUE
+                                            //  {192,168,0,1} + DEFAULT_AP_IP_MODE = STATIC_IP_MODE);
+                                            //  "" = tự dò IP từ đầu (xem 9.2.1)
+#define PANEL_ESP3D_PORT 80
+```
+
+WiFi bật **ngay từ lúc khởi động** (không phải chỉ trong lúc đẩy file) để icon trạng thái ở header
+đúng ngay; `WiFi.setAutoReconnect(true)` + thử lại mỗi 8 s nếu mất kết nối. Lúc **nhận qua BT
+(pha 1)** WiFi được để ở chế độ tiết kiệm (`WiFi.setSleep(true)`) cho BT có trọn radio; lúc **đẩy
+file** thì tắt tiết kiệm để đẩy nhanh hơn.
+
+#### 9.2.1 Tự dò IP module ESP3D (chỉ chạy khi bắt đầu pha 2, kết quả được cache)
+
+Không phụ thuộc việc người dùng nhớ đúng IP. Thứ tự thử (`esp3d_ensure()` trong `panel_bt_upload.cpp`):
+
+1. **`PANEL_ESP3D_HOST`** (đang là `192.168.0.1`) — nếu trả lời thì **dùng luôn, không dò tiếp**;
+2. **mDNS** — chỉ khi build có `-DPANEL_ESP3D_USE_MDNS=1` (**mặc định TẮT**, xem lý do bên dưới):
+   thử lần lượt các tên trong `PANEL_ESP3D_MDNS_NAMES` (`"MYESP,esp3d"`);
+3. **gateway của mạng đang nối** (`WiFi.gatewayIP()`) — ở chế độ AP thì **chính là module**;
+4. **danh sách ứng viên** `PANEL_ESP3D_IP_LIST` = `192.168.4.1, 192.168.0.1, 192.168.1.1,
+   192.168.1.50, 192.168.0.50`.
+
+Mỗi ứng viên tối đa **1,5 s**, tổng tối đa **15 s**; chỉ chạy **một lần** cho tới khi tìm được (cache
+`IPAddress`), và tự xoá cache nếu lần POST sau không kết nối được. Log COM7:
+
+```
+[BTUP] dang do IP ESP3D...
+[BTUP] ESP3D thay o 192.168.0.1 (nguon: cau hinh)      <- hoac: mdns / gateway / danh sach
+[BTUP] KHONG tim thay ESP3D (da thu: 192.168.0.1,192.168.4.1,...)
+```
+
+**Cách nhận dạng “đúng là ESP3D”, không chỉ “port 80 mở”** (bắt buộc, vì `192.168.0.0/24` **trùng
+dải IP mạng nhà** — router TP-Link cũng thường là `192.168.0.1`): panel gửi
+`GET /command?plain=[ESP800]` và chỉ chấp nhận khi phản hồi có chuỗi **`FW version:`**
+(`esp3d/command.cpp:1916+`). Lệnh này là lệnh duy nhất không cần đăng nhập và **không đụng vào thẻ
+SD của Marlin** (khác với `GET /files`, thứ sẽ giành bus SPI của thẻ).
+
+**Vì sao mDNS mặc định TẮT:** tên mDNS của ESP3D **không cố định** — `esp3d/config.h:34,37` đặt
+`ESP_DEFAULT_NAME "MYESP"` và `ESP_HOST_NAME = ESP_DEFAULT_NAME` ⇒ mặc định là **`MYESP.local`**
+(không phải `esp3d.local`), và tên thật còn sửa được trong EEPROM (`EP_HOSTNAME`, qua web UI).
+Thêm nữa `ESPmDNS` kéo thêm DRAM biến tĩnh (xem 9.8: trần DRAM của CYD chỉ còn ~2,5 KB). Khi cần,
+bật bằng `-DPANEL_ESP3D_USE_MDNS=1` — nhưng **phải build kiểm lại** vì có thể tràn DRAM.
+
+### 9.3 Gửi file từ điện thoại — 2 kiểu
+
+| Kiểu | Định dạng | Kết thúc phiên |
+|---|---|---|
+| **Có header** (ưu tiên) | dòng `PUT <ten_file> <so_byte>` + `\n`, rồi đúng `<so_byte>` byte nhị phân | đủ số byte (thiếu quá 8 s → `ERR`) |
+| **Gửi thô** (app kiểu "Serial Bluetooth Terminal") | dữ liệu ngay từ byte đầu | không còn byte nào trong **3 giây** |
+
+* Kiểu thô lấy tên mặc định `PANEL_BT_DEF_NAME` = `bt_upload.gco`; tên không có phần mở rộng thì
+  tự thêm `.gco`; mọi ký tự lạ/đường dẫn bị loại.
+* Tên file (kiểu header) tối đa 31 ký tự, chỉ `[A-Za-z0-9._-]`.
+* **Chỉ nhận khi Marlin không đang in** (`panel.flags & PANEL_SF_SD_PRINTING` hoặc state
+  PRINTING/PAUSED/HOMING/LEVELING/RUNOUT/KILLED) — vì lúc đẩy file ESP3D sẽ giành bus SPI của thẻ
+  SD (xem 9.6), đang in mà giành bus là hỏng bản in. Đang in → `ERR dang in`.
+* Không cho 2 phiên chồng nhau: trong lúc nhận/đẩy, byte mới tới chỉ bị bỏ và trả `ERR`.
+* Heap < `PANEL_BT_HEAP_MIN` (20 KB) → `ERR heap thap`.
+
+**Trả lời qua BT** (app đọc được, mỗi dòng kết thúc `\n`):
+
+```
+OK <ten> <so_byte>     phiên kiểu header được nhận
+OK <ten> RAW           phiên kiểu thô được nhận
+PROG <so_byte_da_nhan> mỗi ~64 KB
+POST <so_byte>         đã nhận xong, bắt đầu đẩy lên ESP3D (bắt đầu KHÓA UI)
+DONE <so_byte>         POST thành công, đã gửi M22/M21 + xin lại danh sách file
+ERR <lý do>            lỗi (không gửi M22/M21)
+```
+
+### 9.4 Endpoint upload thật của ESP3D (đọc từ `D:\arduino\ESP3D-direct-sd\`)
+
+| Mục | Giá trị | Nguồn |
+|---|---|---|
+| URL | `http://<PANEL_ESP3D_HOST>:<PANEL_ESP3D_PORT>/files` | `esp3d/webinterface.cpp:386` `web_server.on("/files", HTTP_ANY, handleSDFileList, SPIShareSdCardUpload);` |
+| Method | `POST` (handler đăng ký `HTTP_ANY`) | như trên |
+| Kiểu body | **bắt buộc `multipart/form-data`** (có `boundary`) mới gọi được upload handler | `Parsing-impl.h` (`_parseRequest`: chỉ khi `Content-Type` bắt đầu bằng `multipart/` mới đặt `isForm=true` → `_parseForm`) |
+| Tên field | **không quan trọng** — ESP8266WebServer nhận ra phần file qua `filename="..."` | `Parsing-impl.h::_parseForm` (`argIsFile` khi có `filename=`) |
+| Thứ tự trong `Content-Disposition` | **`name="..."` phải đứng TRƯỚC `filename="..."`** (code cắt chuỗi theo dấu `=` đầu tiên) | `Parsing-impl.h::_parseForm` |
+| `Content-Length` | **BẮT BUỘC gửi** trong bản này (vì multipart + để hợp với mọi bản ESP3D). Lưu ý: `_parseForm` của ESP8266WebServer **bỏ qua** tham số `len` (`(void) len;`) và kết thúc theo `\r\n--boundary`, nên về lý thuyết không cần — nhưng panel đã có file trên thẻ nên cứ gửi cho chắc | `Parsing-impl.h::_parseForm` |
+| `Transfer-Encoding: chunked` | **KHÔNG dùng** (server đồng bộ của ESP8266 không giải mã chunked; byte khung chunk sẽ bị ghi vào file) | `Parsing-impl.h::_parseRequest` (không hề đọc header này) |
+| Đăng nhập | **không cần** — `AUTHENTICATION_FEATURE` đang tắt nên `is_authenticated()` trả `LEVEL_ADMIN` | `esp3d/config.h:89` + `esp3d/webinterface.cpp:437-439` |
+| Ghi vào đâu | `/` + `filename` (gốc thẻ SD) khi là admin | `esp3d/syncwebserver.cpp:1013-1042` (`SPIShareSdCardUpload`), `PANEL_ESP3D_DIR` chỉ để ghi tài liệu |
+| File trùng tên | bị **xóa rồi ghi lại** | `esp3d/syncwebserver.cpp:1031-1034` |
+| Trả lời | `200 application/json`, JSON có `"status":"Ok"` khi xong (ngược lại `"Upload failed"`/`"Initialize sd failure"`); lỗi ghi file thì ESP3D trả sớm `500` | `esp3d/syncwebserver.cpp:443-696` (`handleSDFileList`), `:78-102` (`pushError`) |
+
+Panel **coi là thành công** khi: dòng trạng thái HTTP đầu tiên là `200` **và** (nếu tìm thấy)
+`"status":"Ok"`. Nếu card nhiều file đến mức phần JSON vượt `PANEL_BT_MAX_REPLY_BYTES` (24 KB) mà
+chưa thấy `"status"` thì vẫn tính là xong và ghi cảnh báo vào log (xem 9.9).
+
+### 9.5 Thẻ TF của CYD — chân, định dạng, file tạm
+
+| Mục | Giá trị | Nguồn |
+|---|---|---|
+| Bus | **VSPI — bus RIÊNG với LCD** (LCD ở HSPI) | `tools/tft_setup/User_Setup.h:56-57`: “CYD: LCD o HSPI (VSPI de danh cho khe the SD: CS 5 / MOSI 23 / MISO 19 / SCLK 18)” + `#define USE_HSPI_PORT` |
+| Chân | **SCK 18 / MISO 19 / MOSI 23 / CS 5** (`PANEL_SD_*` trong `panel_config.h`) | như trên; đây cũng là chân VSPI mặc định của core (`variants/esp32/pins_arduino.h`) |
+| Tốc độ | `PANEL_SD_HZ` = 20 MHz | `panel_config.h` |
+| Không đụng gì | cảm ứng XPT2046 là chân riêng 25/32/39/33/36 (bit-bang trong `ui_lvgl_port.cpp`), LCD 12/13/14/15 + DC 2 + BL 21 | `User_Setup.h:47-71` |
+| Định dạng thẻ | **FAT32** (thư viện `SD` của core 2.0.17 không mount exFAT) | — |
+| File tạm | `/btup/<ten>.tmp` (thư mục riêng, đuôi `.tmp`; Marlin chỉ liệt kê **gốc** thẻ nên không thấy) | `PANEL_BTUP_DIR`, `panel_bt_upload.cpp::open_temp()` |
+| Kích thước tối đa | = chỗ trống còn lại của thẻ TF (kiểm tra trước khi ghi khi biết trước kích thước; chừa 256 KB) và ≤ 4 GB/FAT32 | `open_temp()` |
+| Log mỗi phiên | `[BTUP] the TF: con X KB / tong Y KB (kieu header\|kieu RAW)` — không để thẻ đầy âm thầm | `open_temp()` |
+
+#### 9.5.1 Dọn file tạm — chống “file mồ côi” khi panel bị reset
+
+Nếu panel bị **reset / mất điện / watchdog** giữa lúc đang nhận hoặc đang POST thì `/btup/<ten>.tmp`
+sẽ **nằm lại vĩnh viễn** (đầy thẻ dần mà không ai biết). Vì vậy:
+
+* **Lúc khởi động**: `panel_bt_upload_begin()` mount thẻ TF rồi gọi `clean_dir("luc khoi dong", true)`
+  — quét `/btup`, xóa **mọi** file `.tmp`, log số file + tổng byte thu hồi + dung lượng trống còn lại:
+  `[BTUP] don /btup (luc khoi dong): xoa N file .tmp (M KB); the TF con X/Y KB`.
+* **Đầu mỗi phiên**: `open_temp()` gọi `clean_dir("dau phien", false)` (chỉ log khi thật sự có file bị xóa).
+* Chưa có thư mục thì **tạo**; mọi trường hợp lỗi (không tạo được, không mở được thư mục, không xóa
+  được 1 file) đều được **log rõ ràng** — không im lặng.
+
+**Danh sách đường thoát có xóa file tạm** (hàm chính: `del_temp()`):
+
+| # | Đường thoát | Chỗ trong code |
+|---|---|---|
+| a | POST thành công | `finish_recv()` → `st_sdwait()` → `del_temp("xong")` |
+| b | POST lỗi (ESP3D trả 500, `status != Ok`, timeout, TCP lỗi) | `finish_recv()` nhánh `if (!ok)` → `del_temp("post loi")` |
+| c | **BT mất kết nối giữa pha 1** | `st_recv()` kiểm `bt_alive()` (`hasClient()`) → `fail_session()` → `del_temp("phien loi")` |
+| d | Hết dữ liệu 3 s nhưng **thiếu byte** (kiểu header) | `st_recv()` (quá `PANEL_BT_STALL_MS`) hoặc `finish_recv()` (`got != s_declared`) → `fail_session()` |
+| e | Lỗi ghi thẻ (hết chỗ / `write` fail / không mở được file tạm) | `open_temp()` (hết chỗ), `stage_flush()` (write fail) → `fail_session()` |
+| f | **WiFi rớt giữa lúc POST** | `http_post()` (kiểm `WiFi.status()` mỗi khối + `write_all` fail) → `finish_recv()` → `del_temp("post loi")` |
+| g | Người dùng ngắt phiên / app disconnect | như (c) — `bt_alive()` sai ⇒ `ERR BT mat ket noi giua pha 1` |
+| h | Header sai định dạng / quá thời gian chờ header / đệm BT tràn / file rỗng | `st_sniff()`, `st_recv()` (`s_drop`), `finish_recv()` → `fail_session()` |
+| i | Panel bị reset/mất điện giữa phiên | không kịp xóa ⇒ **dọn ở lần khởi động sau** (mục 9.5.1) |
+
+**Đổi hành vi cần biết (kiểu RAW):** vì gửi thô không biết trước số byte, nên nếu **SPP bị ngắt
+giữa lúc đang nhận** thì panel **coi là lỗi** (`ERR BT mat ket noi giua pha 1`) và **xóa file tạm**,
+thay vì chấp nhận phần đã nhận. Lý do: thà bắt gửi lại còn hơn để **file G-code bị cắt** lọt lên thẻ
+SD của Marlin rồi in ra hỏng. ⇒ App phải **giữ kết nối tới khi phiên xong** (muốn chắc chắn thì dùng
+kiểu có header `PUT <ten> <so_byte>`). Muốn nới lỏng: bỏ 2 dòng `if (!bt_alive())` trong `st_recv()`.
+
+### 9.6 Vì sao sau khi upload **phải** gửi `M22` + `M21`
+
+`ESP3D-direct-sd` ghi trực tiếp lên thẻ SD của MKS Monster8 qua bus SPI **dùng chung**: trước khi
+ghi nó đóng relay để tách Marlin khỏi thẻ (`esp3d/direct_sd.cpp:47-53` `switchRelay(LOW)` trong
+`beginSDOperation()`, `:84-103`), ghi xong thì trả lại (`endSDOperation()` → `switchRelay(HIGH)`,
+`:55-82`). Trong lúc đó Marlin **không hề biết** thẻ vừa có file mới (nó vẫn giữ trạng thái
+`card`/FAT cũ), nên phải:
+
+1. `panel_link_send_gcode2("M22", "M21")` — `M22` = nhả media, `M21` = init media (Marlin mount lại
+   thẻ và đọc lại thư mục);
+2. chờ **~800 ms** (`PANEL_BT_SDWAIT_MS`) — lệnh G-code đi qua **hàng đợi** của Marlin
+   (`panel_serial.cpp: queue.enqueue_one_now()`), còn frame `REQUEST` được xử lý **ngay**; xin sớm
+   quá sẽ nhận danh sách **cũ** (đúng như `files_job_task()` trong `ui_lvgl.cpp` đang làm);
+3. `panel_link_request(PANEL_REQ_FILES)` (xóa `panel.files_done`/`n_files` trước, để thư mục rỗng
+   vẫn được vẽ lại);
+4. **chỉ khi POST thành công** mới làm 1–3; POST lỗi thì **không** gửi `M22/M21` mà báo `ERR`.
+
+### 9.7 Icon WiFi ở header — hợp đồng với nhánh UI (`src/net_upload.h`)
+
+```c
+#include "net_upload.h"
+uint8_t st = net_wifi_state();   // 0 = WiFi tắt/chưa cấu hình/không có module
+                                 // 1 = ĐANG kết nối (đang thử, kể cả thử lại) -> icon ĐỎ
+                                 // 2 = ĐÃ kết nối                              -> icon XANH
+```
+
+* Hàm **chỉ đọc biến trạng thái đã cache** (cập nhật trong `panel_bt_upload_task()`), không chặn,
+  không cấp phát, không gọi `WiFi.*` → gọi được từ `ui_lvgl_task()` mỗi vòng.
+* Chỉ trả `2` khi `WiFi.status() == WL_CONNECTED` (không phải chỉ vì đã gọi `WiFi.begin()`).
+* `net_upload.h` chỉ include `<stdint.h>` (không kéo `WiFi.h`/`BluetoothSerial.h`/`SD.h` vào build
+  của UI). Mọi env đều link được: khi tính năng tắt (STM32, hoặc `-DPANEL_BT_UPLOAD=0`) hàm trả `0`.
+
+### 9.8 DRAM: vì sao phải đổi `LV_MEM_SIZE` và bảng phân vùng
+
+ESP32 (không PSRAM) chỉ có **124.580 byte DRAM cho biến tĩnh** (vùng `dram0_0_seg`:
+`tools/sdk/esp32/ld/memory.ld:66-67` = `0x3FFB0000 + 0xDB5C`, dài `0x2C200 - 0xDB5C`). Bật WiFi +
+Bluetooth Classic kéo theo **~38 KB `.bss`/`.data` tĩnh** của thư viện SDK (libbt 13,0 KB;
+libfreertos 5,0; liblwip 3,4; libmesh 2,9; libpp 2,9; libespcoredump 2,2; libnet80211 1,4;
+libcoexist 1,2; …). Vì vậy đã phải:
+
+**Số build thật (kiểm bằng build trong thư mục riêng, 0 warning):** `panel_esp32_cyd` →
+**RAM 122.040 B / 327.680 (37,2 %) · Flash 1.770.457 B / 3.145.728 (56,3 %)** ⇒ **trần DRAM biến tĩnh
+chỉ còn dư ~2,5 KB**. Riêng khi bật `-DPANEL_ESP3D_USE_MDNS=1` (thêm `ESPmDNS`): RAM **123.960 B
+(+1.920 B)** · Flash **1.797.105 B (+26,6 KB)** — vẫn link được nhưng chỉ còn **~0,6 KB** DRAM dự
+phòng, nên mặc định **để TẮT**.
+
+| Thay đổi | File | Ghi chú |
+|---|---|---|
+| 2 buffer làm việc (vòng đệm BT **4 KB** + khối ghi thẻ **2 KB**) **cấp phát từ heap** thay vì mảng tĩnh | `src/panel_bt_upload.cpp` | cấp 1 lần trong `panel_bt_upload_begin()` (task BT cần vòng đệm cả khi rảnh). Trước đó để mảng tĩnh 8 KB + 4 KB thì linker báo `dram0_0_seg overflowed by 28144 bytes` |
+| `LV_MEM_SIZE` 48 KB → **30 KB** bằng file cấu hình RIÊNG | **mới** `src/lv_conf_panel.h` + `-DLV_CONF_PATH=lv_conf_panel.h` (chỉ env CYD) | `lv_conf_panel.h` **khác `lv_conf.h` đúng 1 dòng cấu hình**: `#undef LV_MEM_SIZE` + `#define LV_MEM_SIZE (30U * 1024U)` (phần còn lại chỉ là chú thích). **KHÔNG sửa trực tiếp `lv_conf.h`** vì: (1) file đó là cấu hình CHUNG cho cả 3 env LVGL (F411/F407/CYD) — hạ pool ở đó sẽ hạ luôn cả 2 board STM32 nơi không có vấn đề DRAM; (2) `lv_conf_panel.h` include `lv_conf.h` rồi chỉ ghi đè 1 macro ⇒ vẫn **một nguồn cấu hình duy nhất**, không copy file |
+| Bảng phân vùng `default.csv` (app 1.25 MB) → **`huge_app.csv`** (app 3 MB) | `platformio.ini` (env `panel_esp32_cyd`) | WiFi + BT Classic + LVGL + TFT_eSPI = **1,77 MB flash** > 1,25 MB |
+
+**Vì sao đổi bảng phân vùng mà hiệu chuẩn cảm ứng KHÔNG mất:** cả hai file đều khai báo phân vùng
+`nvs` ở **cùng offset `0x9000`, size `0x5000`** (20 KB), chỉ khác phần `app`/`spiffs`:
+
+| File (trong package PlatformIO) | Dòng | Khai báo |
+|---|---|---|
+| `…\.platformio\packages\framework-arduinoespressif32\tools\partitions\default.csv` | **:2** | `nvs, data, nvs, 0x9000, 0x5000,` |
+| `…\tools\partitions\huge_app.csv` | **:2** | `nvs, data, nvs, 0x9000, 0x5000,` |
+
+⇒ NVS (nơi `ui_lvgl_port.cpp` lưu kết quả hiệu chuẩn cảm ứng) nằm nguyên chỗ. **Lưu ý:** bảng phân
+vùng đổi thì lần nạp đầu phải nạp cả `firmware.bin` + `partitions.bin` (PlatformIO `-t upload` làm
+sẵn), và **tuyệt đối không chạy `-t erase`** nếu muốn giữ hiệu chuẩn. File csv này nằm trong package
+của PlatformIO (không phải trong repo) — package cập nhật thì phải xem lại 2 dòng trên.
+
+Muốn trả `LV_MEM_SIZE` về 48 KB thì phải trả lại DRAM ở chỗ khác trước (nếu không linker FAIL):
+cách sạch nhất là cho `ui_lvgl.cpp` cấp buffer vẽ 25,6 KB từ heap (hoặc giảm còn `320×20`) — file đó
+thuộc nhánh UI khác.
+
+**Buffer/heap mà module này dùng** (để cân đối với nhánh UI):
+
+| Khoản | Byte | Ở đâu |
+|---|---|---|
+| `.bss`/`.data` (biến tĩnh) | **0** | tất cả đã chuyển sang heap/lớp phủ LVGL |
+| Vòng đệm BT (`PANEL_BT_RING_BYTES`) | 4.096 | heap, cấp 1 lần lúc boot |
+| Khối ghi thẻ (`PANEL_BT_SD_CHUNK`) | 2.048 | heap, cấp 1 lần lúc boot |
+| Stack task hút BT (`TASK_STACK`) | 2.048 | heap (FreeRTOS cấp) |
+| Lớp phủ LVGL (~7 object: 1 khung + 5 nhãn + 1 thanh) | ~0,4 KB | từ pool LVGL 30 KB (không phải heap) |
+| **Tổng module lấy của heap** | **8.192** | in ra ở log `[BTUP] WiFi + BT Classic DA SAN SANG: … buffer cua module da lay …` |
+
+**Cắt tiếp nếu heap quá thấp** (sửa 2 số trong `panel_config.h`, không cần đổi code):
+`PANEL_BT_RING_BYTES` 4096 → 2048 và `PANEL_BT_SD_CHUNK` 2048 → 1024 (tiết kiệm thêm 3 KB; pha 1 vẫn
+ghi thẳng xuống thẻ nên không cần buffer lớn) — đổi lại vòng đệm chỉ chịu được ~34 ms thẻ ghi chậm
+thay vì ~68 ms, nên theo dõi `drop=` trong log; nếu `drop=` > 0 thì tăng lại.
+
+**Heap lúc chạy:** tổng DRAM dùng được = `0x40000000 − 0x3FFBDB5C` = 271.524 B; trừ **122.040 B** biến
+tĩnh (số build thật) → **~146 KB heap lúc boot** (trước khi FreeRTOS/WiFi/BT cấp phát). WiFi STA +
+Bluetooth Classic (Bluedroid) lấy của heap **~80–130 KB** tuỳ lúc ⇒ **heap tự do sau khi cả hai đã
+kết nối có thể chỉ còn ~10–60 KB**, thấp hơn ngưỡng `PANEL_BT_HEAP_WARN` = 60 KB. Log 1 Hz in
+`heap=` (hiện tại) và `heapmin=` (thấp nhất kể từ lúc bắt đầu phiên gần nhất — có tính cả lúc đang
+đẩy file), cộng dòng `!! CANH BAO HEAP THAP` khi dưới 60 KB. **Đây là số ước tính từ kích thước
+biến tĩnh + tài liệu Bluedroid, KHÔNG đo được trên máy thật từ đây** — phải đọc `heap=`/`heapmin=`
+trên COM7 sau khi nạp. Nếu heap tự do < 25 KB: cắt buffer như bảng trên, và/hoặc trả DRAM bằng cách
+cho `ui_lvgl.cpp` cấp buffer vẽ từ heap.
+
+### 9.9 Kiểm trên máy thật
+
+1. `pio run -d D:\Marlin\lcd_panel -e panel_esp32_cyd -t upload --upload-port COMn` (đổi bảng phân
+   vùng → nên `-t erase` một lần nếu mạch lạ, **sẽ mất hiệu chuẩn cảm ứng trong NVS**).
+2. Mở COM7 115200, xem log 1 Hz: có dòng `[BTUP] bt=1 wifi=… st=idle … heap=…` và
+   `[BTUP] BT SPP "TBT-PANEL" san sang (task=0)`.
+3. Điện thoại: bật BT → thấy **TBT-PANEL** → ghép đôi. Icon WiFi ở header: **đỏ** khi đang kết nối
+   WiFi, **xanh** khi đã vào mạng; rút AP đi thì icon về đỏ rồi tự xanh lại (≤ ~10 s).
+4. Cắm thẻ TF (FAT32) vào khe của CYD; log phải in `[BTUP] the TF panel OK: …`.
+5. Gửi file: app hỗ trợ dòng lệnh gửi `PUT benchy.gco 12345\r\n` + dữ liệu, hoặc app kiểu
+   Serial Bluetooth Terminal gửi thẳng file (kết thúc bằng 3 s im lặng).
+   - Khung overlay hiện tên file + % + KB/s; app nhận `OK`/`PROG`/`POST`/`DONE`.
+   - Lúc `POST`, màn hình bị lớp phủ che và **cảm ứng/encoder không tác dụng** cho tới khi xong.
+6. Sau `DONE`: mở màn **FILES** của panel → phải thấy file mới (nếu không, bấm **REFRESH** — nút này
+   gửi lại M22/M21), và `ls` trên màn hình Marlin cũng phải thấy (M20 qua host).
+7. Kiểm tra file tạm đã bị xóa: tháo thẻ TF của CYD ra PC → thư mục `btup` phải rỗng.
+8. Kiểm **dọn file mồ côi lúc khởi động**: cắm thẻ CYD vào PC, tạo tay `btup\gia-lap.tmp` (vài KB),
+   cắm lại thẻ vào CYD rồi **reset panel** → log phải có
+   `[BTUP] don /btup (luc khoi dong): xoa 1 file .tmp (M KB); the TF con X/Y KB`, và tháo thẻ ra PC thì
+   `btup` rỗng.
+9. Kiểm **tự dò IP ESP3D**: xoá/đổi `PANEL_ESP3D_HOST` thành `""`, nạp lại, gửi 1 file → log phải có
+   `[BTUP] dang do IP ESP3D...` rồi `[BTUP] ESP3D thay o <IP> (nguon: gateway|danh sach)`.
+   Nếu thấy `KHONG tim thay ESP3D (da thu: ...)` thì kiểm lại AP của module và dải IP (mục 9.2.1).
+8. Đo thông lượng thật: đọc `[BTUP] … KB/s` trong log (hoặc dòng `PROG` trên app). **Lưu ý:** BT
+   Classic và WiFi **dùng chung radio** (chia thời gian) nên khi WiFi đang bật, BT chậm đi rõ rệt;
+   kỳ vọng thực tế chỉ **vài chục KB/s** ⇒ file 10 MB mất **vài phút**. Nếu quá chậm, thử tắt
+   `PANEL_BT_UPLOAD` để so sánh (hoặc để panel gần router).
+
+**Hạn chế đã biết:** (a) BT và WiFi chia sẻ radio → thông lượng mỗi bên giảm; (b) file tạm bị xóa ở
+**mọi** đường thoát (kể cả POST lỗi) nên phải gửi lại từ đầu nếu lỗi — đổi ở `finish_recv()` nếu muốn
+giữ để đẩy lại (mặc định xóa để tránh đầy thẻ); (c) phiên kiểu header chấp nhận `PUT …` nên file
+G-code bắt đầu bằng đúng chữ `PUT ` sẽ bị hiểu là header (rất khó xảy ra); (d) nếu phần JSON trả lời
+của ESP3D vượt 24 KB mà chưa thấy `"status"` thì panel vẫn tính là thành công (chỉ log cảnh báo);
+(e) **kiểu RAW: ngắt BT giữa phiên bị coi là lỗi** (xem 9.5.1) — app phải giữ kết nối tới khi xong;
+(f) thẻ TF **mounted suốt** từ lúc boot (để dọn rác + nhận file ngay) nên nếu rút thẻ ra cắm lại thì
+phải khởi động lại panel (hoặc để phiên sau tự thử mount lại — chỉ mount lại khi lần trước THẤT BẠI);
+(g) **WiFi chỉ bật khi đẩy file** (xem 9.10) ⇒ icon WiFi ở header **xám (0) phần lớn thời gian**, chỉ
+đỏ/xanh trong ~1 phút quanh mỗi lần upload.
+
+### 9.10 🔴 PANIC THẬT 2026-10-14 (`StoreProhibited EXCVADDR=0x00000000`) — nguyên nhân & cách chặn
+
+**Hiện tượng (log COM7 máy thật):** sau `[BTUP] WiFi bat dau ket noi "Voron2308" ...` + SD mount thất
+bại, panel **reboot loop**:
+
+```
+Guru Meditation Error: Core 0 panic'ed (StoreProhibited). EXCVADDR: 0x00000000
+Backtrace: 0x40091e09(memset) <- bta_sys_init (bta_sys_main.c:171)
+           <- btu_task_start_up (btu_task.c:276) <- osi_thread_run (osi/thread.c:165)
+```
+Không hề có dòng `[BTUP] BT SPP "TBT-PANEL" san sang` ⇒ chết **trong lúc Bluedroid khởi động**, ngay
+sau `SerialBT.begin()`.
+
+**Nguyên nhân (chứng minh bằng mã + disassembly thư viện đã cài):**
+
+| Bằng chứng | Ý nghĩa |
+|---|---|
+| `bta_sys_int.h`: `extern tBTA_SYS_CB *bta_sys_cb_ptr;` + `#define bta_sys_cb (*bta_sys_cb_ptr)` | `bta_sys_cb` là **con trỏ cấp phát động** (khi `BTA_DYNAMIC_MEMORY != FALSE`) |
+| `nm libbt.a` → `bta_sys_main.c.obj: 00000004 C bta_sys_cb_ptr` | Là **COMMON/BSS** ⇒ bằng **0** lúc boot, phải được gán bằng `osi_malloc` |
+| Disassembly `bta_sys_init` (libbt.a): `movi a12,0x130` (size), `movi a11,0` (giá trị), `l32i a10,a2,0` (**a10 = *bta_sys_cb_ptr**), `callx8 memset` | `memset(*bta_sys_cb_ptr, 0, 0x130)`: con trỏ còn **NULL** ⇒ **ghi vào địa chỉ 0** = đúng `StoreProhibited EXCVADDR=0x00000000` |
+| Điểm cấp phát: `bte_init.c.obj` (`BTE_InitStack`) có literal trỏ tới `bta_sys_cb_ptr` cùng loạt `bta_dm_cb_ptr`, `avdt_cb_ptr`… | Bluedroid cấp phát cả loạt CB động **không kiểm tra NULL** ⇒ thiếu RAM/phân mảnh là **PANIC**, không phải lỗi trả về |
+| `tools/sdk/esp32/sdkconfig`: `CONFIG_BT_CLASSIC_ENABLED=y`, `CONFIG_BT_SPP_ENABLED=y`, **`CONFIG_SW_COEXIST_ENABLE=y` (:2090)** | **Coexistence ĐANG BẬT** ⇒ loại giả thuyết “coex tắt” |
+| `esp32-hal-bt.c:29` `#define BT_MODE ESP_BT_MODE_BTDM` | Controller chạy **BTDM** (Classic + BLE) ⇒ **KHÔNG** dùng `esp_bt_controller_mem_release(ESP_BT_MODE_BLE)` để tiết kiệm RAM (sẽ hỏng init) |
+| `SerialBT.begin()` chỉ gọi **1 lần duy nhất**, không có `end()` | Loại giả thuyết “begin 2 lần / gọi sau end” |
+| `firmware.elf` trong `.pio/build` có `.flash.text` kết thúc `0x401178A3`, **không có** symbol `bta_sys_init`, còn backtrace trỏ `0x4015b630` | **ELF đó KHÔNG khớp firmware đã nạp** ⇒ muốn tra backtrace phải build sạch và giữ đúng ELF |
+
+**Thủ phạm thực tế (thứ tự khởi tạo):** code cũ gọi `WiFi.mode()+WiFi.begin()` ở **boot**, sau đó
+`SD.begin()` thất bại, rồi mới `SerialBT.begin()` ⇒ **hai stack radio khởi tạo cùng lúc**
+(log `E (3457) wifi:Set status to INIT` ngay trước panic) và WiFi đã ăn ~40-50 KB heap **trước khi**
+Bluedroid cấp phát CB của nó.
+
+**Cách chặn (thứ tự khởi động mới trong `panel_bt_upload_begin()`):**
+
+1. **Mount thẻ TF trước**; không mount được ⇒ **TẮT tính năng**, log rõ, **không bật BT**.
+   `sd_mount()` nay thử lần lượt **20 → 10 → 4 MHz**, log từng bước, log `cardType()/totalBytes()`
+   khi thành công, và khi thất bại in gợi ý: cắm thẻ / **thẻ phải FAT32** / khe TF-bus VSPI 18/19/23/5.
+2. Cấp buffer làm việc (heap 4 KB + 2 KB) rồi **cửa an toàn RAM**: in `heap=` và
+   `khoi lien tuc lon nhat=` (`heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)`), chỉ bật BT khi
+   đạt `PANEL_BT_MIN_HEAP` (110 KB) **và** `PANEL_BT_MIN_BLOCK` (48 KB); không đạt ⇒ tắt tính năng.
+3. **Sau đó** mới `SerialBT.begin()` + tạo task hút BT, rồi log lại heap/khoi liên tục sau khi BT lên.
+4. **KHÔNG bật WiFi lúc boot**: WiFi chỉ `WiFi.begin()` khi vào **pha 2** (`wifi_up()`), tự
+   `WiFi.disconnect(true) + WiFi.mode(WIFI_OFF)` sau `PANEL_ESP3D_KEEP_MS` (60 s) rảnh
+   (`wifi_stop_idle()` trong `st_idle()`) ⇒ pha 1 chạy **một mình**, WiFi không bao giờ khởi tạo song
+   song với BT.
+5. Mọi `File` (`SD.open`/`openNextFile`) đều được kiểm tra trước khi dùng; `clean_dir()/open_temp()`
+   thoát ngay nếu `!s_sd_ready`.
+
+**Đánh đổi:** icon WiFi **xám (0)** phần lớn thời gian (chỉ đỏ/xanh ~1 phút quanh mỗi lần upload) và
+mỗi phiên phải chờ WiFi kết nối lại (~2-4 s) — chấp nhận để panel **không thể chết vì BT/WiFi**. Nếu
+sau này muốn WiFi thường trực: bật lại trong `panel_bt_upload_begin()` **và phải đo lại**
+`heap=`/`khoi lien tuc` trước `SerialBT.begin()`.
+
+**Bus SPI của thẻ không xung đột với LCD (đã kiểm lại):** `User_Setup.h:57` `#define USE_HSPI_PORT`
+⇒ TFT_eSPI chạy **HSPI**; nhánh CYD của `ui_lvgl_port.cpp` chỉ dùng `s_lcd` (TFT_eSPI) + cảm ứng
+bit-bang 25/32/39/33/36, còn `SPI.beginTransaction` ở `ui_lvgl_port.cpp:117` nằm trong nhánh **STM32**
+(`#endif // !PANEL_BOARD_CYD` ở `:121`) ⇒ thẻ TF trên VSPI 18/19/23/5 là bus riêng.
+
 ## Cap nhat 2026-10-13 (protocol v2 + UI mo rong)
 Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).
 Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.

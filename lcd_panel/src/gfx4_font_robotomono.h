@@ -1,10 +1,10 @@
 /*
- * gfx4_font_robotomono.h -- font 1-bit mono sinh tu TTF bang tools/ttf2gfxfont.py
+ * gfx4_font_robotomono.h -- font sinh tu TTF bang tools/ttf2gfxfont.py
  *
  *   font    : RobotoMono-Regular.ttf
  *   size    : 13 px (em size FreeType)   16 muc xam (4 bit/pixel), KHONG threshold
  *   bpp     : 4
- *   xAdvance: 8 px (mono)   yAdvance: 17 px   base_line: 3 px
+ *   xAdvance: 8 px (mono)  yAdvance: 17 px   base_line: 3 px
  *   do dai  : 5 dai, 336 o, 287 glyph co net, 9782 byte bitmap
  *
  * yOffset = tu BASELINE len mep tren bitmap (am = o TREN baseline).
@@ -1278,5 +1278,10 @@ const GFXfont *const gfx4_font_robotomono_ranges[5] = {
 #define GFX4_FONT_ROBOTOMONO_RANGE_COUNT 5
 
 #define GFX4_FONT_ROBOTOMONO_BPP 4
+#define GFX4_FONT_ROBOTOMONO_YADVANCE 17
+#define GFX4_FONT_ROBOTOMONO_BASELINE 3
+#define GFX4_FONT_ROBOTOMONO_ASCENDER 14
+#define GFX4_FONT_ROBOTOMONO_DESCENDER 3
+#define GFX4_FONT_ROBOTOMONO_XADVANCE 8
 
 #endif /* GFX4_FONT_ROBOTOMONO_H */

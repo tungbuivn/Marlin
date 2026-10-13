@@ -21,6 +21,8 @@
   #include "panel_link.h"
   #include "tram_link.h"          // chan doan: dem dong/byte TRAM nhan duoc
   #include "ui_lvgl.h"
+  #include "panel_bt_upload.h"    // nhan file G-code qua BT -> the TF panel -> POST len ESP3D
+                                  // (rong neu PANEL_BT_UPLOAD = 0; xem panel_config.h)
 
   #if defined(PANEL_CYD_DEBUG)
     #include <esp_system.h>
@@ -44,6 +46,9 @@
     #if defined(PANEL_CYD_DEBUG)
       Serial.printf("[CYD] ui_lvgl_begin() xong, free heap = %u B\n", (unsigned)ESP.getFreeHeap());
     #endif
+    // BT SPP (nhan file) + WiFi (bat san de icon trang thai o header dung ngay). Xem
+    // panel_bt_upload.cpp / net_upload.h. Khong lam gi neu PANEL_BT_UPLOAD = 0.
+    panel_bt_upload_begin();
     DBGLN("panel ready (LVGL, push mode)");
   }
 
@@ -53,9 +58,12 @@
       static uint32_t dbg_next = 0;
       if (millis() >= dbg_next) {
         dbg_next = millis() + 1000;
-        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx=%u err=%u heap=%u\n",
-                      (int)panel.linked, (int)tram.linked, (unsigned)panel.rx_frames,
-                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap());
+        // rx/err la 2 CO bool trong panel_data_t (panel_link.h) -> in ra 0/1 (ep (int) de dung
+        // voi ca bool lan uint16_t neu nhanh khac doi kieu).
+        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx=%d err=%d heap=%u\n",
+                      (int)panel.linked, (int)tram.linked, (int)panel.rx_frames,
+                      (int)panel.rx_errors, (unsigned)ESP.getFreeHeap());
+        panel_bt_upload_log();     // 1 dong: BT/WiFi/phien upload + heap (+ canh bao heap thap)
       }
     #endif
 
@@ -68,6 +76,7 @@
       s_forward_pending[0] = '\0';
     }
     panel_link_task();     // nhan frame tu Marlin + giu PING/lien ket
+    panel_bt_upload_task();// BT SPP -> the TF panel -> POST ESP3D (blocking + khoa UI khi dang day)
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
 
     // CONSOLE G-CODE QUA CONG USB CUA PANEL (tinh nang, 2026-10-13): nhan tung dong G-code/M-code

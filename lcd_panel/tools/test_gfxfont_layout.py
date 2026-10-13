@@ -182,8 +182,15 @@ def art(canvas, bpp):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--header", required=True)
-    ap.add_argument("--font", required=True)
-    ap.add_argument("--size", type=int, required=True)
+    ap.add_argument("--font", default="",
+                    help="TTF de doi chieu bang FreeType (bo qua khi dung --no-compare)")
+    ap.add_argument("--size", type=int, default=0, help="co chu cua --font")
+    ap.add_argument("--no-compare", action="store_true",
+                    help="KHONG doi chieu FreeType; chi giai ma header, in ASCII art + dem pixel "
+                         "co muc. Dung cho FONT ICON: codepoint dich (U+Exxx) khong co trong "
+                         "font nguon nen khong the ve lai bang FreeType duoc.")
+    ap.add_argument("--ink", action="store_true",
+                    help="in bang dem pixel co muc cho tung codepoint trong --cps")
     ap.add_argument("--text", action="append", default=[])
     ap.add_argument("--cps", action="append", default=[],
                     help="chuoi bang ma codepoint, vd 0x4E,0x48,0x1EC6,0x54 (tranh loi ma hoa "
@@ -199,10 +206,11 @@ def main():
     args = ap.parse_args()
 
     ranges, bpp = parse_header(args.header)
+    raw_cps = [int(v, 0) for spec in args.cps for v in spec.split(",") if v.strip()]
     texts = list(args.text)
     for spec in args.cps:
         texts.append("".join(chr(int(v, 0)) for v in spec.split(",") if v.strip()))
-    if not texts:
+    if not texts and not args.no_compare:
         texts = ["NHIET DO", "Chon file", "SAVE EEPROM", "BED MESH 100%"]
 
     print("header   :", args.header)
@@ -263,6 +271,47 @@ def main():
                   % (nm, g["w"], g["h"], g["adv"], g["xoff"], ofs_y, bpp, need, csum,
                      " ".join("%02X" % b for b in buf[:n8])))
         print("[GFXFONT] -----------------------------------------------------------")
+
+    if args.no_compare:
+        # ---- FONT ICON: khong the doi chieu FreeType (codepoint dich khong co trong font
+        # nguon). Thay vao do: giai ma header -> ASCII art + DEM SO PIXEL CO MUC de chung minh
+        # glyph KHONG rong, va kiem tra kich thuoc / vi tri so voi baseline.
+        if not raw_cps:
+            print("\n(--no-compare nhung khong co --cps -> khong co gi de in)")
+        print("\n--- KIEM TRA GLYPH (giai ma tu header, dung cach LVGL doc) ---")
+        for cp in raw_cps:
+            g = driver_lookup(ranges, cp)
+            if g is None:
+                print("\nU+%04X: KHONG CO GLYPH (o trong) -> FAIL" % cp)
+                fails += 1
+                continue
+            buf = driver_bitmap(g, bpp)
+            need = glyph_bytes(g["w"], g["h"], bpp)
+            lvl = [[lvgl_level(buf, g["w"], g["h"], r, c, bpp) for c in range(g["w"])]
+                   for r in range(g["h"])]
+            ink = sum(1 for r in range(g["h"]) for c in range(g["w"]) if lvl[r][c])
+            solid = sum(1 for r in range(g["h"]) for c in range(g["w"]) if lvl[r][c] == (1 << bpp) - 1)
+            ofs_y = -(g["yoff"] + g["h"])
+            # vi tri trong hop dong (dung luat cua lv_draw_sw_letter)
+            top_row = (line_height - base_line) - g["h"] - ofs_y
+            bot_row = top_row + g["h"] - 1
+            bad = (ink == 0) or (g["w"] > 14) or (g["h"] > 14) or top_row < 0 or bot_row >= line_height
+            if bad:
+                fails += 1
+            print("\n[%s] U+%04X  box %dx%d  xAdv %d  xOff %d  yOff %d  ofs_y %d  bytes %d"
+                  % ("FAIL" if bad else "OK ", cp, g["w"], g["h"], g["adv"], g["xoff"], g["yoff"],
+                     ofs_y, need))
+            print("        NET = %d pixel (muc toi da 15: %d pixel)  -> %s"
+                  % (ink, solid, "CO NET" if ink else "RONG !!!"))
+            print("        trong hop dong: hang %d..%d cua dong cao %d (base_line %d) -> %s"
+                  % (top_row, bot_row, line_height, base_line,
+                     "vua" if (top_row >= 0 and bot_row < line_height) else "TRAN/BI CAT"))
+            print(art(lvl, bpp))
+        print("\nKET LUAN:", "TAT CA OK" if fails == 0 else "%d muc FAIL" % fails)
+        return 1 if fails else 0
+
+    if not args.font:
+        sys.exit("--font bat buoc khi doi chieu FreeType (hoac dung --no-compare)")
 
     for text in texts:
         lv, ok, missing = render_lvgl(ranges, text, line_height, base_line, bpp)
