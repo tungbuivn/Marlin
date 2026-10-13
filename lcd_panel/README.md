@@ -7,10 +7,10 @@ Có **2 kiểu giao tiếp**, chọn bằng env trong `lcd_panel/platformio.ini`
 |---|---|---|
 | Env | `panel_f411cc`, `panel_f103c6` | `panel_f407vgz_lvgl`, `panel_f411cc_lvgl`, `panel_esp32_cyd` |
 | Panel lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`panel_link.cpp`) |
-| Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) |
+| Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) — **màn NGANG 320×240**, bố cục + **icon lấy từ màn TFT của Marlin** (§5) |
 | Marlin cần | chỉ bật 1 UART trống | bật `PANEL_SERIAL_UI` (ExtUI `panel_serial`) + tắt màn 12864 |
 | Dữ liệu nặng (file SD, bed mesh, PID/steps/mm, prompt…) | **không có** | **có** (Marlin đẩy hết) |
-| Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font) |
+| Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font + ~17 KB icon) |
 
 > **Vì sao có kiểu PUSH?** Panel ở MCU riêng *không* đọc được biến nội bộ của Marlin. Nếu chỉ
 > hỏi bằng G-code thì rất nhiều "khối" không thể vẽ: danh sách file SD, lưới bed mesh, thông số
@@ -27,13 +27,20 @@ Có **2 kiểu giao tiếp**, chọn bằng env trong `lcd_panel/platformio.ini`
 |---|---|---|---|
 | `panel_f411cc` | STM32F411CCU6 ("Black Pill") | ILI9341 SPI 240×320 | G-code |
 | `panel_f103c6` | STM32F103C6T6 ("Blue Pill") | ILI9341 SPI 240×320 | G-code |
-| `panel_f411cc_lvgl` | STM32F411CCU6 | ILI9341 SPI 240×320 | PUSH + LVGL |
-| `panel_f407vgz_lvgl` | STM32F407VGT6 (1 MB/128 KB) | ILI9341 SPI 240×320 | PUSH + LVGL |
-| `panel_esp32_cyd` | **ESP32-2432S028R "CYD"** 2.8" | ILI9341 + XPT2046 (gắn sẵn trên board) | PUSH + LVGL |
+| `panel_f411cc_lvgl` | STM32F411CCU6 | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
+| `panel_f407vgz_lvgl` | STM32F407VGT6 (1 MB/128 KB) | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
+| `panel_esp32_cyd` | **ESP32-2432S028R "CYD"** 2.8" | **ST7789** 240×320 (bản ILI9341 chỉ khác 1 dòng driver) + XPT2046 (gắn sẵn trên board) → **ngang 320×240** (`setRotation(1)`) | PUSH + LVGL |
 
 * Board F407 khác (F407ZGT6 144 chân…): sửa `board =` trong env (`black_f407zg`,
   `vccgnd_f407zg_mini`, `genericSTM32F407IGT6`…) và giữ nguyên phần còn lại.
 * Env LVGL kéo thư viện từ mạng lần đầu: `lvgl@^8.3.11` (+ `TFT_eSPI` cho CYD).
+* **`TFT_ROTATION` (2026-10-13)**: `panel_config.h` chỉ còn là **mặc định** (`TFT_ROTATION 0`, portrait
+  cho UI G-code `ui.cpp`); 2 env LVGL truyền `-DTFT_ROTATION=1` để UI LVGL chạy **ngang 320×240**.
+  Đổi chỗ này thì phải xem lại `UI_LCD_HOR_RES/VER_RES` trong `src/ui_lvgl.h`.
+* **Env CYD — 2 cờ BẮT BUỘC** (đã có sẵn trong `platformio.ini`):
+  `-DUSER_SETUP_LOADED=1 -include tools/tft_setup/User_Setup.h`. Thiếu 2 cờ này TFT_eSPI dùng
+  `User_Setup.h` mặc định trong thư viện (ILI9341, **không có `TFT_BL`**) → màn trắng/không đèn nền.
+  `ui_lvgl_port.cpp` cũng có `#warning` nhắc nếu `PANEL_CYD_SETUP_LOADED` không được định nghĩa.
 
 ```powershell
 # từ thư mục gốc repo
@@ -54,12 +61,18 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 |---|---|---|
 | `panel_f411cc` (G-code UI) | 20.688 B / 262.144 (7,9 %) | 1.912 B / 131.072 (1,5 %) |
 | `panel_f103c6` (G-code UI) | 21.096 B / 32.768 (**64,4 %**) | 1.880 B / 10.240 (18,4 %) |
-| `panel_f411cc_lvgl` | 134.012 B / 262.144 (51,1 %) | 46.180 B / 131.072 (35,2 %) |
-| `panel_f407vgz_lvgl` | 135.928 B / 1.048.576 (13,0 %) | 74.900 B / 131.072 (57,1 %) |
-| `panel_esp32_cyd` | 441.561 B / 1.310.720 (33,7 %) | 95.284 B / 327.680 (29,1 %) |
+| `panel_f411cc_lvgl` | 154.544 B / 262.144 (59,0 %) | 52.376 B / 131.072 (40,0 %) |
+| `panel_f407vgz_lvgl` | 156.136 B / 1.048.576 (14,9 %) | 81.096 B / 131.072 (61,9 %) |
+| `panel_esp32_cyd` | 460.005 B / 1.310.720 (35,1 %) | 101.812 B / 327.680 (31,1 %) |
+
+> **2026-10-13** (commit `1edfd7aa0b` — UI kiểu Marlin + icon thật): số LVGL **đã đo lại** sau khi
+> thêm bộ icon (`ui_lvgl_icons.h`, ~17 KB) và màn MENU/FEED-FLOW. Trước đó: F411 **134.012/46.180**,
+> F407 **135.928/74.900**, CYD **441.561/95.284**. Con số CYD ở trên **đang bật `-DPANEL_CYD_DEBUG=1`**
+> (cờ tạm để hiệu chuẩn touch) — tắt đi thì nhỏ hơn một chút.
+> Hai env G-code (`panel_f411cc`, `panel_f103c6`) **không đổi** (chúng loại `ui_lvgl*.cpp` khỏi build).
 
 > Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/lv_conf.h`
-> từ 20 KB lên 28–32 KB (F411 còn 128 KB RAM, buffer vẽ 240×40×2 = 19,2 KB).
+> từ 20 KB lên 28–32 KB (F411 còn 128 KB RAM; **buffer vẽ giờ là 320×40×2 = 25,6 KB** vì màn ngang).
 
 ---
 
@@ -99,7 +112,16 @@ vì chân nằm ngay header EXP1 (header màn 12864 cũ):
 | PB12 / PB13 / PB14 | Encoder A / B / SW (nút) | dùng `INPUT_PULLUP` (không cần cho CYD) |
 
 Với **CYD**: màn + cảm ứng đã nối sẵn trong board, cấu hình nằm ở
-`lcd_panel/tools/tft_setup/User_Setup.h` (ILI9341: 13/12/14/15/2/21; touch: 32/39/25/33/36).
+`lcd_panel/tools/tft_setup/User_Setup.h` — **bắt buộc** nạp file này bằng
+`-DUSER_SETUP_LOADED=1 -include tools/tft_setup/User_Setup.h` (đã có trong env).
+
+* **Driver (2026-10-13)**: board này dùng **ST7789** (`#define ST7789_DRIVER` + `TFT_INVERSION_ON`);
+  nếu là bản ILI9341 thì đổi đúng 1 dòng thành `ILI9341_2_DRIVER` (và bỏ `TFT_INVERSION_ON` nếu
+  trắng/đen bị ngược).
+* **Chân**: LCD MOSI 13 / MISO 12 / SCLK 14 / CS 15 / DC 2 / RST −1; **đèn nền `TFT_BL` = GPIO21**
+  (CYD/ILI9341) **hoặc GPIO27** (nhiều bản ST7789) — dò bằng `-DPANEL_CYD_DEBUG=1` + thử lần lượt.
+  Touch: T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36 (có thể đổi bằng macro
+  `PANEL_CYD_TOUCH_*` trong `panel_config.h`).
 
 ---
 
@@ -173,27 +195,100 @@ frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần ch�
 
 ---
 
-## 5. Điều khiển trên panel (UI LVGL)
+## 5. Điều khiển trên panel (UI LVGL — **kiểu Marlin**)
+
+> **2026-10-13** (commit `1edfd7aa0b`): UI LVGL làm lại **theo đúng màn TFT ILI9341 của Marlin**
+> (`Marlin/src/lcd/tft/ui_320x240.cpp` + `tft_color.h`) và chạy **màn NGANG 320×240**:
+> bỏ thanh 8 nút ở đáy, thêm **màn MENU dọc kiểu Marlin**, dùng **icon thật của Marlin**
+> (bitmap GREYSCALE4 → LVGL, §5.2) và thêm **hiệu chuẩn cảm ứng 4 góc** cho board có touch (§5.5).
 
 | Thao tác | Việc |
 |---|---|
-| Xoay encoder / chạm | di chuyển focus trong màn hình |
-| Bấm encoder / chạm nút | chọn |
-| Bấm giữ (>0,7 s) | quay về màn STATUS |
-| Nút trên màn | chuyển màn: STATUS · TEMP · JOG · FILES · SETTINGS · MESH · CUSTOM · INFO |
+| Xoay encoder (hoặc chạm trên CYD) | di chuyển focus trong màn hình |
+| Bấm encoder (hoặc chạm nút) | chọn |
+| Nút **BACK** ở **góc phải dòng tiêu đề** | lùi 1 cấp: màn con → MENU → STATUS (màn STATUS — gốc — không có BACK) |
 
-* **TEMP**: +/- nhiệt độ nozzle & bed → `M104 S…` / `M140 S…`; COOLDOWN → `M104 S0`+`M140 S0`.
-* **JOG**: chọn trục, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), HOME ALL → `G28`.
-* **FILES**: danh sách từ SD (Marlin đẩy xuống), bấm file → `M23` + `M24`; PAUSE `M25`,
-  RESUME `M24`, STOP `M524`; UP/REFRESH gửi `REQUEST`.
-* **SETTINGS**: steps/mm · max feed · max accel · jerk (hoặc junction deviation) · PID · probe
-  offset · z-offset · feed/flow %; SAVE → `M500`.
-* **MESH**: lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu.
-* **CUSTOM**: `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ.
+* **Luồng màn hình**: `STATUS` —(nút **SETTINGS** góc phải) → `MENU` —(chọn dòng) → màn con
+  —(**BACK**)→ `MENU` —(**BACK**)→ `STATUS`. Trên STATUS các khối cũng là **nút**:
+  đầu in/bàn in/quạt → TEMP · hàng XYZ → JOG · SD → FILES · FR/FL → FEED/FLOW · SETTINGS → MENU.
+* **Mọi màn trừ STATUS** dùng chung **1 dòng tiêu đề** `[tên màn] …… [LINK / NO LINK] [BACK]`
+  (MENU cũng vậy — không còn BACK riêng, không còn tiêu đề trùng).
+* **Đã bỏ** thanh 8 nút ở đáy: BACK nằm ở dòng tiêu đề, và STATUS (màn gốc) dùng kín 320×240 như
+  màn Marlin. (Dòng *"bấm giữ (>0,7 s) → quay về STATUS"* trong tài liệu bản cũ **không đúng với UI
+  LVGL** — bản cũ cũng không có thao tác này; giữ ghi chú ở đây để khỏi đi tìm lại.)
+
+### 5.1 Màn STATUS — bố cục y nguyên màn TFT của Marlin
+
+Toạ độ lấy nguyên từ `Marlin/src/lcd/tft/ui_320x240.cpp` (cùng 320×240), màu theo `tft_color.h`
+(nền `#1E156E`, COLD/FAN aqua, HOTEND scarlet, HEATED_BED dark-orange, AXIS_HOMED trắng,
+AXIS_NOT_HOMED vàng, RATE_100 xanh lá, RATE_ALTERED vàng, PRINT_TIME aqua, PROGRESS_BAR xanh dương):
+
+| Khối | Vị trí / nội dung |
+|---|---|
+| 3 ô nhiệt + quạt (64×100) | x = **21 / 127 / 234**: **đầu in (E0)** · **bàn in (BED)** · **quạt (FAN)** — target ở y=8, **icon 64×64** ở y=18 (quạt y=10), nhiệt độ hiện tại ở y=72; đổi màu + đổi icon theo nhiệt độ/tốc độ |
+| Hàng **XYZ** | khung (4, 103, 312, 24); chưa home → hiện `?` màu vàng (`AXIS_NOT_HOMED`), khung đổi màu theo liên kết |
+| **FR / FL** | (70, 136) và (170, 136), **icon 32×32** + `%`; xanh lá khi đúng 100 %, vàng khi khác |
+| **SD / SETTINGS** | 2 nút **icon 64×64** ở (0, 130) và (256, 130) |
+| Thời gian in | (96, 176, 128, 20) — `đã in / còn lại` |
+| Thanh tiến độ | (4, 198, 312, 9) + `%` ở (226, 176) |
+| Dòng trạng thái | (0, 216, 320, 20) — `STATE  tên file` hoặc `NO LINK` |
+
+### 5.2 Icon thật của Marlin (`src/ui_lvgl_icons.h`)
+
+Icon **không còn** là hình vẽ lại bằng LVGL: `lcd_panel/src/ui_lvgl_icons.h` chứa **10 icon
+64×64 / 32×32 chuyển nguyên từ bitmap GREYSCALE4 của Marlin** (`Marlin/src/lcd/tft/images/*.cpp`)
+sang `LV_IMG_CF_ALPHA_4BIT`, rồi **đổi màu lúc chạy** bằng `lv_obj_set_style_img_recolor()` +
+`recolor_opa = LV_OPA_COVER`.
+
+| Nguồn trong Marlin | Icon xuất ra | Dùng ở |
+|---|---|---|
+| `hotend_64x64x4.cpp` | `ui_icon_hotend` | ô đầu in (STATUS) |
+| `heated_bed_64x64x4.cpp` | `ui_icon_bed`, `ui_icon_bed_heated` | ô bàn in — tắt / đang nung (target > 0) |
+| `fan_64x64x4.cpp`, `fan_slow_64x64x4.cpp`, `fan_fast_64x64x4.cpp` | `ui_icon_fan`, `ui_icon_fan_slow`, `ui_icon_fan_fast` | ô quạt — theo tốc độ (0 / <50 % / ≥50 %) |
+| `sd_64x64x4.cpp` | `ui_icon_sd` | nút SD |
+| `settings_64x64x4.cpp` | `ui_icon_settings` | nút SETTINGS |
+| `feedrate_32x32x4.cpp`, `flowrate_32x32x4.cpp` | `ui_icon_feedrate`, `ui_icon_flowrate` | FR/FL trên STATUS + hàng FEED/FLOW |
+
+**Sinh lại icon** (chạy từ **thư mục gốc repo**):
+
+```powershell
+python lcd_panel/tools/make_lvgl_icons.py
+# -> Da ghi D:\Marlin\lcd_panel\src\ui_lvgl_icons.h (10 icon, 17408 byte du lieu)
+```
+
+* Cần **Python 3** — script chỉ dùng `re` / `sys` / `pathlib`, **không cần Pillow** (khác
+  `tools/make_font.py`), và cần **nguồn Marlin** có sẵn ở `Marlin/src/lcd/tft/images/`.
+* Kết quả ~**17,0 KB** dữ liệu icon, nằm trong flash của panel.
+* **KHÔNG sửa tay** `ui_lvgl_icons.h` — chạy lại script là **ghi đè**. Muốn thêm/bớt/đổi icon thì
+  sửa bảng `ICONS` trong `tools/make_lvgl_icons.py` (tên file `.cpp`, tên biến mảng, tên symbol
+  xuất ra, rộng, cao) rồi chạy lại.
+* Đầu file sinh ra có sẵn dòng cảnh báo `FILE NAY DUOC SINH TU DONG -- dung sua tay`.
+* Bảng đổi mức xám: `level ≤ 8` (nền + lớp bóng của Marlin) → **trong suốt**; `9…15` → alpha
+  `(level−8)×15/7`, nên icon hiện **giống hệt bản Marlin** khi `recolor` = màu chính và nền =
+  `COLOR_BACKGROUND`.
+* Cần **`#define LV_USE_IMG 1`** trong `src/lv_conf.h` (đã bật ở commit này; trước đây là `0`).
+
+### 5.3 Các màn
+
+| Màn | Nội dung / lệnh gửi |
+|---|---|
+| **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · Settings · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, số file, cỡ mesh, `n/33`, LINK…) |
+| **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100` |
+| **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
+| **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
+| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): `PRINT`/bấm file → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524` |
+| **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `PANEL_REQ_SAVE_SETTINGS` |
+| **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `PANEL_REQ_MESH` |
+| **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
+| **INFO** | tên firmware, proto, frame/lỗi, `UI: LVGL 8.3 + encoder/touch`; `REFRESH FULL` → `PANEL_REQ_FULL` |
+
 * **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`
-  → Marlin gọi `ExtUI::setUserConfirmed()`.
+  → Marlin gọi `ExtUI::setUserConfirmed()`. Thông báo (`panel.message`) tự đóng sau 6 s.
+* Chữ trên màn hình là **ASCII** (font `montserrat_14` không có dấu tiếng Việt) — đó là lý do
+  nhãn màn hình viết không dấu (`NHIET DO`, `THONG SO`…).
 
-### 5.1 Encoder đọc bằng ngắt (`src/encoder.cpp`)
+### 5.4 Encoder đọc bằng ngắt (`src/encoder.cpp`)
 
 Panel **không polling** encoder: hai chân A/B ngắt đổi trạng thái, ISR chỉ đẩy mẫu 2 bit vào một
 **ring cố định 32 phần tử** (không heap, không STL), rồi luồng chính giải mã bằng bảng chuyển tiếp:
@@ -201,8 +296,58 @@ chuyển tiếp **1 bit** = cạnh thật → ±1 xung (đủ `ENC_PULSES_PER_DE
 chuyển tiếp **2 bit** (dội phím / cạnh đến lúc ring đầy) → **không đếm**, chỉ đồng bộ lại;
 quay quá nhanh trong một lần đọc → **kẹp ở `ENC_MAX_DETENTS`** (3).
 
-Lý do: mỗi lần vẽ một khối lớn (ví dụ `fillScreen` 240×320 ≈ 150 KB qua SPI) mất hàng chục ms —
+Lý do: mỗi lần vẽ một khối lớn (ví dụ `fillScreen` 320×240 ≈ 150 KB qua SPI) mất hàng chục ms —
 trong khoảng đó polling **không đọc được chân** nên chắc chắn mất nấc.
+
+### 5.5 Hiệu chuẩn cảm ứng 4 góc (chỉ board có touch — CYD)
+
+Cảm ứng XPT2046 trên CYD do panel **tự bit-bang SPI mềm** (TFT_eSPI chỉ đọc được XPT2046 khi nó
+chung bus SPI với LCD, mà CYD đi dây riêng), nên hiệu chuẩn nằm **trong firmware panel**
+(`ui_port_touch_calibrate()` — `src/ui_lvgl_port.cpp`).
+
+**Cách vào** (2 đường, không cần build lại):
+
+1. Trên STATUS bấm **SETTINGS** → **MENU** → dòng **`Calibrate touch`** (cột phải ghi `NVS` nếu đã
+   có hiệu chuẩn lưu trong flash, `mac dinh` nếu đang dùng giá trị trong `panel_config.h`).
+2. **Giữ tay trên màn hình lúc cấp điện** — panel phát hiện `T_IRQ` mức thấp trong
+   `ui_port_input_init()` và vào thẳng chế độ hiệu chuẩn. Đây là **"thoát hiểm"** khi giá trị cũ
+   quá tệ, không chạm trúng được dòng menu.
+
+> Dòng `Calibrate touch` **chỉ hiện trên board có touch** (`ui_port_touch_cal_available()`);
+> board STM32 (chỉ encoder) không có dòng này và hàm hiệu chuẩn là hàm rỗng.
+
+**Cách làm** (làm lần lượt **TRÊN-TRÁI → TRÊN-PHẢI → DƯỚI-PHẢI → DƯỚI-TRÁI**):
+
+1. Màn hình đen hiện **tên góc** cần hiệu chuẩn + `CHAM + KEO SAT GOC NAY / ROI NHAC TAY`.
+2. Chạm vào màn hình → **CẢ MÀN HÌNH ĐỔI SANG XANH** = đã nhận (màn xanh cũng là dấu "đang lấy mẫu").
+3. **Kéo ngón tay/bút sát vào đúng góc đó**, rồi **nhấc tay** — lúc **mất cảm ứng** chính là lúc
+   chốt toạ độ: firmware lấy **cực trị (min/max)** ghi được trong cả quá trình kéo (bỏ qua mẫu
+   nhảy > 500 khi nhấc tay). Cần ≥ 5 mẫu, không đủ thì màn đỏ `QUA NGAN / NHIEU` và làm lại (tối đa
+   3 lần/góc, chờ tối đa 60 s mỗi lần chạm).
+4. Từ **4 góc**, firmware **tự suy ra** `SWAP_XY`, `INVERT_X/Y` và `XMIN/XMAX`, `YMIN/YMAX` rồi hiện
+   màn `DA LUU` (kèm 4 cặp raw của 4 góc + `cham de tiep tuc`).
+
+**Lưu ở đâu**: **NVS (flash) của ESP32** qua `Preferences`, namespace **`cydtouch`**, khoá
+`xmin/xmax/ymin/ymax/swap/invx/invy` (`touch_cal_save()`); lúc khởi động `touch_cal_load()` nạp lại
+và in `[TOUCHCAL] nap tu NVS: …`. ⇒ **Reset/mất điện không mất hiệu chuẩn, không phải build lại**
+(`erase_flash` mới xoá). Khi chưa có NVS thì dùng **giá trị mặc định trong `src/panel_config.h`**:
+`PANEL_CYD_TOUCH_SWAP_XY 0`, `INVERT_X/Y 0`, `X 184..3866`, `Y 185..3910` — đây là **kết quả
+hiệu chuẩn thật** đã chạy tốt trên board (dòng MENU hiện `NVS`/`mac dinh` để biết đang dùng bộ nào).
+
+**Khi nào cần làm lại**: đổi/thay tấm cảm ứng hoặc board, chạm lệch rõ ở **giữa** màn hình dù 4
+góc đúng, hoặc sau khi `erase_flash`. Không cần làm lại sau mỗi lần nạp firmware thường.
+
+**Đọc thêm khi hiệu chuẩn**: bật `-DPANEL_CYD_DEBUG=1` (env `panel_esp32_cyd`, **đang bật tạm**) →
+Serial 115200 in `[TOUCH] raw=… -> px=…` (mỗi 150 ms khi chạm), `[CAL] 1:raw=…, …` (5 cụm chạm gần
+nhất, in 1 Hz — chạm 5 điểm theo thứ tự bất kỳ rồi đọc lại lúc nào cũng được),
+`[TOUCHCAL]` khi lưu/nạp. Ngoài ra cờ này còn in reset reason, dung lượng heap, chân đèn nền và
+heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
+
+> ⚠️ **Sửa lỗi cũ**: bản trước ghi `raw_x` là trục DỌC (comment trong code bị ngược 2 kênh) nên
+> chạm bị **leo trục**. Đúng ra **`raw_x` = trục NGANG** (trái 184 → phải 3866), **`raw_y` = trục
+> DỌC** (trên 185 → dưới 3910), **cả hai đều TĂNG** theo hướng phải/xuống ⇒ không đảo trục.
+> Cách "chấm 4 góc bằng mắt" trước đây chỉ ra `332..3645 / 453..3658` (hụt vào 150–250 đơn vị ở
+> mỗi mép → lệch ở giữa màn hình); cách **kéo tới lúc mất cảm ứng** mới lấy đúng mép vật lý.
 
 ---
 
@@ -216,9 +361,11 @@ trong khoảng đó polling **không đọc được chân** nên chắc chắn 
 | Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/panel_config.h` |
 | Nhiệt độ nhảy loạn | đường serial nhiễu: giảm baud 2 bên (`PANEL_MARLIN_BAUD` + `BAUDRATE_2`) hoặc dùng cáp ngắn/xoắn |
 | ESP32 build lỗi `lv_conf.h` | phải có `src/lv_conf.h` và cờ `-DLV_CONF_INCLUDE_SIMPLE -Isrc` (đã có trong env). Nếu LVGL báo `Possible failure to include lv_conf.h` thì include path sai (đừng dùng `${PROJECT_DIR}` — nó bị expand sai trong project này) |
-| CYD: chạm không ăn / lệch | TFT_eSPI giả định XPT2046 **chung bus SPI với LCD** (chỉ khác CS) nên `tft.getTouch()` **không** đọc được XPT2046 trên CYD; `ui_lvgl_port.cpp` đã bit-bang SPI mềm cho touch (T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36). Cần chỉnh `PANEL_CYD_TOUCH_SWAP_XY/INVERT_X/INVERT_Y/RAW_MIN/MAX` cho đúng board thật; muốn thử lại đường TFT_eSPI thì `#define PANEL_CYD_TOUCH_USE_TFTESPI` |
-| CYD: màu bị đảo | bật `TFT_INVERSION_ON` / đổi `TFT_RGB_ORDER` trong `tools/tft_setup/User_Setup.h` |
-| TFT_eSPI không thấy file setup | thêm `-DUSER_SETUP_LOADED=1 -include tools/tft_setup/User_Setup.h` vào `build_flags` (file đã có `#warning` nhắc) |
+| CYD: chạm không ăn / lệch | TFT_eSPI giả định XPT2046 **chung bus SPI với LCD** (chỉ khác CS) nên `tft.getTouch()` **không** đọc được XPT2046 trên CYD; `ui_lvgl_port.cpp` đã bit-bang SPI mềm cho touch (T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36). **Đừng sửa macro bằng tay nữa — chạy hiệu chuẩn 4 góc** (menu `Calibrate touch`, hoặc giữ tay lúc cấp điện) rồi xem **§5.5**; kết quả lưu vào NVS nên không cần build lại. Muốn thử lại đường TFT_eSPI thì `#define PANEL_CYD_TOUCH_USE_TFTESPI` (khi đó **không** hiệu chuẩn được) |
+| CYD: màu bị đảo | `tools/tft_setup/User_Setup.h` **đang** bật `TFT_INVERSION_ON` (ST7789 thường cần): trắng↔đen ngược thì **comment dòng đó**; xanh↔đỏ thì `TFT_RGB_ORDER TFT_BGR` |
+| CYD: không đèn nền / màn tối | `TFT_BL` mặc định **GPIO21**; nhiều bản ST7789 dùng **GPIO27** — bật `-DPANEL_CYD_DEBUG=1` + thử lần lượt, và thử `fillScreen(TFT_RED)` để tách lỗi đèn nền khỏi lỗi driver/SPI |
+| TFT_eSPI không thấy file setup | **bắt buộc** có `-DUSER_SETUP_LOADED=1 -include tools/tft_setup/User_Setup.h` trong `build_flags` — env CYD **đã có sẵn**; thiếu thì TFT_eSPI dùng setup mặc định (ILI9341, không có `TFT_BL`) và `ui_lvgl_port.cpp` in `#warning` |
+| ESP32 build lỗi `PermissionError: [Errno 13] … _contrib\intelhex\__init__.py` | ACL của `%USERPROFILE%\.platformio` bị hỏng (esptool không chạy được) → chạy **`tools/fix_platformio_acl.ps1`** bằng PowerShell **Administrator** — xem §8 |
 | Muốn xem panel nhận/gửi gì | bật `-DUSBD_USE_CDC -DHAL_PCD_MODULE_ENABLED` trong env F411 **và** `#define PANEL_DEBUG` trong `panel_config.h` → log ra SerialUSB |
 
 ---
@@ -234,3 +381,42 @@ python lcd_panel/tools/make_font.py     # in ra bản ASCII-art để kiểm né
 
 Muốn chữ to hơn thì không cần sinh lại: driver đã hỗ trợ `print(..., size)` với `size = 2`.
 Kiểu LVGL dùng font có sẵn của LVGL (`LV_FONT_MONTSERRAT_14`, bật trong `src/lv_conf.h`).
+Còn **icon** của kiểu LVGL là file sinh tự động khác — xem **§5.2**.
+
+---
+
+## 8. `tools/fix_platformio_acl.ps1` — sửa ACL hỏng của PlatformIO (Windows)
+
+**Vấn đề nó giải quyết**: trên máy này một số thư mục trong
+`%USERPROFILE%\.platformio\packages\tool-esptoolpy\_contrib\` (`intelhex`, `ecdsa`) bị **DENY ACE** →
+**không đọc được file**, kể cả `Get-Acl`/`icacls` cũng bị từ chối. Hậu quả: `esptool.py` không chạy
+được ⇒ **PlatformIO KHÔNG build/nạp được env ESP32 (`panel_esp32_cyd`)** với lỗi:
+
+```
+PermissionError: [Errno 13] Permission denied: '...\_contrib\intelhex\__init__.py'
+```
+
+Env **STM32 không dùng esptool** nên **không bị ảnh hưởng**.
+
+**Chạy khi nào**: chỉ khi build ESP32/CYD gặp đúng lỗi `PermissionError` ở trên.
+**Không bắt buộc** cho việc build bình thường — máy sạch (ACL đúng) thì không cần chạy.
+
+```powershell
+# PowerShell với quyền Administrator (bắt buộc)
+powershell -ExecutionPolicy Bypass -File D:\Marlin\lcd_panel\tools\fix_platformio_acl.ps1
+```
+
+Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
+
+1. quét `~/.platformio` (`packages`, `platforms`, file ở gốc) → liệt kê mục **không đọc được**;
+2. với từng mục hỏng: `takeown` (không đệ quy) → `icacls /reset` → grant Full cho
+   **Administrators** + user hiện tại, rồi làm lại **có đệ quy**;
+3. quét lại cả cây (`takeown /R` + `icacls /reset /T` + grant) cho chắc;
+4. kiểm tra lại các file quan trọng của esptool và in `esptool.py version`.
+
+* **Không** grant cho `Everyone` — chỉ `BUILTIN\Administrators` (S-1-5-32-544) và tài khoản đang đăng nhập.
+* Tham số: `-Root <thư mục>` (mặc định `%USERPROFILE%\.platformio`) và `-SkipFullTree`
+  (bỏ bước 3, nhanh hơn — chỉ sửa các mục tìm thấy).
+* Bước 3 có thể mất 10–60 giây; script thoát với mã lỗi = số mục còn hỏng (`0` = xong).
+* Sau khi xong, build/nạp bình thường:
+  `pio run -d D:\Marlin\lcd_panel -e panel_esp32_cyd -t upload --upload-port COM3`.

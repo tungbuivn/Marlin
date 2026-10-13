@@ -14,8 +14,9 @@
  *     Mau theo Marlin/src/lcd/tft/tft_color.h: nen #1E156E, COLD/FAN aqua, HOTEND scarlet,
  *     HEATED_BED dark-orange, AXIS_HOMED trang, AXIS_NOT_HOMED vang, RATE_100 xanh la,
  *     RATE_ALTERED vang, PRINT_TIME aqua, PROGRESS_BAR xanh duong.
- *   Icon 64x64: KHONG port bitmap GREYSCALE4 cua Marlin (font montserrat_14 khong co glyph
- *   icon) -> thay bang "bang" ve bang LVGL (khung + nhan NOZ/BED/FAN/SD/SET), mau theo nhiet do.
+ *   Icon 64x64: DA PORT THAT tu bitmap GREYSCALE4 cua Marlin -> sinh ra ui_lvgl_icons.h bang
+ *   tools/make_lvgl_icons.py (xem muc 5.2 trong lcd_panel/README.md), ve bang LVGL (LV_USE_IMG).
+ *   (Ban cu chi ve "bang" khung + nhan NOZ/BED/FAN/SD/SET - nay KHONG dung nua.)
  *
  * Cac man khac (TEMP/JOG/FILES/SETTINGS/MESH/CUSTOM/INFO) nam duoi 1 MAN MENU kieu Marlin:
  *   STATUS --(nut SETTINGS)--> MENU --(chon dong)--> man con --(BACK)--> MENU --(BACK)--> STATUS.
@@ -523,7 +524,7 @@ static void cb_action(lv_event_t *e) {
 //  STATUS -- TOA DO Y NGUYEN tu Marlin/src/lcd/tft/ui_320x240.cpp
 //   3 o nhiet/quat 64x100 tai x = 21/127/234 + hang XYZ + FR/FL + SD + SETTINGS
 //   + thoi gian (96,176) + thanh tien do (4,198) + dong trang thai (0,216)
-//   Icon 64x64 cua Marlin (bitmap GREYSCALE4) thay bang "bang" ve bang LVGL.
+//   Icon 64x64 cua Marlin (bitmap GREYSCALE4) da port that vao ui_lvgl_icons.h.
 // ===========================================================================
 #define ST_CELLS 3                     // 0 = dau in (E0), 1 = ban in (BED), 2 = quat (FAN)
 
