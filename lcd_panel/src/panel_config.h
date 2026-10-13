@@ -28,6 +28,13 @@
   #define PANEL_NAME "F411CC"
 #endif
 
+// Ten MAY IN hien o man INFO. O che do PUSH, ten that lay tu goi HELLO cua Marlin
+// (panel.name). O che do TRAM (PANEL_TRAM_LINK) KHONG co goi HELLO nen dung ten nay
+// -> doi cho khop may cua ban, hoac -DPANEL_MACHINE_NAME=\"...\" trong platformio.ini.
+#ifndef PANEL_MACHINE_NAME
+  #define PANEL_MACHINE_NAME "Voron 2.1 300"
+#endif
+
 // UI LVGL: mac dinh BAT cho board du man (F407/CYD), TAT cho F411/F103C6 (UI tu ve).
 // Co the ep bang -DPANEL_USE_LVGL=0/1 trong platformio.ini.
 #ifndef PANEL_USE_LVGL

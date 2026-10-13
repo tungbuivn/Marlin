@@ -54,6 +54,22 @@ static bool       s_force = false;        // co lenh -> gui lai ngay
 static uint16_t   s_cmds = 0, s_ignored = 0;
 
 // ---------------------------------------------------------------------------
+// CHAN DOAN DAY NOI (2026-10-13) - TAM THOI, bo khi da tim xong loi.
+// In ra USB CDC (MYSERIAL1) moi 2s: so BYTE nhan duoc tren USART1 RX (PA10), so dong, so lenh hop le,
+// so lenh bi bo, so lan gui. Dung khi panel bao "LINK OK" nhung bam nut khong thay may chay:
+//   rx_bytes = 0        -> khong co byte nao toi PA10 (day TX panel / pad RX board)
+//   rx_bytes > 0, cmds=0-> co byte nhung sai dinh dang (thua ky tu, thieu '\n', sai baud)
+//   cmds > 0            -> Marlin DA nhan lenh (loi nam cho khac: active/busy/queue)
+//   tx > 0              -> Marlin CO gui trang thai (neu panel van 'NO LINK' thi day PA9 -> panel RX)
+// ---------------------------------------------------------------------------
+// MAC DINH TAT. Bat bang -DPANEL_TRAM_DIAG=1 (hoac doi so 0 -> 1 o duoi) khi can chan doan day noi.
+#define PANEL_TRAM_DIAG 0
+#if PANEL_TRAM_DIAG
+  static uint32_t s_diag_rx_bytes = 0, s_diag_lines = 0, s_diag_sent = 0;
+  static millis_t s_diag_next = 0;
+#endif
+
+// ---------------------------------------------------------------------------
 // Trang thai hien tai -> struct dung chung (tram_protocol.h)
 // ---------------------------------------------------------------------------
 
@@ -110,6 +126,7 @@ static void send_status(const bool force) {
   // (hoac lan dinh ky sau) se gui lai, panel khong bi mat trang thai.
   if (PANEL_TRAM_SERIAL.availableForWrite() < n) return;
   PANEL_TRAM_SERIAL.write((const uint8_t *)s_line, (size_t)n);
+  TERN_(PANEL_TRAM_DIAG, s_diag_sent++);
 
   memcpy(s_last, s_line, (size_t)n + 1U);
   s_have_last = true;
@@ -186,11 +203,18 @@ void tick() {
     if (c == '\r') continue;
     if (c == '\n') {
       s_rxline[s_rxlen] = '\0';
+      #if PANEL_TRAM_DIAG
+        s_diag_lines++;
+        DEBUG_ECHOLNPGM("TRAMDIAG RXLINE: [", s_rxline, "]");
+      #endif
       handle_line(s_rxline);
       s_rxlen = 0;
       continue;
     }
-    if (s_rxlen < sizeof(s_rxline) - 1) s_rxline[s_rxlen++] = c;
+    if (s_rxlen < sizeof(s_rxline) - 1) {
+      s_rxline[s_rxlen++] = c;
+      TERN_(PANEL_TRAM_DIAG, s_diag_rx_bytes++);
+    }
     else { s_rxlen = 0; s_ignored++; }    // dong qua dai -> bo
   }
 
@@ -203,6 +227,14 @@ void tick() {
   send_status(s_force || due);
   if (s_force) s_force = false;
   if (due) s_next_ms = ms + PANEL_TRAM_PUSH_MS;
+
+  #if PANEL_TRAM_DIAG
+    if (ELAPSED(ms, s_diag_next)) {
+      s_diag_next = ms + 2000;
+      DEBUG_ECHOLNPGM("TRAMDIAG rx_bytes=", s_diag_rx_bytes, " lines=", s_diag_lines,
+                      " cmds=", s_cmds, " ign=", s_ignored, " tx=", s_diag_sent);
+    }
+  #endif
 }
 
 } // namespace panel_tram_link

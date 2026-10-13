@@ -19,6 +19,7 @@
 #if PANEL_USE_LVGL
 
   #include "panel_link.h"
+  #include "tram_link.h"          // chan doan: dem dong/byte TRAM nhan duoc
   #include "ui_lvgl.h"
 
   #if defined(PANEL_CYD_DEBUG)
@@ -51,9 +52,11 @@
       static uint32_t dbg_next = 0;
       if (millis() >= dbg_next) {
         dbg_next = millis() + 1000;
-        Serial.printf("[CYD] loop OK | linked=%d state=%u rx=%u err=%u heap=%u\n",
-                      (int)panel.linked, (unsigned)panel.state, (unsigned)panel.rx_frames,
-                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap());
+        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d state=%u rx=%u err=%u heap=%u | TRAM dong=%u loi=%u byte=%u cach-day=%ums\n",
+                      (int)panel.linked, (int)tram.linked, (unsigned)panel.state, (unsigned)panel.rx_frames,
+                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap(),
+                      (unsigned)tram.lines, (unsigned)tram.errors, (unsigned)tram.raw_bytes,
+                      (unsigned)(millis() - tram.last_rx_ms));
       }
     #endif
     panel_link_task();     // nhan frame tu Marlin + giu PING/lien ket

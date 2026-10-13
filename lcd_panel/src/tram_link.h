@@ -28,6 +28,7 @@ typedef struct {
   tram_status_t st;                   // trang thai wizard Marlin gui xuong
   uint32_t last_rx_ms;                // lan cuoi nhan duoc 1 dong TRAM
   uint32_t lines, errors;             // so dong nhan duoc / so dong loi
+  uint32_t raw_bytes;                 // TONG so byte UART nhan duoc (chan doan day noi)
   bool     ever;                      // da tung nhan duoc dong TRAM nao chua
   bool     linked;                    // con nhan duoc dong TRAM (cap nhat trong tram_link_task)
 } tram_link_data_t;

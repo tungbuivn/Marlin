@@ -1334,7 +1334,10 @@ static void page_info_create(lv_obj_t *p) {
 
 static void page_info_update(void) {
   char b[48];
-  snprintf(b, sizeof(b), "FW: %s", panel.name[0] ? panel.name : "(chua co HELLO)");
+  // Ten may: o che do PUSH lay tu goi HELLO cua Marlin. O che do TRAM khong co HELLO
+  // (link chi gui dong "TRAM ...") nen dung ten khai trong panel_config.h.
+  snprintf(b, sizeof(b), "FW: %s", panel.name[0] ? panel.name
+           : (tram.ever ? PANEL_MACHINE_NAME " (TRAM link)" : "(chua co HELLO)"));
   set_text(in_fw, b);
 
   snprintf(b, sizeof(b), "BOARD: %s %dx%d", PANEL_NAME, UI_LCD_HOR_RES, UI_LCD_VER_RES);
@@ -1874,11 +1877,17 @@ void ui_lvgl_task(void) {
   if (now - s_upd_ms < UI_REFRESH_MS) return;      // UI_REFRESH_MS trong panel_config.h
   s_upd_ms = now;
 
-  // thanh tren: trang thai lien ket (chi set khi doi de khong set style mai)
-  if (panel.linked != s_link_state) {
-    s_link_state = panel.linked;
-    set_text(s_link, s_link_state ? "LINK OK" : "NO LINK");
-    lv_obj_set_style_text_color(s_link, s_link_state ? COL_OK : COL_ERR, 0);
+  // Thanh tren: trang thai lien ket (chi set khi doi de khong set style mai).
+  // Co HAI giao thuc loai tru nhau, phai xet CA HAI:
+  //   - PUSH (PANEL_SERIAL_UI) : panel.linked  - chi bat khi Marlin gui frame PUSH
+  //   - TRAM (PANEL_TRAM_LINK) : tram.linked   - chi bat khi Marlin gui dong "TRAM ..."
+  // Truoc 2026-10-13 cho nay chi xet panel.linked nen o che do TRAM thanh tren LUON ghi
+  // "NO LINK" du link dang tot (gay hieu nham nang - xem lcd_panel/README.md §5.6).
+  const bool link_ok = panel.linked || tram.linked;
+  if (link_ok != s_link_state) {
+    s_link_state = link_ok;
+    set_text(s_link, link_ok ? "LINK OK" : "NO LINK");
+    lv_obj_set_style_text_color(s_link, link_ok ? COL_OK : COL_ERR, 0);
   }
 
   switch (s_page_act) {

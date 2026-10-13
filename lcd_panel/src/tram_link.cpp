@@ -52,6 +52,7 @@ void tram_link_send(char cmd) {
 // Tra ve so byte can dua cho bo giai frame PUSH (ghi vao out[], toi da 4 byte).
 // 0 = byte nay (va cac byte dang giu) da thuoc dong "TRAM ..." -> khong dua cho ai nua.
 uint8_t tram_link_feed(uint8_t c, uint8_t *out) {
+  tram.raw_bytes++;                     // chan doan: dem MOI byte UART nhan duoc (ke ca rac)
   switch (s_state) {
 
     case TS_IDLE:
