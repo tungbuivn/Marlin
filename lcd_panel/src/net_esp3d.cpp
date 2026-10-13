@@ -294,6 +294,29 @@ void sd_lost(const char *why) {
   s_sd_retry_ms = millis();
 }
 
+#if PANEL_SD_UART
+// ===========================================================================
+// DONG BO FATFS <-> GHI THO (P3): Marlin ghi sector truc tiep len the (M28/M29/M30/PLR) nen cache
+// cua FATFS phia panel co the LECH. Hai co:
+//   s_fatfs_stale   = Marlin vua ghi tho -> truoc thao tac FATFS ke tiep phai MOUNT LAI (doc lai FAT)
+//   s_fatfs_written = panel vua ghi qua FATFS -> truoc khi cho Marlin ghi tho phai day xuong the
+// ===========================================================================
+bool s_fatfs_stale   = false;
+bool s_fatfs_written = false;
+
+void fatfs_sync(void) {
+  if (!s_sd_ready) return;
+  SD.end();                        // unmount: flush het cache + dong volume
+  s_sd_ready = false;
+  s_sd_was   = false;
+  if (sd_mount(false)) {           // mount lai -> doc FAT/dir MOI tu the
+    s_fatfs_stale = false;
+    s_fatfs_written = false;
+    ELOG("[UP] mount lai the de dong bo FATFS (sau khi Marlin ghi tho)\n");
+  }
+}
+#endif  // PANEL_SD_UART
+
 // ===========================================================================
 // Bao Marlin "the SD vua thay doi" (panel vua ghi/xoa file) -> M22 (nha the) + M21 (mount lai) +
 // xin lai danh sach file. Dung cho CA HAI che do:
@@ -667,9 +690,20 @@ bool net_esp3d_raw_read(const uint32_t sector, uint8_t *dst) {
 }
 
 bool net_esp3d_raw_write(const uint32_t sector, const uint8_t *src) {
-  // GIAI DOAN 1: chi doc (Marlin nap voi SDCARD_READONLY). Duong ghi lam o P3.
+#if PANEL_SD_UART
+  if (!s_sd_ready || !src) return false;
+  // DONG BO TRUOC KHI GHI THO: Marlin ghi thang len the (FAT/dir), con FATFS cua panel co cache
+  // rieng -> phai day het du lieu dang cho xuong the truoc, neu khong cache cu se de len.
+  if (s_file) s_file.flush();                    // dang nhan upload: day file + FAT xuong the
+  else if (s_fatfs_written) { fatfs_sync(); if (!s_sd_ready) return false; }
+  const bool ok = SD.writeRAW((uint8_t *)src, sector);   // core ESP32: sd_write_raw() (SD.h/SD.cpp)
+  if (ok) s_fatfs_stale = true;                  // FATFS cua panel gio co the LECH -> mount lai truoc
+  else    ELOG("[UP] ghi RAW sector %lu THAT BAI\n", (unsigned long)sector);
+  return ok;
+#else
   (void)sector; (void)src;
   return false;
+#endif
 }
 
 bool net_esp3d_delete(const char *name) {
@@ -678,10 +712,13 @@ bool net_esp3d_delete(const char *name) {
   // Dang in thi KHONG xoa (Marlin dang doc the qua UART; xoa file khac thi duoc nhung de an toan
   // va don gian, tu choi luon).
   if (printer_busy()) { ELOG("[UP] TU CHOI xoa file: Marlin dang in\n"); return false; }
+  if (s_fatfs_stale) fatfs_sync();          // P3: FATFS co the lech sau khi Marlin ghi tho
+  if (!s_sd_ready) return false;
   char path[80];
   snprintf(path, sizeof(path), "/%s", name);
   if (!SD.exists(path)) { ELOG("[UP] khong thay file de xoa: %s\n", path); return false; }
   const bool ok = SD.remove(path);
+  if (ok) s_fatfs_written = true;           // P3: vua ghi FATFS -> phai flush truoc khi Marlin ghi tho
   ELOG("[UP] %s file %s (panel tu xoa - che do the qua UART)\n",
        ok ? "da xoa" : "KHONG xoa duoc", path);
   // LUU Y: KHONG goi notify_media_changed() o day - ham do cho ~800 ms (M22/M21 + xin danh sach),
@@ -709,6 +746,17 @@ bool net_esp3d_temp_open(const char *name, uint32_t size_hint) {
     snprintf(s_err, sizeof(s_err), "Marlin dang in - khong dung the");
     return false;
   }
+#if PANEL_SD_UART
+  // P3: Marlin vua ghi tho thi cache FATFS cua panel co the lech -> mount lai truoc khi ghi file moi.
+  if (s_fatfs_stale) fatfs_sync();
+  // Che do the qua UART: panel va Marlin KHONG tranh bus, nhung van can lien lac de con bao
+  // M22/M21 sau khi ghi xong -> mat lien lac thi tu choi luon (tranh ghi file ma Marlin khong biet).
+  if (!panel.linked) {
+    snprintf(s_err, sizeof(s_err), "chua lien lac duoc Marlin");
+    ELOG("[UP] TU CHOI: %s\n", s_err);
+    return false;
+  }
+#endif
 #if PANEL_SD_SHARED
   // CHUA BIET trang thai Marlin (mat lien lac UART) => KHONG duoc gianh the: co the Marlin dang in
   // ma panel khong biet, gianh bus SPI the giua luc in se lam hong ban in.
@@ -785,6 +833,9 @@ uint32_t net_esp3d_temp_close(void) {
     s_file.flush();
     s_file.close();
   }
+#if PANEL_SD_UART
+  s_fatfs_written = true;    // P3: panel vua ghi qua FATFS -> truoc khi cho Marlin ghi tho phai flush
+#endif
   return s_got;
 }
 
@@ -1000,6 +1051,12 @@ void net_esp3d_log(void) {
                 sd_state, (int)s_busy, (unsigned long)s_got, (unsigned long)s_posted,
                 (unsigned long)heap, (unsigned long)s_heap_min, (unsigned long)free_kb,
                 t ? t + 1 : "-", s_result[0] ? s_result : "-");
+  // Trang thai MARLIN (tu frame PUSH) - de chan doan TU XA khi khong nhin duoc man hinh:
+  //   st = panel_state_t (0 idle, 1 printing, 2 paused, 3 homing, 4 leveling, 5 killed...),
+  //   fl = panel_status_flags_t (bit1 PANEL_SF_MEDIA, bit2 PANEL_SF_SD_PRINTING, bit3 PAUSED).
+  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\"\n",
+                (unsigned)panel.state, (unsigned)panel.flags, (unsigned)panel.progress_pct,
+                panel.prog.file);
 }
 
 #else   // ---- PANEL_WIFI_UPLOAD = 0: stub rong (moi env van link duoc) ----

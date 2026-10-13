@@ -120,6 +120,8 @@ namespace {
     bool     s_sd_done = false;        // du 4 manh
     bool     s_sd_busy = false;        // dang cho sector -> hoan cac frame mang LENH lai
     bool     s_sd_present = false;     // panel bao co the (tu lan panel_serial_sd_init)
+    volatile uint8_t s_wr_status = 0xFF;   // ket qua lenh GHI (PANEL_F_SDACK): 0xFF = chua co
+    volatile uint32_t s_wr_sector = 0;
 
     // Ghi THANG ra UART, khong qua hang doi TX: chi dung cho yeu cau SD (5 byte). Co tran thoi gian
     // + nuoi watchdog nen khong bao gio treo vinh vien du UART bi ket.
@@ -714,6 +716,13 @@ namespace {
     #if ENABLED(PANEL_SD_OVER_UART)
       // Dang cho du lieu sector: tra loi SD xu ly NGAY, cac frame mang lenh thi HOAN lai.
       if (rx.type == PANEL_F_SDDATA) { sd_take_chunk(); return; }
+      if (rx.type == PANEL_F_SDACK) {                 // tra loi lenh GHI
+        if (rx.len >= 5) {
+          s_wr_status = rx.payload[0];
+          s_wr_sector = panel_u32(&rx.payload[1]);
+        }
+        return;
+      }
       if (s_sd_busy && is_cmd_frame(rx.type)) { sd_defer(); return; }
     #endif
     switch ((panel_frame_t)rx.type) {
@@ -861,8 +870,45 @@ namespace ExtUI {
 
     // Ghi sector: GIAI DOAN 1 (P1) CHUA ho tro - Marlin chay voi SDCARD_READONLY (xem README muc 12).
     bool panel_serial_sd_write(uint32_t sector, const uint8_t *src, uint32_t timeout_ms) {
-      UNUSED(sector); UNUSED(src); UNUSED(timeout_ms);
-      return false;
+      if (!src) return false;
+      // 1) Yeu cau GHI (5 byte, di thang ra UART)
+      panel_tx_begin(&tx, PANEL_F_SDREQ);
+      panel_tx_u8(&tx, (uint8_t)PANEL_SD_OP_WRITE);
+      panel_tx_u32(&tx, sector);
+      uint8_t total = panel_tx_finish(&tx);
+      const bool busy_prev = s_sd_busy;
+      s_sd_busy = true;
+      s_wr_status = 0xFF;
+      tx_write_now(tx.buf, total);
+
+      // 2) Gui PANEL_SD_CHUNKS frame du lieu (moi frame 128 B)
+      for (uint8_t idx = 0; idx < PANEL_SD_CHUNKS; idx++) {
+        panel_tx_begin(&tx, PANEL_F_SDDATA);
+        panel_tx_u8(&tx, (uint8_t)PANEL_SD_ST_OK);
+        panel_tx_u32(&tx, sector);
+        panel_tx_u8(&tx, idx);
+        panel_tx_u8(&tx, PANEL_SD_CHUNK);
+        panel_tx_raw(&tx, src + (uint16_t)idx * PANEL_SD_CHUNK, PANEL_SD_CHUNK);
+        total = panel_tx_finish(&tx);
+        tx_write_now(tx.buf, total);
+      }
+
+      // 3) Cho PANEL_F_SDACK
+      const millis_t t0 = millis();
+      while (s_wr_status == 0xFF) {
+        if (ELAPSED(millis(), t0 + timeout_ms)) break;
+        while (PANEL_SERIAL.available())
+          if (panel_rx_byte(&rx, (uint8_t)PANEL_SERIAL.read())) handle_frame();
+        tx_drain();
+        if (s_wr_status == 0xFF) hal.watchdog_refresh();
+      }
+      s_sd_busy = busy_prev;
+      const bool ok = (s_wr_status == PANEL_SD_ST_OK) && (s_wr_sector == sector);
+      if (!ok) {
+        SERIAL_ECHOLNPGM("PANEL SD: ghi sector ", sector, " THAT BAI (status=", s_wr_status, ")");
+        if (s_wr_status == PANEL_SD_ST_NOCARD) s_sd_present = false;
+      }
+      return ok;
     }
 
     bool panel_serial_sd_init() {

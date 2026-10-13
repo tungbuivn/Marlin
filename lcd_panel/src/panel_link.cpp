@@ -8,6 +8,13 @@
 #include "tram_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tram_link.h
 #include "net_esp3d.h"        // doc sector tho cho Marlin (che do PANEL_SD_UART)
 
+// Log chan doan cho phan the SD (chi tren board that; ban chay tren may tinh khong co Serial)
+#if defined(PANEL_BOARD_CYD)
+  #define SDLOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
+#else
+  #define SDLOG(...)   do { } while (0)
+#endif
+
 panel_data_t panel;
 
 static panel_rx_t  s_rx;
@@ -32,8 +39,24 @@ static void send_frame(const uint8_t total) {
 // May chu the SD cho Marlin (proto >= 3): tra 1 sector 512 B = PANEL_SD_CHUNKS frame, moi frame
 // PANEL_SD_CHUNK byte. Ly do chia manh: truong `len` cua khung chi co 1 BYTE (max 255).
 //   status != OK -> gui DUNG 1 frame (n = 0) de Marlin biet ngay ma khong doi du 4 manh.
+//
+// CHIEU GHI (P3): Marlin gui PANEL_F_SDREQ{op=WRITE, sector} roi gui 4 frame PANEL_F_SDDATA
+// (moi frame 128 B); panel ghep lai, ghi xuong the bang SD.writeRAW() roi tra PANEL_F_SDACK.
+// Neu thieu manh (mat goi) qua PANEL_SD_WR_TIMEOUT_MS thi HUY phien (Marlin se bao loi ghi).
 // ---------------------------------------------------------------------------
 static uint8_t s_sd_sector_buf[PANEL_SD_SECTOR];   // buffer tinh: khong dung stack cua vong lap chinh
+
+// Phien GHI dang cho du lieu
+static uint8_t  s_wr_buf[PANEL_SD_SECTOR];
+static uint32_t s_wr_sector_ms = 0;
+static uint32_t s_wr_sector = 0;
+static uint8_t  s_wr_have = 0;
+static bool     s_wr_active = false;
+
+// Neu thieu manh (mat goi UART) qua bay lau thi HUY phien (Marlin se bao loi ghi, khong bi treo).
+#ifndef PANEL_SD_WR_TIMEOUT_MS
+  #define PANEL_SD_WR_TIMEOUT_MS 600u
+#endif
 
 void panel_link_send_sd_data(const uint8_t status, const uint32_t sector, const uint8_t *data) {
   for (uint8_t idx = 0; idx < PANEL_SD_CHUNKS; idx++) {
@@ -52,6 +75,40 @@ void panel_link_send_sd_data(const uint8_t status, const uint32_t sector, const 
     }
     send_frame(panel_tx_finish(&s_tx));
   }
+}
+
+void panel_link_send_sd_ack(const uint8_t status, const uint32_t sector) {
+  panel_tx_begin(&s_tx, PANEL_F_SDACK);
+  panel_tx_u8(&s_tx, status);
+  panel_tx_u32(&s_tx, sector);
+  send_frame(panel_tx_finish(&s_tx));
+}
+
+// Nhan 1 manh du lieu cua lenh GHI. Du 4 manh -> ghi xuong the + tra SDACK.
+void panel_link_sd_write_chunk(const uint8_t *p, const uint8_t n) {
+  if (!s_wr_active) return;
+  s_wr_sector_ms = panel_millis();                  // con manh den -> gia han
+  if (n == 0) return;
+  // p[0..4] = status(0) + sector(u32) -> da kiem o handle_frame, p[5] = idx, p[6] = n, p[7..] = du lieu
+  const uint8_t idx = p[5];
+  const uint8_t cnt = p[6];
+  if (idx >= PANEL_SD_CHUNKS || cnt > PANEL_SD_CHUNK) return;
+  if ((uint16_t)n < (uint16_t)(7 + cnt)) return;    // frame thieu du lieu
+  memcpy(s_wr_buf + (uint16_t)idx * PANEL_SD_CHUNK, &p[7], cnt);
+  s_wr_have |= (uint8_t)(1u << idx);
+  if (s_wr_have == (uint8_t)((1u << PANEL_SD_CHUNKS) - 1u)) {
+    const bool ok = net_esp3d_raw_write(s_wr_sector, s_wr_buf);
+    panel_link_send_sd_ack(ok ? PANEL_SD_ST_OK : PANEL_SD_ST_ERR, s_wr_sector);
+    s_wr_active = false;
+  }
+}
+
+void panel_link_sd_write_begin(const uint32_t sector) {
+  s_wr_sector = sector;
+  s_wr_have = 0;
+  s_wr_active = true;
+  s_wr_sector_ms = panel_millis();
+  // KHONG ack o day: Marlin gui ngay 4 frame du lieu, panel tra SDACK sau khi ghi xong.
 }
 #endif  // PANEL_SD_UART
 
@@ -332,19 +389,26 @@ static void handle_frame() {
     #if PANEL_SD_UART
       case PANEL_F_SDREQ: {
         // Marlin hoi 1 sector 512 B cua the SD (the nam o khe CYD - xem README muc 12).
-        // Tra loi NGAY trong handler nay: 4 frame PANEL_F_SDDATA, moi frame 128 B.
+        //   op = READ : tra loi NGAY bang 4 frame PANEL_F_SDDATA.
+        //   op = WRITE: mo phien cho du lieu; Marlin gui tiep 4 frame PANEL_F_SDDATA (xem
+        //               panel_link_sd_write_chunk - tra PANEL_F_SDACK sau khi ghi xong).
         if (n >= 5) {
           const uint8_t  op     = p[0];
           const uint32_t sector = panel_u32(&p[1]);
           if (op == PANEL_SD_OP_READ) {
-            // Buffer TINH (khong dung stack): 512 B + vong lap chinh cua ESP32.
             const bool ok = net_esp3d_raw_read(sector, s_sd_sector_buf);
             panel_link_send_sd_data(ok ? PANEL_SD_ST_OK : PANEL_SD_ST_ERR, sector, ok ? s_sd_sector_buf : nullptr);
           }
           else {
-            panel_link_send_sd_data(PANEL_SD_ST_ERR, sector, nullptr);   // P1: chua ho tro ghi
+            panel_link_sd_write_begin(sector);
           }
         }
+        break;
+      }
+
+      case PANEL_F_SDDATA: {
+        // Chi co nghia khi dang trong phien GHI (chieu panel -> Marlin la du lieu DOC, khong toi day)
+        if (n >= 7) panel_link_sd_write_chunk(p, n);
         break;
       }
     #endif
@@ -397,6 +461,15 @@ void panel_link_task() {
   // (panel_rx_byte), nhung bo dem do la uint16_t nen khong dung lam tong duoc. Ta chi can biet
   // "da tung co loi" -> so sanh voi gia tri lan truoc, khac la bat co (tran cung khong sai).
   if (s_rx.errors != s_err_seen) { s_err_seen = s_rx.errors; panel.rx_errors = true; }
+
+  #if PANEL_SD_UART
+    // Phien GHI bi bo do: het gio cho du lieu -> huy (Marlin se het cho va bao loi ghi).
+    if (s_wr_active && (panel_millis() - s_wr_sector_ms) > PANEL_SD_WR_TIMEOUT_MS) {
+      s_wr_active = false;
+      // Ghi log chan doan (chi tren board that)
+      SDLOG("[SD] huy phien GHI sector %lu (thieu du lieu)\n", (unsigned long)s_wr_sector);
+    }
+  #endif
 
   tram_link_task();                  // cap nhat co `tram.linked`
 

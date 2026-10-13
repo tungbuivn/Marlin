@@ -1962,7 +1962,8 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
 | Frame | Chiều | Payload |
 |---|---|---|
 | `PANEL_F_SDREQ` (0x10) | Marlin → panel | `u8 op` (0=đọc, 1=ghi), `u32 sector` |
-| `PANEL_F_SDDATA` (0x45) | panel → Marlin | `u8 status`, `u32 sector`, `u8 idx` (0..3), `u8 n`, `n` byte |
+| `PANEL_F_SDDATA` (0x45) | **2 chiều** | `u8 status`, `u32 sector`, `u8 idx` (0..3), `u8 n`, `n` byte — panel→Marlin khi ĐỌC, Marlin→panel khi GHI |
+| `PANEL_F_SDACK` (0x46) | panel → Marlin | `u8 status`, `u32 sector` (trả lời lệnh GHI sau khi đã ghi xuống thẻ) |
 
 * 1 sector 512 B = **4 frame × 128 B** vì trường `len` của khung chỉ có **1 byte** (tối đa 255 B) —
   nhờ vậy **không phải đổi định dạng khung**, `PANEL_MAX_PAYLOAD` vẫn 192, không tăng RAM.
@@ -1972,15 +1973,43 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
 * Frame mang **lệnh** từ panel (G-code/REQUEST/ANSWER/TRAM_CMD) rơi vào lúc đang chờ sector sẽ được
   **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
 
-### 12.5 Giới hạn của P1 (và việc còn lại)
+### 12.5 Đã làm tới đâu (P1 + P2 + P3 — **đủ dùng**)
 
-* **Chỉ ĐỌC**: `writeBlock()` trả `false`; Marlin nạp với `SDCARD_READONLY`. `M28/M29` (ghi log ra thẻ)
-  và `POWER_LOSS_RECOVERY` (đang tắt) không dùng được.
-* **Nút `XOA FILE`** trên panel giờ do **panel tự xoá** (`net_sd_delete_file` → `SD.remove` +
-  `files_init_sd()` để Marlin mount lại), không đi qua `M30` nữa (Marlin read-only).
-* **P2 (chưa làm)**: in thử thật một file dài để kiểm tra băng thông/độ trễ khi Marlin đọc liên tục.
-* **P3 (tuỳ)**: đường GHI — panel dùng `sd_write_raw(pdrv, buf, sector)` (core ESP32 `sd_diskio.h:32`)
-  và Marlin bỏ `SDCARD_READONLY` ⇒ `M28/M29/M30/PLR` chạy được.
+| Giai đoạn | Nội dung | Trạng thái |
+|---|---|---|
+| **P1** | Đọc: `readBlock()` → `PANEL_F_SDREQ{READ}` → 4 frame `PANEL_F_SDDATA` | ✅ đã nạp, chạy thật |
+| **P2** | Đo băng thông khi đọc liên tục | ✅ đo được **~11–13 KB/s** (xem 12.5b) |
+| **P3** | Ghi: `writeBlock()` → `SDREQ{WRITE}` + 4 frame dữ liệu → panel `SD.writeRAW()` → `PANEL_F_SDACK` | ✅ đã nạp, chạy thật |
+
+**P3 cho phép gì**: `M28`/`M29` (ghi log ra thẻ), `M30` (xoá file), và `POWER_LOSS_RECOVERY` nếu bạn bật
+lại trong `Configuration_adv.h`. `SDCARD_READONLY` **đã bỏ**; nếu chỉ muốn đọc cho an toàn thì bật
+`#define PANEL_SD_READONLY` trong `Configuration_adv.h` (nó tự thêm `SDCARD_READONLY`).
+
+**Đã kiểm trên máy thật (P3)**:
+`M115` → `Cap:SD_WRITE:1`; `M28 TESTLOG.GCO` → “Now fresh file / Writing to file”; ghi 1 dòng log →
+`M20` thấy `TESTLOG.GCO 57`; `M23 TESTLOG.GCO` → “File opened: Size: 57” (đọc lại đúng dữ liệu vừa ghi);
+`M30 TESTLOG.GCO` → “File deleted” và `M20` không còn file ⇒ **ghi/đọc/xoá đều đi qua panel**.
+
+**Đồng bộ FATFS ↔ ghi thô** (2 chiều, đã cài trong `net_esp3d.cpp`):
+* `net_esp3d_raw_write()`: nếu panel đang mở file upload → `s_file.flush()`; nếu panel vừa ghi qua FATFS
+  (`s_fatfs_written`) → `fatfs_sync()` (unmount + mount lại) để đẩy hết cache xuống thẻ trước khi
+  Marlin ghi đè. Sau khi Marlin ghi thô → đặt `s_fatfs_stale`.
+* Trước mọi thao tác FATFS của panel (`temp_open`, `delete`) mà `s_fatfs_stale` → `fatfs_sync()` để đọc
+  lại FAT/dir mới. Nếu không làm bước này, cache cũ của FATFS sẽ ghi đè lên thay đổi của Marlin.
+* **Đừng vừa upload WiFi vừa để Marlin ghi thẻ** (2 người ghi 1 FAT) — panel có flush nhưng vẫn nên tránh;
+  upload đã tự bị chặn khi Marlin đang in.
+
+**P2 — số đo thật**: file 1.172.890 B toàn dòng chú thích (Marlin đọc hết tốc lực, không chạy lệnh nào)
+được đọc xong trong **~90–105 s ⇒ ~11–13 KB/s** (trần lý thuyết của link 250 000 baud là ~23 KB/s; phần
+hao là độ trễ vòng lặp của panel + ghi UART blocking). In thật chỉ cần **1–4 KB/s** ⇒ dư **3–12 lần**.
+Ghi thì chậm hơn (mỗi sector = 5 lượt đi–về ≈ 30–40 ms) nhưng chỉ dùng cho log/xoá nên không quan trọng.
+*Lưu ý khi đo*: file toàn chú thích làm hàng đợi G-code không bao giờ đầy ⇒ Marlin ở trong vòng đọc thẻ
+liên tục nên **không trả lời lệnh qua USB** cho tới khi đọc xong (đó là hành vi của Marlin, không phải lỗi
+của đường SD). File có lệnh thật (`G4`…) thì `M27` trả lời bình thường.
+
+**Còn lại / tuỳ chọn**:
+* Bật `POWER_LOSS_RECOVERY` nếu muốn Marlin tự ghi file phục hồi khi mất điện (đường ghi đã sẵn sàng).
+* Muốn nhanh hơn: nâng baud 2 đầu (`PANEL_BAUD` + `PANEL_MARLIN_BAUD`) lên 460800/921600.
 * ⚠️ **Mọi thao tác thẻ của Marlin giờ phụ thuộc UART + panel còn sống.** Panel chết/bận ⇒ Marlin
   không đọc được file ⇒ **bản in dừng**. Đây là đánh đổi lớn nhất so với MUX 4053 (mục 11 vẫn giữ
   nguyên code để quay lại: chỉ cần bỏ `PANEL_SD_OVER_UART` ở Marlin và bật `PANEL_SD_SHARED` ở panel).

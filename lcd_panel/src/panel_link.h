@@ -105,6 +105,7 @@ void panel_link_request_dir(const char *dirname);        // vao thu muc roi liet
 // gui PANEL_SD_CHUNKS frame PANEL_F_SDDATA. status != OK -> chi gui 1 frame (n = 0).
 #if PANEL_SD_UART
   void panel_link_send_sd_data(uint8_t status, uint32_t sector, const uint8_t *data);
+  void panel_link_send_sd_ack(uint8_t status, uint32_t sector);   // tra loi lenh GHI (P3)
 #endif
 void panel_link_answer(const uint8_t answer);            // tra loi prompt dang cho (1 = OK)
 void panel_link_send_tram_cmd(char cmd);                 // lenh Tramming Wizard P/D/M/R/B/Q (frame 0x44)

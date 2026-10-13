@@ -90,10 +90,14 @@ enum panel_frame_t : uint8_t {
   PANEL_F_ANSWER    = 0x43,   // u8 prompt_id, u8 answer
   PANEL_F_TRAM_CMD  = 0x44,   // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
                               //          'R' home+probe lai, 'B' thoat wizard, 'Q' hoi trang thai
-  PANEL_F_SDDATA    = 0x45    // [proto >= 3] TRA LOI PANEL_F_SDREQ, chia PANEL_SD_CHUNKS frame:
-                              //   u8 status (panel_sd_status_t), u32 sector, u8 idx (0..3), u8 n, n byte
-                              //   -> Marlin ghep lai thanh 1 sector 512 byte.
-                              //   status = ERR/NOCARD: chi can frame dau (n = 0).
+  PANEL_F_SDDATA    = 0x45,   // [proto >= 3] DU LIEU SECTOR, dung cho CA 2 CHIEU:
+                              //   panel -> Marlin (tra loi lenh DOC): u8 status, u32 sector,
+                              //       u8 idx (0..3), u8 n, n byte  (status != OK: chi 1 frame, n = 0)
+                              //   Marlin -> panel (gui du lieu lenh GHI): u8 status (=0), u32 sector,
+                              //       u8 idx (0..3), u8 n (=128), n byte
+                              //   -> 1 sector 512 B = PANEL_SD_CHUNKS frame, moi frame PANEL_SD_CHUNK byte
+  PANEL_F_SDACK     = 0x46    // [proto >= 3] panel -> Marlin: u8 status, u32 sector
+                              //   (tra loi 1 lenh GHI sau khi da ghi xong xuong the)
 };
 
 // ---------------------------------------------------------------------------
@@ -106,7 +110,7 @@ enum panel_frame_t : uint8_t {
 #define PANEL_SD_CHUNKS     (PANEL_SD_SECTOR / PANEL_SD_CHUNK)   // 4
 enum panel_sd_op_t : uint8_t {
   PANEL_SD_OP_READ  = 0,      // doc sector -> panel tra PANEL_SD_CHUNKS frame
-  PANEL_SD_OP_WRITE = 1       // ghi sector -> Marlin gui kem PANEL_SD_CHUNKS frame
+  PANEL_SD_OP_WRITE = 1       // ghi sector -> Marlin gui kem PANEL_SD_CHUNKS frame, panel tra SDACK
 };
 enum panel_sd_status_t : uint8_t {
   PANEL_SD_ST_OK    = 0,      // thanh cong

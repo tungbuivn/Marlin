@@ -50,11 +50,12 @@ bool DiskIODriver_PanelUART::readBlock(uint32_t block, uint8_t *dst) {
 }
 
 bool DiskIODriver_PanelUART::writeBlock(uint32_t blockNumber, const uint8_t *src) {
-  // Giai doan 1: chi doc. Marlin duoc cau hinh SDCARD_READONLY nen binh thuong khong bao gio vao day.
-  // Neu vao (M28/M29/M30 tu host): bao loi ro rang thay vi im lang.
-  UNUSED(blockNumber); UNUSED(src);
+  if (!ready || !src) return false;
+  // P3: ghi sector qua UART (panel ghi xuong the bang SD.writeRAW).
+  // Dung cho M28/M29 (ghi log ra the), M30 (xoa file), POWER_LOSS_RECOVERY...
+  if (ExtUI::panel_serial_sd_write(blockNumber, src, PANEL_SD_TIMEOUT_MS)) { wr_ok++; return true; }
   wr_err++;
-  SERIAL_ECHOLNPGM("PANEL SD: ghi the qua UART CHUA ho tro (P1 chi doc)");
+  SERIAL_ECHOLNPGM("PANEL SD: ghi sector ", blockNumber, " THAT BAI");
   return false;
 }
 

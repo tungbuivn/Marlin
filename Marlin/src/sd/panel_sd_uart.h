@@ -44,7 +44,7 @@ public:
 private:
   bool     ready = false;
   uint32_t size_blocks = 0;
-  uint32_t rd_ok = 0, rd_err = 0, wr_err = 0;   // thong ke (xem M115/log chan doan)
+  uint32_t rd_ok = 0, rd_err = 0, wr_ok = 0, wr_err = 0;   // thong ke (chan doan)
 };
 
 #endif // PANEL_SD_OVER_UART

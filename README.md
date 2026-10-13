@@ -2780,6 +2780,15 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
 - Frame mang LENH tu panel (G-code/REQUEST/ANSWER/TRAM_CMD) roi vao luc dang cho sector phai **hoan lai**
   roi xu ly o `onIdle()` - khong duoc `queue.enqueue_one_now()` trong luc `disk_read`.
 - `SDCARD_READONLY` + P1: nut XOA FILE tren panel phai **tu xoa** (`net_sd_delete_file` -> `SD.remove`
-  + `files_init_sd()`), khong dung `M30` (Marlin read-only se bao loi).
+  + `files_init_sd()`), khong dung `M30` (Marlin read-only se bao loi). Tu P3 (2026-10-14) **da co
+  duong GHI** (`PANEL_F_SDACK` + `SD.writeRAW`) nen `M28/M29/M30/PLR` chay duoc; `SDCARD_READONLY` da bo
+  (bat `PANEL_SD_READONLY` neu chi muon doc).
+- **P3 - dong bo FATFS khi 2 ben cung ghi the**: Marlin ghi sector tho (M28/M29/M30/PLR) con FATFS cua
+  panel co cache rieng => truoc khi cho Marlin ghi phai `s_file.flush()`/`fatfs_sync()` (unmount+remount),
+  va sau khi Marlin ghi thi dat `s_fatfs_stale` de lan sau panel mount lai truoc khi dung FATFS. Thieu 2
+  buoc nay => cache cu ghi de len thay doi cua ben kia (hong FAT).
+- **Do bang thong that (P2)**: file 1,17 MB toan chu thich -> doc ~90-105 s (**~11-13 KB/s**, tran ly
+  thuyet cua 250000 baud la 23 KB/s). In that can 1-4 KB/s => du 3-12 lan. Ghi cham hon (5 luot di-ve
+  moi sector ~30-40 ms) nhung chi dung cho log/xoa.
 
 

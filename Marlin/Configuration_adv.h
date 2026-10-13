@@ -1802,15 +1802,20 @@
    *   - Marlin van chay dung toan bo ngan xep SD cua no (FAT16/32, liet ke thu muc, M23/M24,
    *     M25/M524, tien do in, M32 subroutine...) vi tat ca chi di qua readBlock()/writeBlock().
    *
-   * GIAI DOAN 1 (P1): CHI DOC. Kem theo SDCARD_READONLY o duoi (Marlin khong ghi the). Nut XOA FILE
-   * tren panel do PANEL tu xoa (no giu the), khong di qua M30.
+   * GIAI DOAN 1 (P1): doc. GIAI DOAN 3 (P3, 2026-10-14): DA CO DUONG GHI - panel nhan 4 frame
+   * PANEL_F_SDDATA roi ghi xuong the bang SD.writeRAW(), tra PANEL_F_SDACK. Nho vay M28/M29 (ghi
+   * log ra the), M30 (xoa file), POWER_LOSS_RECOVERY... chay duoc. Neu CHI muon doc cho an toan thi
+   * bo comment o PANEL_SD_READONLY duoi day.
    * CANH BAO: moi thao tac the cua Marlin gio phu thuoc UART + panel con song.
    * Xem them: src/sd/panel_sd_uart.*, src/lcd/extui/panel_serial/, lcd_panel/README.md muc 12.
    */
   #define PANEL_SD_OVER_UART
 
   #if ENABLED(PANEL_SD_OVER_UART)
-    #define SDCARD_READONLY           // P1: khong ghi the (M28/M29/M30 -> bao loi ro rang)
+    //#define PANEL_SD_READONLY        // bat len neu CHI muon doc (them SDCARD_READONLY, tiet kiem flash)
+    #if ENABLED(PANEL_SD_READONLY)
+      #define SDCARD_READONLY
+    #endif
   #endif
 
   /**
