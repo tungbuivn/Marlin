@@ -89,7 +89,7 @@ Ba ràng buộc của Marlin — vi phạm là **build fail**, không phải l�
 |---|---|---|
 | Steps/mm | `M92 X80 Y80 Z800 E415` | 200 bước/vòng × 16 microstep ÷ 4 mm |
 | Max feedrate (mm/s) | `M203 X150 Y150 Z10 E25` | đã tối ưu — xem §3.3 (trước là 100, thiết kế cũ ghi 300) |
-| Accel (mm/s²) | `M201 X300 Y300 Z200 E1000` | Marlin lấy `min(M204 P, M201)` |
+| Accel (mm/s²) | `M201 X300 Y300 Z50 E1000` | Marlin lấy `min(M204 P, M201)` |
 | Accel print/retract/travel | `M204 P500 R300 T500` | Cura đặt lại `M204 S…` mỗi lần in |
 | Jerk | `M205 X8 Y8 Z0.40 E5` | `CLASSIC_JERK` + `S_CURVE_ACCELERATION` |
 | Dòng driver X/Y | `M906 X800 Y800` | ⚠️ **100 % định mức** của motor 0,8 A — kiểm nhiệt `≤ 80 °C` |
@@ -115,7 +115,7 @@ ngay khi thấy vệt rung — nhớ phải nâng **cả `M201` lẫn Cura**.
 > gì thì máy cũng không vượt 500. Profile Cura đã được đặt khớp ở 500 (`acceleration_print` /
 > `_travel` / `machine_acceleration` / `machine_max_acceleration_x/y`) để con số trong Cura không còn
 > "nói dối". Chi tiết ở §11.6.
-> Z giữ `M201 Z100` (đã dưới 500) và E `M201 E1000`, nhưng Cura khai `machine_max_acceleration_e = 500`
+> Z giữ `M201 Z50` (đã dưới 500) và E `M201 E1000`, nhưng Cura khai `machine_max_acceleration_e = 500`
 > nên **E thực tế cũng bị chặn ở 500**.
 >
 > ℹ️ **Source và EEPROM nay đã đồng bộ với nhau.** `Configuration.h` ghi
@@ -206,7 +206,7 @@ Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ 
 | `M203 Z` | 10 | **10** | 15 | vít me 4 mm → 150 RPM ở 10 mm/s |
 | `M203 E` | 25 | **25** | 25 | BMG |
 | `M201 X/Y` | 300 | **300** | 5000+ | mô-men dư 10–50×; trần thật là ringing |
-| `M201 Z` | 200 | **200** | 500 | gantry nặng |
+| `M201 Z` | 200 | **50** (2026-10-13) | 500 | gantry nặng |
 | `M201 E` | 1000 | **1000** | 1000 | |
 | `M204 P` (in) | 500 | **500** | 3000 | ⚠️ `P > M201 X/Y 300` ⇒ Marlin kẹp `min()` → thực tế **300** |
 | `M204 R` (retract) | 300 | **300** | 1500 | |
@@ -236,7 +236,7 @@ Bộ dưới đây **đã được ghi vào EEPROM** với lựa chọn **giữ 
 
 | Chỗ | Việc đã làm |
 |---|---|
-| **Container máy của Cura** | `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_x/y` → **300**, `machine_acceleration` → **300**, `machine_max_acceleration_z` → **200**, `_e` → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y` **kẹp giá trị mặc định 5000** của Cura xuống |
+| **Container máy của Cura** | `machine_max_feedrate_x/y` 300 → **150**, `machine_max_acceleration_x/y` → **300**, `machine_acceleration` → **300**, `machine_max_acceleration_z` → **50** (2026-10-13; trước là 200), `_e` → **1000**. Đây là chỗ **quyết định con số Cura phát ra**: `M204 S500` trước đây không đến từ profile mà do `machine_max_acceleration_x/y` **kẹp giá trị mặc định 5000** của Cura xuống |
 | **`ClampFeeds`** | ~~`max_feedrate_xy` **150**, `max_acceleration` **300**~~ — **script đã được GỠ ngày 2026-10-12** (firmware tự kẹp theo `M203`/`M201` nên script chỉ gây trùng lặp). File giữ ở `cura_profile/scripts_disabled/ClampFeeds.py`; khối `[ClampFeeds]` đã bị xoá khỏi Cura. Xem §11.6 |
 
 > ✅ **Đã kiểm chứng sau khi gỡ**: container máy trong `%APPDATA%\cura\5.13\definition_changes\` giữ
@@ -801,7 +801,7 @@ Chi tiết thêm: [`UPLOAD_README.md`](UPLOAD_README.md)
 M115        ; phien ban firmware + timestamp build
 M503        ; 2026-10-12 (cuoi ngay - bo "Truoc (1/16)" quy doi cho 1/8):
             ; M92 X40 Y40 Z400 E207.5 / M203 X150 Y150 Z10 E25
-            ; M201 X300 Y300 Z200 E1000 / M204 P500 R300 T500 / M205 X8 Y8 Z0.40 E5
+            ; M201 X300 Y300 Z50 E1000 / M204 P500 R300 T500 / M205 X8 Y8 Z0.40 E5
             ; M906 X600 Y600 Z600 (I1/I2 Z600) / T0 E600      <- 600 mA ca 6 truc
             ; M851 X0 Y0 Z0.75
 M122        ; msteps 8 (ca 6 driver) + off time 3 + blank time 24 + interp true
@@ -892,7 +892,7 @@ git diff up-2.1.2 HEAD --stat
 | Driver | `X/Y/Z/Z2/Z3/E0_DRIVER_TYPE` TMC2209 chế độ UART, **`*_MICROSTEPS 8`** (2026-10-11 — **cả 6 driver**, xem §11.4b), **`*_CURRENT 600`** cho **cả 6** (X Y Z Z2 Z3 E0 — 2026-10-12; 75 % định mức 0,8 A), `*_HAS_STEALTHCHOP` (`STEALTHCHOP_XY`, `STEALTHCHOP_Z`) |
 | Leveling | **UBL**, `GRID_MAX_POINTS_X/Y 7`, `MESH_INSET 15`, `ASSISTED_TRAMMING` (**G35**) |
 | Nhiệt độ | `TEMP_SENSOR_0/BED 1`, `PIDTEMPBED`, **`MPCTEMP`** cho hotend, `MPC_INCLUDE_FAN`, `PREHEAT_BEFORE_LEVELING`, `HOTEND_OVERSHOOT 15`, `BED_OVERSHOOT 10` |
-| Chuyển động | **2026-10-12 — về bộ "Trước (1/16)", chỉ quy đổi `M92` cho microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, `DEFAULT_MAX_FEEDRATE { 150, 150, 10, 25 }`, `DEFAULT_MAX_ACCELERATION { 300, 300, 200, 1000 }`, `DEFAULT_ACCELERATION 500`, `DEFAULT_RETRACT_ACCELERATION 300`, `DEFAULT_TRAVEL_ACCELERATION 500`, `DEFAULT_XJERK/DEFAULT_YJERK 8.0` (`ZJERK 0.4`, `EJERK 5.0`). **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
+| Chuyển động | **2026-10-12 — về bộ "Trước (1/16)", chỉ quy đổi `M92` cho microstep 1/8:** `DEFAULT_AXIS_STEPS_PER_UNIT { 40, 40, 400, 207.5 }`, `DEFAULT_MAX_FEEDRATE { 150, 150, 10, 25 }`, `DEFAULT_MAX_ACCELERATION { 300, 300, 50, 1000 }` (**Z hạ 200 → 50 ngày 2026-10-13**), `DEFAULT_ACCELERATION 500`, `DEFAULT_RETRACT_ACCELERATION 300`, `DEFAULT_TRAVEL_ACCELERATION 500`, `DEFAULT_XJERK/DEFAULT_YJERK 8.0` (`ZJERK 0.4`, `EJERK 5.0`). **`CLASSIC_JERK`** (không dùng Junction Deviation). Toàn bộ **đồng bộ với EEPROM** — xem §3.3 và §11.4b |
 | Khác | `EEPROM_SETTINGS`, `SDSUPPORT`, `FILAMENT_RUNOUT_SENSOR`, `HOST_ACTION_COMMANDS` |
 
 ### 11.2 `Marlin/Configuration_adv.h` — cấu hình nâng cao
@@ -955,7 +955,7 @@ git diff up-2.1.2 HEAD --stat
 > 🟢 **Cập nhật 2026-10-12 — trạng thái CUỐI CÙNG: quay về bộ "Trước (1/16)", chỉ quy đổi `M92`.**
 > Diễn biến trong ngày: (1) 1/8 + giảm nửa vận tốc/gia tốc → (2) nâng lên "trần nên dùng"
 > (`M203 225`, `M201 5000`, **500 mA** cả 6 trục) → (3) hạ lại → (4) **chốt: bộ "Trước (1/16)"** —
-> `M203 150/150/10/25`, `M201 300/300/200/1000`, `M204 500/300/500`, `M205 X8 Y8`,
+> `M203 150/150/10/25`, `M201 300/300/50/1000`, `M204 500/300/500`, `M205 X8 Y8`,
 > **`M906` 600 mA cho CẢ 6 trục**, `M92 40/40/400/207.5`. Đã ghi EEPROM (`M500`, crc 6571) → verify
 > qua reset → đồng bộ **default trong `Configuration*.h`** → clean rebuild + flash
 > (`Marlin 2.1.2 (Oct 12 2026 19:49:38)`, cùng bản có **mốc `Z-MIN`/`Z-MAX`** + sửa lỗi nhận nút).
@@ -1515,7 +1515,7 @@ Những chỗ profile sửa so với bản Voron gốc của Cura:
 | `machine_max_feedrate_x/y` | 500 | **150** | khớp `M203 X150 Y150`; **`speed_travel` bắt nguồn từ đây** — xem cảnh báo bên dưới |
 | `machine_max_feedrate_z/e` | 40 / 120 | **10 / 25** | `M203 Z10 E25` |
 | `machine_max_acceleration_x/y` | 20000 | **300** | **trần cứng** — khớp `M201 X300 Y300`, **và là thứ quyết định `M204 S` Cura phát ra** |
-| `machine_max_acceleration_z` | 500 | **200** | `M201 Z200` của firmware |
+| `machine_max_acceleration_z` | 500 | **50** (2026-10-13; trước là 200) | `M201 Z50` của firmware |
 | `machine_max_acceleration_e` | (mặc định 10000) | **1000** | `M201 E1000` |
 | `acceleration_print` | 5000 | **300** | khớp trần `M201 X300 Y300` — xem giải thích bên dưới |
 | `acceleration_travel` | (công thức → 7000) | **300** | đặt thẳng, **không** dùng công thức `voron2_base` nữa |

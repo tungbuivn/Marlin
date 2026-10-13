@@ -1274,10 +1274,11 @@
  *                                      X, Y, Z [, I [, J [, K...]]], E0 [, E1[, E2...]]
  */
 // 2026-10-12: quay ve bo "Truoc (1/16)" (README 3.3): X/Y 300 mm/s2, Z 200, E 1000.
+// 2026-10-13: Z ha 200 -> 50 theo yeu cau nguoi dung (gantry nang, giam ringing/qua tai Z).
 // Mo-men KHONG phai gioi han - gioi han that la RINGING/do cung khung; may KHONG co input
 // shaping (SanityCheck.h:4332 chan tren COREXY) nen muon tang thi phai tang tu tu.
-// EEPROM phai khop: M201 X300 Y300 Z200 E1000 + M500.
-#define DEFAULT_MAX_ACCELERATION      { 300, 300, 200, 1000 }
+// EEPROM phai khop: M201 X300 Y300 Z50 E1000 + M500.
+#define DEFAULT_MAX_ACCELERATION      { 300, 300, 50, 1000 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
