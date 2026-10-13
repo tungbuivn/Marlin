@@ -380,6 +380,38 @@ bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state ==
 // Xoa file ngay tren panel (che do the qua UART). Xem net_upload_http.h.
 bool net_sd_delete_file(const char *name) { return net_esp3d_delete(name); }
 
+// Tam dung / bat lai mDNS (dung khi QUET MANG - xem net_upload_http.h).
+// LY DO: khi quet, STA roi kenh => interface "down"; responder mDNS rat de assert/panic trong tinh
+// huong do (la mot trong cac nghi van gay panel tu reboot). Tat han mDNS trong luc quet la an toan
+// nhat: luc do mang cung khong dung duoc, xong quet thi bat lai.
+bool net_upload_mdns_pause(const bool pause) {
+#if PANEL_HTTP_USE_MDNS
+  static bool s_mdns_on = false;
+  if (pause) {
+    if (s_mdns_on) {
+      MDNS.end();
+      s_mdns_on = false;
+      HLOG("[HTTP] tam dung mDNS truoc khi quet mang\n");
+    }
+    return false;
+  }
+  if (!s_mdns_on) {
+    if (MDNS.begin(PANEL_HTTP_MDNS_NAME)) {
+      MDNS.addService("http", "tcp", PANEL_HTTP_PORT);
+      s_mdns_on = true;
+      HLOG("[HTTP] bat lai mDNS: http://%s.local/\n", PANEL_HTTP_MDNS_NAME);
+    } else {
+      HLOG("[HTTP] CANH BAO: khong bat lai duoc mDNS (dung IP)\n");
+    }
+  }
+  return s_mdns_on;
+#else
+  // Khong bat mDNS (PANEL_HTTP_USE_MDNS 0) -> khong co gi phai tam dung
+  (void)pause;
+  return false;
+#endif
+}
+
 #else   // ---- PANEL_WIFI_UPLOAD = 0: stub (moi env van link duoc) ----
 
 void net_upload_http_begin(void) {}
@@ -388,5 +420,6 @@ void net_upload_http_log(void) {}
 bool net_upload_http_active(void) { return false; }
 bool net_upload_active(void) { return false; }
 bool net_sd_delete_file(const char *name) { (void)name; return false; }
+bool net_upload_mdns_pause(const bool pause) { (void)pause; return false; }
 
 #endif  // PANEL_WIFI_UPLOAD

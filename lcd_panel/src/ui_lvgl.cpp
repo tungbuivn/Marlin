@@ -2815,6 +2815,8 @@ extern "C" int  net_wifi_scan_poll(void) __attribute__((weak));
 extern "C" void net_wifi_scan_cancel(void) __attribute__((weak));
 extern "C" bool net_wifi_scanning(void) __attribute__((weak));
 static bool net_wifi_scanning_weak(void) { return net_wifi_scanning && net_wifi_scanning(); }
+// Tam dung mDNS trong luc quet (xem net_upload_http.h) - giam nguy co panic khi interface "down"
+extern "C" bool net_upload_mdns_pause(bool pause) __attribute__((weak));
 
 // Log chan doan cua trang WIFI (chi tren board that)
 #if defined(PANEL_BOARD_CYD)
@@ -2834,7 +2836,12 @@ static void cb_wifi_scan(lv_event_t *e) {
   }
   if (net_wifi_scan_begin && net_wifi_scan_poll) {
     // DUONG MOI: quet KHONG CHAN - vong lap van chay (tra loi Marlin + web server + ve man hinh).
-    if (net_wifi_scan_begin() != 0) return;         // dang quet roi -> bo qua
+    // Tat mDNS trong luc quet (interface se "down" khi radio roi kenh -> mDNS de panic).
+    if (net_upload_mdns_pause) net_upload_mdns_pause(true);
+    if (net_wifi_scan_begin() != 0) {
+      if (net_upload_mdns_pause) net_upload_mdns_pause(false);
+      return;                                        // dang quet roi -> bo qua
+    }
     s_wifi_busy = true;
     wifi_ov_show(true, "DANG QUET MANG...");
     return;                                          // ket qua lay o page_wifi_update()
@@ -2899,6 +2906,7 @@ static void wifi_page_leave(void) {
     net_wifi_scan_cancel();
     WIFILOG("[WIFI] roi trang: da huy phien quet\n");
   }
+  if (s_wifi_busy && net_upload_mdns_pause) net_upload_mdns_pause(false);   // bat lai mDNS
   s_wifi_busy = false;
   if (s_indev) lv_indev_enable(s_indev, true);   // mo khoa cho chac (truong hop duong lui)
 }
@@ -2941,6 +2949,7 @@ static void page_wifi_update(void) {
     if (r == -1) return;                       // con dang quet -> giu nguyen lop phu
     if (r >= 0) wifi_fill_roller(r);
     else        lv_roller_set_options(wf_roller, "(quet that bai)", LV_ROLLER_MODE_NORMAL);
+    if (net_upload_mdns_pause) net_upload_mdns_pause(false);   // bat lai mDNS sau khi quet
     wifi_ov_show(false, NULL);
     s_wifi_busy = false;
     refocus_page();

@@ -40,6 +40,11 @@ bool net_upload_active(void);
 // lai the (ui_lvgl.cpp goi files_init_sd() -> M22/M21 qua UART + xin lai danh sach file).
 bool net_sd_delete_file(const char *name);
 
+// Tam dung / bat lai mDNS. Dung trong luc QUET MANG: khi quet, STA roi kenh => interface "down",
+// mDNS (responder) rat de panic/assert trong tinh huong do. Tra ve true = mDNS dang BAT sau loi goi.
+// Neu PANEL_HTTP_USE_MDNS 0 thi luon tra false.
+bool net_upload_mdns_pause(bool pause);
+
 #ifdef __cplusplus
 }
 #endif
