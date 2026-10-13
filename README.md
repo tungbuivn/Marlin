@@ -2476,3 +2476,15 @@ Font `font_segoe_vn_14` (Segoe UI 14, line_height 18) > Montserrat 14 (16).
 Neu gan font nay cho CA CAY (ke thua xuong moi nhan) thi chu trong nut/hang cao
 co dinh 16-22 px bi cat mat. Chi gan cho DUNG nhan can dau tieng Viet
 (`vn_font(label)` / `vn_font_btn(btn)`), phan con lai de Montserrat.
+
+## Cam bay 44 - Do tran noi dung de hien thanh cuon: dung doi chieu cao trang de "do"
+Muon biet mot man co tran theo chieu doc hay khong, cach lam SAI (da dinh trong ban nay):
+dat chieu cao trang ve muc day du (CONT_H) de do `lv_obj_get_scroll_bottom()`, roi thu lai
+(CONT_H - BOT_H). Neu viec do duoc lap lai dinh ky (vd moi 400 ms) thi moi lan ha chieu cao,
+LVGL **kep `scroll_y` ve muc toi da ung voi chieu cao lon hon** => nguoi dung bam NEXT xuong day,
+400 ms sau trang TU NHAY VE DAU. Cach dung:
+ - chi do khi VUA VAO man (luc do `lv_obj_scroll_to_y(pg, 0, LV_ANIM_OFF)` nen khong nhay),
+ - nhip dinh ky chi cap nhat nhan/nut, KHONG dung vao chieu cao trang.
+Ngoai ra `lv_obj_get_scroll_bottom()` CONG ca `pad_bottom` vao ket qua => noi dung vua khop
+vung nhin van bao "tran" ~4 px; phai so voi nguong `> PAGE_PAD`, khong dung `> 0`, neu khong
+moi man gon deu bi hien thanh cuon o day.

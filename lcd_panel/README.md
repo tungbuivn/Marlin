@@ -672,3 +672,20 @@ Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.
   `panel.flags & PANEL_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.
 - Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) dung `font_segoe_vn_14`;
   KHONG dung font nay cho ca cay (xem cam bay 43 o README goc).
+
+## Thanh day (status bar) + phan trang noi dung
+Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky giong header:
+`[PREV]  TRANG x/y  [NEXT]`.
+- `bot_sync(true)` chay o CUOI `show_page()`: do noi dung THUC TE cua man vua mo.
+  - Noi dung gon trong 206 px => **khong hien** thanh day, bo cuc giu nguyen nhu cu
+    (TEMP/MESH/JOG/RATE/FILES/CUSTOM/ENDSTOP/TRAM/INFO khong doi gi).
+  - Noi dung tran => thu trang con `CONT_H - BOT_H = 192` (vung nhin 184 px) + hien thanh day.
+- Moi man con gio la flex COLUMN **cuon doc duoc** (an thanh cuon) => keo bang ngon tay cung cuon duoc.
+- `page_scroll(±1)` = `lv_obj_scroll_by(±(height - 2*PAGE_PAD), LV_ANIM_ON)`, dung chung cho MOI man,
+  khong rieng MENU. Nut nao het duong cuon thi bi lam mo (`bg_opa 40`).
+- `bot_sync(false)` chay o nhip cham 400 ms: chi cap nhat nhan + do mo nut, KHONG do lai chieu cao
+  (xem cam bay 44 o README goc).
+- MENU: `MENU_ROWS` 9 -> 10 (them `Endstops (M119)` -> `PG_ENDSTOP`). MENU co 10 muc + dong
+  "Calibrate touch" = 11 hang x 20 px = 220 px > 206 => thanh day luon xuat hien o MENU va phan
+  trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
+- STATUS khong co thanh day (giong header).

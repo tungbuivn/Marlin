@@ -187,8 +187,10 @@ static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "N
 
 // --- B) cac man con ---
 #define BAR_H      26                                  // dong tieu de: [ten man] ... [LINK][BACK]
+#define BOT_H      22                                  // thanh trang thai duoi: [PREV] [TRANG x/y] [NEXT]
+#define BOT_Y      (UI_LCD_VER_RES - BOT_H)            // 218
 #define CONT_Y     BAR_H
-#define CONT_H     (UI_LCD_VER_RES - BAR_H)             // 214
+#define CONT_H     (UI_LCD_VER_RES - BAR_H)             // 214 (192 khi phai nhuong cho cho thanh day)
 #define PAGE_PAD   4                                    // padding trong vung noi dung
 #define PAGE_INN_W (UI_LCD_HOR_RES - 2 * PAGE_PAD)      // 312: be rong dung duoc
 #define PAGE_INN_H (CONT_H - 2 * PAGE_PAD)              // 206: TONG chieu cao moi man phai <= so nay
@@ -201,6 +203,10 @@ static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "N
 static lv_obj_t  *s_page[PG_COUNT];        // container noi dung tung man (NULL = chua tao)
 static lv_obj_t  *s_bar;                   // dong tieu de chung: [ten man] ... [LINK][BACK] (an o STATUS)
 static lv_obj_t  *s_title, *s_link;
+// Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT]. CHI hien khi noi dung
+// cua man dang mo BI TRAN theo chieu doc (xem bot_sync()); man nao gon thi giu nguyen bo cuc 206 px.
+static lv_obj_t  *s_bot, *s_bot_prev, *s_bot_next, *s_bot_info;
+static bool       s_bot_shown = false;      // trang thai hien tai cua s_bot (tranh goi an/hien vo ich)
 static lv_obj_t  *s_btn_pause, *s_btn_stop; // P9: 2 nut nho chi hien khi dang in tu the SD
 static lv_group_t *s_group;
 static lv_obj_t  *s_focus_prev;            // doi tuong dang focus (de ve khung)
@@ -525,7 +531,11 @@ static lv_obj_t *mk_page(lv_obj_t *parent) {
   lv_obj_set_style_pad_all(p, PAGE_PAD, 0);
   lv_obj_set_style_pad_row(p, GAP, 0);
   lv_obj_set_style_pad_column(p, GAP, 0);
-  lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
+  // Man con duoc phep CUON DOC: noi dung dai hon vung nhin thi thanh day (xem bot_sync)
+  // hien ra de phan trang bang PREV/NEXT; khong ve thanh cuon cho do roi man hinh.
+  lv_obj_add_flag(p, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(p, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(p, LV_SCROLLBAR_MODE_OFF);
   lv_obj_set_flex_flow(p, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(p, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   return p;
@@ -548,7 +558,9 @@ enum {
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
-  A_MPC_TUNE, A_PID_BED
+  A_MPC_TUNE, A_PID_BED,
+  // Thanh day: phan trang noi dung man dang mo (xem page_scroll/bot_sync)
+  A_PAGE_PREV, A_PAGE_NEXT
 };
 
 // user_data cua nut: (heater << 8) | (int8)delta
@@ -556,6 +568,8 @@ enum {
 
 static void show_page(uint8_t p);            // forward
 static void create_page(uint8_t p);          // forward
+static void page_scroll(const int8_t dir);   // forward (phan trang noi dung, dinh nghia duoi MENU)
+static void bot_sync(const bool remeasure);   // forward (dong bo thanh day, dinh nghia duoi MENU)
 static void files_rebuild(void);             // forward
 static void refocus_page(void);              // forward (dinh nghia o cuoi file)
 static void do_action(const int a);          // forward
@@ -616,6 +630,10 @@ static void do_action(const int a) {
     // ---- P5 tuning ----
     case A_MPC_TUNE: panel_link_send_gcode("M306 T");       break;   // MPC autotune dau in
     case A_PID_BED:  panel_link_send_gcode("M303 E-1 S60"); break;   // PID ban in, target 60 do C
+
+    // ---- thanh day: lui/toi 1 trang noi dung (xem bot_sync de biet khi nao co thanh nay) ----
+    case A_PAGE_PREV: page_scroll(-1); break;
+    case A_PAGE_NEXT: page_scroll(+1); break;
     default: break;
   }
 }
@@ -2113,7 +2131,7 @@ static void page_tram_update(void) {
 //  MENU -- menu doc kieu Marlin (nut SETTINGS tren man STATUS mo vao day)
 //  Moi dong: [ten vang] .......... [gia tri trang]; dong la 1 nut (encoder bam = mo)
 // ===========================================================================
-#define MENU_ROWS 9
+#define MENU_ROWS 10
 typedef struct { const char *name; uint8_t page; } menu_item_t;
 static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Temperature",     PG_TEMP },
@@ -2124,7 +2142,9 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Custom G34/SD",   PG_CUSTOM },
   { "Settings",        PG_SETTINGS },
   { "Tramming wizard", PG_TRAM },
-  { "Info",            PG_INFO }
+  { "Info",            PG_INFO },
+  // Muc thu 10 (cuoi): day MENU cao hon vung nhin -> thanh day PREV/NEXT xuat hien
+  { "Endstops (M119)", PG_ENDSTOP }
 };
 static lv_obj_t *mn_val[MENU_ROWS];
 static lv_obj_t *mn_val_cal;                 // dong "Calibrate touch" (chi co tren board co touch)
@@ -2168,7 +2188,8 @@ static void cb_cal_touch(lv_event_t *e) {
 //  MENU la 1 man BINH THUONG: co dong tieu de chung o tren (ten man + LINK + BACK ben phai),
 //  cac dong menu do FLEX cua mk_page() tu xep doc (khong can toa do y).
 static void page_menu_create(lv_obj_t *p) {
-  // 9 dong menu + (tren board co touch) 1 dong "Calibrate touch" = 10 dong x 20 px = 200 <= 206.
+  // 10 dong menu + (tren board co touch) 1 dong "Calibrate touch" = 11 dong x 20 px = 220 > 206,
+  // nen MENU luon co thanh day de phan trang (xem bot_sync; trang bi thu nho con 192 px -> 184 trong).
   // mk_page() dat pad_row = GAP cho moi man, o day phai de 0 thi moi du (cac dong la o dac lien
   // nhau - giong danh sach menu cua Marlin; dong dang chon duoc to sang + vien xanh).
   lv_obj_set_style_pad_row(p, 0, 0);
@@ -2246,12 +2267,87 @@ static void page_menu_update(void) {
   // vi chi bao link chi nam o THANH TREN (xem link_ok()).
   snprintf(b, sizeof(b), "%s", tram.ever ? "TRAM" : (panel.linked ? "PUSH" : "-"));
   set_text(mn_val[8], b);
+
+  // Muc 10 "Endstops (M119)": man chi hien ket qua M119 nen o day chi ghi lenh da gui
+  set_text(mn_val[9], "M119");
   // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
   // hien tien do de nguoi dung biet da du 1.5s chua.
   if (s_cal_hold_ms)
     set_text(mn_val_cal, (ui_port_millis() - s_cal_hold_ms) >= CAL_TOUCH_HOLD_MS ? "NHAC TAY" : "dang giu");
   else
     set_text(mn_val_cal, ui_port_touch_cal_is_saved() ? "NVS" : "mac dinh");
+}
+
+// ===========================================================================
+//  Thanh day: phan trang noi dung man dang mo (PREV / TRANG x/y / NEXT)
+// ===========================================================================
+// Cuon noi dung man dang mo them 1 "trang" (dung lai o 2 dau). dir > 0 = xuong, dir < 0 = len.
+// Dung chung cho MOI man con (khong rieng MENU): man nao co noi dung tran thi moi co thanh day.
+static void page_scroll(const int8_t dir) {
+  lv_obj_t *p = s_page[s_page_act];
+  if (!p || s_page_act == PG_STATUS) return;
+  const lv_coord_t vis = lv_obj_get_height(p) - 2 * PAGE_PAD;
+  if (vis <= 0) return;
+  lv_obj_scroll_by(p, 0, (dir > 0) ? vis : -vis, LV_ANIM_ON);
+}
+
+// Bat/tat thanh day theo noi dung THUC TE cua man dang mo:
+//  - man nao noi dung da nam gon trong vung nhin => KHONG hien thanh day (giu nguyen bo cuc 206 px nhu cu)
+//  - man nao tran => thu nho vung noi dung di BOT_H va hien thanh day de phan trang
+// Goi o CUOI show_page() (luc trang da HIEN) va dinh ky trong ui_lvgl_task() (~400 ms).
+// `remeasure = true`: CHI goi khi VUA VAO man (xem show_page). Luc do trang dang o dau danh sach
+// (scroll = 0) nen co the tam tra chieu cao ve CONT_H de do, roi thu lai - khong lam nhay vi tri cuon.
+// `remeasure = false`: chi cap nhat nhan/mo nut, KHONG doi chieu cao trang: doi chieu cao se lam
+// LVGL KEP `scroll_y` ve muc toi da cu => moi 400 ms trang tu nhay ve dau, bam NEXT khong giu duoc.
+static void bot_sync(const bool remeasure) {
+  if (!s_bot) return;
+  const uint8_t p = s_page_act;
+  lv_obj_t *pg = s_page[p];
+  const bool chrome = (p != PG_STATUS);          // STATUS khong co header/thanh day
+  if (!pg || !chrome) {
+    // STATUS dung kin 320x240 -> khong doi kich thuoc trang, chi dam bao thanh day dang AN
+    if (s_bot_shown) s_bot_shown = false;
+    lv_obj_add_flag(s_bot, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+
+  if (remeasure) {
+    // PHAI do khi trang dang HIEN (LVGL bo qua tinh layout cho vat HIDDEN).
+    // Do o CHIEU CAO DAY DU (CONT_H) truoc: neu noi dung da gon trong 206 px thi khong can
+    // thanh day; do o 192 px thi noi dung ngan cung bi coi la "tran" gia.
+    lv_obj_scroll_to_y(pg, 0, LV_ANIM_OFF);            // vao man -> xem tu dau
+    if (lv_obj_get_height(pg) != CONT_H) {
+      lv_obj_set_height(pg, CONT_H);
+      lv_obj_update_layout(pg);
+    }
+    // LVGL cong ca pad_bottom vao `scroll_bottom` => noi dung vua khop 206 px van bao tran ~4 px.
+    // Vi vay phai so voi nguong PAGE_PAD (khong dung > 0), neu khong cac man dang gon se bi hien thanh day.
+    const lv_coord_t ovf = lv_obj_get_scroll_top(pg) + lv_obj_get_scroll_bottom(pg);
+    const bool need = (ovf > PAGE_PAD);
+    if (need) lv_obj_set_height(pg, CONT_H - BOT_H);   // 192: nhuong 22 px cho thanh day
+    lv_obj_update_layout(pg);
+    if (need != s_bot_shown) {
+      s_bot_shown = need;
+      if (need) lv_obj_clear_flag(s_bot, LV_OBJ_FLAG_HIDDEN);
+      else      lv_obj_add_flag(s_bot, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+
+  const bool need = s_bot_shown;
+  if (!need) return;
+
+  // nhan "TRANG x/y" + lam mo nut nao khong con gi de cuon.
+  // `top + bot` = TONG doan cuon duoc (khong doi theo vi tri dang dung) nen so trang dem theo
+  // moc nhay tung trang, khop voi trang thai mo/sang cua 2 nut (o dau: top=0, o day: bot=0).
+  const lv_coord_t vis = lv_obj_get_height(pg) - 2 * PAGE_PAD;
+  const lv_coord_t top = lv_obj_get_scroll_top(pg), bot = lv_obj_get_scroll_bottom(pg);
+  const int npg = (vis > 0) ? (1 + (int)((top + bot + vis - 1) / vis)) : 1;
+  const int cur = (vis > 0) ? (1 + (int)((top       + vis - 1) / vis)) : 1;
+  char b[24]; snprintf(b, sizeof(b), "TRANG %d/%d", cur, npg);
+  set_text(s_bot_info, b);
+  // mo nut khi khong the cuon them (dung mau COL_* co san cho trang thai mo)
+  lv_obj_set_style_bg_opa(s_bot_prev, (top > 0) ? LV_OPA_COVER : LV_OPA_40, 0);
+  lv_obj_set_style_bg_opa(s_bot_next, (bot > 0) ? LV_OPA_COVER : LV_OPA_40, 0);
 }
 
 // ===========================================================================
@@ -2304,6 +2400,9 @@ static void show_page(uint8_t p) {
 
   // encoder: focus vao vat dau tien cua man vua mo
   if (s_group && !focus_first_in(s_page[p]) && s_bar) lv_group_focus_obj(s_bar);
+
+  // Thanh day: do noi dung SAU khi trang da duoc HIEN (xem canh bao o bot_sync)
+  bot_sync(true);
 }
 
 // ===========================================================================
@@ -2337,6 +2436,31 @@ static void build_chrome(void) {
   lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
   mk_btn(s_bar, "BACK", 48, 20, cb_action, (void *)(intptr_t)A_BACK);
+
+  // --- Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT] ---
+  // CHI hien khi noi dung man dang mo BI TRAN theo chieu doc (xem bot_sync()).
+  // PHAI tao luc dang HIEN roi moi an: LVGL bo qua tinh layout cho vat HIDDEN, do luc an
+  // se ra 0 -> bot_sync() tuong la khong tran va khong bao gio hien thanh nay.
+  s_bot = lv_obj_create(scr);
+  lv_obj_set_pos(s_bot, 0, BOT_Y);
+  lv_obj_set_size(s_bot, UI_LCD_HOR_RES, BOT_H);
+  style_flat(s_bot, COL_BAR);
+  lv_obj_set_style_pad_left(s_bot, 4, 0);
+  lv_obj_set_style_pad_right(s_bot, 4, 0);
+  lv_obj_set_style_pad_column(s_bot, 4, 0);
+  lv_obj_set_flex_flow(s_bot, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(s_bot, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  // Chu "PREV"/"NEXT"/"TRANG x/y" deu la ASCII -> dung Montserrat mac dinh (KHONG vn_font*)
+  s_bot_prev = mk_btn(s_bot, "PREV", 56, 18, cb_action, (void *)(intptr_t)A_PAGE_PREV);
+  s_bot_info = mk_label(s_bot, "", COL_DIM);
+  lv_obj_set_flex_grow(s_bot_info, 1);                                        // gian het cho trong giua
+  lv_obj_set_style_text_align(s_bot_info, LV_TEXT_ALIGN_CENTER, 0);
+  s_bot_next = mk_btn(s_bot, "NEXT", 56, 18, cb_action, (void *)(intptr_t)A_PAGE_NEXT);
+
+  lv_obj_update_layout(s_bot);                    // do xong (luc dang HIEN) roi moi an
+  lv_obj_add_flag(s_bot, LV_OBJ_FLAG_HIDDEN);
+  s_bot_shown = false;
 }
 
 // ===========================================================================
@@ -2618,6 +2742,10 @@ void ui_lvgl_task(void) {
       case PG_CUSTOM:   page_custom_update();   break;
       default: break;
     }
+    // Noi dung man co the doi do (vd SETTINGS loc lai / MENU doi gia tri) -> cap nhat nhan thanh day.
+    // Chi chay o nhip CHAM (400 ms) va KHONG do lai chieu cao trang (xem bot_sync): do lai se lam
+    // LVGL kep `scroll_y` -> vua bam NEXT da bi nhay ve dau. Muon do lai thi phai roi man roi vao lai.
+    bot_sync(false);
   }
 
   boxes_update();
