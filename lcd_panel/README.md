@@ -689,3 +689,30 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
   "Calibrate touch" = 11 hang x 20 px = 220 px > 206 => thanh day luon xuat hien o MENU va phan
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
+
+## Font chu (doi 2026-10-13 theo yeu cau)
+Toan bo UI gio dung font **MONO** `font_consola_vn_14` (Consolas 14, bpp 4, sinh bang lv_font_conv):
+moi ky tu rong 7,7 px nen so dang chay (nhiet do, XYZ, %, gia tri setting) **khong nhay ngang**
+khi do dai gia tri doi; so thang cot dep hon.
+- Cong tac: `#define UI_MONO_FONT 1` trong `src/ui_lvgl.cpp` (0 = quay lai Montserrat 14 cu).
+- Dat font o cap MAN HINH trong `build_chrome()` (`text_font` la thuoc tinh THUA KE nen moi vat
+  tao sau deu dung mono) + dat rieng cho `lv_layer_top()` vi `lv_msgbox_create(NULL, ...)` nam o
+  layer_top, KHONG thua ke tu man hinh.
+- Khi `UI_MONO_FONT = 1` thi `vn_font()` khong lam gi (ca man da la font co dau). Khi = 0 thi
+  `vn_font()`/`vn_font_btn()` moi gan `font_segoe_vn_14` cho dung 3 nhan co dau.
+- `line_height` 17 (Montserrat 14 la 16) nen hang cao 16 px co the bi cat 1 px: hay kiem tra trang
+  INFO va danh sach FILES; neu thay cut thi hoac doi sang sinh font `--size 13`, hoac chi gan mono
+  cho rieng cac o GIA TRI.
+- Theme mac dinh cua LVGL chi dat font cuc bo cho `cb_marker_checked` (khong dung) => roller/table
+  deu thua ke font cua man hinh, khong bi lan font.
+
+Lenh sinh lai font (chay trong `lcd_panel`, giu NGUYEN `--size 14 --bpp 4` va dai ky tu):
+```
+npx --yes lv_font_conv --font C:\Windows\Fonts\consola.ttf --range 0x20-0x7E,0xA0-0xFF,0x0102-0x0103,0x0110-0x0111,0x01A0-0x01B1,0x1EA0-0x1EF9 --size 14 --bpp 4 --format lvgl -o src/font_consola_vn_14.c --force-fast-kern-format
+npx --yes lv_font_conv --font C:\Windows\Fonts\segoeui.ttf --range 0x20-0x7E,0xA0-0xFF,0x0102-0x0103,0x0110-0x0111,0x01A0-0x01B1,0x1EA0-0x1EF9 --size 14 --bpp 4 --format lvgl -o src/font_segoe_vn_14.c --force-fast-kern-format
+```
+Sau khi sinh **phai sua tay khoi include** o dau file thanh `#include "lvgl.h"` (lv_font_conv sinh ra
+`#ifdef LV_LVGL_H_INCLUDE_SIMPLE ... #else #include "lvgl/lvgl.h"`, ma PlatformIO chi them
+`<lvgl-src>` vao duong include -> loi bien dich).
+Nho: linker `--gc-sections` TU BO du lieu glyph cua font khong duoc tham chieu, nen giu ca 2 file
+font trong `src/` khong ton them Flash (do lai: 484 061 B = 36.9%).

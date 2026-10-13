@@ -85,10 +85,18 @@
 #include "tram_link.h"              // Bed Tramming Wizard cua Marlin (link ASCII, xem tram_link.h)
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
 
-// Font co DAU tieng Viet (Segoe UI 14, sinh bang lv_font_conv -> font_segoe_vn_14.c):
+// Font co DAU tieng Viet (sinh bang lv_font_conv, cung thong so: size 14, bpp 4):
 // font Montserrat co san cua LVGL KHONG co U+1EA0..U+1EF9 nen chu co dau se ra o vuong.
-// Font nay chi gan cho nhung cho can dau (lop phu SUA trong SETTINGS + hang PREHEAT).
-LV_FONT_DECLARE(font_segoe_vn_14);
+LV_FONT_DECLARE(font_segoe_vn_14);      // Segoe UI 14 - font ty le (ban cu)
+LV_FONT_DECLARE(font_consola_vn_14);    // Consolas 14 - font MONO, moi ky tu rong 7,7 px
+
+// Chon font cho TOAN BO UI:
+//   1 = Consolas (MONO): moi ky tu cung be rong => so dang chay (nhiet do, XYZ, %, gia tri
+//       setting) KHONG bi nhay ngang khi gia tri doi do dai; so thang cot dep hon.
+//       line_height 17 (Montserrat 14 la 16) nen hang cao 16 px co the bi cat 1 px -> da kiem tra
+//       thuc te, neu thay cut thi chuyen ve 0 hoac chi gan mono cho rieng o GIA TRI.
+//   0 = Montserrat 14 mac dinh cua LVGL (ban cu), chu co dau van dung font_segoe_vn_14.
+#define UI_MONO_FONT 1
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
 static_assert(LV_COLOR_DEPTH == 16, "UI nay chi ho tro LV_COLOR_DEPTH 16");
@@ -306,11 +314,16 @@ static void set_text(lv_obj_t *lbl, const char *txt) {
 }
 
 // Gan font CO DAU tieng Viet cho DUNG 1 nhan (khong bao gio gan cho container/nut/page:
-// Segoe line_height 18 > Montserrat 16 nen gan tran ra ca cay se lam chu bi cat trong cac
-// hang/nut cao co dinh -> nut "khong co text"). Font Montserrat cua LVGL khong co
+// font thay the co line_height 17-18 > Montserrat 16 nen gan tran ra ca cay se lam chu bi cat
+// trong cac hang/nut cao co dinh -> nut "khong co text"). Font Montserrat cua LVGL khong co
 // U+1EA0..U+1EF9, nen chi nhung nhan that su co dau moi duoc doi font.
+// Khi UI_MONO_FONT = 1 thi CA MAN da la font co dau (xem build_chrome) -> khong phai doi rieng nua.
 static void vn_font(lv_obj_t *label) {
+#if UI_MONO_FONT
+  (void)label;                                    // font mono da dat o cap man hinh + layer_top
+#else
   if (label) lv_obj_set_style_text_font(label, &font_segoe_vn_14, 0);
+#endif
 }
 
 // Gan font co dau cho nhan NAM TRONG 1 nut (mk_btn tao dung 1 label con)
@@ -2415,6 +2428,15 @@ static void build_chrome(void) {
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+
+#if UI_MONO_FONT
+  // Font MONO cho TOAN BO UI (xem UI_MONO_FONT). Dat o cap MAN HINH: `text_font` la thuoc tinh
+  // THUA KE nen moi vat tao sau (ke ca nut/nhan trong nut) deu dung mono, khong phai sua tung cho.
+  // Hop thoai lv_msgbox duoc tao voi parent = NULL -> nam o layer_top, KHONG thua ke tu man hinh,
+  // nen phai dat rieng cho layer_top.
+  lv_obj_set_style_text_font(scr, &font_consola_vn_14, 0);
+  lv_obj_set_style_text_font(lv_layer_top(), &font_consola_vn_14, 0);
+#endif
 
   s_bar = lv_obj_create(scr);
   lv_obj_set_pos(s_bar, 0, 0);
