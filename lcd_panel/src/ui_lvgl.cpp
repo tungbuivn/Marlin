@@ -1504,10 +1504,34 @@ static void cb_menu_row(lv_event_t *e) {
 
 // "Calibrate touch": chay trinh hieu chuan 4 goc cua port (blocking, tu ve bang TFT_eSPI),
 // sau do xoa toan bo man hinh de LVGL ve lai tu dau.
+//
+// CHONG BAM NHAM: phai GIU TAY >= CAL_TOUCH_HOLD_MS roi NHAC moi vao; 1 lan cham ngan
+// (lo bam trong MENU) khong lam gi. Ly do phai chan: trinh hieu chuan la blocking, moi goc
+// CHI CAN 1 lan cham la duoc nhan, va no GHI NGAY vao NVS -> bam nham co the lam hong cam ung
+// (khi do chi con duong giu tay luc cap dien de vao lai).
+#define CAL_TOUCH_HOLD_MS 1500
+static uint32_t s_cal_hold_ms = 0;      // >0 = dang giu tay tren dong nay
+static bool     s_cal_req     = false;  // da giu du -> ui_lvgl_task() se chay hieu chuan
+
 static void cb_cal_touch(lv_event_t *e) {
-  (void)e;
-  ui_port_touch_calibrate();
-  lv_obj_invalidate(lv_scr_act());
+  switch (lv_event_get_code(e)) {
+    case LV_EVENT_PRESSED:
+      s_cal_hold_ms = ui_port_millis();
+      if (!s_cal_hold_ms) s_cal_hold_ms = 1;               // 0 = "khong giu"
+      break;
+
+    case LV_EVENT_RELEASED: {
+      const uint32_t held = s_cal_hold_ms ? (ui_port_millis() - s_cal_hold_ms) : 0;
+      s_cal_hold_ms = 0;
+      if (held >= CAL_TOUCH_HOLD_MS) s_cal_req = true;     // du lau -> cho chay o ui_lvgl_task()
+      break;
+    }
+
+    // Keo/scroll lam mat diem bam -> coi nhu huy giu
+    case LV_EVENT_PRESS_LOST:  s_cal_hold_ms = 0; break;
+
+    default: break;                                        // LV_EVENT_CLICKED (cham ngan) -> bo qua
+  }
 }
 
 //  MENU la 1 man BINH THUONG: co dong tieu de chung o tren (ten man + LINK + BACK ben phai),
@@ -1529,12 +1553,16 @@ static void page_menu_create(lv_obj_t *p) {
     lv_obj_align(mn_val[i], LV_ALIGN_RIGHT_MID, -4, 0);
   }
 
-  // Dong hieu chuan cam ung: chi hien tren board co touch (CYD)
+  // Dong hieu chuan cam ung: chi hien tren board co touch (CYD).
+  // PHAI GIU 1.5s (xem cb_cal_touch) -> 3 event rieng, khong dung CLICKED cua mk_hit.
   if (ui_port_touch_cal_available()) {
     lv_obj_t *r = mk_hit(p, 0, 0, PAGE_INN_W, MENU_ROW_H - 2, cb_cal_touch, NULL);
+    lv_obj_add_event_cb(r, cb_cal_touch, LV_EVENT_PRESSED,    NULL);
+    lv_obj_add_event_cb(r, cb_cal_touch, LV_EVENT_RELEASED,   NULL);
+    lv_obj_add_event_cb(r, cb_cal_touch, LV_EVENT_PRESS_LOST, NULL);
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-    lv_obj_t *n = mk_label(r, "Calibrate touch", MR_MENU);
+    lv_obj_t *n = mk_label(r, "Calibrate touch (giu 1.5s)", MR_MENU);
     lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
     mn_val_cal = mk_label(r, "4 goc", MR_MENUVAL);
     lv_obj_align(mn_val_cal, LV_ALIGN_RIGHT_MID, -4, 0);
@@ -1585,7 +1613,12 @@ static void page_menu_update(void) {
 
   snprintf(b, sizeof(b), "%s", panel.linked ? "LINK" : "NO LINK");
   set_text(mn_val[8], b);
-  set_text(mn_val_cal, ui_port_touch_cal_is_saved() ? "NVS" : "mac dinh");
+  // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
+  // hien tien do de nguoi dung biet da du 1.5s chua.
+  if (s_cal_hold_ms)
+    set_text(mn_val_cal, (ui_port_millis() - s_cal_hold_ms) >= CAL_TOUCH_HOLD_MS ? "NHAC TAY" : "dang giu");
+  else
+    set_text(mn_val_cal, ui_port_touch_cal_is_saved() ? "NVS" : "mac dinh");
 }
 
 // ===========================================================================
@@ -1827,6 +1860,16 @@ void ui_lvgl_task(void) {
   }
 
   lv_timer_handler();
+
+  // Hieu chuan cam ung: chay NGOAI event callback cua LVGL (blocking, tu ve bang TFT_eSPI),
+  // xong xoa lai toan man hinh de LVGL ve lai tu dau.
+  if (s_cal_req) {
+    s_cal_req = false;
+    ui_port_touch_calibrate();
+    lv_obj_invalidate(lv_scr_act());
+    s_tick_ms = s_upd_ms = s_slow_ms = ui_port_millis();
+    return;
+  }
 
   if (now - s_upd_ms < UI_REFRESH_MS) return;      // UI_REFRESH_MS trong panel_config.h
   s_upd_ms = now;

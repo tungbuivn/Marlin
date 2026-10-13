@@ -389,8 +389,13 @@ chung bus SPI với LCD, mà CYD đi dây riêng), nên hiệu chuẩn nằm **t
 
 **Cách vào** (2 đường, không cần build lại):
 
-1. Trên STATUS bấm **SETTINGS** → **MENU** → dòng **`Calibrate touch`** (cột phải ghi `NVS` nếu đã
-   có hiệu chuẩn lưu trong flash, `mac dinh` nếu đang dùng giá trị trong `panel_config.h`).
+1. Trên STATUS bấm **SETTINGS** → **MENU** → dòng **`Calibrate touch (giu 1.5s)`** — **PHẢI GIỮ TAY
+   1,5 giây rồi NHẤC** mới vào; chạm ngắn (bấm nhầm) **không làm gì** (cột phải đổi `dang giu` →
+   `NHAC TAY` để biết đã đủ lâu). Lúc rảnh cột phải ghi `NVS` nếu đã có hiệu chuẩn lưu trong flash,
+   `mac dinh` nếu đang dùng giá trị trong `panel_config.h`.
+   > **Vì sao phải giữ:** trước đây chỉ cần 1 lần chạm là vào, mà ở **mỗi góc cũng chỉ cần 1 lần chạm**
+   > là được nhận và **ghi ngay vào NVS** (`touch_cal_save()` trước khi hiện kết quả) ⇒ lỡ tay trong
+   > MENU là mất hiệu chuẩn, phải giữ tay lúc cấp điện mới vào lại được.
 2. **Giữ tay trên màn hình lúc cấp điện** — panel phát hiện `T_IRQ` mức thấp trong
    `ui_port_input_init()` và vào thẳng chế độ hiệu chuẩn. Đây là **"thoát hiểm"** khi giá trị cũ
    quá tệ, không chạm trúng được dòng menu.

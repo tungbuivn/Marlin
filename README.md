@@ -2331,8 +2331,9 @@ của họ (`makerbase-mks/MKS-TFT28-32-Firmware` — tham khảo để đối c
   (`Marlin/src/lcd/tft/images/*.cpp` → LVGL `ALPHA_4BIT`), 10 icon 64×64/32×32, ~17 KB, đổi màu lúc
   chạy bằng `img_recolor`. Sinh lại: `python lcd_panel/tools/make_lvgl_icons.py` (Python 3, **không cần
   Pillow**; **đừng sửa tay** file `.h`). Cần `LV_USE_IMG 1` trong `src/lv_conf.h` (đã bật).
-* **Hiệu chuẩn cảm ứng 4 góc** (chỉ board có touch — CYD): vào bằng dòng **`Calibrate touch`** trong
-  MENU hoặc **giữ tay trên màn hình lúc cấp điện**; chạm → **cả màn hình xanh** → kéo sát góc rồi nhấc
+* **Hiệu chuẩn cảm ứng 4 góc** (chỉ board có touch — CYD): vào bằng dòng **`Calibrate touch (giu 1.5s)`**
+  trong MENU (**giữ tay 1,5 s rồi nhấc** — chạm ngắn không làm gì, chống bấm nhầm) hoặc **giữ tay trên
+  màn hình lúc cấp điện**; chạm → **cả màn hình xanh** → kéo sát góc rồi nhấc
   tay (lấy cực trị); firmware tự suy ra `swap/invert/XMIN..YMAX` và **lưu vào NVS của ESP32**
   (namespace `cydtouch`) ⇒ không cần build lại, reset không mất; giá trị mặc định nằm ở
   `panel_config.h` (`PANEL_CYD_TOUCH_*`). Sửa luôn lỗi cũ: **`raw_x` là trục NGANG** (comment cũ ghi
