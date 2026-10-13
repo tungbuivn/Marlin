@@ -404,9 +404,10 @@ python lcd_panel/tools/make_lvgl_icons.py
 | **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
 
 > 🆕 **Cập nhật 2026-10-13 (UI LVGL sau khi chuyển sang PUSH):**
-> * **TEMP** có thêm **1 hàng preset PREHEAT** đúng như bản UI cũ (`ui.cpp`/`main.cpp`): **`PLA 210/60`** ·
->   **`PETG 240/80`** · **`ABS 250/100`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`) và **`COOLDOWN`**
->   (`M104 S0` + `M140 S0`).
+> * **TEMP** có thêm **1 hàng preset PREHEAT** đúng như bản UI cũ (`ui.cpp`/`main.cpp`): **`PLA` · `PETG` ·
+>   `ABS`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`, thêm `M106 S<fan>` **chỉ khi** fan preset > 0)
+>   và **`COOLDOWN`** (`M104 S0` + `M140 S0`). 🆕 **Từ 2026-10-14 ba preset này SỬA ĐƯỢC** (lưu NVS, xem **§9.22**):
+>   mặc định `PLA 200/60/0` · `PETG 230/60/0` · `ABS 240/60/0`, nhãn trên nút hiện luôn số đang đặt.
 > * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
 >   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện lớp phủ có **4 nút bước
 >   `0.01` · `0.1` · `1` · `10`** (nút đang chọn được tô nổi) + `-` / `+` (giữ nút = nhảy nhanh) + `OK` /
@@ -1197,7 +1198,8 @@ bool        net_wifi_scanning(void);
   (`PANEL_WIFI_DOWN_CONFIRM_MS`) và **KHÔNG bao giờ** ép trong lúc đang quét hoặc trong 20 s sau khi quét
   (`PANEL_WIFI_SCAN_GRACE_MS`) — để core tự auto-reconnect, tránh WiFi chập chờn (đã gặp: panel tự reboot).
 * **Console COM7** (test không cần UI): `WIFI?`, `WIFI SCAN` (quét **không chặn**, vẫn bơm link),
-  `WIFI ASYNC 0|1|2` (chẩn đoán), `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS), `WIFI OFF`, `WIFI FORGET`.
+  `WIFI ASYNC 0|1|2` (chẩn đoán), `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS), `WIFI OFF`, `WIFI FORGET`,
+  và `PRE?` / `PRE <i 0..2> <nozzle> <bed> [fan]` (preset preheat, **§9.22**).
 * **RAM tĩnh** thêm ~0,9 KB (SSID 33 + pass 65 + NVS + 16 mạng quét). **Lưu ý**: đừng bật WiFi từ trang settings
   khi `PANEL_BT_UPLOAD 1` (BT + WiFi không đủ RAM) — cờ `PANEL_WIFI_UPLOAD` đã tự tắt trong trường hợp đó.
 
@@ -1257,6 +1259,49 @@ Luồng: **PC/điện thoại → WiFi → panel ghi `/btup/<tên>.tmp` trên th
   `WIFI?`/`WIFI SCAN` → trên PC mở `http://TBTPANEL.local/?token=TBT-3D-up` (hoặc `http://<ip>/`) → chọn file
   `.gco` → Gửi → theo dõi `state`/`posted_bytes`; kiểm Marlin thấy file mới (M22/M21 đã gửi) và `/btup` sạch
   file tạm.
+### 9.22 PRESET PREHEAT SỬA ĐƯỢC (NVS `ph`) — 2026-10-14
+
+**Vấn đề**: 3 nút `PLA`/`PETG`/`ABS` ở trang TEMP trước đây **cứng trong code** (`210/60`, `240/80`, `250/100`),
+muốn đổi phải sửa `ui_lvgl.cpp` rồi nạp lại cả firmware panel.
+
+**Cách làm bây giờ** — preset là **dữ liệu của panel**, không phải của Marlin:
+
+| Việc | Ở đâu |
+|---|---|
+| Kho giá trị | NVS `Preferences`, namespace **`"ph"`**, khoá `h0..h2` / `b0..b2` / `f0..f2` (nozzle / bed / fan) |
+| Mặc định khi NVS trống | `PRE_H_DEF` = 200/230/240 °C · `PRE_B_DEF` = 60/60/60 °C · `PRE_F_DEF` = 0 |
+| Trần (chặn giá trị rác) | `PRE_H_MAX 300` · `PRE_B_MAX 120` · `PRE_F_MAX 255` |
+| Sửa trên màn hình | **SETTINGS** → 9 dòng mới (`PLA nozzle` · `PLA bed` · `PLA fan` ×3 profile), id **`0x4001..0x4009`** |
+| Nhãn nút TEMP | `tp_pre_sync()` → nút hiện `PLA 215/65`, `PETG 300/0`… (đổi ngay sau khi sửa, không cần khởi động lại) |
+| Console COM7 | `PRE?` · `PRE <i 0..2> <nozzle> <bed> [fan]` |
+
+* **Cơ chế "id riêng"**: Marlin **không bao giờ** gửi id `0x40xx` này. Panel tự **bơm** 9 giá trị vào bảng
+  `panel.settings[]` bằng `panel_setting_set()` (`preheat_inject()`) trước khi dựng bảng, nên trang SETTINGS
+  **vẽ và sửa được như mọi dòng khác**. Khi bấm `OK`, `se_send_mcode()` thấy id `0x4001..0x4009` ⇒ **không gửi
+  M-code nào**, chỉ kẹp trần → lưu NVS → bơm lại (Marlin không hề biết tới các dòng này).
+* **Vì sao KHÔNG đẩy sang Marlin/EEPROM**: build này **`HAS_PREHEAT = 0`** (không có `HAS_MARLINUI_MENU`) ⇒
+  `M145` không được biên dịch và preset không nằm trong `settings_t`; bật lên sẽ **đổi kích thước `settings_t`
+  ⇒ đổi version/CRC EEPROM ⇒ Marlin nạp lại mặc định**, mất `M851`/PID/`M92`/`M201`/`M203`/`M205`/`M906` + lưới UBL.
+  Giữ preset ở panel là **rẻ nhất và không rủi ro**.
+* **Nút TEMP gửi gì**: `M104 S<nozzle>` + `M140 S<bed>`, và `M106 S<fan>` **chỉ khi** fan preset > 0
+  (fan = 0 nghĩa là "không đụng tới quạt", tránh `M106 S0` tắt quạt ngoài ý muốn).
+* **Đã kiểm trên máy thật (COM7, 2026-10-14)**:
+  ```
+  >>> PRE?
+  [PRE] 0) PLA  nozzle=200 C  bed=60 C  fan=0        <- mặc định khi NVS trống
+  >>> PRE 0 215 65 30
+  [PRE] da luu 3 preset preheat vao NVS (ph)
+  [PRE] dat preset 0 (PLA): nozzle=215 bed=65 fan=30 -> OK
+  >>> PRE 1 999 0 0
+  [PRE] dat PETG: nozzle=300 bed=0 fan=0              <- 999 bi kep ve tran 300
+  ```
+  Nạp lại firmware (KHÔNG xoá NVS) → log khởi động:
+  `[PRE] preset: PLA 215/65/30 | PETG 300/0/0 | ABS 250/100/40` ⇒ **giá trị sống qua reset**;
+  `[CYD] reset reason = 1 (poweron)`, `link PUSH=1 TRAM=1 rx=1 err=0` ⇒ khởi động sạch.
+  ⚠️ `PRE <i>` chỉ **đổi preset**, KHÔNG gia nhiệt, KHÔNG chuyển động (an toàn để test khi máy nguội).
+* 🐞 **Bẫy đã gặp**: lệnh `PRE` lúc đầu đặt **lồng bên trong nhánh `WIFI`** của console nên `PRE?` không khớp,
+  bị **chuyển tiếp sang Marlin** (im lặng, coi như G-code lạ). Đã tách thành nhánh **ngang cấp** với
+  `BTUP`/`WIFI` (`main.cpp`) — bài học: nhánh con phải so `s_fwd` chứ không phải `arg` đã trừ tiền tố.
 
 
 ### 9.9 Kiểm trên máy thật
@@ -2228,6 +2273,20 @@ pwsh -File D:\Marlin\serial-console.ps1 -Port COM4 -Baud 250000    # gui thang v
 `serial-console.ps1` luon gui **CRLF** va bat **DTR** (`serial-console.ps1:23, 42-43`); moi dong go
 vao duoc panel **chuyen tiep sang Marlin** bang dung duong ma cac nut tren UI dung
 (`src/main.cpp:62-68, 73-88`). Go `exit` + Enter de thoat.
+
+**Vai lenh RIENG cua panel** (KHONG gui sang Marlin — panel tu xu ly va tra loi ngay tren COM7):
+
+| Lenh | Y nghia |
+|---|---|
+| `WIFI?` | in trang thai WiFi + IP + RSSI + ssid da luu + heap |
+| `WIFI SCAN` / `WIFI ASYNC 0\|1\|2` | quet mang (khong chan, van bom link) / che do chan doan |
+| `WIFI CONNECT <ssid> <pass> [S]` · `WIFI OFF` · `WIFI FORGET` | ket noi (S = luu NVS) · tat · xoa cau hinh |
+| `BTUP ON` · `BTUP OFF` · `BTUP?` | bat/tat/hoi che do nhan file qua Bluetooth |
+| 🆕 `PRE?` | in 3 preset preheat (nozzle/bed/fan) — xem **§9.22** |
+| 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
+
+⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang
+Marlin; cac lenh panel o bang tren deu duoc so **truoc** nhanh chuyen tiep nen khong bi lan.
 
 ### Hieu chinh cam ung (chi board co touch — CYD)
 

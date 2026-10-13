@@ -91,6 +91,14 @@
 #include "lv_font_gfxfont.h"        // driver font 1-bit Adafruit GFXfont (che do UI_MONO_FONT 4)
 #include "net_upload.h"             // net_wifi_state(): trang thai WiFi de ve icon o header
 
+// Log chan doan cua UI tren board that (COM7, 115200). Dat NGAY DAY de moi phan trong file dung duoc
+// (truoc day dinh nghia trong khoi trang WIFI o duoi -> cac khoi phia tren khong thay).
+#if defined(PANEL_BOARD_CYD)
+  #define WIFILOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
+#else
+  #define WIFILOG(...)   do { } while (0)
+#endif
+
 // Trang thai WiFi cho icon o dong tieu de. net_upload.h la "hop dong giao dien" voi nhanh module
 // WiFi/BT (panel_bt_upload.cpp): 0 = WiFi tat/chua cau hinh, 1 = dang ket noi, 2 = da ket noi.
 //
@@ -1279,35 +1287,146 @@ static void fan_row(lv_obj_t *p) {
   mk_btn(r, "MAX", TP_BTN_BIG, TP_ROW_H - 2, cb_temp_adj, TEMP_ADJ(2, +100));
 }
 
-// Preset preheat: giong Configuration.h (PREHEAT_1/2/3) cua may nay -
-//   PLA 200/60 - PETG 230/60 - ABS 240/60 (ban chi toi 60 do C nen ca 3 deu 60).
-// KHONG gui M106: ca 3 FAN_SPEED trong Configuration.h deu = 0 va Marlin khong dung
-// define do khi preheat -> gui M106 S0 se TAT quat ngoai y muon.
+// ===========================================================================
+//  PREHEAT presets (PLA/PETG/ABS) -- PANEL TU LUU (NVS), khong phai Marlin (2026-10-14)
+//
+//  VI SAO KHONG DUNG M145 CUA MARLIN: ban nay KHONG co menu MarlinUI 12864 nen
+//  `HAS_PREHEAT = 0` (Conditionals_post.h: `HAS_TEMPERATURE && ANY(HAS_MARLINUI_MENU, ...)`) =>
+//    - `M145` KHONG duoc bien dich (gui lenh do se la "Unknown command"),
+//    - bang preheat khong nam trong `settings_t` (khong co trong EEPROM).
+//  Bat lai HAS_PREHEAT thi `settings_t` DOI KICH THUOC -> version/CRC EEPROM doi -> Marlin nap
+//  MAC DINH => MAT M851 (Z offset), PID, M92/M201/M203/M205/M906 va MESH UBL dang luu. Vi vay preset
+//  duoc giu trong NVS CUA PANEL (namespace "ph") va van hien/sua duoc o trang SETTINGS nho "id cuc
+//  bo" 0x40xx (Marlin chi dung id 1..~50 nen khong trung).
+//
+//  Nut PLA/PETG/ABS o man TEMP dung CHINH cac gia tri nay (khong con hardcode 200/230/240).
+//  Duong ghi NVS chi co tren CYD (ESP32 co Preferences) - board khac: chi giu trong RAM.
+// ===========================================================================
+#define PANEL_PRE_COUNT   3
+#define PANEL_PRE_ID_BASE 0x4000     // id = BASE + 1 .. BASE + 9 (H,B,F x 3 preset)
+
+static const char *const PRE_LABEL[PANEL_PRE_COUNT] = { "PLA", "PETG", "ABS" };
+// Mac dinh = dung Configuration.h cua may nay (PREHEAT_1/2/3: 200/60, 230/60, 240/60; FAN_SPEED 0)
+static const uint16_t PRE_H_DEF[PANEL_PRE_COUNT] = { 200, 230, 240 };
+static const uint16_t PRE_B_DEF[PANEL_PRE_COUNT] = {  60,  60,  60 };
+static const uint8_t  PRE_F_DEF[PANEL_PRE_COUNT] = {   0,   0,   0 };
+
+static uint16_t s_pre_h[PANEL_PRE_COUNT] = { 200, 230, 240 };
+static uint16_t s_pre_b[PANEL_PRE_COUNT] = {  60,  60,  60 };
+static uint8_t  s_pre_f[PANEL_PRE_COUNT] = {   0,   0,   0 };
+
+// Gioi han khi sua (giong M145 cua Marlin: hotend [extrude_min..max], bed [BED_MINTEMP..MAX]).
+#define PRE_H_MAX 300
+#define PRE_B_MAX 120
+#define PRE_F_MAX 255
+
+#if defined(PANEL_BOARD_CYD)
+  #include <Preferences.h>
+  #define PRE_NVS_NS "ph"
+#endif
+
+static void preheat_load(void) {
+#if defined(PANEL_BOARD_CYD)
+  Preferences p;
+  if (p.begin(PRE_NVS_NS, true)) {                   // read-only
+    char k[4];
+    for (uint8_t i = 0; i < PANEL_PRE_COUNT; i++) {
+      snprintf(k, sizeof(k), "h%u", (unsigned)i);
+      s_pre_h[i] = (uint16_t)p.getUShort(k, PRE_H_DEF[i]);
+      snprintf(k, sizeof(k), "b%u", (unsigned)i);
+      s_pre_b[i] = (uint16_t)p.getUShort(k, PRE_B_DEF[i]);
+      snprintf(k, sizeof(k), "f%u", (unsigned)i);
+      s_pre_f[i] = (uint8_t)p.getUChar(k, PRE_F_DEF[i]);
+    }
+    p.end();
+  }
+#endif
+  // Chan gia tri rac (NVS hong / ghi tu ban khac)
+  for (uint8_t i = 0; i < PANEL_PRE_COUNT; i++) {
+    if (s_pre_h[i] > PRE_H_MAX) s_pre_h[i] = PRE_H_DEF[i];
+    if (s_pre_b[i] > PRE_B_MAX) s_pre_b[i] = PRE_B_DEF[i];
+    if (s_pre_f[i] > PRE_F_MAX) s_pre_f[i] = PRE_F_DEF[i];
+  }
+  WIFILOG("[PRE] preset: %s %u/%u/%u | %s %u/%u/%u | %s %u/%u/%u  (nozzle/bed/fan, sua o SETTINGS)\n",
+          PRE_LABEL[0], (unsigned)s_pre_h[0], (unsigned)s_pre_b[0], (unsigned)s_pre_f[0],
+          PRE_LABEL[1], (unsigned)s_pre_h[1], (unsigned)s_pre_b[1], (unsigned)s_pre_f[1],
+          PRE_LABEL[2], (unsigned)s_pre_h[2], (unsigned)s_pre_b[2], (unsigned)s_pre_f[2]);
+}
+
+static void preheat_save(void) {
+#if defined(PANEL_BOARD_CYD)
+  Preferences p;
+  if (p.begin(PRE_NVS_NS, false)) {                  // read-write
+    char k[4];
+    for (uint8_t i = 0; i < PANEL_PRE_COUNT; i++) {
+      snprintf(k, sizeof(k), "h%u", (unsigned)i); p.putUShort(k, s_pre_h[i]);
+      snprintf(k, sizeof(k), "b%u", (unsigned)i); p.putUShort(k, s_pre_b[i]);
+      snprintf(k, sizeof(k), "f%u", (unsigned)i); p.putUChar(k, s_pre_f[i]);
+    }
+    p.end();
+    WIFILOG("[PRE] da luu 3 preset preheat vao NVS (%s)\n", PRE_NVS_NS);
+  }
+#endif
+}
+
+// Bom 9 gia tri vao bang `panel.settings[]` de trang SETTINGS hien/sua duoc (xem panel_setting_set).
+// Goi lai duoc nhieu lan (idempotent) - Marlin KHONG bao gio gui cac id nay.
+static void preheat_inject(void) {
+  const uint8_t before = panel.n_settings;
+  for (uint8_t i = 0; i < PANEL_PRE_COUNT; i++) {
+    const uint16_t base = (uint16_t)(PANEL_PRE_ID_BASE + 1 + i * 3);
+    panel_setting_set(base,     (int32_t)s_pre_h[i] * 100);   // scale 100 (do C)
+    panel_setting_set(base + 1, (int32_t)s_pre_b[i] * 100);
+    panel_setting_set(base + 2, (int32_t)s_pre_f[i]);         // scale 1  (0..255)
+  }
+  // Chi in khi bang THAT SU duoc them dong (tranh spam: ham nay chay moi lan cap nhat trang).
+  if (panel.n_settings != before)
+    WIFILOG("[PRE] da them 9 dong preset vao bang SETTINGS (%u -> %u dong)\n",
+            (unsigned)before, (unsigned)panel.n_settings);
+}
+
+// Preset preheat: gia tri lay tu KHO CUA PANEL (NVS, sua duoc o trang SETTINGS - xem khoi "PREHEAT
+// presets" o phan SETTINGS). Mac dinh ban dau = Configuration.h (PLA 200/60 - PETG 230/60 - ABS 240/60).
+// KHONG gui M106 khi FAN = 0: Marlin khong dung FAN_SPEED cua preheat, gui M106 S0 se TAT quat ngoai y.
 #define TP_PRE_H    28                                 // nut preset cao 28 >= 26 (du de cham)
 #define TP_TUNE_H   28                                 // hang tuning (M306/M303/SAVE)
 #define TP_PRE_PLA  0
 #define TP_PRE_PETG 1
 #define TP_PRE_ABS  2
 
-static const char *const TP_PRE_NAME[3] = { "PLA", "PETG", "ABS" };
 static char      s_profile[8] = "";                    // profile dang chon ("" = chua chon -> ---)
 static lv_obj_t *tp_prof;                              // nhan DONG DAU: "Profile: <ten>"
+static lv_obj_t *tp_pre_btn[PANEL_PRE_COUNT];          // 3 nut PLA/PETG/ABS (nhan doi theo preset)
+static char      s_pre_txt[PANEL_PRE_COUNT][16];       // nhan dang hien (de chi ve khi doi)
 
 static void cb_temp_preheat(lv_event_t *e) {
-  static const uint16_t NOZ[3] = { 200, 230, 240 };
-  static const uint16_t BED[3] = {  60,  60,  60 };
   const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
-  if (k > 2) return;
+  if (k >= PANEL_PRE_COUNT) return;
 
   char cmd[20];
-  snprintf(cmd, sizeof(cmd), "M104 S%u", (unsigned)NOZ[k]);
+  snprintf(cmd, sizeof(cmd), "M104 S%u", (unsigned)s_pre_h[k]);
   panel_link_send_gcode(cmd);
-  snprintf(cmd, sizeof(cmd), "M140 S%u", (unsigned)BED[k]);
+  snprintf(cmd, sizeof(cmd), "M140 S%u", (unsigned)s_pre_b[k]);
   panel_link_send_gcode(cmd);
+  if (s_pre_f[k] > 0) {                                // 0 = khong dong tÃ¡Â»â€ºi quat (xem ghi chu tren)
+    snprintf(cmd, sizeof(cmd), "M106 S%u", (unsigned)s_pre_f[k]);
+    panel_link_send_gcode(cmd);
+  }
   // Nho profile dang chon -> hien o DONG DAU (khong luu NVS). KHONG hien hop/dialog nao.
-  snprintf(s_profile, sizeof(s_profile), "%s", TP_PRE_NAME[k]);
+  snprintf(s_profile, sizeof(s_profile), "%s", PRE_LABEL[k]);
   // Target nhiet lay tu frame TEMPS/SETTING -> xin gui lai cho o nhiet khop ngay
   panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
+}
+
+// Doi nhan 3 nut theo preset hien co (chi ghi khi chuoi doi -> khong day SPI vo ich).
+static void tp_pre_sync(void) {
+  for (uint8_t k = 0; k < PANEL_PRE_COUNT; k++) {
+    char t[16];
+    snprintf(t, sizeof(t), "%s %u/%u", PRE_LABEL[k], (unsigned)s_pre_h[k], (unsigned)s_pre_b[k]);
+    if (strcmp(t, s_pre_txt[k]) == 0) continue;
+    snprintf(s_pre_txt[k], sizeof(s_pre_txt[k]), "%s", t);
+    if (tp_pre_btn[k]) set_text(lv_obj_get_child(tp_pre_btn[k], 0), t);
+  }
 }
 
 static void page_temp_create(lv_obj_t *p) {
@@ -1318,11 +1437,14 @@ static void page_temp_create(lv_obj_t *p) {
   temp_row(p, "BED",    1, &tp_bed);
   fan_row(p);
 
-  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140, giong menu preheat cua Marlin)
+  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140 theo preset da luu, nhu menu preheat
+  // cua Marlin). Nhan nut duoc ve lai khi doi gia tri trong SETTINGS -> xem tp_pre_sync().
   lv_obj_t *rp = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_PRE_H, 0, GAP);
-  mk_btn_grow(rp, "PLA 200/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
-  mk_btn_grow(rp, "PETG 230/60", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
-  mk_btn_grow(rp, "ABS 240/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
+  tp_pre_btn[0] = mk_btn_grow(rp, "PLA",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
+  tp_pre_btn[1] = mk_btn_grow(rp, "PETG", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
+  tp_pre_btn[2] = mk_btn_grow(rp, "ABS",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
+  for (uint8_t k = 0; k < PANEL_PRE_COUNT; k++) s_pre_txt[k][0] = '\0';   // buoc tp_pre_sync ve lai
+  tp_pre_sync();
 
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 26, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
@@ -1338,6 +1460,8 @@ static void page_temp_create(lv_obj_t *p) {
 static void page_temp_update(void) {
   char b[40], a1[12], a2[12];
   int16_t cur = 0, tgt = 0;
+
+  tp_pre_sync();                       // nhan PLA/PETG/ABS doi khi preset duoc sua o SETTINGS
 
   snprintf(b, sizeof(b), "Profile: %s", s_profile[0] ? s_profile : "---");
   set_text(tp_prof, b);
@@ -1855,6 +1979,16 @@ static const set_row_t SET_ROWS[] = {
   { PANEL_SET_FAN_PCT_E0,    "Fan E0 %",       100, 0 },
   { PANEL_SET_TARGET_TEMP_E0,"Target E0 C",    100, 0 },
   { PANEL_SET_TARGET_TEMP_BED,"Target bed C",  100, 0 },
+  // PREHEAT presets (PANEL tu luu trong NVS - xem khoi o tren): do C / do C / 0..255
+  { PANEL_PRE_ID_BASE + 1, "PLA nozzle C",     100, 0 },
+  { PANEL_PRE_ID_BASE + 2, "PLA bed C",        100, 0 },
+  { PANEL_PRE_ID_BASE + 3, "PLA fan",            1, 0 },
+  { PANEL_PRE_ID_BASE + 4, "PETG nozzle C",    100, 0 },
+  { PANEL_PRE_ID_BASE + 5, "PETG bed C",       100, 0 },
+  { PANEL_PRE_ID_BASE + 6, "PETG fan",           1, 0 },
+  { PANEL_PRE_ID_BASE + 7, "ABS nozzle C",     100, 0 },
+  { PANEL_PRE_ID_BASE + 8, "ABS bed C",        100, 0 },
+  { PANEL_PRE_ID_BASE + 9, "ABS fan",            1, 0 },
   { PANEL_SET_STEPS_MM_X,    "Steps X",       1000, 2 },
   { PANEL_SET_STEPS_MM_Y,    "Steps Y",       1000, 2 },
   { PANEL_SET_STEPS_MM_Z,    "Steps Z",       1000, 2 },
@@ -2073,6 +2207,28 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     se_fmt_id(b, sizeof(b), PANEL_SET_PID_BED_KI, ki);
     se_fmt_id(c, sizeof(c), PANEL_SET_PID_BED_KD, kd);
     snprintf(cmd, sizeof(cmd), "M304 P%s I%s D%s", a, b, c);
+  }
+  else if (id > PANEL_PRE_ID_BASE && id <= (uint16_t)(PANEL_PRE_ID_BASE + PANEL_PRE_COUNT * 3)) {
+    // PREHEAT preset: KHONG gui M-code nao (Marlin khong co M145 trong build nay) - ghi vao NVS
+    // CUA PANEL roi bom lai vao bang de bang + nut o man TEMP thay gia tri moi ngay.
+    const uint8_t k   = (uint8_t)(id - PANEL_PRE_ID_BASE - 1);   // 0..8
+    const uint8_t pre = (uint8_t)(k / 3);                        // 0..2 (PLA/PETG/ABS)
+    const uint8_t fld = (uint8_t)(k % 3);                        // 0 hotend, 1 bed, 2 fan
+    int32_t v = raw;
+    if (fld == 2) {
+      if (v < 0) v = 0; else if (v > PRE_F_MAX) v = PRE_F_MAX;
+      s_pre_f[pre] = (uint8_t)v;
+    } else {
+      const int32_t mx = (fld == 0) ? PRE_H_MAX : PRE_B_MAX;
+      v = v / 100;                                     // raw = do C * 100 (scale 100) -> do C
+      if (v < 0) v = 0; else if (v > mx) v = mx;
+      if (fld == 0) s_pre_h[pre] = (uint16_t)v; else s_pre_b[pre] = (uint16_t)v;
+    }
+    preheat_save();
+    preheat_inject();
+    WIFILOG("[PRE] %s: nozzle=%u bed=%u fan=%u (da luu NVS)\n", PRE_LABEL[pre],
+            (unsigned)s_pre_h[pre], (unsigned)s_pre_b[pre], (unsigned)s_pre_f[pre]);
+    return true;
   }
   else return false;      // id khac (Junction dev / Linear adv...) -> khong gui gi
 
@@ -2294,6 +2450,9 @@ static void page_settings_create(lv_obj_t *p) {
 
 static void page_settings_update(void) {
   char b[40], a[16];
+  // 9 dong preheat do PANEL tu quan ly (khong phai Marlin) -> bom lai truoc khi dung danh sach,
+  // de sau M501/M502 (Marlin xoa bang) hay luc moi ket noi chung van con.
+  preheat_inject();
   // Neu so thong so nhan duoc doi (HELLO moi / bam lai) -> dung lai danh sach dong co gia tri
   static uint8_t last_n = 255;
   if (last_n != panel.n_settings) {
@@ -2804,11 +2963,11 @@ static void wifi_fill_roller(const int n) {
 // QUET MANG: uu tien duong KHONG CHAN (net_wifi_scan_begin/poll). Duong cu (dong bo) chi con la
 // duong lui khi firmware khong co API async.
 //
-// ⚠️⚠️ CANH BAO (2026-10-14): quet dong bo CHAN vong lap 2-8 s (DO THAT: 8,2 s voi 30 mang) ->
+// Ã¢Å¡Â Ã¯Â¸ÂÃ¢Å¡Â Ã¯Â¸Â CANH BAO (2026-10-14): quet dong bo CHAN vong lap 2-8 s (DO THAT: 8,2 s voi 30 mang) ->
 // trong luc do panel KHONG tra loi sector the SD cho Marlin (Marlin bao "SD read error" va DUNG BAN
 // IN) va khong phuc vu web server. Vi vay: (1) TU CHOI quet khi Marlin dang in; (2) UI dung duong
 // ASYNC de vong lap van chay.
-// Ngoai ra: roi trang WIFI KHONG dung tới WiFi (xem wifi_page_leave) - chi QUET/NGAT/XOA moi doi WiFi.
+// Ngoai ra: roi trang WIFI KHONG dung tÃ¡Â»â€ºi WiFi (xem wifi_page_leave) - chi QUET/NGAT/XOA moi doi WiFi.
 extern "C" bool net_esp3d_printer_busy(void) __attribute__((weak));
 extern "C" int  net_wifi_scan_begin(void) __attribute__((weak));
 extern "C" int  net_wifi_scan_poll(void) __attribute__((weak));
@@ -2818,12 +2977,6 @@ static bool net_wifi_scanning_weak(void) { return net_wifi_scanning && net_wifi_
 // Tam dung mDNS trong luc quet (xem net_upload_http.h) - giam nguy co panic khi interface "down"
 extern "C" bool net_upload_mdns_pause(bool pause) __attribute__((weak));
 
-// Log chan doan cua trang WIFI (chi tren board that)
-#if defined(PANEL_BOARD_CYD)
-  #define WIFILOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
-#else
-  #define WIFILOG(...)   do { } while (0)
-#endif
 
 static void cb_wifi_scan(lv_event_t *e) {
   (void)e;
@@ -2890,7 +3043,7 @@ static void cb_wifi_forget(lv_event_t *e) {
 
 // Dong moi thu CUA TRANG WIFI khi roi trang: ban phim nhap mat khau + lop phu "DANG QUET...".
 // (Ca 2 vat deu la con cua lv_scr_act() chu KHONG phai con cua trang, nen neu khong don thi chung
-//  van nam tren man hinh o trang khac.) KHONG dung tới WiFi: roi trang khong ngat/ket noi lai gi ca.
+//  van nam tren man hinh o trang khac.) KHONG dung tÃ¡Â»â€ºi WiFi: roi trang khong ngat/ket noi lai gi ca.
 static void wifi_page_leave(void) {
 #if LV_USE_KEYBOARD && LV_USE_TEXTAREA
   if (s_kb_bd) {
@@ -3469,7 +3622,7 @@ static void show_page(uint8_t p) {
   if (p != PG_SETTINGS) ov_hide();
 
   // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
-  // con cua trang) va KHONG dung tới WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
+  // con cua trang) va KHONG dung tÃ¡Â»â€ºi WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
   if (p != PG_WIFI) wifi_page_leave();
   else if (s_page_act != PG_WIFI) WIFILOG("[WIFI] vao trang WIFI (chi doc trang thai, khong quet)\n");
 
@@ -4021,6 +4174,10 @@ void ui_lvgl_begin(void) {
   s_indev = indev;                        // + de KHOA/MO input khi quet WiFi (xem cb_wifi_scan)
 
   build_chrome();
+  // Kho preset preheat cua PANEL (NVS) - doc 1 lan luc boot roi bom vao bang thong so de trang
+  // SETTINGS hien/sua duoc. Phai sau panel_link_begin() (xem main.cpp) vi panel.settings[] moi co.
+  preheat_load();
+  preheat_inject();
   show_page(PG_STATUS);
 
   s_tick_ms = s_upd_ms = s_slow_ms = ui_port_millis();
@@ -4123,6 +4280,37 @@ void ui_lvgl_task(void) {
   }
 
   boxes_update();
+}
+
+
+// ===========================================================================
+//  API PRESET PREHEAT (khai bao trong ui_lvgl.h) - cho console COM7 va test
+//  Kho du lieu nam trong khoi "PREHEAT presets" o phan SETTINGS (NVS namespace "ph").
+// ===========================================================================
+const char *ui_preheat_label(uint8_t i) { return (i < PANEL_PRE_COUNT) ? PRE_LABEL[i] : ""; }
+
+bool ui_preheat_get(uint8_t i, uint16_t *nozzle, uint16_t *bed, uint8_t *fan) {
+  if (i >= PANEL_PRE_COUNT) return false;
+  if (nozzle) *nozzle = s_pre_h[i];
+  if (bed)    *bed    = s_pre_b[i];
+  if (fan)    *fan    = s_pre_f[i];
+  return true;
+}
+
+bool ui_preheat_set(uint8_t i, uint16_t nozzle, uint16_t bed, uint8_t fan) {
+  if (i >= PANEL_PRE_COUNT) return false;
+  if (nozzle > PRE_H_MAX) nozzle = PRE_H_MAX;
+  if (bed    > PRE_B_MAX) bed    = PRE_B_MAX;
+  if (fan    > PRE_F_MAX) fan    = PRE_F_MAX;
+  s_pre_h[i] = nozzle;
+  s_pre_b[i] = bed;
+  s_pre_f[i] = fan;
+  preheat_save();          // NVS (CYD) - board khac chi giu RAM
+  preheat_inject();        // cap nhat bang thong so de trang SETTINGS thay ngay
+  tp_pre_sync();           // + nhan nut PLA/PETG/ABS o man TEMP
+  WIFILOG("[PRE] dat %s: nozzle=%u bed=%u fan=%u\n", PRE_LABEL[i],
+          (unsigned)s_pre_h[i], (unsigned)s_pre_b[i], (unsigned)s_pre_f[i]);
+  return true;
 }
 
 #endif  // PANEL_USE_LVGL

@@ -16,7 +16,7 @@
 
 #define PANEL_MAX_FILES      32      // so file nho toi da trong 1 lan liet ke
 #define PANEL_FILE_NAME_LEN  32
-#define PANEL_SETTINGS_MAX   48
+#define PANEL_SETTINGS_MAX   56      // 41 thong so Marlin gui + 9 preheat (M145) + du phong
 #define PANEL_MESH_MAX       16      // UBL 7x7 (hoac 10x10) -> 16 la du
 #define PANEL_TEXT_LEN       48
 
@@ -118,3 +118,8 @@ static inline float panel_val(const int32_t v)  { return (float)v / PANEL_VAL_SC
 
 // Lay 1 thong so (PANEL_SET_*); tra ve 'def' neu Marlin chua gui
 int32_t panel_setting(const uint16_t id, const int32_t def);
+
+// Ghi 1 thong so vao bang `panel.settings[]` (them neu chua co) - dung cho thong so do PANEL tu
+// quan ly (vd 9 preset preheat id 0x40xx): Marlin khong gui chung nen panel phai tu bom vao bang
+// de trang SETTINGS hien/sua duoc.
+void panel_setting_set(uint16_t id, int32_t value);

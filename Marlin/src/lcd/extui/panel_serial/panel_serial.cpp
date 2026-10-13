@@ -483,6 +483,11 @@ namespace {
     #if HAS_FILAMENT_SENSOR
       push_setting(PANEL_SET_RUNOUT_EN, runout.enabled ? 1 : 0);
     #endif
+    // GHI CHU (2026-10-14): KHONG gui preheat presets tu day. Ban nay khong co menu MarlinUI 12864
+    // nen `HAS_PREHEAT = 0` => `M145` khong duoc bien dich va bang preheat khong nam trong
+    // `settings_t`. Bat lai thi `settings_t` doi kich thuoc -> version/CRC EEPROM doi -> Marlin nap
+    // MAC DINH (mat M851/PID/M92/M201/M203/M205/M906 + MESH UBL). Vi vay 3 preset PLA/PETG/ABS do
+    // CHINH PANEL luu trong NVS (namespace "ph") va sua o trang SETTINGS - xem ui_lvgl.cpp.
   }
 
   // Gui DUNG 1 dong setting moi lan goi (xem tx_pump). Het danh sach thi tat co liet ke.

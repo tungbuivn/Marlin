@@ -166,6 +166,19 @@ int32_t panel_setting(const uint16_t id, const int32_t def) {
   return def;
 }
 
+// Ghi 1 thong so vao bang `panel.settings[]` (them neu chua co). Dung cho cac thong so do CHINH PANEL
+// quan ly - Marlin khong bao gio gui chung, vd 9 preset preheat (id 0x40xx, xem ui_lvgl.cpp).
+// Marlin gui frame PANEL_F_SETTING thi di qua duong rieng o handle_frame (logic y het).
+void panel_setting_set(const uint16_t id, const int32_t value) {
+  for (uint8_t i = 0; i < panel.n_settings; i++)
+    if (panel.settings[i].id == id) { panel.settings[i].value = value; return; }
+  if (panel.n_settings < PANEL_SETTINGS_MAX) {
+    panel.settings[panel.n_settings].id = id;
+    panel.settings[panel.n_settings].value = value;
+    panel.n_settings++;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Nhan frame
 // ---------------------------------------------------------------------------

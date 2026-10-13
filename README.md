@@ -1145,6 +1145,7 @@ git diff upstream/lts-2.1.2 HEAD --stat
 | Sửa bug microstep TMC2209 | `module/settings.cpp` | sau khi nạp EEPROM ép lại `mstep_reg_select(true)` + `microsteps()` (không có thì trục chạy **gấp đôi**) |
 | Hạ tầng panel | `MarlinCore.cpp`, `Conditionals_*`, `SanityCheck.h` | hook ExtUI, điều kiện biên dịch cho panel/TRAM/SD-UART, guard nhỏ |
 | Lệnh/tiện ích sửa thêm | `gcode/queue.cpp`, `M303`, `M106_M107`, `M605`, `M524`, `M1001`, `M75-M78`, `M115`, `menu_main/motion/advanced/bed_leveling`, `numtostr.*` | phục vụ panel + sửa lỗi nhỏ (xem 11.4) |
+| **Preset preheat cấu hình được** (phía **panel**, không phải Marlin) | `lcd_panel/src/ui_lvgl.cpp` (kho NVS `"ph"`), `panel_link.cpp` (`panel_setting_set`), `main.cpp` (console `PRE`) | 3 nút `PLA`/`PETG`/`ABS` ở trang TEMP nay **sửa được ngay trên panel**: 9 dòng mới trong **SETTINGS** + lưu **NVS** (không đụng EEPROM Marlin). Lý do không đẩy sang Marlin: build này `HAS_PREHEAT = 0` ⇒ bật lên là **đổi kích thước `settings_t` ⇒ reset EEPROM** (xem cạm bẫy 38). Chi tiết: `lcd_panel/README.md` **§9.22** |
 
 **B3. Hành vi mặc định đã đổi (khác gốc)**
 

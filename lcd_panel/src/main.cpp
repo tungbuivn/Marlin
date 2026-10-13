@@ -186,6 +186,32 @@
                             (int)net_wifi_rssi(), net_wifi_saved_ssid(),
                             (unsigned)ESP.getFreeHeap());
             }
+          } else if (strncmp(s_fwd, "PRE", 3) == 0) {
+            // PRESET PREHEAT cua PANEL (kho rieng trong NVS namespace "ph" - xem ui_lvgl.cpp).
+            // LUU Y: lenh nay KHONG gui sang Marlin, chi doi gia tri preset cua panel.
+            //   PRE?                               -> in ca 3 preset
+            //   PRE <i 0..2> <nozzle> <bed> [fan]  -> dat + luu NVS (0=PLA, 1=PETG, 2=ABS)
+            const char *a2 = s_fwd + 3;
+            while (*a2 == ' ') a2++;
+            if (*a2 == '?') {
+              for (uint8_t i = 0; i < 3; i++) {
+                uint16_t pn = 0, pb = 0; uint8_t pf = 0;
+                if (ui_preheat_get(i, &pn, &pb, &pf))
+                  Serial.printf("[PRE] %u) %-4s nozzle=%u C  bed=%u C  fan=%u\n",
+                                (unsigned)i, ui_preheat_label(i), (unsigned)pn, (unsigned)pb, (unsigned)pf);
+              }
+            } else {
+              int iv = 0, nv = 0, bv = 0, fv = 0;
+              const int got = sscanf(a2, "%d %d %d %d", &iv, &nv, &bv, &fv);
+              if (got >= 3 && iv >= 0 && iv < 3) {
+                const bool ok = ui_preheat_set((uint8_t)iv, (uint16_t)(nv < 0 ? 0 : nv),
+                                               (uint16_t)(bv < 0 ? 0 : bv), (uint8_t)(fv < 0 ? 0 : fv));
+                Serial.printf("[PRE] dat preset %d (%s): nozzle=%d bed=%d fan=%d -> %s\n",
+                              iv, ui_preheat_label((uint8_t)iv), nv, bv, fv, ok ? "OK" : "LOI");
+              } else {
+                Serial.println("[PRE] dung: PRE?   hoac   PRE <i 0..2> <nozzle> <bed> [fan]");
+              }
+            }
           } else {
             snprintf(s_forward_pending, sizeof(s_forward_pending), "%s", s_fwd);
           }

@@ -33,6 +33,16 @@
 void ui_lvgl_begin(void);
 void ui_lvgl_task(void);
 
+// ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
+// 3 preset do CHINH PANEL luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
+// Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.
+//   i = 0..2 (PLA/PETG/ABS). Gia tri: nozzle/bed = do C, fan = 0..255 (0 = khong dong tới quat).
+//   ui_preheat_set() chan gia tri vao khoang hop le, ghi NVS va cap nhat bang thong so.
+// Tra false neu i ngoai khoang.
+bool ui_preheat_get(uint8_t i, uint16_t *nozzle, uint16_t *bed, uint8_t *fan);
+bool ui_preheat_set(uint8_t i, uint16_t nozzle, uint16_t bed, uint8_t fan);
+const char *ui_preheat_label(uint8_t i);      // "PLA" / "PETG" / "ABS" ("" neu i sai)
+
 // ---- Port phan cung (ui_lvgl_port.cpp) ----
 void     ui_port_display_init(void);        // init LCD (STM32: tft_ili9341, CYD: TFT_eSPI)
 void     ui_port_input_init(void);          // init encoder (STM32) hoac chan touch (CYD)
