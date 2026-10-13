@@ -2740,18 +2740,6 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
   binh thuong; gui thang COM4 la chac chan nhat:
   `mở COM4 (DTR=true) -> "M997" -> cho ~2 s -> dfu-util --list` phai thay `[0483:df11]`.
 
-## Cam bay 49 - Chan den nen CYD (`IO21`) va chan chon MUX SPI: KHONG the dung chung (2026-10-14)
-- Tren CYD: **`IO21` = den nen (`TFT_BL`)**, nam o **chan thu 4 cua connector `P3`**; `IO27` (chan 3
-  cua `CN1`) moi la chan trong. Truoc day `TFT_eSPI` tu keo `TFT_BL` len HIGH trong `init()` nen chan
-  do bi giu o mot muc co dinh -> **khong dung lam chan chon MUX duoc** (chan chon phai doi muc luc chay).
-- Da tach ra: `User_Setup.h` dat **`TFT_BL -1`** (TFT_eSPI.cpp:787 co `if (TFT_BL >= 0)` nen an toan)
-  va firmware tu bat den nen qua `PANEL_BL_PIN` (`ui_lvgl_port.cpp::ui_port_display_init`).
-- Neu buoc phai dung chinh chan den nen lam chan chon MUX: **phai dau den nen thang 3V3** roi build
-  `-DPANEL_SD_MUX_PIN=21 -DPANEL_BL_PIN=-1`. Neu quen, cu moi lan panel tra bus SPI cho Marlin thi
-  man hinh **tat/nhay** (vi muc "nhuong bus" = LOW) - firmware da chan bang `#error` luc build.
-- Board CYD co 2 ban: den nen `IO21` (ILI9341/CYD thuong) hoac `IO27` (nhieu ban ST7789) -> doi
-  `-DPANEL_BL_PIN`; nham chan thi trieu chung la **man toi nhung van cham duoc** (cam ung van chay).
-
 ## Cam bay 48 - The SD dung chung: `NO_SD_DETECT` va thu tu "tra bus" (2026-10-14)
 - Khi the TF nam o **khe cua man hinh** (CYD) ma SPI cua Marlin di qua MUX 74HC4053, cong tac nhan
   the (`SD_DETECT_PIN = PC4`) van o khe TRONG cua MKS => Marlin bao "khong co the" va **khong
@@ -2765,4 +2753,16 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
   / chan GPIO con treo thi the van thuoc Marlin.
 - **KHONG BAO GIO** gianh bus khi Marlin dang in (mat the giua ban in = hong ban in) va khi **chua
   lien lac duoc Marlin** (`!panel.linked` - co the dang in ma panel khong biet).
+
+## Cam bay 49 - Chan den nen CYD (`IO21`) va chan chon MUX SPI: KHONG the dung chung (2026-10-14)
+- Tren CYD: **`IO21` = den nen (`TFT_BL`)**, nam o **chan thu 4 cua connector `P3`**; `IO27` (chan 3
+  cua `CN1`) moi la chan trong. Truoc day `TFT_eSPI` tu keo `TFT_BL` len HIGH trong `init()` nen chan
+  do bi giu o mot muc co dinh -> **khong dung lam chan chon MUX duoc** (chan chon phai doi muc luc chay).
+- Da tach ra: `User_Setup.h` dat **`TFT_BL -1`** (TFT_eSPI.cpp:787 co `if (TFT_BL >= 0)` nen an toan)
+  va firmware tu bat den nen qua `PANEL_BL_PIN` (`ui_lvgl_port.cpp::ui_port_display_init`).
+- Neu buoc phai dung chinh chan den nen lam chan chon MUX: **phai dau den nen thang 3V3** roi build
+  `-DPANEL_SD_MUX_PIN=21 -DPANEL_BL_PIN=-1`. Neu quen, cu moi lan panel tra bus SPI cho Marlin thi
+  man hinh **tat/nhay** (vi muc "nhuong bus" = LOW) - firmware da chan bang `#error` luc build.
+- Board CYD co 2 ban: den nen `IO21` (ILI9341/CYD thuong) hoac `IO27` (nhieu ban ST7789) -> doi
+  `-DPANEL_BL_PIN`; nham chan thi trieu chung la **man toi nhung van cham duoc** (cam ung van chay).
 
