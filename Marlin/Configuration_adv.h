@@ -1782,6 +1782,15 @@
 
   // Enable if SD detect is rendered useless (e.g., by using an SD extender)
   //#define NO_SD_DETECT
+  //
+  // >>> TBT-PANEL (2026-10-14): THE SD DUNG CHUNG qua MUX SPI 74HC4053 <<<
+  // The TF thuc te nam o khe cua MAN HINH (CYD); SPI cua Marlin (PC9/PC10/PC11/PC12) di qua MUX
+  // toi khe do, con CONG TAC NHAN THE (SD_DETECT_PIN PC4) van o khe TRONG cua MKS Monster8
+  // => Marlin se bao "khong co the" va KHONG mount. Vi vay phai TAT cong tac nhan the.
+  // Khi tat: IS_SD_INSERTED() luon = true => Marlin mount 1 lan luc khoi dong roi giu nguyen
+  // (khong tu mount lai), dung y do muon (panel gianh bus khi nhan file, xong tra lai + M22/M21).
+  // CHI BAT khi da han 4053 xong; neu con dung the o khe Marlin nhu cu thi KHONG can.
+  #define NO_SD_DETECT
 
   /**
    * Multiple volume support - EXPERIMENTAL.

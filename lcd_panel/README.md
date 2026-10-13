@@ -1833,11 +1833,37 @@ Marlin không mount), tức thêm vào `Configuration_adv.h`:
 1. **Rút/ngắt module ESP3D khỏi bus SPI thẻ SD** (hoặc bỏ hẳn module): firmware `ESP3D-direct-sd`
    chiếm trực tiếp bus này, nếu còn nối nó sẽ tranh bus với cả Marlin và panel.
 2. Hàn 4053 + **điện trở 10 kΩ kéo chân chọn xuống GND** (mặc định = Marlin).
-3. Nếu chọn **cách B**: thêm `#define NO_SD_DETECT` vào `Configuration_adv.h` rồi nạp lại Marlin.
+3. **Cách B (đã chọn — thẻ ở khe CYD): `NO_SD_DETECT` ĐÃ BẬT** trong
+   `Marlin/Configuration_adv.h` (mục "Enable if SD detect is rendered useless") và **đã nạp Marlin
+   ngày 2026-10-14**. Kiểm chứng trên máy: `M20` liệt kê được file trên thẻ
+   (`V300_B~1.GCO 1693754`, `V300_P~1.GCO 63472`) ⇒ mount thẻ vẫn tốt dù công tắc nhận thẻ bị bỏ.
+   *Lưu ý:* bật `NO_SD_DETECT` khi thẻ **vẫn còn ở khe Marlin** thì vô hại (Marlin mount thẳng).
 4. Cân nhắc hạ tốc độ SPI thẻ của Marlin cho đường dây dài: `Configuration_adv.h` →
-   `#define SD_SPI_SPEED SPI_HALF_SPEED` (dòng ~1568).
+   `#define SD_SPI_SPEED SPI_HALF_SPEED` (dòng ~1568). Panel: hạ `PANEL_SD_HZ` (hiện 20 MHz) xuống
+   10 MHz nếu thấy lỗi mount sau khi đi dây.
 5. Nạp lại panel, mở `http://TBTPANEL.local/` gửi 1 file → `/status` phải `done`, rồi mở trang FILES
    trên panel (hoặc bấm REFRESH) để thấy file mới.
+
+### 11.6 Nạp Marlin từ máy này (đường đi chắc chắn) — 2026-10-14
+
+```powershell
+cd D:\Marlin
+pio run -e mks_monster8                                   # ~30 s
+# 1) vao DFU: mo COM4 (USB CDC cua STM32), DTR = TRUE, gui "M997", cho ~2 s
+$p = New-Object System.IO.Ports.SerialPort COM4,250000,None,8,one
+$p.DtrEnable = $true; $p.RtsEnable = $false; $p.Open(); $p.WriteLine("M997"); $p.Close()
+Start-Sleep 3
+# 2) kiem tra phai thay [0483:df11]
+& "$env:USERPROFILE\.platformio\packages\tool-dfuutil\bin\dfu-util.exe" --list
+# 3) nap (~35 s cho 197 KB)
+& "$env:USERPROFILE\.platformio\packages\tool-dfuutil\bin\dfu-util.exe" -a 0 -s "0x0800C000:leave" `
+    -t 2048 -D ".pio\build\mks_monster8\mks_monster8.bin"
+```
+
+⚠️ **Đừng đọc log panel bằng COM7 mà không tắt RTS**: chân DTR/RTS của CH340 nối vào EN/IO0 của
+ESP32, để mặc định có thể **giữ panel ở trạng thái RESET** (im lặng hoàn toàn, không WiFi) — trông y
+như panel chết. Luôn đặt `$p.DtrEnable=$false; $p.RtsEnable=$false` ngay sau `Open()` (xem README
+gốc, "Cẩm bẫy 47"). Muốn reset panel: kéo `RtsEnable` true→false một nhịp.
 
 
 Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).

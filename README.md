@@ -2724,3 +2724,33 @@ Da doi sang bang mau Material 3 dark (giu sac indigo cua may): nen giu `0x1E156E
 chu `0xE6E1E5` (11.7:1), chu phu `0xCAC4D0` (8.9:1), accent cyan `0x00E5FF` (9.8:1), amber `0xFFD54F`
 (10.7:1), green `0x81C784` (7.5:1), do `0xFF8A80` (6.7:1), chu mo `0x9E9AA7` (5.5:1), nen chon
 `0x4F378B` (7.2:1 voi chu trang), ruot tien do `0x00E5FF` tren nen `0x2A2080` (8.4:1).
+
+## Cam bay 47 - Hai cong USB cua may nay de nham: COM7 (panel) va COM4 (Marlin) doi xu nguoc nhau
+Do that 2026-10-14 (mat ~15 phut tuong panel chet):
+- **COM7 = CH340 cua CYD** (`VID_1A86&PID_7523`). Chan DTR/RTS cua no **noi vao EN/IO0 cua ESP32**
+  (mach auto-reset). Mo cong bang `System.IO.Ports.SerialPort` roi de mac dinh, driver co the keo
+  **RTS = EN thap => ESP32 BI GIU O TRANG THAI RESET**: khong log, khong WiFi, khong tra HTTP -
+  trong y nhu "panel chet". **Cach doc dung**:
+  `$p.DtrEnable=$false; $p.RtsEnable=$false` NGAY sau `Open()`; muon reset that thi keo RTS
+  true->false mot nhip (`$p.RtsEnable=$true; sleep 150ms; $p.RtsEnable=$false`).
+- **COM4 = USB CDC cua STM32/Marlin** (`VID_0483&PID_5740`). Phai **`$p.DtrEnable=$true`** thi
+  Marlin moi tra loi (`M115` im lang neu DTR thap).
+- **Gui `M997` de nap Marlin: dung COM4**, khong dung COM7. Duong vong qua panel (console COM7 ->
+  frame `PANEL_F_GCODE` -> Marlin) van co trong code nhung de phu thuoc vao viec panel dang chay
+  binh thuong; gui thang COM4 la chac chan nhat:
+  `mở COM4 (DTR=true) -> "M997" -> cho ~2 s -> dfu-util --list` phai thay `[0483:df11]`.
+
+## Cam bay 48 - The SD dung chung: `NO_SD_DETECT` va thu tu "tra bus" (2026-10-14)
+- Khi the TF nam o **khe cua man hinh** (CYD) ma SPI cua Marlin di qua MUX 74HC4053, cong tac nhan
+  the (`SD_DETECT_PIN = PC4`) van o khe TRONG cua MKS => Marlin bao "khong co the" va **khong
+  mount**. Phai `#define NO_SD_DETECT` trong `Configuration_adv.h`. Khi do `IS_SD_INSERTED()` luon
+  = true => Marlin mount 1 lan luc khoi dong roi **khong tu mount lai** (dung y muon: panel gianh
+  bus khi nhan file, xong tra lai + `M22`/`M21`).
+- Bat buoc giu dung thu tu nay o phia panel: `SD.end()` (flush FATFS) -> **doi MUX ve Marlin** ->
+  `M22`+`M21` -> xin lai danh sach file. Dao thu tu se lam Marlin mount the trong luc chan MUX con
+  tro ve phia ESP32.
+- Chan chon MUX **phai co dien tro 10 kΩ keo xuong GND** (mac dinh = Marlin): panel reset / mat dien
+  / chan GPIO con treo thi the van thuoc Marlin.
+- **KHONG BAO GIO** gianh bus khi Marlin dang in (mat the giua ban in = hong ban in) va khi **chua
+  lien lac duoc Marlin** (`!panel.linked` - co the dang in ma panel khong biet).
+
