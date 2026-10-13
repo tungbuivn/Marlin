@@ -1801,6 +1801,23 @@ Heap khi rảnh **194 KB** (trước đây 166 KB vì không còn giữ mount + 
 Ưu điểm: **Marlin không phải sửa gì** — công tắc nhận thẻ (`SD_DETECT_PIN PC4`) vẫn hoạt động, cờ
 `PANEL_SF_MEDIA` trong frame PUSH vẫn đúng, `isMediaInserted()` vẫn thật.
 
+#### ⚠️ Chân chọn MUX và chân ĐÈN NỀN (`IO21`) — đọc trước khi hàn
+
+Trên CYD, **`IO21` (chân thứ 4 của `P3`) = đèn nền (`TFT_BL`)**; `IO27` (chân 3 của `CN1`) **trống**.
+Hai chân này **loại trừ nhau**:
+
+* Mức chọn MUX phải là **LOW khi panel nhường bus cho Marlin** (mặc định / 10 kΩ kéo xuống GND).
+  Nếu chân đó vẫn nối vào đèn nền thì **mỗi lần trả bus, màn hình tắt/nháy**, và lúc rảnh thì tối luôn.
+* Vì vậy: **hoặc** dùng `IO27` cho MUX (giữ nguyên đèn nền — khuyến nghị), **hoặc** dùng `IO21` cho
+  MUX thì **bắt buộc đấu đèn nền thẳng vào 3V3** (màn luôn sáng hết cỡ, không tắt được nữa).
+* Firmware đã **chặn lúc biên dịch**: nếu `PANEL_SD_MUX_PIN == PANEL_BL_PIN` thì build **báo lỗi**
+  kèm hướng dẫn. Muốn dùng `IO21` cho MUX:
+  `-DPANEL_SD_MUX_PIN=21 -DPANEL_BL_PIN=-1` (thêm vào `build_flags` của env `panel_esp32_cyd`)
+  **và** đấu đèn nền vào 3V3.
+* Từ 2026-10-14 đèn nền do **firmware** điều khiển (`PANEL_BL_PIN`, mặc định 21): `User_Setup.h` đã
+  đặt `TFT_BL -1` để TFT_eSPI không giữ chân đó ở mức HIGH vĩnh viễn. Board ST7789 nào dùng `IO27`
+  làm đèn nền thì build với `-DPANEL_BL_PIN=27`.
+
 **Cách B (theo đúng câu chữ của người dùng): thẻ nằm ở khe của CYD**
 
 Giống bảng trên nhưng đảo đầu dây: SCK/MOSI/CS của Marlin (`PC10/PC12/PC9`) đi vào các cực, SCK/MOSI/CS
@@ -1817,6 +1834,8 @@ Marlin không mount), tức thêm vào `Configuration_adv.h`:
 | Việc | Ở đâu |
 |---|---|
 | Chân chọn MUX (`PANEL_SD_MUX_PIN 27`, mức `HIGH`=panel, `LOW`=Marlin, `PANEL_SD_MUX_SETTLE_MS 3`) | `panel_config.h` (khối `PANEL_SD_SHARED`) |
+| Chặn lúc biên dịch nếu chân chọn MUX trùng chân đèn nền (`PANEL_BL_PIN`) | `panel_config.h` (`#error` ngay dưới khối trên) |
+| Đèn nền do firmware điều khiển (`PANEL_BL_PIN`, `PANEL_BL_ON_LEVEL`, `-1` = đấu thẳng 3V3); `TFT_BL -1` | `panel_config.h`, `tools/tft_setup/User_Setup.h`, `ui_lvgl_port.cpp` (`ui_port_display_init`) |
 | Giành bus **chỉ khi** mount/ghi thẻ; trả bus + `M22`+`M21` + xin lại danh sách file sau khi ghi xong | `net_esp3d.{h,cpp}` (`sd_mux_panel`, `sd_release_to_marlin`) |
 | KHÔNG mount thẻ lúc boot, KHÔNG kiểm tra thẻ 1 Hz khi rảnh (bus thuộc Marlin) | `net_esp3d_begin()`, `net_esp3d_task()` |
 | Đổi tên `/btup/<tên>.tmp` → `/<tên>` (ghi đè: xoá bản cũ trước vì FATFS rename không ghi đè) | `net_esp3d_push()` |

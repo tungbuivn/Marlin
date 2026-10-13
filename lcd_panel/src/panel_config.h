@@ -340,9 +340,10 @@
 //
 //   PANEL_SD_SHARED 0 = quay lai kieu cu (panel ghi /btup/<ten>.tmp roi POST sang ESP3D).
 //   PANEL_SD_MUX_PIN: chan GPIO dieu khien chan chon cua 4053 (A/B/C noi chung).
-//     CYD: GPIO27 (chan con trong o header CN1). Cac chan da dung: 21 = den nen, 22/35 = UART
-//     Marlin, 18/19/23/5 = SPI the TF, 12/13/14/15/2 = LCD, 25/32/33/36/39 = cam ung,
-//     4/16/17 = LED RGB, 34 = cam bien anh sang, 26 = loa.
+//     CYD: GPIO27 = chan TRONG o header CN1 (GND/IO22/IO27/3.3V) -> KHUYEN NGHI.
+//     Cach khac: dung chinh chan DEN NEN (IO21, chan thu 4 cua P3 - xem canh bao ben duoi).
+//     Cac chan da dung: 22/35 = UART Marlin, 18/19/23/5 = SPI the TF, 12/13/14/15/2 = LCD,
+//     25/32/33/36/39 = cam ung, 4/16/17 = LED RGB, 34 = cam bien anh sang, 26 = loa.
 // ---------------------------------------------------------------------------
 #if defined(PANEL_BOARD_CYD) && !defined(PANEL_SD_SHARED)
   #define PANEL_SD_SHARED 1
@@ -363,6 +364,25 @@
   #ifndef PANEL_SD_MUX_SETTLE_MS
     #define PANEL_SD_MUX_SETTLE_MS 3u
   #endif
+#endif
+
+// ---------------------------------------------------------------------------
+// DEN NEN man hinh CYD: FIRMWARE dieu khien truc tiep
+//   tools/tft_setup/User_Setup.h da dat `TFT_BL -1` (TFT_eSPI khong keo chan nay nua) de:
+//     (1) board CYD co 2 ban: den nen o GPIO21 (CYD/ILI9341) hoac GPIO27 (nhieu ban ST7789);
+//     (2) chan den nen la ung vien cho CHAN CHON MUX SPI the SD (xem khoi ngay tren).
+//   PANEL_BL_PIN -1 = den nen DAU THANG 3V3 (luon sang) => chan do coi nhu TRONG, dung lam chan
+//   chon MUX duoc (khi do phai them -DPANEL_BL_PIN=-1 vao build_flags).
+// ---------------------------------------------------------------------------
+#if defined(PANEL_BOARD_CYD) && !defined(PANEL_BL_PIN)
+  #define PANEL_BL_PIN 21
+#endif
+#ifndef PANEL_BL_ON_LEVEL
+  #define PANEL_BL_ON_LEVEL HIGH
+#endif
+#if defined(PANEL_SD_SHARED) && PANEL_SD_SHARED && defined(PANEL_BL_PIN) && (PANEL_BL_PIN >= 0) && \
+    defined(PANEL_SD_MUX_PIN) && (PANEL_SD_MUX_PIN == PANEL_BL_PIN)
+  #error "PANEL_SD_MUX_PIN trung PANEL_BL_PIN: chan chon MUX doi muc luc chay => man hinh se TAT/NHAY moi lan panel tra bus cho Marlin. Hay dau den nen thang 3V3 roi them -DPANEL_BL_PIN=-1 vao build_flags (xem lcd_panel/README.md muc 11.3)."
 #endif
 
 #if PANEL_WIFI_UPLOAD

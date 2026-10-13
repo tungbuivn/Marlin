@@ -50,7 +50,13 @@
 #define TFT_CS   15
 #define TFT_DC    2
 #define TFT_RST  -1           // RST noi vao EN cua ESP32 (-1 = khong dung chan)
-#define TFT_BL   21           // den nen: GPIO21 (CYD/ILI9341) hoac 27 (nhieu ban ST7789)
+// DEN NEN (BL): dat -1 = TFT_eSPI KHONG dung toi chan den nen nua.
+//   Tu 2026-10-14 FIRMWARE tu dieu khien den nen qua `PANEL_BL_PIN` (panel_config.h), vi:
+//     (1) TFT_eSPI chi biet MOT chan co dinh, trong khi CYD co 2 ban (BL = GPIO21 hoac GPIO27);
+//     (2) chan den nen la ung vien cho CHAN CHON MUX SPI the SD (74HC4053) - neu TFT_eSPI giu
+//         chan do o muc HIGH vinh vien thi khong the doi muc luc chay duoc (xem README muc 11.3).
+//   TFT_eSPI.cpp:787 co san `if (TFT_BL >= 0)` nen -1 la an toan.
+#define TFT_BL  -1
 #define TFT_BACKLIGHT_ON HIGH
 
 // CYD: LCD o HSPI (VSPI de danh cho khe the SD: CS 5 / MOSI 23 / MISO 19 / SCLK 18)

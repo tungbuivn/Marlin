@@ -493,12 +493,21 @@ void ui_port_display_init(void) {
   void ui_port_display_init(void) {
     s_lcd.init();
     s_lcd.setRotation(1);                              // 1 = LANDSCAPE 320x240
+    // DEN NEN: firmware tu bat (User_Setup.h dat TFT_BL -1 nen TFT_eSPI khong dung toi chan nay).
+    // Xem PANEL_BL_PIN trong panel_config.h: 21 = CYD/ILI9341, 27 = nhieu ban ST7789, -1 = den nen
+    // da dau thang 3V3 (khong can dieu khien). Tach ra khoi TFT_eSPI de chan den nen co the dung
+    // lam CHAN CHON MUX SPI the SD (luc do phai dat PANEL_BL_PIN -1 + dau den nen thang 3V3).
+    #if PANEL_BL_PIN >= 0
+      pinMode(PANEL_BL_PIN, OUTPUT);
+      digitalWrite(PANEL_BL_PIN, PANEL_BL_ON_LEVEL);
+    #endif
     s_lcd.fillScreen(TFT_BLACK);
     #if defined(PANEL_CYD_DEBUG)
       // Bat lai bang -DPANEL_CYD_DEBUG=1 trong env panel_esp32_cyd khi can chan doan:
-      // muon biet den nen di chan nao thi thu lan luot GPIO21 / GPIO27, va thu fillScreen(TFT_RED)
+      // muon biet den nen di chan nao thi doi PANEL_BL_PIN giua 21 / 27, va thu fillScreen(TFT_RED)
       // de tach loi "den nen" khoi loi "driver/SPI".
-      Serial.printf("[CYD] TFT_eSPI init xong: width=%d height=%d\n", s_lcd.width(), s_lcd.height());
+      Serial.printf("[CYD] TFT_eSPI init xong: width=%d height=%d | den nen: BL_PIN=%d, chan chon MUX=%d\n",
+                    s_lcd.width(), s_lcd.height(), (int)PANEL_BL_PIN, (int)PANEL_SD_MUX_PIN);
     #endif
   }
 
