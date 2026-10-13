@@ -483,13 +483,18 @@ wizard chưa chạy thì `R` gọi `tramming_run::begin()`, đang chạy thì `r
 TRAMMING trên panel **dùng được độc lập**, không cần mở wizard trên màn 12864 trước. Dòng 1 hiện
 `READY (bam HOME + PROBE)` khi wizard chưa chạy.
 
-**Hai chỉ báo link — đừng lẫn (đã sửa 2026-10-13):**
+**Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
 
-| Chỗ hiển thị | Lấy từ | Ở chế độ TRAM |
+| Chỗ hiển thị | Nội dung | Ghi chú |
 |---|---|---|
-| **Thanh trên cùng** (`LINK OK` / `NO LINK`) | `panel.linked \|\| tram.linked` | đúng (trước đây chỉ xét `panel.linked` của giao thức **PUSH** nên **luôn** `NO LINK` dù link tốt — gây hiểu nhầm) |
-| Dòng `Tramming wizard` trong MENU (`san sang` / `chua bat` / `mat link`) | `tram.linked` | đúng |
-| Góc phải màn TRAMMING | `tram.linked` | đúng |
+| **Thanh trên cùng** (mọi màn) | `LINK OK` / `NO LINK` | **NƠI DUY NHẤT** hiện chỉ báo link — hàm `link_ok()` = `panel.linked \|\| tram.linked` (xét **cả** giao thức PUSH và TRAM). Trước đây chỉ xét `panel.linked` nên ở chế độ TRAM **luôn** `NO LINK` dù link tốt |
+| Trang **STATUS (home)** | dòng trạng thái + viền khung XYZ | vẫn báo mất link (viền đỏ + `NO LINK`) — theo yêu cầu, giữ riêng cho trang home |
+| Màn **TRAMMING** | mode/phase/góc + dòng hướng dẫn `CW/CCW…`/`DAT` | **đã BỎ nhãn `LINK OK/NO LINK`** ở đây (trước đây hiện trùng với header) |
+| MENU dòng `Tramming wizard` | `san sang` / `chua bat` / `mat link` / `<MODE> <phase>` | trạng thái **wizard**, không phải chỉ báo link (dùng `link_ok()` để quyết định `mat link`) |
+| MENU dòng `Info` | `TRAM` / `PUSH` / `-` | giao thức đang dùng (trước đây ghi `LINK`/`NO LINK` → trùng) |
+| Màn `INFO` | `LINK: OK (TRAM) state …` | trang chẩn đoán nên vẫn ghi rõ giao thức + trạng thái |
+
+Mọi chỗ hiển thị link đều đi qua **một hàm duy nhất** `link_ok()` trong `ui_lvgl.cpp` — sửa logic link chỉ cần sửa hàm này.
 
 **Tên máy in:** ở chế độ PUSH tên lấy từ gói `HELLO` của Marlin; ở chế độ **TRAM không có HELLO** nên màn INFO hiện `FW: <PANEL_MACHINE_NAME> (TRAM link)` — đổi tên bằng `PANEL_MACHINE_NAME` trong `src/panel_config.h` hoặc `-DPANEL_MACHINE_NAME=\"...\"` trong `platformio.ini`.
 

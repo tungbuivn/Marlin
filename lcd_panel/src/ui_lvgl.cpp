@@ -196,6 +196,13 @@ static uint8_t    s_page_act = PG_STATUS;
 static bool       s_link_state = false;
 static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
 
+// "Co link voi Marlin" - CO HAI giao thuc LOAI TRU nhau (PUSH: panel.linked / TRAM: tram.linked)
+// nen phai xet CA HAI. Dung ham nay o MOI cho hien thi link (thanh tren + trang STATUS).
+// Chinh sach hien thi (2026-10-13, theo yeu cau): chi bao link chi nam o
+//   1) THANH TREN (moi man), va 2) dong trang thai + khung XYZ cua trang STATUS (home).
+// Cac man khac KHONG hien lai nua (truoc day man TRAMMING va MENU cung hien -> nhieu cho mau thuan).
+static bool link_ok(void) { return panel.linked || tram.linked; }
+
 // ===========================================================================
 //  Format so/chuoi (khong dung %f)
 // ===========================================================================
@@ -672,7 +679,7 @@ static void page_status_update(void) {
       lv_obj_set_style_text_color(st_axis_val[i], MR_AXIS, 0);
     }
   }
-  lv_obj_set_style_border_color(st_xyz_frame, panel.linked ? MR_AXIS : COL_ERR, 0);
+  lv_obj_set_style_border_color(st_xyz_frame, link_ok() ? MR_AXIS : COL_ERR, 0);
 
   // ---- FR / FL: xanh la khi 100%, vang khi khac (Marlin) ----
   const uint8_t rate[2] = { (uint8_t)(panel.pos.feed_pct / 100), (uint8_t)(panel.pos.flow_pct / 100) };
@@ -698,7 +705,7 @@ static void page_status_update(void) {
   if (lv_bar_get_value(st_bar) != (int32_t)pct) lv_bar_set_value(st_bar, (int32_t)pct, LV_ANIM_OFF);
 
   // ---- dong trang thai: mat lien ket > "STATE  ten file" ----
-  if (!panel.linked) {
+  if (!link_ok()) {
     set_text(st_msg, "NO LINK");
     lv_obj_set_style_text_color(st_msg, COL_ERR, 0);
   }
@@ -1349,7 +1356,8 @@ static void page_info_update(void) {
   snprintf(b, sizeof(b), "MARLIN fw: 0x%04X", (unsigned)panel.marlin_fw);
   set_text(in_marlin, b);
 
-  snprintf(b, sizeof(b), "LINK: %s  state %s", panel.linked ? "OK" : "NO", state_name(panel.state));
+  snprintf(b, sizeof(b), "LINK: %s%s  state %s", link_ok() ? "OK" : "NO",
+           tram.ever ? " (TRAM)" : (panel.linked ? " (PUSH)" : ""), state_name(panel.state));
   set_text(in_stat, b);
 
   snprintf(b, sizeof(b), "RX: %u frame / %u loi  0x%02X",
@@ -1373,7 +1381,7 @@ static void page_info_update(void) {
 //    dong 5 : 4 nut PROBE | MAX/MIN | BACK | DONE
 //    2 dong : chu thich
 // ===========================================================================
-static lv_obj_t *tr_head, *tr_link, *tr_corner[TRAM_PROTO_POINTS], *tr_hint;
+static lv_obj_t *tr_head, *tr_corner[TRAM_PROTO_POINTS], *tr_hint;
 
 // Ten 4 goc - PHAI theo dung thu tu TRAMMING_POINT_XY trong Marlin/Configuration_adv.h:
 //   0 = Back-Right (280,285)  1 = Back-Left (25,285)  2 = Front-Left (25,25)  3 = Front-Right (280,25)
@@ -1400,10 +1408,10 @@ static void tram_fmt_corner(char *b, size_t n, const uint8_t i) {
 }
 
 static void page_tram_create(lv_obj_t *p) {
+  // KHONG con nhan "LINK OK / NO LINK" o day nua: chi bao link nam o THANH TREN (xem link_ok()).
   lv_obj_t *rh = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 20, 0, GAP);
-  tr_head = mk_label_w(rh, "-", COL_TXT, 220);
+  tr_head = mk_label_w(rh, "-", COL_TXT, PAGE_INN_W);
   lv_obj_set_flex_grow(tr_head, 1);
-  tr_link = mk_label_w(rh, "NO LINK", COL_ERR, 84);
 
   for (uint8_t r = 0; r < 2; r++) {
     lv_obj_t *row = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 24, 0, GAP);
@@ -1441,10 +1449,7 @@ static void page_tram_update(void) {
              tram_phase_name(tram.st.phase), (unsigned)(tram.st.idx + 1));
   set_text(tr_head, b);
 
-  set_text(tr_link, tram.linked ? "LINK OK" : "NO LINK");
-  lv_obj_set_style_text_color(tr_link, tram.linked ? COL_OK : COL_ERR, 0);
-
-  // ---- 4 goc: gia tri mm so voi moc (Marlin da tinh) ----
+  // 4 goc: gia tri mm so voi moc (Marlin da tinh)
   for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++) {
     tram_fmt_corner(b, sizeof(b), i);
     set_text(tr_corner[i], b);
@@ -1607,14 +1612,16 @@ static void page_menu_update(void) {
   snprintf(b, sizeof(b), "%u/33", (unsigned)panel.n_settings);
   set_text(mn_val[6], b);
 
-  // Tramming wizard: NO LINK khi chua nhan duoc dong TRAM nao tu Marlin (chua bat
-  // #define PANEL_TRAM_LINK, hoac day UART chua noi)
-  if (!tram.linked) snprintf(b, sizeof(b), "%s", tram.ever ? "mat link" : "chua bat");
+  // Tramming wizard: hien trang thai WIZARD (khong phai chi bao link - chi bao link o THANH TREN).
+  // Chua co dong TRAM nao / mat link thi ghi ro de biet duong nao chua thong.
+  if (!link_ok()) snprintf(b, sizeof(b), "%s", tram.ever ? "mat link" : "chua bat");
   else if (!tram.st.active) snprintf(b, sizeof(b), "san sang");
   else snprintf(b, sizeof(b), "%s %s", tram.st.mode_max ? "MAX" : "MIN", tram_phase_name(tram.st.phase));
   set_text(mn_val[7], b);
 
-  snprintf(b, sizeof(b), "%s", panel.linked ? "LINK" : "NO LINK");
+  // Duong dang dung (PUSH / TRAM / chua co) - KHONG hien lai trang thai link o day,
+  // vi chi bao link chi nam o THANH TREN (xem link_ok()).
+  snprintf(b, sizeof(b), "%s", tram.ever ? "TRAM" : (panel.linked ? "PUSH" : "-"));
   set_text(mn_val[8], b);
   // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
   // hien tien do de nguoi dung biet da du 1.5s chua.
@@ -1877,17 +1884,14 @@ void ui_lvgl_task(void) {
   if (now - s_upd_ms < UI_REFRESH_MS) return;      // UI_REFRESH_MS trong panel_config.h
   s_upd_ms = now;
 
-  // Thanh tren: trang thai lien ket (chi set khi doi de khong set style mai).
-  // Co HAI giao thuc loai tru nhau, phai xet CA HAI:
-  //   - PUSH (PANEL_SERIAL_UI) : panel.linked  - chi bat khi Marlin gui frame PUSH
-  //   - TRAM (PANEL_TRAM_LINK) : tram.linked   - chi bat khi Marlin gui dong "TRAM ..."
-  // Truoc 2026-10-13 cho nay chi xet panel.linked nen o che do TRAM thanh tren LUON ghi
-  // "NO LINK" du link dang tot (gay hieu nham nang - xem lcd_panel/README.md §5.6).
-  const bool link_ok = panel.linked || tram.linked;
-  if (link_ok != s_link_state) {
-    s_link_state = link_ok;
-    set_text(s_link, link_ok ? "LINK OK" : "NO LINK");
-    lv_obj_set_style_text_color(s_link, link_ok ? COL_OK : COL_ERR, 0);
+  // Thanh tren = NOI DUY NHAT hien chi bao link cho moi man (tru trang STATUS co them dong
+  // trang thai + khung XYZ cung bao mat link). Xet CA HAI giao thuc loai tru nhau:
+  //   PUSH (PANEL_SERIAL_UI): panel.linked   |   TRAM (PANEL_TRAM_LINK): tram.linked
+  const bool ok = link_ok();
+  if (ok != s_link_state) {
+    s_link_state = ok;
+    set_text(s_link, ok ? "LINK OK" : "NO LINK");
+    lv_obj_set_style_text_color(s_link, ok ? COL_OK : COL_ERR, 0);
   }
 
   switch (s_page_act) {
