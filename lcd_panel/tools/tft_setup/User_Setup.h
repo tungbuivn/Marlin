@@ -1,8 +1,10 @@
 // ===========================================================================
-//  User_Setup.h -- TFT_eSPI cho ESP32-2432S028R "CYD" (2.8" ILI9341 + XPT2046)
+//  User_Setup.h -- TFT_eSPI cho board ESP32 2.8" 240x320 (CYD / clone)
 //
-//  Board: ESP32-2432S028R ("Cheap Yellow Display")
-//      LCD   ILI9341  240x320   MOSI 13 / MISO 12 / SCLK 14 / CS 15 / DC 2 / RST -1 / BL 21
+//  Board: ESP32 + man 2.8" 240x320 **ST7789** (ban ILI9341 chi khac 1 dong driver)
+//      LCD   ST7789  240x320   MOSI 13 / MISO 12 / SCLK 14 / CS 15 / DC 2 / RST -1
+//      Den nen (BL): thu GPIO21 (ban ILI9341/CYD thuong dung) HOAC GPIO27
+//                    (nhieu ban ST7789 dung 27) -> do bang -DPANEL_CYD_DEBUG
 //      Touch XPT2046            T_DIN 32 / T_DO 39 / T_CLK 25 / T_CS 33 / T_IRQ 36
 //
 //  File nay duoc dua vao include path bang `-I${PROJECT_DIR}/tools/tft_setup`
@@ -21,7 +23,7 @@
 // ===========================================================================
 
 // Thong tin cho example "Read_User_Setup"
-#define USER_SETUP_INFO "PANEL_CYD_2432S028R"
+#define USER_SETUP_INFO "PANEL_CYD_2432S028R_ST7789"
 
 // Danh dau de ui_lvgl_port.cpp kiem tra xem file nay co duoc nap khong
 #define PANEL_CYD_SETUP_LOADED 1
@@ -29,15 +31,15 @@
 // ---------------------------------------------------------------------------
 // Section 1: driver + kich thuoc
 // ---------------------------------------------------------------------------
-#define ILI9341_2_DRIVER      // driver ILI9341 thay the (CYD dung ban nay)
+#define ST7789_DRIVER         // <-- man cua board nay la ST7789 (240x320)
+                              //     (neu la ban ILI9341 thi doi thanh ILI9341_2_DRIVER)
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 320
 
 // Neu mau bi dao (xanh <-> do): bo comment dong duoi
 //#define TFT_RGB_ORDER TFT_BGR
-// Neu trang thanh den / den thanh trang: thu lan luot 1 trong 2 dong duoi
-//#define TFT_INVERSION_ON
-//#define TFT_INVERSION_OFF
+// ST7789 thuong can bat inversion; neu trang <-> den nguoc thi COMMENT dong duoi
+#define TFT_INVERSION_ON
 
 // ---------------------------------------------------------------------------
 // Section 2: chan LCD
@@ -47,8 +49,8 @@
 #define TFT_SCLK 14
 #define TFT_CS   15
 #define TFT_DC    2
-#define TFT_RST  -1           // CYD noi RST vao EN cua ESP32 (-1 = khong dung chan)
-#define TFT_BL   21           // den nen
+#define TFT_RST  -1           // RST noi vao EN cua ESP32 (-1 = khong dung chan)
+#define TFT_BL   21           // den nen: GPIO21 (CYD/ILI9341) hoac 27 (nhieu ban ST7789)
 #define TFT_BACKLIGHT_ON HIGH
 
 // CYD: LCD o HSPI (VSPI de danh cho khe the SD: CS 5 / MOSI 23 / MISO 19 / SCLK 18)
@@ -69,9 +71,13 @@
 #define PANEL_CYD_TOUCH_CLK  25              // T_CLK
 
 // ---------------------------------------------------------------------------
-// Section 3: font cua TFT_eSPI (chi can GLCD: LVGL tu ve chu, TFT_eSPI chi push pixel)
+// Section 3: font cua TFT_eSPI
+//   LVGL tu ve chu nen TFT_eSPI chi can font cho MAN HINH HIEU CHUAN CAM UNG
+//   (ui_port_touch_calibrate): font 4 (26px) = ten goc, font 2 (16px) = huong dan/ket qua.
 // ---------------------------------------------------------------------------
 #define LOAD_GLCD
+#define LOAD_FONT2
+#define LOAD_FONT4
 
 // ---------------------------------------------------------------------------
 // Section 4: toc do SPI

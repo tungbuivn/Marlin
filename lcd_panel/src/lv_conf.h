@@ -59,6 +59,7 @@
 #define LV_USE_TABLE        1   /* man SETTINGS + MESH */
 #define LV_USE_BAR          1   /* thanh tien do */
 #define LV_USE_ROLLER       1   /* danh sach file SD */
+#define LV_USE_IMG          1   /* icon 64x64 cua Marlin (ALPHA_4BIT + recolor) */
 #define LV_USE_FLEX         1   /* lv_list dung flex layout */
 
 /* Bang: mesh toi da 16x16 diem (PANEL_MESH_MAX = 16) -> can 16 cot */
@@ -76,7 +77,6 @@
 #define LV_USE_COLORWHEEL   0
 #define LV_USE_DROPDOWN     0
 #define LV_USE_IMGBTN       0
-#define LV_USE_IMG          0
 #define LV_USE_KEYBOARD     0
 #define LV_USE_LED          0
 #define LV_USE_LINE         0

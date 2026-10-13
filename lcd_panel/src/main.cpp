@@ -21,14 +21,41 @@
   #include "panel_link.h"
   #include "ui_lvgl.h"
 
+  #if defined(PANEL_CYD_DEBUG)
+    #include <esp_system.h>
+  #endif
+
   void setup() {
+    #if defined(PANEL_CYD_DEBUG)
+      Serial.begin(115200);
+      delay(300);
+      Serial.println();
+      Serial.println("[CYD] ===== setup bat dau (LVGL + push) =====");
+      Serial.printf("[CYD] reset reason = %d (1=poweron,3=sw,4=panic,5/6=wdt)\n", (int)esp_reset_reason());
+      Serial.printf("[CYD] free heap = %u B\n", (unsigned)ESP.getFreeHeap());
+    #endif
     DBG_BEGIN();
     panel_link_begin(PANEL_MARLIN_BAUD);
+    #if defined(PANEL_CYD_DEBUG)
+      Serial.println("[CYD] da begin Serial2 (GPIO22 TX / GPIO35 RX) @250000");
+    #endif
     ui_lvgl_begin();
+    #if defined(PANEL_CYD_DEBUG)
+      Serial.printf("[CYD] ui_lvgl_begin() xong, free heap = %u B\n", (unsigned)ESP.getFreeHeap());
+    #endif
     DBGLN("panel ready (LVGL, push mode)");
   }
 
   void loop() {
+    #if defined(PANEL_CYD_DEBUG)
+      static uint32_t dbg_next = 0;
+      if (millis() >= dbg_next) {
+        dbg_next = millis() + 1000;
+        Serial.printf("[CYD] loop OK | linked=%d state=%u rx=%u err=%u heap=%u\n",
+                      (int)panel.linked, (unsigned)panel.state, (unsigned)panel.rx_frames,
+                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap());
+      }
+    #endif
     panel_link_task();     // nhan frame tu Marlin + giu PING/lien ket
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
   }

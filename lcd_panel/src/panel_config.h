@@ -82,7 +82,12 @@
 // ---------------------------------------------------------------------------
 // 2.4" ILI9341 SPI TFT  (240x320)
 // ---------------------------------------------------------------------------
-#define TFT_ROTATION    0            // 0/2 = portrait 240x320, 1/3 = landscape 320x240
+// 0/2 = portrait 240x320, 1/3 = landscape 320x240.
+// UI LVGL (ui_lvgl) chay landscape -> env LVGL truyen -DTFT_ROTATION=1.
+// UI tu ve (ui.cpp, env G-code) van thiet ke portrait -> mac dinh 0.
+#ifndef TFT_ROTATION
+  #define TFT_ROTATION  0
+#endif
 #define TFT_SPI_SPEED   24000000     // ILI9341 is happy at 24 MHz over short wires
 #define TFT_PIN_SCK     PA5
 #define TFT_PIN_MISO    PA6          // ILI9341 never sends data; kept free for touch
@@ -109,6 +114,40 @@
 #ifdef PANEL_TOUCH
   #define TOUCH_PIN_CS  PB15
 #endif
+
+// ---------------------------------------------------------------------------
+// CYD: hieu chuan cam ung XPT2046 (man NGANG 320x240)
+//
+// GIA TRI DUOI DAY la ket qua hieu chuan THUC TE da chay tot tren board, lay tu
+// trinh hieu chuan 4 goc trong firmware (menu "Calibrate touch" hoac giu tay luc cap
+// dien) -- xem ui_port_touch_calibrate() trong ui_lvgl_port.cpp:
+//     cach do: cham -> CA MAN HINH XANH -> keo sat vao goc den khi MAT cam ung;
+//     toa do goc = cuc tri (min/max) ghi duoc trong luc keo.
+//     [TOUCHCAL] nap tu NVS: swap=0 invX=0 invY=0 X=184..3866 Y=185..3910
+//
+// Y NGHIA: raw_x la truc NGANG (trai 184 -> phai 3866), raw_y la truc DOC (tren 185 ->
+// duoi 3910), ca hai deu TANG theo huong phai/xuong => khong phai dao truc nao.
+// (Cach cham 4 goc bang mat truoc day chi ra 332..3645 / 453..3658: hut vao ~150-250
+//  don vi o moi mep, chinh vi vay truoc day bi lech o giua man hinh. Cach keo den luc
+//  mat cam ung moi lay dung mep vat ly.)
+//
+// Cach dat ten cua 4 macro (quan trong, de khong nham nua):
+//   SWAP_XY = 0 -> X man hinh <- raw_x (dung XMIN/XMAX + INVERT_X)
+//                  Y man hinh <- raw_y (dung YMIN/YMAX + INVERT_Y)
+//   SWAP_XY = 1 -> X man hinh <- raw_y (dung YMIN/YMAX + INVERT_X)
+//                  Y man hinh <- raw_x (dung XMIN/XMAX + INVERT_Y)
+//   INVERT_* = 1 khi canh "0" (trai/tren) co gia tri raw LON HON canh doi dien.
+//
+// LUU Y: day chi la MAC DINH khi NVS (Preferences) chua co gi. Sau khi nguoi dung bam
+// "Calibrate touch", gia tri trong NVS se duoc dung thay the (khong can build lai).
+// ---------------------------------------------------------------------------
+#define PANEL_CYD_TOUCH_SWAP_XY   0
+#define PANEL_CYD_TOUCH_INVERT_X  0
+#define PANEL_CYD_TOUCH_INVERT_Y  0
+#define PANEL_CYD_TOUCH_XMIN      184    // raw_x tai mep TRAI (X man hinh = 0)
+#define PANEL_CYD_TOUCH_XMAX      3866   // raw_x tai mep PHAI (X man hinh = 319)
+#define PANEL_CYD_TOUCH_YMIN      185    // raw_y tai mep TREN (Y man hinh = 0)
+#define PANEL_CYD_TOUCH_YMAX      3910   // raw_y tai mep DUOI (Y man hinh = 239)
 
 // ---------------------------------------------------------------------------
 // Behaviour
