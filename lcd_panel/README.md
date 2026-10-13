@@ -1640,17 +1640,31 @@ Kiểm chứng (đã chạy, xem §10.7): một parser chép đúng logic trên 
 
 ### 10.4 Cách dò thiết bị (`panel-upload.ps1`)
 
-Thứ tự (bỏ qua khi có `-NoDiscover`), mỗi ứng viên timeout **1–1,5 s**, buổi quét có trần
+Thứ tự (bỏ qua khi có `-NoDiscover`), mỗi ứng viên timeout **1–1,5 s**, bước quét có trần
 `-ScanBudgetSec` (mặc định 25 s). Nguồn tìm được in ra ở dòng `[PANEL] thay <IP> (nguon: ...)`:
 
 1. `-Host` (nếu có) — **vẫn xác nhận** chữ ký;
-2. **mDNS**: `TBTPANEL.local`, `tbtpanel.local`, rồi dự phòng `esp3d.local`, `MYESP.local`;
-3. **gateway** của card mạng đang dùng (nối AP của module thì gateway chính là module);
-4. **quét LAN** `/24` của card đang hoạt động, **song song** `-ScanThreads` luồng (mặc định 40):
+2. **CACHE** — IP của lần tìm **thành công gần nhất** (thêm 2026-10-14): bình thường chỉ mất
+   **~0,2–0,5 s** là xong, **không** phải mDNS / quét LAN (17–27 s). IP cũ hoặc máy đổi IP thì tự
+   rơi xuống các bước dưới rồi **ghi đè cache**. Tắt bằng `-NoCache`;
+3. **mDNS**: `TBTPANEL.local`, `tbtpanel.local`, rồi dự phòng `esp3d.local`, `MYESP.local`;
+4. **gateway** của card mạng đang dùng (nối AP của module thì gateway chính là module);
+5. **quét LAN** `/24` của card đang hoạt động, **song song** `-ScanThreads` luồng (mặc định 40):
    lọc “port 80 mở” trước, rồi mới **xác nhận chữ ký** ⇒ nguồn `quet`;
-5. **danh sách cố định**: `192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50`.
+6. **danh sách cố định**: `192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50`.
 
-IP tìm được **lưu cache** ở `%LOCALAPPDATA%\esp3d-upload\last-target.txt` (dùng khi `-NoDiscover`).
+**Cache IP** ở `%LOCALAPPDATA%\esp3d-upload\last-target.txt`, **mỗi đích 1 dòng**:
+
+```
+panel=192.168.0.146
+esp3d=192.168.0.1
+```
+
+* `-Target panel` đọc dòng `panel=`, `-Target esp3d` đọc dòng `esp3d=` ⇒ đổi qua lại không phải dò lại.
+* Định dạng **cũ** (file chỉ có 1 dòng IP trần) vẫn đọc được (coi như của `panel`).
+* Đo thật (2026-10-14): cache đúng → dò **0,2 s** (tổng cả phiên gửi 63 KB: **6,5 s**);
+  cache sai IP (`192.168.0.99`) → mất 1,5 s thử rồi tự dò lại **18,4 s** và ghi đè lại IP đúng;
+  `-NoCache` → vào thẳng bước mDNS như trước.
 Tối ưu: nếu `/status` **thất bại ngay ở tầng TCP** thì **không** thử tiếp ESP800/`/` cho IP đó
 (ứng viên “chết” chỉ tốn **1** lần timeout).
 

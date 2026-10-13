@@ -36,7 +36,7 @@
             Client con gui header  X-Panel-Token: <token>  (nhan ca 2 kieu xac thuc).
       (Co the ep chuoi nhan dang khac bang -PanelMarker "<chuoi>".)
 
-    ⚠️ VI SAO KHONG DUNG Invoke-WebRequest -Form / MultipartFormDataContent:
+    âš ï¸ VI SAO KHONG DUNG Invoke-WebRequest -Form / MultipartFormDataContent:
       ESP3D chay ESP8266WebServer: Parsing-impl.h::_parseForm cat chuoi Content-Disposition theo dau
       '=' DAU TIEN va LUON bo 1 ky tu ngay sau dau '=':
           argName     = line.substring(nameStart + 2);                       // bo '="'
@@ -54,18 +54,22 @@
 
     THU TU TU TIM THIET BI (bo qua khi co -NoDiscover):
       1. -Host (neu co)                          -> nguon: host
-      2. mDNS: TBTPANEL.local, esp3d.local, MYESP.local   -> nguon: mdns
-      3. gateway cua card mang dang dung         -> nguon: gateway
+      2. CACHE: IP cua lan tim THANH CONG gan nhat        -> nguon: cache
+         (%LOCALAPPDATA%\esp3d-upload\last-target.txt, moi dich 1 dong "panel=<ip>" / "esp3d=<ip>")
+         => binh thuong chi mat ~0,2-0,5 s, KHONG phai mDNS hay quet lai LAN (17-27 s).
+         IP cu / doi IP thi tu dong tim lai o cac buoc duoi roi ghi de. Tat bang -NoCache.
+      3. mDNS: TBTPANEL.local, esp3d.local, MYESP.local   -> nguon: mdns
+      4. gateway cua card mang dang dung         -> nguon: gateway
          (PC noi vao AP cua module thi gateway CHINH LA module)
-      4. quet LAN /24 cua card dang hoat dong, SONG SONG nhieu luong: loc "port 80 mo" truoc,
+      5. quet LAN /24 cua card dang hoat dong, SONG SONG nhieu luong: loc "port 80 mo" truoc,
          roi moi XAC NHAN chu ky thiet bi                     -> nguon: quet
-      5. danh sach co dinh: 192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50
+      6. danh sach co dinh: 192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50
                                                              -> nguon: danh sach
       Moi ung vien timeout ngan (1-1,5 s); buoc quet co tran -ScanBudgetSec.
-      Tim duoc thi in:  [TBT] thay <IP> (nguon: mdns|gateway|quet|danh sach)  va luu cache
+      Tim duoc thi in:  [PANEL] thay <IP> (nguon: cache|mdns|gateway|quet|danh sach) va luu cache
       (%LOCALAPPDATA%\esp3d-upload\last-target.txt) de lan sau vao thang.
 
-    ⚠️ CANH BAO MANG (doc truoc khi hoi "sao khong thay may in"):
+    âš ï¸ CANH BAO MANG (doc truoc khi hoi "sao khong thay may in"):
       * Duong PANEL: panel se vao WiFi STA cua mang nha (TP-Link_31A0, 2.4 GHz) => PC dang o mang nha
         la gui duoc NGAY, khong phai doi mang. Neu panel chua noi duoc WiFi nha thi no chua co IP.
       * Duong ESP3D: module dang phat AP rieng "Voron2308" voi IP TINH 192.168.0.1 (config.h:370-376),
@@ -100,6 +104,9 @@
     Tran thoi gian cho RIENG lan upload (giay). Mac dinh 300 (file 10 MB nen de >= 120).
 .PARAMETER NoDiscover
     KHONG tu tim: chi dung -Host, neu khong co thi dung IP da luu trong cache.
+.PARAMETER NoCache
+    BO QUA buoc dung IP da luu (cache). Dung khi nghi IP trong cache sai / muon do lai tu dau.
+    Cache: %LOCALAPPDATA%\esp3d-upload\last-target.txt, moi dich 1 dong "panel=<ip>" / "esp3d=<ip>".
 .PARAMETER ScanThreads
     So luong quet song song khi quet LAN. Mac dinh 40 (nen trong khoang 30-50).
 .PARAMETER ScanTimeoutMs
@@ -159,6 +166,7 @@ param(
     [string]$MarlinPort = 'COM4',
     [int]$TimeoutSec = 300,
     [switch]$NoDiscover,
+    [switch]$NoCache,
     [int]$ScanThreads = 40,
     [int]$ScanTimeoutMs = 1000,
     [int]$ScanBudgetSec = 25,
@@ -174,6 +182,48 @@ try { Add-Type -AssemblyName System.Net.Http -ErrorAction Stop } catch { }
 
 $CACHE_DIR  = Join-Path $env:LOCALAPPDATA 'esp3d-upload'
 $CACHE_FILE = Join-Path $CACHE_DIR 'last-target.txt'
+
+# ---------------------------------------------------------------------------
+# CACHE IP (2026-10-14): luu IP cua lan tim THANH CONG gan nhat cho tung dich
+#   File: %LOCALAPPDATA%\esp3d-upload\last-target.txt, moi dong 1 dang  "<target>=<ip>"
+#         panel=192.168.0.146
+#         esp3d=192.168.0.1
+#   Lan sau: thu IP da luu TRUOC TIEN (1 lan HTTP ngan ~1,5 s). Dung thi xong ngay (khong mDNS,
+#   khong quet LAN 17-27 s); sai (IP doi / thiet bi tat) thi tu tim lai nhu cu roi ghi de.
+#   Ban cu (file chi co 1 dong IP) van doc duoc.
+#   Tat: -NoCache.
+# ---------------------------------------------------------------------------
+function Get-CachedIp([string]$tgt) {
+    if (-not (Test-Path -LiteralPath $CACHE_FILE)) { return $null }
+    $lines = @(Get-Content -LiteralPath $CACHE_FILE -ErrorAction SilentlyContinue)
+    foreach ($ln in $lines) {
+        $s = "$ln".Trim()
+        if (-not $s) { continue }
+        if ($s -match '^([A-Za-z0-9_]+)\s*=\s*(\S+)$') {
+            if ($matches[1].ToLower() -eq $tgt.ToLower()) { return $matches[2] }
+        } elseif ($s -match '^\d{1,3}(\.\d{1,3}){3}$') {
+            return $s                      # dinh dang CU: 1 dong IP duy nhat
+        }
+    }
+    return $null
+}
+function Set-CachedIp([string]$tgt, [string]$ip) {
+    try {
+        if (-not (Test-Path -LiteralPath $CACHE_DIR)) { [void](New-Item -ItemType Directory -Path $CACHE_DIR -Force) }
+        $map = [ordered]@{}
+        if (Test-Path -LiteralPath $CACHE_FILE) {
+            foreach ($ln in @(Get-Content -LiteralPath $CACHE_FILE -ErrorAction SilentlyContinue)) {
+                $s = "$ln".Trim()
+                if ($s -match '^([A-Za-z0-9_]+)\s*=\s*(\S+)$') { $map[$matches[1].ToLower()] = $matches[2] }
+                elseif ($s -match '^\d{1,3}(\.\d{1,3}){3}$') { $map['panel'] = $s }
+            }
+        }
+        $map[$tgt.ToLower()] = $ip
+        $out = @($map.Keys | ForEach-Object { "{0}={1}" -f $_, $map[$_] })
+        Set-Content -LiteralPath $CACHE_FILE -Value $out -Encoding ASCII
+        Write-Dim ("  (da luu cache {0}={1} vao {2})" -f $tgt.ToLower(), $ip, $CACHE_FILE)
+    } catch { Write-Dim ("  (khong ghi duoc cache: {0})" -f $_.Exception.Message) }
+}
 $FIXED_LIST = @('192.168.0.1', '192.168.4.1', '192.168.1.1', '192.168.1.50', '192.168.0.50')
 $PANEL_MARKERS_DEFAULT = @('TBT-PANEL', 'TBTPANEL', 'TBT_PANEL', 'PANEL-TBT', 'TBT-3D-up')
 $PANEL_FIELD_NAME = 'file'      # ten field cua phan file khi POST /upload
@@ -225,7 +275,7 @@ function Get-WlanSsid {
 # HTTP GET nho (dung HttpClient, TAT proxy de proxy he thong khong an mat IP LAN)
 # ---------------------------------------------------------------------------
 function Get-ShortError {
-    # PowerShell boc loi .NET trong MethodInvocationException => phai bóc den tan cung moi doc duoc.
+    # PowerShell boc loi .NET trong MethodInvocationException => phai bÃ³c den tan cung moi doc duoc.
     param($ErrorRecord)
     $ex = $null
     try { $ex = $ErrorRecord.Exception } catch { }
@@ -273,7 +323,7 @@ function Invoke-HttpGet {
 }
 
 # ---------------------------------------------------------------------------
-# Doc JSON /status cua panel (chịu duoc nhieu ten truong khac nhau)
+# Doc JSON /status cua panel (chá»‹u duoc nhieu ten truong khac nhau)
 # ---------------------------------------------------------------------------
 function Get-FieldValue {
     param($Obj, [string[]]$Names)
@@ -345,7 +395,7 @@ function Test-PanelSignature {
 # Xac nhan thiet bi dich
 # ---------------------------------------------------------------------------
 function Test-Esp3dAt {
-    # DUNG LA ESP3D khi GET /command?plain=[ESP800] chua "FW version:" (khong dung tới the SD).
+    # DUNG LA ESP3D khi GET /command?plain=[ESP800] chua "FW version:" (khong dung tá»›i the SD).
     param([string]$Ip, [int]$Port = 80, [int]$TimeoutMs = 1500)
     $g = Invoke-HttpGet -Ip $Ip -Port $Port -Path '/command?plain=%5BESP800%5D' -TimeoutMs $TimeoutMs
     $out = [pscustomobject]@{ Esp = $false; Status = $g.Status; Ms = $g.Ms; Error = $g.Error; Info = '' }
@@ -982,7 +1032,7 @@ function Try-Candidate {
 }
 
 if ($TargetHost) {
-    Write-Step ("[1/5] -Host {0}" -f $TargetHost)
+    Write-Step ("[1/6] -Host {0}" -f $TargetHost)
     if (Try-Candidate -Ip $TargetHost -Source 'host' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
     elseif ($NoDiscover) {
         Write-Err "IP ep (-Host $TargetHost) khong dung chu ky thiet bi dich va dang co -NoDiscover => dung."
@@ -991,26 +1041,41 @@ if ($TargetHost) {
         Write-Warn "  Tiep tuc tu tim..."
     }
 } elseif ($NoDiscover) {
-    Write-Step "[1/5] -NoDiscover: chi dung -Host hoac IP da luu trong cache"
-    if (Test-Path -LiteralPath $CACHE_FILE) {
-        $cached = (Get-Content -LiteralPath $CACHE_FILE -ErrorAction SilentlyContinue | Select-Object -First 1)
-        if ($cached) {
-            Write-Host ("  cache: {0}" -f $cached)
-            if (Try-Candidate -Ip $cached.Trim() -Source 'cache' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
+    Write-Step "[1/6] -NoDiscover: chi dung -Host hoac IP da luu trong cache"
+    $cachedIp = Get-CachedIp $Target
+    if ($cachedIp) {
+        Write-Host ("  cache: {0} = {1}" -f $Target.ToLower(), $cachedIp)
+        if (Try-Candidate -Ip $cachedIp -Source 'cache' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
+    } else {
+        Write-Dim ("  (chua co cache {0} cho dich '{1}')" -f $CACHE_FILE, $Target.ToLower())
+    }
+}
+
+if (-not $foundIp -and -not $NoDiscover -and -not $NoCache) {
+    # ---- 2) CACHE: IP cua lan tim thanh cong gan nhat (nhanh nhat - 1 lan HTTP ngan) ----
+    Write-Step ("[2/6] cache IP lan truoc ({0})" -f $CACHE_FILE)
+    $cachedIp = Get-CachedIp $Target
+    if ($cachedIp) {
+        Write-Host ("  thu IP da luu: {0}  (bo qua bang -NoCache)" -f $cachedIp)
+        # Timeout ngan: IP cu/chet chi lam mat ~1,5 s roi tu tim lai
+        if (Try-Candidate -Ip $cachedIp -Source 'cache' -Port $Port -TimeoutMs ([Math]::Min($ProbeTimeoutMs, 1500))) {
+            Write-Ok ("  DUNG IP DA LUU -> khoi phai do lai (nhanh ~{0:N1} s)" -f $swDisc.Elapsed.TotalSeconds)
+        } else {
+            Write-Dim "  IP da luu khong dung nua (doi IP / thiet bi tat) -> tim lai tu dau."
         }
     } else {
-        Write-Dim "  (chua co cache $CACHE_FILE)"
+        Write-Dim "  chua co cache (lan dau) - se tim roi luu lai."
     }
 }
 
 if (-not $foundIp -and -not $NoDiscover) {
-    # ---- 2) mDNS ----
+    # ---- 3) mDNS ----
     $mdnsNames = if ($isPanel) {
         @('TBTPANEL.local', 'tbtpanel.local', 'esp3d.local', 'MYESP.local')
     } else {
         @('MYESP.local', 'esp3d.local', 'TBTPANEL.local')
     }
-    Write-Step ("[2/5] mDNS ({0})" -f ($mdnsNames -join ', '))
+    Write-Step ("[3/6] mDNS ({0})" -f ($mdnsNames -join ', '))
     $mdnsIps = New-Object System.Collections.ArrayList
     foreach ($n in $mdnsNames) {
         try {
@@ -1035,7 +1100,7 @@ if (-not $foundIp -and -not $NoDiscover) {
 
 if (-not $foundIp -and -not $NoDiscover) {
     # ---- 3) gateway ----
-    Write-Step "[3/5] gateway cua card mang dang dung"
+    Write-Step "[4/6] gateway cua card mang dang dung"
     $gws = @($nets | Where-Object { $_.Gateway } | ForEach-Object { $_.Gateway } | Sort-Object -Unique)
     if ($gws.Count -eq 0) {
         Write-Dim "  khong co gateway nao."
@@ -1058,7 +1123,7 @@ if (-not $foundIp -and -not $NoDiscover) {
     }
     $subnets = @($subnets | Sort-Object -Unique)
 
-    Write-Step ("[4/5] quet LAN {0} (port {1})" -f (($subnets | ForEach-Object { "$_/24" }) -join ' + '), $Port)
+    Write-Step ("[5/6] quet LAN {0} (port {1})" -f (($subnets | ForEach-Object { "$_/24" }) -join ' + '), $Port)
     if ($subnets.Count -eq 0) {
         Write-Dim "  khong xac dinh duoc dai /24 nao."
     } else {
@@ -1085,7 +1150,7 @@ if (-not $foundIp -and -not $NoDiscover) {
 
 if (-not $foundIp -and -not $NoDiscover) {
     # ---- 5) danh sach co dinh ----
-    Write-Step ("[5/5] danh sach co dinh ({0})" -f ($FIXED_LIST -join ', '))
+    Write-Step ("[6/6] danh sach co dinh ({0})" -f ($FIXED_LIST -join ', '))
     foreach ($ip in $FIXED_LIST) {
         if ($foundIp) { break }
         if (Try-Candidate -Ip $ip -Source 'danh sach' -Port $Port -TimeoutMs $ProbeTimeoutMs) { break }
@@ -1119,10 +1184,9 @@ if (-not $foundIp) {
 Write-Host ""
 Write-Ok ("[{0}] thay {1} (nguon: {2})  [do mat {3:N1} s]" -f $(if ($isPanel) { 'PANEL' } else { 'ESP3D' }), $foundIp, $foundFrom, $swDisc.Elapsed.TotalSeconds)
 
-try {
-    if (-not (Test-Path -LiteralPath $CACHE_DIR)) { [void](New-Item -ItemType Directory -Path $CACHE_DIR -Force) }
-    Set-Content -LiteralPath $CACHE_FILE -Value $foundIp -Encoding ASCII
-} catch { Write-Dim ("  (khong ghi duoc cache: {0})" -f $_.Exception.Message) }
+# Luu IP cho tung dich (panel / esp3d) de lan sau vao thang - xem Get-CachedIp/Set-CachedIp.
+# Nguon 'cache' thi khong ghi lai (giong y nguyen gia tri dang co).
+if ($foundFrom -ne 'cache') { Set-CachedIp $Target $foundIp }
 
 $sameSubnet = $false
 $localIps = @($nets | ForEach-Object { $_.IP })
