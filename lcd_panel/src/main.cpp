@@ -48,19 +48,48 @@
   }
 
   void loop() {
+    static char s_forward_pending[40];     // lenh G-code nhan tu COM7 (console), cho gui sang Marlin
     #if defined(PANEL_CYD_DEBUG)
       static uint32_t dbg_next = 0;
       if (millis() >= dbg_next) {
         dbg_next = millis() + 1000;
-        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx-active=%d state=%u rx=%u err=%u heap=%u | TRAM dong=%u loi=%u byte=%u cach-day=%ums\n",
-                      (int)panel.linked, (int)tram.linked, (int)tram.rx_active, (unsigned)panel.state,
-                      (unsigned)panel.rx_frames, (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap(),
-                      (unsigned)tram.lines, (unsigned)tram.errors, (unsigned)tram.raw_bytes,
-                      (unsigned)(millis() - tram.last_rx_ms));
+        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx=%u err=%u heap=%u\n",
+                      (int)panel.linked, (int)tram.linked, (unsigned)panel.rx_frames,
+                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap());
       }
     #endif
+
+    // Gui lenh G-code/M-code nhan duoc tu CONG USB CUA PANEL (COM7) sang Marlin, bang DUNG duong ma
+    // cac nut bam tren UI dung. Gui o nhip 500ms cho chac (2026-10-13) - xem lcd_panel/README.md.
+    static uint32_t fwd_next = 0;
+    if (s_forward_pending[0] && millis() >= fwd_next) {
+      fwd_next = millis() + 500;
+      panel_link_send_gcode(s_forward_pending);
+      s_forward_pending[0] = '\0';
+    }
     panel_link_task();     // nhan frame tu Marlin + giu PING/lien ket
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
+
+    // CONSOLE G-CODE QUA CONG USB CUA PANEL (tinh nang, 2026-10-13): nhan tung dong G-code/M-code
+    // tu COM7 roi chuyen tiep sang Marlin bang DUNG duong ma cac nut bam tren UI dung
+    // (panel_link_send_gcode) -> go lenh tu PC y nhu bam nut tren LCD.
+    // Vi du: mo COM7 115200 (hoac dung serial-console.ps1), go "G28", "G35", "M220 S100",
+    // "G91" -> "G1 X10 F600" -> "G90". Chuan bi o day, gui o nhip 500ms cho chac (xem dau loop()).
+    // CHAP NHAN CA '\r' VA '\n' lam ket thuc dong: nhieu terminal (PuTTY/Arduino) gui chi CR,
+    // neu chi nhan '\n' thi nhieu lenh bi don thanh 1 dong (da gap that 2026-10-13).
+    static char s_fwd[40];
+    static uint8_t s_fwd_len = 0;
+    while (Serial.available()) {
+      const char ch = (char)Serial.read();
+      if (ch == '\r' || ch == '\n') {
+        s_fwd[s_fwd_len] = '\0';
+        if (s_fwd_len) snprintf(s_forward_pending, sizeof(s_forward_pending), "%s", s_fwd);
+        s_fwd_len = 0;
+        continue;
+      }
+      if (s_fwd_len < sizeof(s_fwd) - 1) s_fwd[s_fwd_len++] = ch;
+      else s_fwd_len = 0;
+    }
   }
 
 #else   // ---------- G-code mode (UI tu ve) ----------

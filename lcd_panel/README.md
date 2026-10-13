@@ -293,6 +293,21 @@ frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần ch�
 > dòng sai**, `tram_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
 > với frame PUSH** (byte `T`/`TRAM` trong payload **không** bị ăn mất), và việc **ngừng gửi PING**
 > khi đã vào chế độ TRAM.
+### Gửi lệnh G-code/M-code từ PC xuống Marlin (2026-10-13)
+
+Hai cách, dùng khi muốn thử lệnh **y như bấm nút trên LCD**:
+
+1. **`serial-console.ps1`** (gốc repo — công cụ khuyến nghị, luôn gửi **CRLF** và bật **DTR**):
+   ```powershell
+   pwsh -File D:\Marlin\serial-console.ps1                          # qua PANEL (COM7 @115200)
+   pwsh -File D:\Marlin\serial-console.ps1 -Port COM4 -Baud 250000  # thẳng vào Marlin (USB)
+   ```
+   Gõ `G28`, `G35`, `M220 S100`, `G91` → `G1 X10 F600` → `G90`, … ; gõ `exit` để thoát.
+2. **Terminal ngoài**: PuTTY (COM7, 115200, 8N1, bật *Implicit CR in every LF*) hoặc PlatformIO
+   `pio device monitor -p COM7 -b 115200`. ⚠️ Nếu terminal chỉ gửi `\r` thì các lệnh gõ liên tiếp
+   sẽ **dồn thành 1 dòng** (xem README gốc, cạm bẫy 40) — firmware panel nay đã chấp nhận **cả `\r`
+   và `\n`**, nhưng vẫn nên dùng CRLF.
+
 > ⚠️ **Máy này chưa chạy được `run_host_test.ps1`** (không có `g++`/MinGW trên PATH; script cần
 > `pwsh`). Đã kiểm bằng `arm-none-eabi-g++ -fsyntax-only -Wall -Wextra` → **0 lỗi, 0 cảnh báo**;
 > muốn chạy thật thì cần cài MinGW (`winget install BrechtSanders.WinLibs.POSIX.UCRT`) rồi chạy
@@ -387,6 +402,20 @@ python lcd_panel/tools/make_lvgl_icons.py
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `PANEL_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
 | **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
+
+> 🆕 **Cập nhật 2026-10-13 (UI LVGL sau khi chuyển sang PUSH):**
+> * **TEMP** có thêm **1 hàng preset PREHEAT** đúng như bản UI cũ (`ui.cpp`/`main.cpp`): **`PLA 210/60`** ·
+>   **`PETG 240/80`** · **`ABS 250/100`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`) và **`COOLDOWN`**
+>   (`M104 S0` + `M140 S0`).
+> * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
+>   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện `-` / `+` / `OK` (bước nhảy
+>   theo số lẻ của dòng) → gửi M-code tương ứng (`M92` steps · `M203` max feed · `M201` max accel ·
+>   `M205` jerk · `M851` probe offset · `M206` home offset · `M220/M221` feed/flow · `M301/M304` PID ·
+>   `M104/M140/M106` nhiệt & quạt) rồi tự xin lại thông số. Hàng nút ở đáy: **`UP` · `DOWN` · `SAVE EEPROM`**
+>   (SAVE = `M500`).
+> * **FEED/FLOW**: sau mỗi lần `+/-` (gửi `M220`/`M221`) panel **tự xin lại thông số** nên con số trên màn
+>   cập nhật ngay (trước đây bị đứng ở 100%).
+> * **JOG**: X/Y nhích ở **`F3000` = 50 mm/s** (bằng tốc độ home), Z giữ **`F600` = 10 mm/s** (trần `M203 Z10`).
 | **INFO** | tên firmware, proto, frame/lỗi, `UI: LVGL 8.3 + encoder/touch`; `REFRESH FULL` → `PANEL_REQ_FULL` |
 
 * **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`

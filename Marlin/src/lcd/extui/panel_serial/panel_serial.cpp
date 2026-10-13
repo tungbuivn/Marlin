@@ -432,13 +432,16 @@ namespace {
       case PANEL_F_GCODE: {
         // 1 dong G-code -> hang doi cua Marlin (khong block vong lap UI)
         static char cmd[PANEL_MAX_PAYLOAD + 2];
-        uint8_t n = rx.len < PANEL_MAX_PAYLOAD ? rx.len : (uint8_t)PANEL_MAX_PAYLOAD;
-        for (uint8_t i = 0; i < n; i++) {
+        // Payload kieu "str" = u8 len + n byte  => PHAI BO byte len dau tien.
+        // BUG CU (2026-10-13): lay ca byte len -> lenh thanh "\x03G28" (1 ky tu dieu khien o dau,
+        // khong hien trong log) => parser KHONG thuc thi lenh. Day la ly do G28/G35/G1 tu panel
+        // khong chay du frame van toi, trong khi lenh gui qua USB (khong co byte len) chay binh thuong.
+        uint8_t n = 0;
+        for (uint8_t i = 1; i < rx.len && n < PANEL_MAX_PAYLOAD; i++) {
           const char c = (char)rx.payload[i];
-          cmd[i] = (c == '\r' || c == '\n') ? ' ' : c;
+          cmd[n++] = (c == '\r' || c == '\n') ? ' ' : c;
         }
-        cmd[n] = '\n';
-        cmd[n + 1] = '\0';
+        cmd[n] = '\0';
         if (n) queue.enqueue_one_now(cmd);
         break;
       }

@@ -46,12 +46,15 @@
  *   STATUS  : THEO MARLIN ui_320x240 (nhiet dau in / ban in / quat + XYZ + FR/FL + SD + SETTINGS
  *             + thoi gian + thanh tien do + dong trang thai).
  *   MENU    : menu doc kieu Marlin, mo bang nut SETTINGS tren STATUS.
- *   TEMP    : +/- 1/10 do C cho nozzle & bed -> M104 S... / M140 S..., hang FAN -> M106 S..., COOLDOWN.
+ *   TEMP    : +/- 1/10 do C cho nozzle & bed -> M104 S... / M140 S..., hang FAN -> M106 S...,
+ *             1 hang preset PLA 210/60 | PETG 240/80 | ABS 250/100 (M104 + M140), COOLDOWN.
  *   JOG     : chon truc X/Y/Z, nut -0.1/+0.1/-1/+1/-10/+10 mm -> G91 + G1 <truc><d> F600 + G90,
  *             nut HOME ALL -> G28.
  *   FILES   : lv_roller danh sach panel.files[], PRINT (M23 + M24), DIR, UP, REFRESH,
  *             PAUSE (M25), RESUME (M24), STOP (M524).
- *   SETTINGS: bang thong so panel_setting(PANEL_SET_*) + SAVE EEPROM (PANEL_REQ_SAVE_SETTINGS).
+ *   SETTINGS: bang thong so panel_setting(PANEL_SET_*), cham 1 dong -> lop phu -/+/OK de SUA
+ *             (gui M92/M203/M201/M205/M851/M206/M220/M221/M301/M304/M106/M104/M140) +
+ *             SAVE EEPROM (PANEL_REQ_SAVE_SETTINGS).
  *   MESH    : bang luoi bed mesh (panel.mesh[col][row]), o cao = xanh, o thap = do,
  *             REFRESH -> PANEL_REQ_MESH; khong co PANEL_HAS_MESH thi bao "khong ho tro".
  *   CUSTOM  : 2 nut nhu menu cu cua Marlin: G34 Bed (G34 Q99) + Init SD (M22 roi M21).
@@ -522,6 +525,7 @@ enum {
 static void show_page(uint8_t p);            // forward
 static void create_page(uint8_t p);          // forward
 static void files_rebuild(void);             // forward
+static void refocus_page(void);              // forward (dinh nghia o cuoi file)
 
 static void cb_action(lv_event_t *e) {
   const int a = (int)(intptr_t)lv_event_get_user_data(e);
@@ -799,10 +803,37 @@ static void fan_row(lv_obj_t *p) {
   mk_btn(r, "MAX", TP_BTN_BIG, TP_ROW_H - 2, cb_temp_adj, TEMP_ADJ(2, +100));
 }
 
+// Preset preheat (giong ban UI cu: main.cpp ACT_PLA/PETG/ABS - 210/60, 240/80, 250/100)
+#define TP_PRE_H    28                                 // nut preset cao 28 >= 26 (du de cham)
+#define TP_PRE_PLA  0
+#define TP_PRE_PETG 1
+#define TP_PRE_ABS  2
+
+static void cb_temp_preheat(lv_event_t *e) {
+  static const uint16_t NOZ[3] = { 210, 240, 250 };
+  static const uint16_t BED[3] = {  60,  80, 100 };
+  const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  if (k > 2) return;
+
+  char cmd[20];
+  snprintf(cmd, sizeof(cmd), "M104 S%u", (unsigned)NOZ[k]);
+  panel_link_send_gcode(cmd);
+  snprintf(cmd, sizeof(cmd), "M140 S%u", (unsigned)BED[k]);
+  panel_link_send_gcode(cmd);
+  // Target nhiet lay tu frame TEMPS/SETTING -> xin gui lai cho o nhiet khop ngay
+  panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
+}
+
 static void page_temp_create(lv_obj_t *p) {
   temp_row(p, "NOZZLE", 0, &tp_noz);
   temp_row(p, "BED",    1, &tp_bed);
   fan_row(p);
+
+  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140 nhu ban UI cu)
+  lv_obj_t *rp = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_PRE_H, 0, GAP);
+  mk_btn_grow(rp, "PLA 210/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
+  mk_btn_grow(rp, "PETG 240/80", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
+  mk_btn_grow(rp, "ABS 250/100", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
 
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 34, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
@@ -857,11 +888,14 @@ static void cb_rate_adj(lv_event_t *e) {
   char cmd[16];
   snprintf(cmd, sizeof(cmd), which ? "M221 S%ld" : "M220 S%ld", (long)next);
   panel_link_send_gcode(cmd);
+  // Marlin doi that nhung so tren man lay tu goi SETTING -> xin gui lai cho khoi cu
+  panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
 }
 
 static void cb_rate_reset(lv_event_t *e) {
   (void)e;
   panel_link_send_gcode2("M220 S100", "M221 S100");
+  panel_link_request((uint8_t)PANEL_REQ_SETTINGS);
 }
 
 static void rate_row(lv_obj_t *p, const char *name, uint8_t which, const lv_img_dsc_t *icon,
@@ -923,7 +957,11 @@ static void cb_jog_move(lv_event_t *e) {
   if (step > 2) return;
 
   char cmd[24];
-  snprintf(cmd, sizeof(cmd), "G1 %c%s%s F600", "XYZ"[s_axis], neg ? "-" : "", JOG_STEP[step]);
+  // Toc do nhich: X/Y = 3000 mm/phut = 50 mm/s (bang HOMING_FEEDRATE X/Y cho de so sanh),
+  // Z giu 600 mm/phut = 10 mm/s (= tran M203 Z10, vit me nen phai cham).
+  // Truoc day dung F600 cho ca 3 truc -> nhich X/Y cham hon home 5 lan (2026-10-13).
+  const unsigned f = (s_axis == 2) ? 600U : 3000U;
+  snprintf(cmd, sizeof(cmd), "G1 %c%s%s F%u", "XYZ"[s_axis], neg ? "-" : "", JOG_STEP[step], f);
   // G91 ... G90: luon dong lai bang G90 de mot dong bi mat khong de may o che do tuong doi
   panel_link_send_gcode("G91");
   panel_link_send_gcode(cmd);
@@ -1078,8 +1116,8 @@ static void page_files_update(void) {
 }
 
 // ===========================================================================
-//  SETTINGS (chi doc gia tri Marlin gui; muon sua thi gui M-code)
-//  Bang ben trai (cao 104 <= 124) + 3 nut ben phai -> 16 + 104 + 16 + 2*GAP = 140
+//  SETTINGS (bang thong so Marlin gui + SUA duoc: cham 1 dong -> lop phu -/+/OK)
+//  Bang (cao SET_TABLE_H) + 1 hang nut UP | DOWN | SAVE EEPROM + 1 dong info <= 206
 // ===========================================================================
 typedef struct {
   uint16_t    id;
@@ -1125,34 +1163,291 @@ static const set_row_t SET_ROWS[] = {
 };
 #define SET_NROWS ((uint8_t)(sizeof(SET_ROWS) / sizeof(SET_ROWS[0])))
 
-#define SET_TABLE_H 104                              // <= 124, du 6 dong + cuon
-#define SET_BTN_W   108                              // du cho chu "SAVE EEPROM" (105 px)
-#define SET_TABLE_W (PAGE_INN_W - SET_BTN_W - GAP)   // 202
-#define SET_COL0_W  124
-#define SET_COL1_W  (SET_TABLE_W - SET_COL0_W)       // 78
+#define SET_TABLE_H 140                              // bang + 1 hang nut + info <= 206
+#define SET_COL0_W  190
+#define SET_COL1_W  (PAGE_INN_W - SET_COL0_W - 4)
 
 static lv_obj_t *se_table, *se_info;
+static uint8_t   se_idx[SET_NROWS];   // CHI so cac dong CO gia tri: loc bo cac dong ma ban build
+static uint8_t   se_n = 0;            // nay khong gui (Junction dev / Linear adv / PID... -> trong)
 
 static void cb_scroll_table(lv_event_t *e) {
   const lv_coord_t d = (lv_coord_t)(intptr_t)lv_event_get_user_data(e);
   if (se_table) lv_obj_scroll_by(se_table, 0, d, LV_ANIM_OFF);
 }
 
+// Loc: chi giu nhung dong ma panel DA NHAN duoc gia tri tu Marlin (2026-10-13, yeu cau nguoi dung)
+static void settings_build_list(void) {
+  se_n = 0;
+  for (uint8_t i = 0; i < SET_NROWS; i++)
+    if (panel_setting(SET_ROWS[i].id, INT32_MIN) != INT32_MIN) se_idx[se_n++] = i;
+}
+
+static void settings_fill_table(void) {
+  lv_table_set_row_cnt(se_table, (uint16_t)(se_n + 1));
+  for (uint8_t k = 0; k < se_n; k++)
+    lv_table_set_cell_value(se_table, (uint16_t)(k + 1), 0, SET_ROWS[se_idx[k]].name);
+}
+
+// ---------------------------------------------------------------------------
+//  Lop phu SUA 1 dong: cham vao 1 dong cua bang -> hien khung nho ngay TREN bang
+//  gom ten thong so + gia tri dang sua + 4 nut: - | + | OK | HUY.
+//  Buoc nhay = 10^(-dec) don vi HIEN THI (vi du Steps X: scale 1000 dec 2 -> 0.01).
+//  Gia tri lam viec la "raw" (da nhan scale, dung nhu panel_setting() tra ve) nen
+//  buoc quy ve raw = scale / 10^dec -> khong dung so thuc, khong cap phat dong.
+//  Bam OK: gui M-code dung voi .id (xem se_send_mcode) roi xin Marlin gui lai thong so.
+// ---------------------------------------------------------------------------
+#define OV_W       240                              // khung noi dung (giua man 320)
+#define OV_H       76
+#define OV_BTN_H   28
+#define OV_PAD     4
+#define OV_VCAP    120                              // be rong toi da cua o gia tri
+#define OV_RAW_LIM 100000000L                       // tran raw (du moi thong so o day)
+#define OV_ADJ(d)  ((void *)(intptr_t)(int8_t)(d))
+
+static const uint32_t OV_TEN_POW[4] = {1, 10, 100, 1000};
+
+static lv_obj_t *ov_bd, *ov_box, *ov_name, *ov_val, *ov_hint, *ov_minus;
+static uint8_t  ov_i = 0;        // chi so THAT trong SET_ROWS[] (khong phai chi so dong dang hien)
+static int32_t  ov_raw = 0;      // gia tri dang sua (raw = gia tri hien thi * scale)
+static bool     ov_open = false;
+static bool     ov_rep = false;  // da nhay do GIU nut -> bo qua lan CLICKED luc nhac tay
+
+// Buoc nhay (raw) cua 1 dong: 10^(-dec) don vi hien thi
+static int32_t ov_step(const uint8_t i) {
+  const uint8_t  dec = (SET_ROWS[i].dec > 3) ? 3 : SET_ROWS[i].dec;
+  const uint32_t sc  = SET_ROWS[i].scale ? SET_ROWS[i].scale : 1;
+  const uint32_t st  = sc / OV_TEN_POW[dec];
+  return (int32_t)(st ? st : 1);
+}
+
+// Tim dong khai bao cua 1 id (de in so dung so le nhu bang dang hien)
+static const set_row_t *se_find(const uint16_t id) {
+  for (uint8_t i = 0; i < SET_NROWS; i++)
+    if (SET_ROWS[i].id == id) return &SET_ROWS[i];
+  return NULL;
+}
+
+static void se_fmt_id(char *b, size_t n, const uint16_t id, const int32_t raw) {
+  const set_row_t *r = se_find(id);
+  fmt_scaled(b, n, raw, r ? r->scale : 1000, r ? r->dec : 2);
+}
+
+// Ky tu truc cho nhom id LIEN TIEP X Y Z E (tra 0 neu id khong thuoc nhom).
+// n = so phan tu cua nhom (4 cho X/Y/Z/E, 3 cho probe X/Y/Z) - phai kiem tra dung so
+// luong vi cac nhom nay nam lien nhau trong enum panel_setting_t.
+static char se_axis_char(const uint16_t id, const uint16_t first, const uint8_t n) {
+  const uint16_t d = (uint16_t)(id - first);
+  return (d < n) ? "XYZE"[d] : (char)0;
+}
+
+// Gui M-code ung voi 1 dong (dung gia tri 'raw' dang sua). false = id khong ho tro sua.
+static bool se_send_mcode(const uint8_t i, const int32_t raw) {
+  const uint16_t id = SET_ROWS[i].id;
+  char v[16], a[16], b[16], c[16], cmd[64];
+  char ax;
+
+  se_fmt_id(v, sizeof(v), id, raw);
+
+  if ((ax = se_axis_char(id, PANEL_SET_STEPS_MM_X, 4)) != 0)
+    snprintf(cmd, sizeof(cmd), "M92 %c%s", ax, v);
+  else if ((ax = se_axis_char(id, PANEL_SET_MAXFEED_X, 4)) != 0)
+    snprintf(cmd, sizeof(cmd), "M203 %c%s", ax, v);
+  else if ((ax = se_axis_char(id, PANEL_SET_MAXACCEL_X, 4)) != 0)
+    snprintf(cmd, sizeof(cmd), "M201 %c%s", ax, v);
+  else if ((ax = se_axis_char(id, PANEL_SET_JERK_X, 4)) != 0)
+    snprintf(cmd, sizeof(cmd), "M205 %c%s", ax, v);
+  else if ((ax = se_axis_char(id, PANEL_SET_PROBE_OFFSET_X, 3)) != 0)
+    snprintf(cmd, sizeof(cmd), "M851 %c%s", ax, v);
+  else if (id == PANEL_SET_Z_OFFSET)          // home offset (M206 Z)
+    snprintf(cmd, sizeof(cmd), "M206 Z%s", v);
+  else if (id == PANEL_SET_FEEDRATE_PCT)
+    snprintf(cmd, sizeof(cmd), "M220 S%s", v);
+  else if (id == PANEL_SET_FLOW_PCT)
+    snprintf(cmd, sizeof(cmd), "M221 S%s", v);
+  else if (id == PANEL_SET_TARGET_TEMP_E0)
+    snprintf(cmd, sizeof(cmd), "M104 S%s", v);
+  else if (id == PANEL_SET_TARGET_TEMP_BED)
+    snprintf(cmd, sizeof(cmd), "M140 S%s", v);
+  else if (id == PANEL_SET_FAN_PCT_E0) {
+    // % -> 0..255 (lam tron). raw o day da nhan 100 (PANEL_PCT_SCALE)
+    int32_t s = (raw * 255 + 5000) / 10000;
+    if (s < 0) s = 0; else if (s > 255) s = 255;
+    snprintf(cmd, sizeof(cmd), "M106 S%ld", (long)s);
+  }
+  else if (id >= PANEL_SET_PID_E_KP && id <= PANEL_SET_PID_E_KD) {
+    // M301 P/I/D: gui CA 3 gia tri, cho nao dang sua thi lay gia tri moi
+    int32_t kp = panel_setting(PANEL_SET_PID_E_KP, 0);
+    int32_t ki = panel_setting(PANEL_SET_PID_E_KI, 0);
+    int32_t kd = panel_setting(PANEL_SET_PID_E_KD, 0);
+    if (id == PANEL_SET_PID_E_KP) kp = raw;
+    else if (id == PANEL_SET_PID_E_KI) ki = raw;
+    else kd = raw;
+    se_fmt_id(a, sizeof(a), PANEL_SET_PID_E_KP, kp);
+    se_fmt_id(b, sizeof(b), PANEL_SET_PID_E_KI, ki);
+    se_fmt_id(c, sizeof(c), PANEL_SET_PID_E_KD, kd);
+    snprintf(cmd, sizeof(cmd), "M301 P%s I%s D%s", a, b, c);
+  }
+  else if (id >= PANEL_SET_PID_BED_KP && id <= PANEL_SET_PID_BED_KD) {
+    int32_t kp = panel_setting(PANEL_SET_PID_BED_KP, 0);
+    int32_t ki = panel_setting(PANEL_SET_PID_BED_KI, 0);
+    int32_t kd = panel_setting(PANEL_SET_PID_BED_KD, 0);
+    if (id == PANEL_SET_PID_BED_KP) kp = raw;
+    else if (id == PANEL_SET_PID_BED_KI) ki = raw;
+    else kd = raw;
+    se_fmt_id(a, sizeof(a), PANEL_SET_PID_BED_KP, kp);
+    se_fmt_id(b, sizeof(b), PANEL_SET_PID_BED_KI, ki);
+    se_fmt_id(c, sizeof(c), PANEL_SET_PID_BED_KD, kd);
+    snprintf(cmd, sizeof(cmd), "M304 P%s I%s D%s", a, b, c);
+  }
+  else return false;      // id khac (Junction dev / Linear adv...) -> khong gui gi
+
+  panel_link_send_gcode(cmd);
+  return true;
+}
+
+// Hien lai gia tri dang sua + buoc nhay cua dong do
+static void ov_refresh(void) {
+  char a[16], b[32];
+  fmt_scaled(a, sizeof(a), ov_raw, SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
+  set_text(ov_val, a);
+  fmt_scaled(a, sizeof(a), ov_step(ov_i), SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
+  snprintf(b, sizeof(b), "buoc %s", a);
+  set_text(ov_hint, b);
+}
+
+static void ov_hide(void) {
+  ov_open = false;
+  ov_rep  = false;
+  if (ov_bd)  lv_obj_add_flag(ov_bd, LV_OBJ_FLAG_HIDDEN);
+  if (ov_box) lv_obj_add_flag(ov_box, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void ov_close(void) {
+  if (!ov_open) return;
+  ov_hide();
+  refocus_page();                     // tra focus ve nut dau tien cua man SETTINGS
+}
+
+static void cb_se_ov_adj(lv_event_t *e) {
+  const lv_event_code_t code = lv_event_get_code(e);
+  const int8_t d = (int8_t)(intptr_t)lv_event_get_user_data(e);
+  if (code == LV_EVENT_PRESSED) { ov_rep = false; return; }
+  if (code == LV_EVENT_LONG_PRESSED_REPEAT) { ov_rep = true; }   // GIU nut -> nhay lien tuc
+  else if (ov_rep) { ov_rep = false; return; }                   // bo qua CLICKED luc nhac tay
+  if (!ov_open) return;
+
+  const int32_t st = ov_step(ov_i);
+  int64_t nv = (int64_t)ov_raw + (int64_t)d * (int64_t)st;
+  if (nv >  (int64_t)OV_RAW_LIM) nv =  (int64_t)OV_RAW_LIM;
+  if (nv < -(int64_t)OV_RAW_LIM) nv = -(int64_t)OV_RAW_LIM;
+  ov_raw = (int32_t)nv;
+  ov_refresh();
+}
+
+static void cb_se_ov_ok(lv_event_t *e) {
+  (void)e;
+  if (!ov_open) return;
+  const uint8_t i = ov_i;
+  const int32_t v = ov_raw;
+  ov_hide();
+  se_send_mcode(i, v);                                  // id khong ho tro -> khong gui gi
+  panel_link_request((uint8_t)PANEL_REQ_SETTINGS);      // xin lai de bang tu khop gia tri
+  refocus_page();
+}
+
+static void cb_se_ov_cancel(lv_event_t *e) { (void)e; ov_close(); }
+
+static void ov_create(void) {
+  lv_obj_t *scr = lv_scr_act();
+
+  // Nen mo: nuot moi lan cham ra NGOAI khung (khong cho roi xuong bang ben duoi)
+  ov_bd = lv_obj_create(scr);
+  lv_obj_set_pos(ov_bd, 0, CONT_Y);
+  lv_obj_set_size(ov_bd, UI_LCD_HOR_RES, CONT_H);
+  lv_obj_set_style_bg_color(ov_bd, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(ov_bd, LV_OPA_70, 0);
+  lv_obj_set_style_border_width(ov_bd, 0, 0);
+  lv_obj_set_style_radius(ov_bd, 0, 0);
+  lv_obj_set_style_pad_all(ov_bd, 0, 0);
+  lv_obj_clear_flag(ov_bd, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(ov_bd, LV_OBJ_FLAG_HIDDEN);
+
+  ov_box = lv_obj_create(scr);
+  lv_obj_set_pos(ov_box, (UI_LCD_HOR_RES - OV_W) / 2, (lv_coord_t)(CONT_Y + (CONT_H - OV_H) / 2));
+  lv_obj_set_size(ov_box, OV_W, OV_H);
+  lv_obj_set_style_bg_color(ov_box, COL_BAR, 0);
+  lv_obj_set_style_bg_opa(ov_box, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(ov_box, COL_ACCENT, 0);
+  lv_obj_set_style_border_width(ov_box, 1, 0);
+  lv_obj_set_style_radius(ov_box, 3, 0);
+  lv_obj_set_style_pad_all(ov_box, OV_PAD, 0);
+  lv_obj_set_style_pad_row(ov_box, GAP, 0);
+  lv_obj_clear_flag(ov_box, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_flex_flow(ov_box, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(ov_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  lv_obj_add_flag(ov_box, LV_OBJ_FLAG_HIDDEN);
+
+  ov_name = mk_label_w(ov_box, "-", MR_MENU, OV_W - 2 * OV_PAD);
+
+  lv_obj_t *rv = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, ROW_H, 0, GAP);
+  ov_val  = mk_label(rv, "-", COL_OK);
+  lv_obj_set_style_text_align(ov_val, LV_TEXT_ALIGN_LEFT, 0);
+  lv_obj_set_width(ov_val, OV_VCAP);
+  ov_hint = mk_label_w(rv, "", COL_DIM, 90);
+
+  lv_obj_t *rb = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
+  ov_minus = mk_btn_grow(rb, "-",   OV_BTN_H, cb_se_ov_adj, OV_ADJ(-1));
+  lv_obj_t *plus = mk_btn_grow(rb, "+", OV_BTN_H, cb_se_ov_adj, OV_ADJ(+1));
+  mk_btn_grow(rb, "OK",  OV_BTN_H, cb_se_ov_ok, NULL);
+  mk_btn_grow(rb, "HUY", OV_BTN_H, cb_se_ov_cancel, NULL);
+
+  // Giu nut de tang nhanh: nhan them PRESSED + LONG_PRESSED_REPEAT cho 2 nut -/+
+  lv_obj_t *adj[2] = { ov_minus, plus };
+  const int8_t dir[2] = { -1, +1 };
+  for (uint8_t k = 0; k < 2; k++) {
+    lv_obj_add_event_cb(adj[k], cb_se_ov_adj, LV_EVENT_PRESSED, OV_ADJ(dir[k]));
+    lv_obj_add_event_cb(adj[k], cb_se_ov_adj, LV_EVENT_LONG_PRESSED_REPEAT, OV_ADJ(dir[k]));
+  }
+}
+
+// Mo lop phu cho dong dang hien thu k (0..se_n-1); chi so THAT lay qua se_idx[]
+static void ov_open_row(const uint8_t k) {
+  if (k >= se_n) return;
+  ov_i   = se_idx[k];
+  ov_raw = panel_setting(SET_ROWS[ov_i].id, 0);
+  if (!ov_box) ov_create();
+  set_text(ov_name, SET_ROWS[ov_i].name);
+  ov_refresh();
+  ov_open = true;
+  ov_rep  = false;
+  lv_obj_clear_flag(ov_bd, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(ov_box, LV_OBJ_FLAG_HIDDEN);
+  if (s_group && ov_minus) lv_group_focus_obj(ov_minus);
+}
+
+// Cham 1 o cua bang -> mo lop phu (hang 0 la dong tieu de nen bo qua)
+static void cb_se_cell(lv_event_t *e) {
+  (void)e;
+  uint16_t row = 0, col = 0;
+  if (!se_table) return;
+  lv_table_get_selected_cell(se_table, &row, &col);
+  if (row < 1 || row > (uint16_t)se_n) return;
+  ov_open_row((uint8_t)(row - 1));
+}
+
 static void page_settings_create(lv_obj_t *p) {
+  settings_build_list();
   se_info = mk_label_w(p, "Marlin gui: 0 thong so", COL_DIM, PAGE_INN_W);
 
-  lv_obj_t *row = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, SET_TABLE_H, 0, GAP);
-
-  se_table = lv_table_create(row);
-  lv_obj_set_size(se_table, SET_TABLE_W, SET_TABLE_H);
+  se_table = lv_table_create(p);
+  lv_obj_set_size(se_table, PAGE_INN_W, SET_TABLE_H);
   lv_table_set_col_cnt(se_table, 2);
-  lv_table_set_row_cnt(se_table, (uint16_t)(SET_NROWS + 1));
   lv_table_set_col_width(se_table, 0, SET_COL0_W);
   lv_table_set_col_width(se_table, 1, SET_COL1_W);
   lv_table_set_cell_value(se_table, 0, 0, "THONG SO");
   lv_table_set_cell_value(se_table, 0, 1, "GIA TRI");
-  for (uint8_t i = 0; i < SET_NROWS; i++)
-    lv_table_set_cell_value(se_table, (uint16_t)(i + 1), 0, SET_ROWS[i].name);
+  settings_fill_table();
 
   lv_obj_set_style_bg_color(se_table, COL_BG, 0);
   lv_obj_set_style_bg_opa(se_table, LV_OPA_COVER, 0);
@@ -1166,32 +1461,36 @@ static void page_settings_create(lv_obj_t *p) {
   lv_obj_set_style_border_width(se_table, 1, LV_PART_ITEMS);
   lv_obj_set_style_pad_all(se_table, 2, LV_PART_ITEMS);
   lv_obj_set_style_text_color(se_table, COL_ACCENT, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  // Cham 1 o -> mo lop phu sua (-/+/OK). LVGL 8.3 gui VALUE_CHANGED khi NHAC tay (khong keo)
+  lv_obj_add_event_cb(se_table, cb_se_cell, LV_EVENT_VALUE_CHANGED, NULL);
 
-  // cot nut ben phai bang: SAVE EEPROM / UP / DN
-  lv_obj_t *cb = mk_flex(row, LV_FLEX_FLOW_COLUMN, SET_BTN_W, SET_TABLE_H, 0, GAP);
-  mk_btn(cb, "SAVE EEPROM", SET_BTN_W, 30, cb_action, (void *)(intptr_t)A_SAVE);
-  mk_btn(cb, "UP", SET_BTN_W, 28, cb_scroll_table, (void *)(intptr_t)(-48));
-  mk_btn(cb, "DN", SET_BTN_W, 28, cb_scroll_table, (void *)(intptr_t)(48));
-
-  mk_label_w(p, "SAVE = M500   UP/DN = cuon bang", COL_DIM, PAGE_INN_W);
+  // 1 HANG NUT o DAY bang, trai -> phai: UP | DOWN | SAVE EEPROM (2026-10-13)
+  lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 30, 0, GAP);
+  mk_btn_grow(rb, "UP",          28, cb_scroll_table, (void *)(intptr_t)(-48));
+  mk_btn_grow(rb, "DOWN",        28, cb_scroll_table, (void *)(intptr_t)(48));
+  mk_btn_grow(rb, "SAVE EEPROM", 28, cb_action, (void *)(intptr_t)A_SAVE);
 }
 
 static void page_settings_update(void) {
   char b[40], a[16];
-  uint8_t n = 0;
-  for (uint8_t i = 0; i < SET_NROWS; i++) {
-    const int32_t v = panel_setting(SET_ROWS[i].id, INT32_MIN);
-    if (v != INT32_MIN) {
-      fmt_scaled(a, sizeof(a), v, SET_ROWS[i].scale, SET_ROWS[i].dec);
-      n++;
-    }
-    else snprintf(a, sizeof(a), "-");
-    // chi set khi khac -> khong nhay + khong day SPI vo ich
-    const char *old = lv_table_get_cell_value(se_table, (uint16_t)(i + 1), 1);
-    if (!old || strcmp(old, a) != 0)
-      lv_table_set_cell_value(se_table, (uint16_t)(i + 1), 1, a);
+  // Neu so thong so nhan duoc doi (HELLO moi / bam lai) -> dung lai danh sach dong co gia tri
+  static uint8_t last_n = 255;
+  if (last_n != panel.n_settings) {
+    last_n = panel.n_settings;
+    settings_build_list();
+    settings_fill_table();
   }
-  snprintf(b, sizeof(b), "%u/%u thong so da nhan", (unsigned)n, (unsigned)SET_NROWS);
+
+  for (uint8_t k = 0; k < se_n; k++) {
+    const uint8_t i = se_idx[k];
+    const int32_t v = panel_setting(SET_ROWS[i].id, INT32_MIN);
+    fmt_scaled(a, sizeof(a), v, SET_ROWS[i].scale, SET_ROWS[i].dec);
+    // chi set khi khac -> khong nhay + khong day SPI vo ich
+    const char *old = lv_table_get_cell_value(se_table, (uint16_t)(k + 1), 1);
+    if (!old || strcmp(old, a) != 0)
+      lv_table_set_cell_value(se_table, (uint16_t)(k + 1), 1, a);
+  }
+  snprintf(b, sizeof(b), "cham 1 dong de SUA - %u/%u thong so", (unsigned)se_n, (unsigned)SET_NROWS);
   set_text(se_info, b);
 }
 
@@ -1688,6 +1987,9 @@ static void show_page(uint8_t p) {
     if (chrome) lv_obj_clear_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
     else        lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
   }
+
+  // Lop phu SUA thong so chi thuoc man SETTINGS -> doi man thi dong luon
+  if (p != PG_SETTINGS) ov_hide();
 
   set_text(s_title, PG_TITLE[p]);
   s_page_act = p;
