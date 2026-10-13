@@ -304,6 +304,9 @@ void sd_lost(const char *why) {
 bool s_fatfs_stale   = false;
 bool s_fatfs_written = false;
 
+// Bo dem phuc vu Marlin (de KIEM CHUNG driver SD qua UART: doc bao nhieu sector, bao nhieu loi)
+uint32_t s_raw_rd = 0, s_raw_rd_err = 0, s_raw_wr = 0, s_raw_wr_err = 0;
+
 void fatfs_sync(void) {
   if (!s_sd_ready) return;
   SD.end();                        // unmount: flush het cache + dong volume
@@ -681,7 +684,7 @@ bool net_esp3d_raw_read(const uint32_t sector, uint8_t *dst) {
   // SD.readRAW(): doc THANG sector vat ly, khong qua FATFS (core ESP32 SD.cpp:124 -> sd_read_raw).
   // Doc lap voi FATFS dang mount: chi doc, khong dung cache cua FATFS.
   const bool ok = SD.readRAW(dst, sector);
-  if (!ok) ELOG("[UP] doc RAW sector %lu THAT BAI (the rut ra?)\n", (unsigned long)sector);
+  if (ok) s_raw_rd++; else { s_raw_rd_err++; ELOG("[UP] doc RAW sector %lu THAT BAI (the rut ra?)\n", (unsigned long)sector); }
   return ok;
 #else
   (void)sector; (void)dst;
@@ -697,8 +700,8 @@ bool net_esp3d_raw_write(const uint32_t sector, const uint8_t *src) {
   if (s_file) s_file.flush();                    // dang nhan upload: day file + FAT xuong the
   else if (s_fatfs_written) { fatfs_sync(); if (!s_sd_ready) return false; }
   const bool ok = SD.writeRAW((uint8_t *)src, sector);   // core ESP32: sd_write_raw() (SD.h/SD.cpp)
-  if (ok) s_fatfs_stale = true;                  // FATFS cua panel gio co the LECH -> mount lai truoc
-  else    ELOG("[UP] ghi RAW sector %lu THAT BAI\n", (unsigned long)sector);
+  if (ok) { s_raw_wr++; s_fatfs_stale = true; }   // FATFS cua panel gio co the LECH -> mount lai truoc
+  else    { s_raw_wr_err++; ELOG("[UP] ghi RAW sector %lu THAT BAI\n", (unsigned long)sector); }
   return ok;
 #else
   (void)sector; (void)src;
@@ -1051,12 +1054,16 @@ void net_esp3d_log(void) {
                 sd_state, (int)s_busy, (unsigned long)s_got, (unsigned long)s_posted,
                 (unsigned long)heap, (unsigned long)s_heap_min, (unsigned long)free_kb,
                 t ? t + 1 : "-", s_result[0] ? s_result : "-");
-  // Trang thai MARLIN (tu frame PUSH) - de chan doan TU XA khi khong nhin duoc man hinh:
+  // Trang thai MARLIN (tu frame PUSH) + bo dem sector phuc vu Marlin - de chan doan TU XA khi khong
+  // nhin duoc man hinh:
   //   st = panel_state_t (0 idle, 1 printing, 2 paused, 3 homing, 4 leveling, 5 killed...),
-  //   fl = panel_status_flags_t (bit1 PANEL_SF_MEDIA, bit2 PANEL_SF_SD_PRINTING, bit3 PAUSED).
-  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\"\n",
+  //   fl = panel_status_flags_t (bit1 PANEL_SF_MEDIA, bit2 PANEL_SF_SD_PRINTING, bit3 PAUSED),
+  //   r=%lu/%lu = so sector DOC thanh cong / loi, w=%lu/%lu = so sector GHI thanh cong / loi.
+  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\" | SD r=%lu/%lu w=%lu/%lu\n",
                 (unsigned)panel.state, (unsigned)panel.flags, (unsigned)panel.progress_pct,
-                panel.prog.file);
+                panel.prog.file,
+                (unsigned long)s_raw_rd, (unsigned long)s_raw_rd_err,
+                (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err);
 }
 
 #else   // ---- PANEL_WIFI_UPLOAD = 0: stub rong (moi env van link duoc) ----

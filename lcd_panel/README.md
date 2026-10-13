@@ -2014,6 +2014,47 @@ của đường SD). File có lệnh thật (`G4`…) thì `M27` trả lời bì
   không đọc được file ⇒ **bản in dừng**. Đây là đánh đổi lớn nhất so với MUX 4053 (mục 11 vẫn giữ
   nguyên code để quay lại: chỉ cần bỏ `PANEL_SD_OVER_UART` ở Marlin và bật `PANEL_SD_SHARED` ở panel).
 
+### 12.6 Bài test xác nhận driver SD qua UART — **chỉ lệnh get-info, KHÔNG gia nhiệt, KHÔNG chuyển động**
+
+Mục đích: khẳng định `DiskIODriver_PanelUART` (Marlin) + card server (panel) chạy chắc, **không cần
+bật hotend/bàn, không di chuyển trục nào**. Dùng được cho cả khi máy đang nguội.
+
+**Bằng chứng định lượng**: panel in bộ đếm sector ở dòng log 1 Hz (COM7):
+
+```
+[MRL] st=0 fl=0x22 prog=0% file="" | SD r=274/0 w=5/0
+                                       ^^^^^^^  ^^^^^^^
+                                       đọc: 274 lần, 0 lỗi | ghi: 5 lần, 0 lỗi
+```
+
+**Trình tự test** (COM4 = Marlin; `panel-upload.ps1` để đưa file lên thẻ):
+
+| Bước | Lệnh | Kỳ vọng |
+|---|---|---|
+| 0 | `M105` | nhiệt độ hiện tại + **target `0.00`** (mốc "không gia nhiệt") |
+| 1 | `M115` | `Cap:SDCARD:1`, `Cap:SD_WRITE:1` |
+| 2 | `M22` / `M21` ×4 | `echo:SD card released` rồi `echo:SD card ok` — mỗi lần mount = đọc sector 0 + FAT qua UART |
+| 3 | `M20` ×6 | **6/6** lần thấy file (liệt kê = đọc FAT + sector thư mục) |
+| 4 | `M20 L` | liệt kê **tên dài** (đọc entry DIR) |
+| 5 | `M33 INFO.GCO` | trả `/INFO.GCO` (tra tên dài) — ⚠️ Marlin này **không có `M36`** (báo "Unknown command") |
+| 6 | `M23 <file>` | `File opened: <tên> Size: <n>` rồi `File selected`; **phải `M21` trước nếu vừa `M22`** |
+| 7 | tạo `INFO.GCO` = 1.200 dòng `M105`/`M114`/`M27` (+ padding `;`) ≈ 93 KB, upload qua WiFi | `/status` → `done` |
+| 8 | `M23 INFO.GCO` + `M24` | đọc **toàn bộ** file; `M27` báo `SD printing byte 93200/93200` rồi `Not SD printing` |
+| 9 | `M105` lại | target vẫn `0.00` ⇒ **không hề gia nhiệt** |
+| 10 | `M30 INFO.GCO` | `File deleted:...` (đường **GHI** chạy) + `M20` không còn file ⇒ dọn thẻ luôn |
+
+**Kết quả đo thật (2026-10-14, máy này)**:
+
+* Bộ đếm panel: **`SD r=274/0 w=5/0`** — 274 sector đọc + 5 ghi, **không lỗi nào**; không có dòng
+  `doc RAW sector ... THAT BAI` trong log.
+* File get-info 93.200 B: `M27` báo **100 % ở t = 13,8 s** (≥ **6,8 KB/s**, chậm hơn trần vì mỗi dòng
+  `M105/M114/M27` còn in ra USB), `Not SD printing` ở t = 18,4 s.
+* Nhiệt độ trước/sau: `T:30.76 /0.00 B:28.76 /0.00` → `T:30.71 /0.00 B:28.83 /0.00` ⇒ **target không đổi**.
+* `M22`/`M21` ×4 đều báo OK; `M20` **6/6**; `M20 L` ra `INFO.GCO 93200 INFO.GCO`; `M33` ra `/INFO.GCO`.
+* `M23` lặp lại **ngay sau `M22`** không in gì (thẻ đã bị nhả) — nhớ `M21` trước.
+
+
+
 
 
 ## Thanh day (status bar) + phan trang noi dung

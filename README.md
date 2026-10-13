@@ -2899,5 +2899,9 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
 - **Do bang thong that (P2)**: file 1,17 MB toan chu thich -> doc ~90-105 s (**~11-13 KB/s**, tran ly
   thuyet cua 250000 baud la 23 KB/s). In that can 1-4 KB/s => du 3-12 lan. Ghi cham hon (5 luot di-ve
   moi sector ~30-40 ms) nhung chi dung cho log/xoa.
+- **Bo dem kiem chung driver (2026-10-14)**: panel in `[MRL] ... | SD r=<doc>/<loi> w=<ghi>/<loi>` o
+  dong log 1 Hz (COM7). Bai test **chi lenh get-info, KHONG gia nhiet, KHONG chuyen dong** (M21/M22 x4,
+  M20 x6, M20 L, M33, M23, roi chay 1 file toan M105/M114/M27) cho ket qua **`SD r=274/0 w=5/0`** -
+  khong mot loi sector nao. Trinh tu day du o `lcd_panel/README.md` muc 12.6.
 
 
