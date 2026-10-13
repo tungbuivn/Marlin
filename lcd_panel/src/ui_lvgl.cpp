@@ -56,6 +56,10 @@
  *             REFRESH -> PANEL_REQ_MESH; khong co PANEL_HAS_MESH thi bao "khong ho tro".
  *   CUSTOM  : 2 nut nhu menu cu cua Marlin: G34 Bed (G34 Q99) + Init SD (M22 roi M21).
  *   INFO    : ten firmware, proto, marlin_fw, so frame/loi, phien ban UI.
+ *   TRAM    : Bed Tramming Wizard cua Marlin (4 so do lech + huong dan van vit + 4 nut
+ *             PROBE / MAX<->MIN / BACK / DONE). KHONG dung frame PUSH: Marlin chi can bat
+ *             #define PANEL_TRAM_LINK la du (link ASCII tren USART1 - xem tram_link.h), nho vay
+ *             man 12864 + menu MarlinUI (Tramming Wizard, Z ALIGN MANUAL...) VAN CON NGUYEN.
  *
  * Prompt cua Marlin (panel.prompt_active) -> lv_msgbox OK/CANCEL -> panel_link_answer().
  * Thong bao (panel.message) -> lv_msgbox theo panel.message_sev, tu dong dong sau 6s.
@@ -72,6 +76,7 @@
 #include <string.h>
 
 #include "panel_link.h"
+#include "tram_link.h"              // Bed Tramming Wizard cua Marlin (link ASCII, xem tram_link.h)
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
@@ -114,12 +119,14 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 //  Man hinh
 // ===========================================================================
 enum {
-  PG_STATUS = 0, PG_MENU, PG_RATE, PG_TEMP, PG_JOG, PG_FILES, PG_SETTINGS, PG_MESH, PG_CUSTOM, PG_INFO,
+  PG_STATUS = 0, PG_MENU, PG_RATE, PG_TEMP, PG_JOG, PG_FILES, PG_SETTINGS, PG_MESH, PG_CUSTOM,
+  PG_TRAM, PG_INFO,
   PG_COUNT
 };
 
 static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
-                                               "FILE SD", "THONG SO", "BED MESH", "CUSTOM", "INFO"};
+                                               "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
+                                               "TRAMMING", "INFO"};
 
 // ===========================================================================
 //  Hinh hoc 320x240
@@ -1351,10 +1358,127 @@ static void page_info_update(void) {
 }
 
 // ===========================================================================
+//  TRAMMING -- dieu khien Bed Tramming Wizard cua Marlin qua link ASCII (tram_link.h)
+//
+//  KHONG dung ExtUI/PANEL_SERIAL_UI: phia Marlin chi can 1 dong #define PANEL_TRAM_LINK
+//  (xem Marlin/src/feature/panel_tram_link.h). Nho vay menu 12864 + MarlinUI van con nguyen.
+//
+//  Bo cuc (tong 168 <= PAGE_INN_H 206):
+//    dong 1 : MODE + phase + goc dang dung .......... LINK / NO LINK
+//    2 dong : 2 goc mot dong, mm so voi moc, dau '*' = goc nozzle dang dung
+//    dong 4 : huong dan van vit (Marlin tinh san: "CW 0.150" / "CCW nhe" / "DAT")
+//    dong 5 : 4 nut PROBE | MAX/MIN | BACK | DONE
+//    2 dong : chu thich
+// ===========================================================================
+static lv_obj_t *tr_head, *tr_link, *tr_corner[TRAM_PROTO_POINTS], *tr_hint;
+
+// Ten 4 goc - PHAI theo dung thu tu TRAMMING_POINT_XY trong Marlin/Configuration_adv.h:
+//   0 = Back-Right (280,285)  1 = Back-Left (25,285)  2 = Front-Left (25,25)  3 = Front-Right (280,25)
+static const char *const TRAM_NAME[TRAM_PROTO_POINTS] = { "BR", "BL", "FL", "FR" };
+
+// Bam 1 trong 4 nut -> gui dung 1 ky tu lenh xuong Marlin (xem tram_protocol.h)
+static void cb_tram_cmd(lv_event_t *e) {
+  const char c = (char)(intptr_t)lv_event_get_user_data(e);
+  tram_link_send(c);
+  // BACK = thoat man nay (giong nut BACK cua wizard tren man 12864): bao Marlin thoat wizard
+  // (stow probe + danh dau Z chua home) roi quay ve MENU.
+  if (c == TRAM_CMD_BACK) show_page(PG_MENU);
+}
+
+// " BR  -0.012" / "*FL    ---" : 1 goc, mm so voi moc (Marlin gui san gia tri da tinh)
+static void tram_fmt_corner(char *b, size_t n, const uint8_t i) {
+  char num[12];
+  if (tram.st.ok[i]) {
+    const float d = tram.st.d[i];
+    fmt_scaled(num, sizeof(num), (int32_t)(d * 1000.0f + (d < 0.0f ? -0.5f : 0.5f)), 1000, 3);
+  }
+  else snprintf(num, sizeof(num), "  ---");
+  snprintf(b, n, "%c%s %s", (tram.st.active && tram.st.idx == i) ? '*' : ' ', TRAM_NAME[i], num);
+}
+
+static void page_tram_create(lv_obj_t *p) {
+  lv_obj_t *rh = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 20, 0, GAP);
+  tr_head = mk_label_w(rh, "-", COL_TXT, 220);
+  lv_obj_set_flex_grow(tr_head, 1);
+  tr_link = mk_label_w(rh, "NO LINK", COL_ERR, 84);
+
+  for (uint8_t r = 0; r < 2; r++) {
+    lv_obj_t *row = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 24, 0, GAP);
+    for (uint8_t k = 0; k < 2; k++) {
+      const uint8_t i = (uint8_t)(r * 2 + k);
+      tr_corner[i] = mk_label_w(row, "-", COL_TXT, 100);
+      lv_obj_set_flex_grow(tr_corner[i], 1);
+    }
+  }
+
+  tr_hint = mk_label_w(p, "NO LINK", COL_ACCENT, PAGE_INN_W);
+
+  lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 40, 0, GAP);
+  mk_btn_grow(rb, "PROBE",   38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_PROBE);
+  mk_btn_grow(rb, "MAX/MIN", 38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_MINMAX);
+  mk_btn_grow(rb, "BACK",    38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_BACK);
+  mk_btn_grow(rb, "DONE",    38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_DONE);
+
+  mk_label_w(p, "PROBE = probe lai goc dang dung", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, "DONE = goc nay xong | MAX/MIN = doi moc", COL_DIM, PAGE_INN_W);
+}
+
+static void page_tram_update(void) {
+  char b[44];
+
+  // ---- dong 1: MODE + phase + goc dang dung | LINK ----
+  if (!tram.st.active)
+    snprintf(b, sizeof(b), "%s  READY (bam R)", tram.st.mode_max ? "MAX" : "MIN");
+  else
+    snprintf(b, sizeof(b), "%s  %s  goc %u", tram.st.mode_max ? "MAX" : "MIN",
+             tram_phase_name(tram.st.phase), (unsigned)(tram.st.idx + 1));
+  set_text(tr_head, b);
+
+  set_text(tr_link, tram.linked ? "LINK OK" : "NO LINK");
+  lv_obj_set_style_text_color(tr_link, tram.linked ? COL_OK : COL_ERR, 0);
+
+  // ---- 4 goc: gia tri mm so voi moc (Marlin da tinh) ----
+  for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++) {
+    tram_fmt_corner(b, sizeof(b), i);
+    set_text(tr_corner[i], b);
+    lv_color_t col = COL_TXT;
+    if (tram.st.active && tram.st.idx == i) col = COL_ACCENT;      // goc nozzle dang dung
+    else if (tram.st.accepted[i])           col = COL_DIM;         // da bam DONE
+    else if (tram.st.ok[i])                 col = COL_OK;          // da do duoc
+    lv_obj_set_style_text_color(tr_corner[i], col, 0);
+  }
+
+  // ---- dong huong dan: Marlin gui token "CW:0.150" / "CCW:nhe" / "DAT" / "PROBE" / "ERR" / "-"
+  lv_color_t hcol = COL_ACCENT;
+  if (!tram.linked) {
+    snprintf(b, sizeof(b), "chua co du lieu (PANEL_TRAM_LINK?)");
+    hcol = COL_ERR;
+  }
+  else if (tram.st.phase != TRAM_PH_IDLE) {
+    snprintf(b, sizeof(b), "%s...", tram_phase_name(tram.st.phase));
+  }
+  else if (tram.st.all_dat) {
+    snprintf(b, sizeof(b), "DAT - lech so voi tam (chi con BACK)");
+    hcol = COL_OK;
+  }
+  else {
+    // "CW:0.150" -> "CW 0.150"; "CCW:nhe" -> "CCW nhe"
+    const char *h = tram.st.hint[0] ? tram.st.hint : "-";
+    uint8_t k = 0;
+    for (; h[k] && k < sizeof(b) - 1; k++) b[k] = (h[k] == ':') ? ' ' : h[k];
+    b[k] = '\0';
+    if (h[0] == 'D') hcol = COL_OK;                                // DAT
+    else if (h[0] == 'E') hcol = COL_ERR;                          // ERR
+  }
+  set_text(tr_hint, b);
+  lv_obj_set_style_text_color(tr_hint, hcol, 0);
+}
+
+// ===========================================================================
 //  MENU -- menu doc kieu Marlin (nut SETTINGS tren man STATUS mo vao day)
 //  Moi dong: [ten vang] .......... [gia tri trang]; dong la 1 nut (encoder bam = mo)
 // ===========================================================================
-#define MENU_ROWS 8
+#define MENU_ROWS 9
 typedef struct { const char *name; uint8_t page; } menu_item_t;
 static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Temperature",     PG_TEMP },
@@ -1364,6 +1488,7 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Bed mesh",        PG_MESH },
   { "Custom G34/SD",   PG_CUSTOM },
   { "Settings",        PG_SETTINGS },
+  { "Tramming wizard", PG_TRAM },
   { "Info",            PG_INFO }
 };
 static lv_obj_t *mn_val[MENU_ROWS];
@@ -1384,6 +1509,11 @@ static void cb_cal_touch(lv_event_t *e) {
 //  MENU la 1 man BINH THUONG: co dong tieu de chung o tren (ten man + LINK + BACK ben phai),
 //  cac dong menu do FLEX cua mk_page() tu xep doc (khong can toa do y).
 static void page_menu_create(lv_obj_t *p) {
+  // 9 dong menu + (tren board co touch) 1 dong "Calibrate touch" = 10 dong x 20 px = 200 <= 206.
+  // mk_page() dat pad_row = GAP cho moi man, o day phai de 0 thi moi du (cac dong la o dac lien
+  // nhau - giong danh sach menu cua Marlin; dong dang chon duoc to sang + vien xanh).
+  lv_obj_set_style_pad_row(p, 0, 0);
+
   for (uint8_t i = 0; i < MENU_ROWS; i++) {
     lv_obj_t *r = mk_hit(p, 0, 0, PAGE_INN_W, MENU_ROW_H - 2,
                          cb_menu_row, (void *)(intptr_t)MENU_ITEMS[i].page);
@@ -1441,8 +1571,16 @@ static void page_menu_update(void) {
   set_text(mn_val[5], "G34/M22");
   snprintf(b, sizeof(b), "%u/33", (unsigned)panel.n_settings);
   set_text(mn_val[6], b);
-  snprintf(b, sizeof(b), "%s", panel.linked ? "LINK" : "NO LINK");
+
+  // Tramming wizard: NO LINK khi chua nhan duoc dong TRAM nao tu Marlin (chua bat
+  // #define PANEL_TRAM_LINK, hoac day UART chua noi)
+  if (!tram.linked) snprintf(b, sizeof(b), "%s", tram.ever ? "mat link" : "chua bat");
+  else if (!tram.st.active) snprintf(b, sizeof(b), "san sang");
+  else snprintf(b, sizeof(b), "%s %s", tram.st.mode_max ? "MAX" : "MIN", tram_phase_name(tram.st.phase));
   set_text(mn_val[7], b);
+
+  snprintf(b, sizeof(b), "%s", panel.linked ? "LINK" : "NO LINK");
+  set_text(mn_val[8], b);
   set_text(mn_val_cal, ui_port_touch_cal_is_saved() ? "NVS" : "mac dinh");
 }
 
@@ -1463,6 +1601,7 @@ static void create_page(uint8_t p) {
     case PG_SETTINGS: page_settings_create(s_page[p]); break;
     case PG_MESH:     page_mesh_create(s_page[p]);     break;
     case PG_CUSTOM:   page_custom_create(s_page[p]);   break;
+    case PG_TRAM:     page_tram_create(s_page[p]);     break;
     case PG_INFO:     page_info_create(s_page[p]);     break;
     default: break;
   }
@@ -1701,6 +1840,7 @@ void ui_lvgl_task(void) {
     case PG_RATE:   page_rate_update();   break;
     case PG_TEMP:   page_temp_update();   break;
     case PG_JOG:    page_jog_update();    break;
+    case PG_TRAM:   page_tram_update();   break;
     case PG_INFO:   page_info_update();   break;
     default: break;
   }

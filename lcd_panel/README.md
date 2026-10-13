@@ -1,16 +1,16 @@
 # lcd_panel — firmware màn hình riêng cho Marlin (Voron 300 / MKS Monster8 V2)
 
 Một MCU **riêng** lo toàn bộ việc vẽ màn hình; Marlin không phải render gì.
-Có **2 kiểu giao tiếp**, chọn bằng env trong `lcd_panel/platformio.ini` (không phải sửa code):
+Có **3 kiểu giao tiếp**, chọn bằng env trong `lcd_panel/platformio.ini` (không phải sửa code):
 
-| | **Kiểu G-code** | **Kiểu PUSH** (mới, dùng cho màn LVGL) |
-|---|---|---|
-| Env | `panel_f411cc`, `panel_f103c6` | `panel_f407vgz_lvgl`, `panel_f411cc_lvgl`, `panel_esp32_cyd` |
-| Panel lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`panel_link.cpp`) |
+| | **Kiểu G-code** | **Kiểu PUSH** (mới, dùng cho màn LVGL) | **Kiểu TRAM** (mới — **không cần ExtUI**) |
+|---|---|---|---|
+| Env | `panel_f411cc`, `panel_f103c6` | `panel_f407vgz_lvgl`, `panel_f411cc_lvgl`, `panel_esp32_cyd` | như kiểu PUSH |
+| Panel lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`panel_link.cpp`) | dòng ASCII `TRAM …` (`tram_link.cpp`) — **chỉ** dữ liệu Tramming Wizard |
 | Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) — **màn NGANG 320×240**, bố cục + **icon lấy từ màn TFT của Marlin** (§5) |
-| Marlin cần | chỉ bật 1 UART trống | bật `PANEL_SERIAL_UI` (ExtUI `panel_serial`) + tắt màn 12864 |
-| Dữ liệu nặng (file SD, bed mesh, PID/steps/mm, prompt…) | **không có** | **có** (Marlin đẩy hết) |
-| Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font + ~17 KB icon) |
+| Marlin cần | chỉ bật 1 UART trống | bật `PANEL_SERIAL_UI` (ExtUI `panel_serial`) + tắt màn 12864 | **chỉ thêm 1 dòng `#define PANEL_TRAM_LINK`** — **KHÔNG** tắt gì của MarlinUI ⇒ **màn 12864 + menu MarlinUI vẫn nguyên vẹn** |
+| Dữ liệu nặng (file SD, bed mesh, PID/steps/mm, prompt…) | **không có** | **có** (Marlin đẩy hết) | **không có** (chỉ Tramming Wizard — §5.6) |
+| Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font + ~17 KB icon) | như kiểu PUSH (+0,3 KB khi thêm màn TRAMMING — xem §1.1) |
 
 > **Vì sao có kiểu PUSH?** Panel ở MCU riêng *không* đọc được biến nội bộ của Marlin. Nếu chỉ
 > hỏi bằng G-code thì rất nhiều "khối" không thể vẽ: danh sách file SD, lưới bed mesh, thông số
@@ -18,6 +18,14 @@ Có **2 kiểu giao tiếp**, chọn bằng env trong `lcd_panel/platformio.ini`
 > (MKS TFT cũng làm kiểu G-code và phải thêm hàng loạt M-code riêng —
 > tham khảo `makerbase-mks/MKS-TFT28-32-Firmware`.) Nên kiểu mới: Marlin **đẩy** dữ liệu xuống,
 > panel chỉ gửi G-code cho **hành động** (G28 / M104 / M140 / M24 / M524…).
+
+> **Vì sao có thêm kiểu TRAM (2026-10-13)?** Kiểu PUSH bắt buộc bật `PANEL_SERIAL_UI` (ExtUI), mà
+> ExtUI **chiếm `MarlinUI::init_lcd()/update()`** nên phải **tắt màn 12864 + `CUSTOM_MENU_MAIN` +
+> `LED_CONTROL_MENU`** ⇒ **mất toàn bộ menu MarlinUI** (Tramming Wizard, `Z ALIGN MANUAL`…).
+> Kiểu TRAM chỉ thêm **một link ASCII rất nhỏ** (`Marlin/src/feature/panel_tram_link.cpp`) để màn
+> riêng hiển thị + điều khiển **Bed Tramming Wizard**, **không dùng ExtUI** ⇒ chỉ cần thêm
+> `#define PANEL_TRAM_LINK` là xong, bản build 12864 không mất gì. Xem **§5.6** và
+> `docs/issues/0001-panel-serial-ui-tat-custom-menu.md` §3c.
 
 ---
 
@@ -71,6 +79,14 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 > (cờ tạm để hiệu chuẩn touch) — tắt đi thì nhỏ hơn một chút.
 > Hai env G-code (`panel_f411cc`, `panel_f103c6`) **không đổi** (chúng loại `ui_lvgl*.cpp` khỏi build).
 
+> **2026-10-13** (màn **TRAMMING**, §5.6): đo lại sau khi thêm `tram_link.cpp` + màn TRAMMING:
+> `panel_f411cc_lvgl` **157.152 B / 262.144 (59,9 %) · RAM 52.608 B / 131.072 (40,1 %)**;
+> `panel_f407vgz_lvgl` **158.756 B (15,1 %) / 81.328 B (62,0 %)**;
+> `panel_esp32_cyd` **463.101 B (35,3 %) / 102.044 B (31,1 %)** (vẫn bật `-DPANEL_CYD_DEBUG=1`).
+> Màn TRAMMING thêm **~2,6 KB flash** (F407: 156.136 → 158.756) — chủ yếu là code LVGL cho 4 nút +
+> 6 nhãn, phần link TRAM chỉ vài trăm byte.
+> Build này **vẫn giữ nguyên** `-DPANEL_CYD_DEBUG=1` như trước (không phải số của bản dùng thật).
+
 > Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/lv_conf.h`
 > từ 20 KB lên 28–32 KB (F411 còn 128 KB RAM; **buffer vẽ giờ là 320×40×2 = 25,6 KB** vì màn ngang).
 
@@ -80,8 +96,31 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 
 ### 2.1 UART panel ↔ Marlin (MKS Monster8 V2)
 
-Marlin đang dùng `SERIAL_PORT -1` (USB CDC) để nói với PC → còn UART trống. Dùng **USART3**
-vì chân nằm ngay header EXP1 (header màn 12864 cũ):
+Marlin đang dùng `SERIAL_PORT -1` (USB CDC) để nói với PC → còn UART trống. **Chân nối phụ thuộc
+kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
+
+| Kiểu | UART (Marlin) | Chân Monster8 | Vì sao |
+|---|---|---|---|
+| **PUSH** (`PANEL_SERIAL_UI`) | USART3 | PD9 (RX) / PD8 (TX) = EXP1 chân 5/6 | chân nằm ngay header màn 12864 cũ |
+| **TRAM** (`PANEL_TRAM_LINK`) | **USART1** | **PA10 (RX) / PA9 (TX) = header MKS WiFi** | USART3 **hết chân TX rảnh** (PD8 = `NEOPIXEL_PIN`, PB10 = `HEATER_BED`, PC10 = `SD_SCK`); PA9/PA10 **hoàn toàn rảnh** (`//#define WIFI_SERIAL 1 // USART1` đang comment trong `pins_MKS_MONSTER8_V2.h`) |
+
+**Kiểu TRAM (khuyến nghị cho Tramming Wizard) — KHÔNG đụng PD8/NeoPixel, KHÔNG đụng chân reset màn 12864:**
+
+| Monster8 (header **MKS WiFi**) | Chân MCU | Nối tới panel |
+|---|---|---|
+| chân RX | **PA10 = USART1_RX** | ← **TX của panel** (CYD: GPIO22) |
+| chân TX | **PA9 = USART1_TX** | → **RX của panel** (CYD: GPIO35) |
+| GND | GND | GND (**bắt buộc nối chung**) |
+
+* Dây **chéo TX↔RX**; baud 250000 hai bên; panel cấp nguồn riêng (USB/5V) — **không** lấy 5V từ
+  header vào chân 3V3 của CYD.
+* Build flag cho USART1 nằm trong **`ini/features.ini`** (key `PANEL_TRAM_LINK`):
+  `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` ⇒ **chỉ** được thêm khi bật
+  `#define PANEL_TRAM_LINK`, nên bản build hiện tại không đổi gì.
+* ⚠️ Nếu định bật **cả** `WIFI_SERIAL` (USART1) thì phải chọn cổng khác — `panel_tram_link.h` có
+  `#error` chặn sẵn.
+
+**Kiểu PUSH (`PANEL_SERIAL_UI`) — USART3, chỉ dùng khi chấp nhận tắt màn 12864:**
 
 | Monster8 EXP1 | Chân MCU | Nối tới panel |
 |---|---|---|
@@ -96,10 +135,11 @@ vì chân nằm ngay header EXP1 (header màn 12864 cũ):
 * ⚠️ **PD8 còn là `NEOPIXEL_PIN` = `EXP1_06_PIN`** (đèn nền RGB của màn 12864 V3, `NEOPIXEL_LED`
   đang bật trong `Configuration.h`) ⇒ phải tắt cả `MKS_MINI_12864_V3` **và** `NEOPIXEL_LED`
   (xem §4).
-* **Panel CYD (ESP32)**: UART đến Marlin = `Serial2`, mặc định **GPIO22 = TX** (nối vào PD9),
-  **GPIO35 = RX** (nối từ PD8). ESP32 là 3V3 nên **không** nối 5V từ EXP1 vào chân 3V3 của CYD;
-  cấp nguồn cho CYD bằng USB hoặc 5V riêng. Đổi chân trong `src/panel_config.h`
-  (`PANEL_UART_TX` / `PANEL_UART_RX`).
+* **Panel CYD (ESP32)**: UART đến Marlin = `Serial2`, mặc định **GPIO22 = TX**, **GPIO35 = RX**
+  (chân khai trong `src/panel_config.h`: `PANEL_UART_TX` / `PANEL_UART_RX`). Nối **chéo** với
+  USART3 (PD9/PD8) ở kiểu PUSH, hoặc với **USART1 (PA10/PA9)** ở kiểu TRAM — xem bảng đầu §2.1.
+  ESP32 là 3V3 nên **không** nối 5V từ EXP1 vào chân 3V3 của CYD; cấp nguồn cho CYD bằng USB hoặc
+  5V riêng. `GPIO35` chỉ **đọc** được nên đúng cho chiều RX.
 
 ### 2.2 Màn hình (khi đi dây với board STM32)
 
@@ -125,7 +165,35 @@ Với **CYD**: màn + cảm ứng đã nối sẵn trong board, cấu hình nằ
 
 ---
 
-## 3. Phía Marlin — bật chế độ panel (1 lệnh)
+## 3. Phía Marlin — 2 cách bật
+
+### 3.1 Kiểu TRAM (khuyến nghị — giữ nguyên màn 12864 + menu MarlinUI)
+
+```powershell
+# 1) thêm ĐÚNG 1 dòng vào Marlin/Configuration.h (bất kỳ chỗ nào, ví dụ ngay dưới khối BAUDRATE):
+#        #define PANEL_TRAM_LINK
+# 2) build + nạp Marlin như bình thường:
+pio run -e mks_monster8 -t upload
+```
+
+* **Mặc định TẮT** (`//#define PANEL_TRAM_LINK` trong `src/feature/panel_tram_link.h`). Chưa thêm
+  dòng nào ⇒ **không** biên dịch module, **không** chiếm UART, **không** tốn flash, và
+  `Configuration.h`/`Configuration_adv.h` **giữ nguyên 100%** so với bản 12864.
+* Khi bật: `MKS_MINI_12864_V3` **vẫn bật**, `CUSTOM_MENU_MAIN` **vẫn bật**, `LED_CONTROL_MENU`
+  **vẫn bật**, `NEOPIXEL_LED` **vẫn bật** (link dùng **USART1/PA9-PA10**, xem §2.1) ⇒ **không mất
+  menu MarlinUI nào**.
+* Build flag USART1 được thêm tự động từ `ini/features.ini` (key `PANEL_TRAM_LINK`) — đúng như khi
+  bạn bật định nghĩa đó, không cần sửa `platformio.ini`/`stm32f4.ini`.
+* Số liệu build thật (`pio run -e mks_monster8`, đo 2026-10-13):
+
+| | Flash | RAM |
+|---|---|---|
+| `PANEL_TRAM_LINK` **tắt** (mặc định, 12864) | **267.576 B** (25,5 %) | **12.220 B** (9,3 %) |
+| `PANEL_TRAM_LINK` **bật** | **270.592 B** (25,8 %) | **12.828 B** (9,8 %) |
+
+⇒ tính năng thêm **~3,0 KB flash / ~0,6 KB RAM** khi bật; tắt thì **không có gì thay đổi**.
+
+### 3.2 Kiểu PUSH (`PANEL_SERIAL_UI`) — chỉ khi chấp nhận mất menu 12864
 
 ```powershell
 pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on     # bat panel:  PANEL_SERIAL_UI + tat man cu
@@ -153,8 +221,10 @@ Cần thêm trong `ini/stm32f4.ini` (env `mks_monster8`) — **đã có sẵn** 
 > 📌 **`CUSTOM_MENU_MAIN` bị tắt ở chế độ panel** — đây là thoả hiệp tạm thời. 2 mục menu cũ đã
 > chuyển sang màn **CUSTOM** của panel, nhưng muốn *thêm mục mới* thì hiện phải sửa code panel.
 > Kế hoạch làm lại (Marlin đẩy danh sách menu xuống panel): **`docs/issues/0001-panel-serial-ui-tat-custom-menu.md`**.
+> 👉 **Từ 2026-10-13 không cần thoả hiệp này nữa nếu chỉ cần Tramming Wizard** — dùng **kiểu TRAM**
+> (§3.1 + §5.6): màn 12864 + toàn bộ menu MarlinUI giữ nguyên.
 
-Số liệu build thật (`pio run -e mks_monster8`):
+Số liệu build thật của **kiểu PUSH** (`pio run -e mks_monster8`):
 
 | | Flash | RAM |
 |---|---|---|
@@ -192,6 +262,17 @@ Chương trình `tools/test_panel_link.cpp` dùng **đúng** bộ tạo/giải f
 FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, và nhóm chịu lỗi (rác trước
 frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần chạy đầu đã bắt được **2 lỗi thật**
 (lệch offset 2 byte của `feed/flow %`, và điều kiện gửi PING sai) — nay **40/40 pass**.
+
+> **2026-10-13 — thêm nhóm test cho TRAM** (`src/tram_link.cpp` + `src/tram_protocol.h`): **+35 kiểm
+> tra** (tổng **~75**): định dạng số `tram_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse
+> round-trip** đầy đủ trường, đọc được **dòng tối thiểu** (thiếu 3 trường mở rộng) và **từ chối
+> dòng sai**, `tram_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
+> với frame PUSH** (byte `T`/`TRAM` trong payload **không** bị ăn mất), và việc **ngừng gửi PING**
+> khi đã vào chế độ TRAM.
+> ⚠️ **Máy này chưa chạy được `run_host_test.ps1`** (không có `g++`/MinGW trên PATH; script cần
+> `pwsh`). Đã kiểm bằng `arm-none-eabi-g++ -fsyntax-only -Wall -Wextra` → **0 lỗi, 0 cảnh báo**;
+> muốn chạy thật thì cần cài MinGW (`winget install BrechtSanders.WinLibs.POSIX.UCRT`) rồi chạy
+> `pwsh lcd_panel/tools/run_host_test.ps1`.
 
 ---
 
@@ -281,6 +362,7 @@ python lcd_panel/tools/make_lvgl_icons.py
 | **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `PANEL_REQ_SAVE_SETTINGS` |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `PANEL_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
+| **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 4 nút **PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
 | **INFO** | tên firmware, proto, frame/lỗi, `UI: LVGL 8.3 + encoder/touch`; `REFRESH FULL` → `PANEL_REQ_FULL` |
 
 * **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`
@@ -349,6 +431,48 @@ heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
 > Cách "chấm 4 góc bằng mắt" trước đây chỉ ra `332..3645 / 453..3658` (hụt vào 150–250 đơn vị ở
 > mỗi mép → lệch ở giữa màn hình); cách **kéo tới lúc mất cảm ứng** mới lấy đúng mép vật lý.
 
+### 5.6 Màn TRAMMING — Bed Tramming Wizard (kiểu TRAM, **không cần ExtUI**)
+
+> **2026-10-13**: màn mới cho màn hình riêng, dùng **chung thuật toán** với wizard trên màn 12864
+> (`Marlin/src/feature/tramming_run.cpp`). Phía Marlin chỉ cần **1 dòng** `#define PANEL_TRAM_LINK`
+> — **KHÔNG** phải tắt `MKS_MINI_12864_V3` / `CUSTOM_MENU_MAIN` / `LED_CONTROL_MENU`.
+
+**Vào màn:** STATUS → **SETTINGS** → MENU → dòng **`Tramming wizard`** (cột phải ghi `chua bat` /
+`san sang` / `MAX PROBING` / `mat link`).
+
+| Hàng | Nội dung |
+|---|---|
+| 1 | `MAX  IDLE  goc 2` (mode · phase · góc nozzle đang đứng) + `LINK OK` / `NO LINK` bên phải |
+| 2–3 | **4 góc, 2 góc một dòng**: ` BR  -0.012   BL  +0.021` — `*` = góc đang đứng, mm so với **mốc**; `---` = góc chưa probe được |
+| 4 | **hướng dẫn vặn vít** do **Marlin** gửi: `CW 0.150` / `CCW nhe` / `DAT` / `PROBE` / `ERR` |
+| 5 | **4 nút**: `PROBE` · `MAX/MIN` · `BACK` · `DONE` |
+| 6–7 | chú thích |
+
+**4 nút gửi đúng 1 ký tự xuống Marlin** (`tram_protocol.h`): `P` = probe lại góc đang đứng ·
+`D` = góc này xong (đi góc cần chỉnh kế tiếp; hết góc → home Z + probe lại 4 góc) · `M` = đổi mốc
+`MAX`↔`MIN` · **`BACK`** gửi `B` (thoát wizard: stow probe + đánh dấu Z chưa home) rồi về MENU.
+Ngoài ra panel gửi `Q` khi mới vào màn. Marlin trả lời bằng **1 dòng ASCII mỗi 200 ms**:
+
+```
+TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active> <all_dat> <hint>
+```
+
+* `phase` 0 IDLE / 1 HOMING / 2 PROBING / 3 GOTO / 4 POINT / 5 AUTO · `mode` 1 = MAX (mốc `Z-MIN`),
+  0 = MIN (mốc `Z-MAX`) · `idx` = góc nozzle đang đứng · `ref` = **mốc** đang so (mm, 3 số lẻ) ·
+  `d0..d3` = độ lệch từng góc (`---.---` = chưa đo) · `A0..A3` = đã bấm DONE ·
+  `hint` = `DAT` / `CW:0.150` / `CCW:nhe` / `PROBE` / `ERR` / `-`.
+* **`hint` do Marlin tính sẵn** (dùng đúng `tramming_turn_cw` + `TRAM_DONE_MM` như màn 12864) nên
+  panel **không** tự suy lại chiều vặn vít ⇒ số và chiều ở 2 màn luôn giống nhau.
+* Định nghĩa **dùng chung y nguyên** ở 2 nơi: `Marlin/src/feature/tram_protocol.h` và
+  `lcd_panel/src/tram_protocol.h` (sửa một bên thì **copy sang bên kia**).
+* Panel đọc dòng `TRAM …` **ngay trong vòng đọc UART của `panel_link.cpp`**; byte không thuộc dòng
+  TRAM được trả lại **nguyên vẹn** cho bộ giải frame PUSH (không mất byte nào), và khi đã vào chế độ
+  TRAM thì panel **ngừng gửi PING** (tránh byte nhị phân lọt vào bộ giải lệnh ASCII của Marlin).
+* Ở chế độ này các màn khác (STATUS/TEMP/FILES…) vẫn mở được nhưng hiện `NO LINK` — chúng cần frame
+  PUSH của `PANEL_SERIAL_UI`, mà 2 chế độ **loại trừ nhau** (`panel_tram_link.h` có `#error` chặn).
+
+**Nối dây:** USART1 = **PA9 (TX) / PA10 (RX)** — bảng đầu §2.1.
+
 ---
 
 ## 6. Xử lý sự cố
@@ -356,7 +480,9 @@ heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
 | Hiện tượng | Kiểm gì |
 |---|---|
 | Màn trắng / không có gì | dây SPI (SCK/MOSI/CS/DC/RST), chân BL, `TFT_ROTATION`; thử `TFT_SPI_SPEED` thấp hơn (12 MHz) nếu dây dài |
-| Header hiện `NO LINK` | dây TX/RX có **chéo** không, GND chung chưa, baud 2 bên có trùng `250000`, Marlin đã bật `PANEL_SERIAL_UI` chưa (và đã tắt màn 12864 chưa), cờ `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_*` có trong env chưa |
+| Header hiện `NO LINK` | **kiểu PUSH**: dây TX/RX có **chéo** không, GND chung chưa, baud 2 bên có trùng `250000`, Marlin đã bật `PANEL_SERIAL_UI` chưa (và đã tắt màn 12864 chưa), cờ `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_*` có trong env chưa |
+| Màn **TRAMMING** hiện `NO LINK` | **kiểu TRAM**: Marlin đã thêm `#define PANEL_TRAM_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `PANEL_TRAM_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TRAM` nào |
+| Màn **TRAMMING** hiện `PROBE`/`ERR` mãi | góc đó chưa probe được (đầu dò lỗi/ngoài tầm) → bấm `PROBE` lại; `ERR` = lần probe vừa rồi trả `NAN` |
 | Panel không nhận nhiệt độ/vị trí | Marlin phải build ở **chế độ panel** (`set_panel_mode.ps1 -Mode status` để xem) — nếu còn `MKS_MINI_12864_V3` thì Marlin sẽ báo lỗi SanityCheck |
 | Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/panel_config.h` |
 | Nhiệt độ nhảy loạn | đường serial nhiễu: giảm baud 2 bên (`PANEL_MARLIN_BAUD` + `BAUDRATE_2`) hoặc dùng cáp ngắn/xoắn |

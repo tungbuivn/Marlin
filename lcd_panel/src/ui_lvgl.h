@@ -9,7 +9,7 @@
  * Khi PANEL_USE_LVGL = 0 (F411/F103C6 -- UI tu ve) thi file nay KHONG khai bao gi ca,
  * nen main.cpp cu van build duoc ma khong keo theo LVGL.
  *
- * Man hinh (xem ui_lvgl.cpp): STATUS / TEMP / JOG / FILES / SETTINGS / MESH / CUSTOM / INFO.
+ * Man hinh (xem ui_lvgl.cpp): STATUS / TEMP / JOG / FILES / SETTINGS / MESH / CUSTOM / TRAM / INFO.
  */
 #pragma once
 

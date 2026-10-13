@@ -252,6 +252,10 @@
   #include "tests/marlin_tests.h"
 #endif
 
+// Man hinh rieng lcd_panel: link TRAMMING tren USART3 (mac dinh TAT - xem panel_tram_link.h).
+// Khai bao luon co (than ham rong khi TAT) de TERN_ ben duoi bien dich duoc o moi cau hinh.
+#include "feature/panel_tram_link.h"
+
 PGMSTR(M112_KILL_STR, "M112 Shutdown");
 
 MarlinState marlin_state = MF_INITIALIZING;
@@ -838,6 +842,11 @@ void idle(bool no_stepper_sleep/*=false*/) {
 
   // Update the Beeper queue
   TERN_(HAS_BEEPER, buzzer.tick());
+
+  // Man hinh rieng lcd_panel: link TRAMMING (USART3) - PANEL_TRAM_LINK, mac dinh TAT.
+  // Dat TRUOC ui.update() de man 12864 (neu cung mo wizard) ve ngay trang thai vua tien;
+  // va vi no khong goi idle() nen khong the de quy vo han (xem panel_tram_link.cpp).
+  TERN_(PANEL_TRAM_LINK, panel_tram_link::tick());
 
   // Handle UI input / draw events
   TERN(DWIN_CREALITY_LCD, DWIN_Update(), ui.update());

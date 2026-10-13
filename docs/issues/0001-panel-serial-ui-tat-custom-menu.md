@@ -98,6 +98,78 @@ cần đối chiếu nhiệt độ / vị trí / tiến độ mà không muốn 
 `lcd_panel/src/ui_lvgl.cpp`, `Marlin/Configuration_adv.h`, `lcd_panel/tools/test_panel_link.cpp`
 (thêm test cho frame MENU).
 
+## 3c. HƯỚNG MỚI ĐÃ CHỌN (2026-10-13) — `PANEL_TRAM_LINK`: Tramming Wizard trên màn riêng **KHÔNG cần ExtUI**
+
+**Vấn đề:** màn CYD cần hiển thị + điều khiển **Bed Tramming Wizard**. Cách cũ (bật `PANEL_SERIAL_UI`)
+bắt buộc tắt `MKS_MINI_12864_V3` + `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU` (mục 1) ⇒ **mất toàn bộ
+menu MarlinUI** đang dùng (Tramming Wizard, `Z ALIGN MANUAL`, custom menu…). Không chấp nhận được.
+
+**Cách đã chọn:** thêm **một link serial RIÊNG, rất nhỏ** (`src/feature/panel_tram_link.cpp`) chỉ để
+đổi trạng thái Tramming Wizard, **không dùng ExtUI**:
+
+1. **Tách thuật toán khỏi menu:** toàn bộ máy trạng thái của wizard được chuyển từ
+   `src/lcd/menu/menu_tramming.cpp` sang `src/feature/tramming_run.cpp/.h` (không phụ thuộc
+   MarlinUI). `menu_tramming.cpp` trở thành lớp UI mỏng. **Hành vi không đổi** (mốc `Z-MIN`/`Z-MAX`
+   chốt 1 lần, ngưỡng auto-DAT 0.01 mm, tự đi tiếp khi DAT, `DONE` = góc xong, `BACK` = thoát).
+2. **Hai UI dùng CHUNG một trạng thái** ⇒ số trên màn 12864 và trên panel luôn giống nhau; chỉ
+   **một** nguồn được "tiến bước" (`tramming_run::step()`):
+   * màn 12864 đang mở wizard ⇒ `menu_tramming.cpp` gọi `step()`;
+   * không mở ⇒ `panel_tram_link::tick()` (trong `manage_inactivity()`) gọi `step()`.
+3. **Giao thức ASCII** (`src/feature/tram_protocol.h`, bản y nguyên ở `lcd_panel/src/tram_protocol.h`):
+   * panel → Marlin: `P` probe, `D` done, `M` đổi MAX/MIN, `R` home+probe lại, `B` thoát, `Q` hỏi;
+   * Marlin → panel: `TRAM <phase> <mode> <idx> <ref> <d0..d3> <A0..A3> <active> <all_dat> <hint>`,
+     gửi khi trạng thái đổi + định kỳ ~5 Hz. Trường `hint` do **Marlin** tính (dùng đúng
+     `tramming_turn_cw` + `TRAM_DONE_MM`) nên panel không phải tự suy lại chiều vặn vít.
+4. **Chân nối: USART1 = PA9 (TX) / PA10 (RX)** — đúng như đã ghi ở §3b điểm 2. **Không** dùng
+   USART3/PD8 nữa, nên **không phải tắt `NEOPIXEL_LED`** và **không đụng chân reset của màn 12864**
+   (`PD9 = EXP1_05 = LCD_RESET_PIN`). Header dùng: hàng chân **MKS WiFi** (`WIFI_SERIAL 1` đang
+   comment trong `pins_MKS_MONSTER8_V2.h`).
+   Build flag `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` được khai trong
+   `ini/features.ini` (key `PANEL_TRAM_LINK`) nên **chỉ** có tác dụng khi bật `#define PANEL_TRAM_LINK`.
+5. **Mặc định TẮT** (`//#define PANEL_TRAM_LINK` trong `feature/panel_tram_link.h`). Chưa bật ⇒
+   không biên dịch module, không chiếm UART, không tốn flash, `Configuration.h`/`Configuration_adv.h`
+   giữ nguyên 100%.
+6. **Cách bật:** thêm đúng 1 dòng `#define PANEL_TRAM_LINK` vào `Marlin/Configuration.h` rồi build
+   `pio run -e mks_monster8`. Khi đó: màn 12864 **vẫn đủ menu như cũ**, màn CYD có thêm màn
+   `TRAMMING` (vào từ MENU) với 4 số của 4 góc + dòng hướng dẫn + 4 nút PROBE / MAX→MIN / BACK / DONE.
+
+**So với Cách A (§3):** Cách A vẫn hữu ích nếu sau này muốn **toàn bộ** UI panel (file SD, bed mesh,
+PID…) mà không cần màn 12864 — nhưng nó vẫn phải trả giá bằng việc tắt `MKS_MINI_12864_V3` và
+`CUSTOM_MENU_MAIN`/`LED_CONTROL_MENU`. Hướng `PANEL_TRAM_LINK` giải quyết đúng nhu cầu trước mắt
+(Tramming Wizard) mà **không mất gì** của bản build hiện tại.
+
+**Đổi lại (đã biết, chấp nhận):** màn CYD ở chế độ này chỉ có màn `TRAMMING` là có dữ liệu; các màn
+STATUS/TEMP/FILES… vẫn hiện nhưng báo `NO LINK` vì không có frame PUSH (muốn có thì phải bật
+`PANEL_SERIAL_UI` — và khi đó `PANEL_TRAM_LINK` tự bị `#error` chặn vì 2 chế độ loại trừ nhau).
+
+**File đã sửa/thêm (2026-10-13):** `Marlin/src/feature/tramming_run.{h,cpp}` (mới),
+`Marlin/src/feature/panel_tram_link.{h,cpp}` (mới), `Marlin/src/feature/tram_protocol.h` (mới, copy
+sang `lcd_panel/src/tram_protocol.h`), `Marlin/src/lcd/menu/menu_tramming.cpp` (rút gọn thành UI mỏng),
+`Marlin/src/MarlinCore.cpp` (gọi `panel_tram_link::tick()` trong `manage_inactivity()`),
+`ini/features.ini`, `ini/stm32f4.ini` (ghi chú), `lcd_panel/src/tram_link.{h,cpp}` (mới),
+`lcd_panel/src/panel_link.cpp` (chia sẻ UART), `lcd_panel/src/ui_lvgl.cpp` (màn TRAMMING + 1 dòng MENU),
+`lcd_panel/tools/test_panel_link.cpp` (thêm ~25 test cho parse/format TRAM).
+
+**Kiểm chứng đã chạy (2026-10-13, build trên máy này):**
+
+| Build | Kết quả | Flash | RAM |
+|---|---|---|---|
+| `pio run -e mks_monster8` — `PANEL_TRAM_LINK` **tắt** (mặc định, 12864) | **SUCCESS** | 267.576 B (25,5 %) | 12.220 B (9,3 %) |
+| `pio run -e mks_monster8` — `PANEL_TRAM_LINK` **bật** (thêm tạm 1 dòng vào `Configuration.h`) | **SUCCESS** | 270.592 B (25,8 %) | 12.828 B (9,8 %) |
+| `pio run -d lcd_panel -e panel_esp32_cyd` | **SUCCESS** | 463.101 B (35,3 %) | 102.044 B (31,1 %) |
+| `pio run -d lcd_panel -e panel_f407vgz_lvgl` | **SUCCESS** | 158.756 B (15,1 %) | 81.328 B (13,9 %) |
+| `pio run -d lcd_panel -e panel_f411cc_lvgl` | **SUCCESS** | xem `lcd_panel/README.md` §1.1 | |
+
+* Sau khi kiểm, `Marlin/Configuration.h`/`Configuration_adv.h` đã **trả về đúng bản gốc**:
+  `git diff -- Marlin/Configuration.h Marlin/Configuration_adv.h` = **RỖNG** (đã xác nhận).
+* `ini/features.ini` (key `PANEL_TRAM_LINK`) tự thêm
+  `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` **chỉ khi** define được bật.
+* Host test: thêm **35 kiểm tra** cho TRAM vào `lcd_panel/tools/test_panel_link.cpp`. **Máy này
+  KHÔNG chạy được** `run_host_test.ps1` (không có `g++`/MinGW, không có `pwsh`) — đã kiểm bằng
+  `arm-none-eabi-g++ -fsyntax-only -Wall -Wextra` → **0 lỗi, 0 cảnh báo**. Cần chạy thật bằng MinGW.
+* **CHƯA kiểm chứng trên máy in**: chưa nạp firmware nào (theo yêu cầu). Cần nạp thử để xác nhận
+  dây USART1 (PA9/PA10) + màn TRAMMING chạy thật.
+
 ## 4. Ghi chú vận hành (không quên)
 
 * Trước khi bật `PANEL_SERIAL_UI`, luôn chạy `set_panel_mode.ps1 -Mode on` (script tự tắt 4 mục

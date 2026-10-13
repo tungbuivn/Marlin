@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include "panel_port.h"
+#include "tram_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tram_link.h
 
 panel_data_t panel;
 
@@ -264,6 +265,7 @@ void panel_link_begin(const uint32_t baud) {
   PANEL_LINK_BEGIN(baud);
   panel_rx_init(&s_rx);
   memset(&panel, 0, sizeof(panel));
+  tram_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
   s_want_full = true;
   s_next_ping_ms = 0;
 }
@@ -271,8 +273,18 @@ void panel_link_begin(const uint32_t baud) {
 bool panel_link_connected() { return panel.linked; }
 
 void panel_link_task() {
-  while (PANEL_MARLIN_SERIAL.available())
-    if (panel_rx_byte(&s_rx, (uint8_t)PANEL_MARLIN_SERIAL.read())) handle_frame();
+  uint8_t fwd[4];
+  while (PANEL_MARLIN_SERIAL.available()) {
+    const uint8_t c = (uint8_t)PANEL_MARLIN_SERIAL.read();
+    // Duong TRAMMING (Marlin: PANEL_TRAM_LINK) dung CHUNG UART nay: tram_link_feed() tra ve 0
+    // khi byte thuoc dong "TRAM ...", nguoc lai tra ve so byte (0..4) can dua cho bo giai frame
+    // PUSH - cac byte 'T','R','A' dang giu de do duoc tra lai day du nen KHONG mat byte nao.
+    const uint8_t n = tram_link_feed(c, fwd);
+    for (uint8_t k = 0; k < n; k++)
+      if (panel_rx_byte(&s_rx, fwd[k])) handle_frame();
+  }
+
+  tram_link_task();                  // cap nhat co `tram.linked`
 
   const uint32_t now = panel_millis();
 
@@ -281,8 +293,11 @@ void panel_link_task() {
     s_want_full = true;                        // khi noi lai thi xin lai tu dau
   }
 
-  // PING 1s/lan: vua de kiem tra lien ket, vua de Marlin biet panel con song
-  if (!s_next_ping_ms || now >= s_next_ping_ms) {
+  // PING 1s/lan: vua de kiem tra lien ket, vua de Marlin biet panel con song.
+  // KHONG gui khi dang o che do TRAM: byte nhi phan cua frame PING co the lot vao bo giai
+  // lenh ASCII cua Marlin (panel_tram_link). O che do TRAM, Marlin tu gui dong TRAM dinh ky
+  // nen khong can PING.
+  if (!tram_link_active() && (!s_next_ping_ms || now >= s_next_ping_ms)) {
     s_next_ping_ms = now + PANEL_LINK_PING_MS;
     panel_link_ping();
   }

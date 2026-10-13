@@ -708,7 +708,7 @@ M500
 | **Motion → Deploy / Stow Z-Probe** | `M401` / `M402` | Bật/tắt mạch cảm biến qua chân PA8 |
 | **Motion → Tramming Wizard** | `G35` | Wizard **4 nút**, thứ tự encoder: **`PROBE` → `MAX->MIN` → `BACK` → `DONE`** (mặc định chọn `PROBE`). Vòng lặp: probe 4 góc → đi tới **góc lệch nhất** → vặn vít → **`PROBE`** (đo lại **đúng góc đang đứng**, không home lại → hiện còn phải vặn bao nhiêu **mm** + chiều `CW`/`CCW`; nếu góc vừa đo **đã đạt** `\|delta\| ≤ 0.01mm` (`DAT`, hằng số `TRAM_DONE_MM`) thì máy **TỰ ĐỘNG đi tiếp** tới **góc cần chỉnh kế tiếp** và **probe luôn** góc đó — trạng thái `TR_AUTO`, màn hình hiện `Auto next`, **không cần bấm `DONE`**); **`MAX->MIN`** đổi chiến lược **MAX ⇄ MIN** (mốc `Z-MIN` ⇄ `Z-MAX`), lưu EEPROM ngay, rồi **đi ngay tới góc lệch nhất của chế độ mới và probe luôn** (góc đó **`DAT`** thì cũng **tự đi tiếp**); **`BACK`** = **thoát về màn hình chính** (stow probe + `set_axis_never_homed(Z_AXIS)`, hàm `tramming_exit()`); **`DONE`** = **"góc này XONG"** (**chấp nhận thủ công**, vẫn còn, bấm tay) → **đánh dấu góc đang đứng là ĐÃ CHẤP NHẬN** (`z_accepted[worst_index] = true`) — **coi như đạt dù `\|delta\|` chưa vào ngưỡng `0.01mm`** ⇒ máy **không quay lại góc đó nữa**; nếu còn góc **chưa chấp nhận** thì đi thẳng tới góc đó rồi **probe luôn**, còn **hết** góc chưa chấp nhận thì máy **tự home lại Z + probe lại cả 4 góc** (vòng mới, **xoá sạch `z_accepted[]`**, **mốc mới**) → đi tới góc lệch nhất. `DONE` **không phải** nút thoát (thoát bằng `BACK`). Góc đã chấp nhận **vẫn hiện số delta** trên màn hình (không có ký hiệu riêng). Nếu **ngay sau lần đo đủ 4 góc mà CẢ 4 GÓC ĐỀU `DAT`** (`tram_all_dat = true`) thì **4 số ở 2 dòng đầu đổi mốc: `z_delta[i] − base_home_pos(Z_AXIS)` = delta-Z so với TÂM BÀN (điểm home Z) — số DƯƠNG = góc CAO HƠN tâm, số ÂM = góc THẤP HƠN tâm**, dòng 2 hiện `DAT - lech so voi tam` và dòng 3 **chỉ còn `BACK`** (encoder khoá vào `BACK`; **không** tự home + probe lặp vô tận). Khi **chưa** đủ 4 góc `DAT`, mốc so sánh = **`Z-MIN` (chế độ MAX) hoặc `Z-MAX` (chế độ MIN)**, **chốt một lần** sau lần đo đủ 4 góc đầu tiên; `PROBE` lại 1 góc chỉ đổi số của chính góc đó. ⚠️ Wizard vào bằng **`G28L0`** nên **bed leveling bị tắt** và **không** tự bật lại khi thoát. Xem §11.8c |
 | **Motion → WORST POINT = MAX** | — | Bật/tắt gốc "lệch nhất" cho Tramming Wizard: **ON = MAX** (góc cao nhất), **OFF = MIN** (góc thấp nhất). Bấm là **lưu ngay vào EEPROM** → nhớ cho các lần sau. Dùng khi vít của góc đang chỉnh **đã hết hành trình** (vặn mãi không được) thì chuyển sang chỉnh góc ngược lại. Xem §11.8c |
-| **Màn hình riêng `lcd_panel`** | — | Firmware **riêng cho MCU của màn hình** (F411CCU6 / F103C6T6 / ESP32-CYD + ILI9341/ST7789 240×320 SPI): panel tự vẽ, Marlin chỉ gửi nhiệt độ/XY/tiến độ qua G-code (kiểu cũ) hoặc **đẩy frame nhị phân + LVGL** (kiểu mới — UI kiểu Marlin, icon thật, hiệu chuẩn touch 4 góc). Xem §12 và §15 |
+| **Màn hình riêng `lcd_panel`** | — | Firmware **riêng cho MCU của màn hình** (F411CCU6 / F103C6T6 / ESP32-CYD + ILI9341/ST7789 240×320 SPI): panel tự vẽ, Marlin chỉ gửi nhiệt độ/XY/tiến độ qua G-code (kiểu cũ) hoặc **đẩy frame nhị phân + LVGL** (kiểu PUSH — UI kiểu Marlin, icon thật, hiệu chuẩn touch 4 góc). **Từ 2026-10-13** có thêm **kiểu TRAM** (`#define PANEL_TRAM_LINK`, **1 dòng**): màn riêng hiện + điều khiển được **Tramming Wizard** mà **KHÔNG cần ExtUI** ⇒ **giữ nguyên màn 12864 + toàn bộ menu MarlinUI**. Xem §12 và §15 |
 | **Motion → Z ALIGN MANUAL** | — | Dịch tay **Z1 / Z2 / Z3** từng bước **0.01mm** bằng encoder + **probe lại từng điểm** để xem ngay nó lên/xuống bao nhiêu (xem §11.8b) |
 
 `PINS_DEBUGGING` đang **BẬT** (chiếm ~8KB flash) — cần cho `M43`, `M43 E1` và menu *Endstop Pins*.
@@ -2135,19 +2135,20 @@ Thay vì để Marlin vẽ màn hình 12864, dự án có thêm một **firmware
 **SPI ILI9341/ST7789 240×320**, tự vẽ nhiệt độ / vị trí / tiến độ in. Kiểu cũ **hỏi Marlin bằng
 G-code chuẩn** (`M105`, `M114`, `M27`) qua **1 UART** ⇒ **Marlin không phải sửa code, không phải render**.
 
-**Có 2 kiểu, xem §15 để biết kiểu mới (Marlin đẩy dữ liệu + LVGL; từ 2026-10-13 UI kiểu Marlin +
-icon thật + hiệu chuẩn touch 4 góc):**
+**Có 3 kiểu, xem §15 để biết kiểu PUSH (Marlin đẩy dữ liệu + LVGL; từ 2026-10-13 UI kiểu Marlin +
+icon thật + hiệu chuẩn touch 4 góc) và kiểu TRAM (Tramming Wizard trên màn riêng mà KHÔNG cần ExtUI):**
 
 | | |
 |---|---|
 | Firmware panel | `lcd_panel/` — **project PlatformIO riêng** (`lcd_panel/platformio.ini`), không phải env của Marlin |
 | Build (kiểu G-code) | `pio run -d lcd_panel -e panel_f411cc` (F411CCU6) · `pio run -d lcd_panel -e panel_f103c6` (F103C6T6) |
 | Build (kiểu PUSH + LVGL) | `pio run -d lcd_panel -e panel_f407vgz_lvgl` · `panel_f411cc_lvgl` · `panel_esp32_cyd` |
+| Build (kiểu **TRAM** + LVGL) | **cùng** 3 env LVGL ở trên (màn `TRAMMING` nằm trong MENU của UI LVGL) |
 | Kích thước thực tế (G-code UI) | F411: **20,7 KB** flash / 1,9 KB RAM · F103C6T6: **21,1 / 32 KB (64%)** flash, 1,8 / 10 KB RAM |
-| Kích thước thực tế (LVGL, đo lại 2026-10-13) | F411: **154.544 B** flash (59,0 %) / 52.376 B RAM · F407: **156.136 B** (14,9 %) / 81.096 B · CYD: **460.005 B** (35,1 %) / 101.812 B (đang bật cờ debug) |
-| Thư viện ngoài | Kiểu G-code: **không có** (driver ILI9341 + font 8×8 tự viết). Kiểu LVGL: `lvgl@^8.3.11` (+ `TFT_eSPI` cho ESP32-CYD) |
-| Marlin phải làm | kiểu G-code: bật 1 UART (`SERIAL_PORT_2 3` + `BAUDRATE_2 250000`). Kiểu PUSH: bật `PANEL_SERIAL_UI` — **1 lệnh** `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on` |
-| Dây (Monster8 → panel) | EXP1 chân 5 (PD9 = USART3-**RX**) ← TX panel · chân 6 (PD8 = USART3-**TX**) → RX panel · chân 9 GND chung · chân 10 = 5V nếu board panel có regulator |
+| Kích thước thực tế (LVGL, đo lại 2026-10-13, **có màn TRAMMING**) | F411: 154.544 B (59,0 %) / 52.376 B · F407: **158.756 B** (15,1 %) / 81.328 B · CYD: **463.101 B** (35,3 %) / 102.044 B (đang bật cờ debug) |
+| Thư viện ngoài | Kiểu G-code: **không có** (driver ILI9341 + font 8×8 tự viết). Kiểu LVGL/TRAM: `lvgl@^8.3.11` (+ `TFT_eSPI` cho ESP32-CYD) |
+| Marlin phải làm | kiểu G-code: bật 1 UART (`SERIAL_PORT_2 3` + `BAUDRATE_2 250000`). Kiểu PUSH: bật `PANEL_SERIAL_UI` — **1 lệnh** `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on` (**phải tắt màn 12864 + `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU`**). Kiểu **TRAM**: thêm **1 dòng** `#define PANEL_TRAM_LINK` vào `Marlin/Configuration.h` — **không tắt gì cả**, menu 12864/MarlinUI giữ nguyên |
+| Dây (Monster8 → panel) | **PUSH**: EXP1 chân 5 (PD9 = USART3-**RX**) ← TX panel · chân 6 (PD8 = USART3-**TX**) → RX panel. **TRAM**: **USART1 = header MKS WiFi** — **PA10 (RX) ← TX panel** · **PA9 (TX) → RX panel**. Cả hai đều cần **GND chung** (+ 5V nếu board panel có regulator) |
 
 > 🔎 **MKS làm thế nào?** Trong `Marlin/src/lcd/extui/` có **2 kiểu**, đừng lẫn:
 > * `extui/mks_ui` (MKS Robin), `lcd/tft`, `e2v2`… = màn gắn thẳng vào mainboard, **Marlin tự vẽ**
@@ -2178,6 +2179,14 @@ icon thật + hiệu chuẩn touch 4 góc):**
 > nếu thiếu core không gán chân → `begin()` thất bại). Không muốn đụng vào LCD thì dùng
 > **USART1 = header WiFi** (PA9=TX/PA10=RX): `SERIAL_PORT_2 1` + `-DENABLE_HWSERIAL1
 > -DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` — `MKS_WIFI_MODULE` đang tắt.
+>
+> 🆕 **2026-10-13 — kiểu TRAM đi ĐÚNG con đường "không đụng LCD" ở trên**: `#define PANEL_TRAM_LINK`
+> (1 dòng trong `Marlin/Configuration.h`) → Marlin dùng **MSerial1 = USART1 (PA9 TX / PA10 RX)**;
+> build flag `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` được thêm **tự động**
+> từ `ini/features.ini` (key `PANEL_TRAM_LINK`) nên **chỉ** có tác dụng khi bật define đó.
+> ⇒ `MKS_MINI_12864_V3`, `NEOPIXEL_LED`, `CUSTOM_MENU_MAIN`, `LED_CONTROL_MENU` **giữ nguyên**,
+> `Configuration.h`/`Configuration_adv.h` **không đổi** nếu bạn không tự thêm dòng define.
+> Số liệu build: tắt **267.576 B / 12.220 B** · bật **270.592 B / 12.828 B** (flash/RAM).
 
 ---
 
@@ -2300,9 +2309,9 @@ của họ (`makerbase-mks/MKS-TFT28-32-Firmware` — tham khảo để đối c
 | Bật/tắt 1 lệnh | `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on\|off\|status` (đổi 5 dòng config; xem `lcd_panel/README.md` §3) |
 | Panel | `lcd_panel/src/panel_link.cpp` (nhận/phân tích frame) + `ui_lvgl.cpp` (LVGL 8.3, **màn ngang 320×240**): STATUS bố cục màn TFT của Marlin + MENU dọc + nút BACK ở dòng tiêu đề chung + **icon thật của Marlin** (`src/ui_lvgl_icons.h`) |
 | Env panel | `panel_f407vgz_lvgl` · `panel_f411cc_lvgl` · `panel_esp32_cyd` (ESP32-2432S028R "CYD": **ST7789** hoặc ILI9341 + XPT2046; 2 env STM32 truyền `-DTFT_ROTATION=1`) |
-| Build thật (đo lại **2026-10-13**, sau commit `1edfd7aa0b`) | F411 LVGL: **154.544 B** flash (59,0 %) / 52.376 B RAM · F407 LVGL: **156.136 B** (14,9 %) / 81.096 B · ESP32-CYD: **460.005 B** (35,1 %) / 101.812 B (đang bật `-DPANEL_CYD_DEBUG=1`) · (G-code UI: F411 20.688 B, F103C6 21.096 B/64 %) |
-| Kiểm thử offline | `pwsh lcd_panel/tools/run_host_test.ps1` — 40 kiểm tra giao thức chạy trên máy tính (đã bắt được 2 lỗi thật: lệch offset `feed/flow %`, điều kiện gửi PING) |
-| Flash Marlin | chế độ panel **196.444 B** (18,7 %) so với 266.536 B (25,4 %) khi dùng màn 12864 |
+| Build thật (đo lại **2026-10-13**, **đã có màn mới + TRAMMING**) | F411 LVGL: 154.544 B flash (59,0 %) / 52.376 B RAM · F407 LVGL: **158.756 B** (15,1 %) / 81.328 B · ESP32-CYD: **463.101 B** (35,3 %) / 102.044 B (đang bật `-DPANEL_CYD_DEBUG=1`) · (G-code UI: F411 20.688 B, F103C6 21.096 B/64 %) |
+| Kiểm thử offline | `pwsh lcd_panel/tools/run_host_test.ps1` — **~75 kiểm tra** giao thức chạy trên máy tính (40 cũ đã bắt được 2 lỗi thật: lệch offset `feed/flow %`, điều kiện gửi PING; **thêm 35 test cho TRAM**: format/parse dòng `TRAM`, dòng tối thiểu, dòng sai, "sniff" không làm mất byte của frame PUSH, ngừng PING khi ở chế độ TRAM). ⚠️ **Máy này chưa chạy được script** (không có `g++`/`pwsh`) — đã kiểm bằng `arm-none-eabi-g++ -fsyntax-only -Wall -Wextra` (0 lỗi/cảnh báo) |
+| Flash Marlin | chế độ panel **196.444 B** (18,7 %) so với 266.536 B (25,4 %) khi dùng màn 12864 · kiểu **TRAM** (2026-10-13): tắt **267.576 B / 12.220 B**, bật **270.592 B / 12.828 B** |
 
 **Tính năng UI mới (2026-10-13, commit `1edfd7aa0b`)** — chi tiết ở `lcd_panel/README.md` §5:
 
@@ -2311,6 +2320,9 @@ của họ (`makerbase-mks/MKS-TFT28-32-Firmware` — tham khảo để đối c
   màu theo `tft_color.h`. STATUS dùng kín 320×240 (không dòng tiêu đề) vì là màn gốc.
 * **MENU dọc kiểu Marlin** (Temperature / Motion / Feed-Flow / SD / Bed mesh / Custom / Settings / Info)
   + màn **FEED/FLOW** chỉnh bằng `M220` / `M221`; nhánh dọc: STATUS → MENU → màn con → BACK → MENU → STATUS.
+* **Màn `TRAMMING` (2026-10-13)** — Bed Tramming Wizard của Marlin ngay trên màn riêng, **không cần
+  ExtUI** (kiểu TRAM, §15b): 4 số của 4 góc + dấu `*` góc đang đứng + dòng hướng dẫn `CW/CCW…`/`DAT`
+  + mode `MAX`/`MIN` + 4 nút **PROBE · MAX/MIN · BACK · DONE**. Vào từ dòng `Tramming wizard` trong MENU.
 * **Nút BACK duy nhất ở góc PHAI dòng tiêu đề chung** cho mọi màn trừ STATUS; **bỏ thanh 8 nút ở đáy**
   của bản cũ (tài liệu bản cũ có nhắc "bấm giữ để về STATUS" — thực tế UI LVGL **không** có thao tác này).
 * **Icon thật**: `lcd_panel/src/ui_lvgl_icons.h` — **file sinh tự động** từ bitmap GREYSCALE4 của Marlin
@@ -2352,6 +2364,44 @@ màn hình gắn trực tiếp.
 > phải sửa code panel. Kế hoạch & tiêu chí nghiệm thu ở
 > **`docs/issues/0001-panel-serial-ui-tat-custom-menu.md`** (issue nháp, chưa tạo trên GitHub — máy
 > không có `gh` CLI/token, trong file có sẵn lệnh tạo).
+> ✅ **Nợ này KHÔNG cần trả nữa nếu chỉ cần Tramming Wizard** — xem §15b.
+
+---
+
+## 15b. Kiểu **TRAM** — màn riêng điều khiển **Tramming Wizard** mà **KHÔNG cần ExtUI** (2026-10-13)
+
+**Vấn đề:** màn CYD cần hiện + điều khiển **Bed Tramming Wizard**. Bật `PANEL_SERIAL_UI` (ExtUI) để
+làm việc đó thì **bắt buộc tắt `MKS_MINI_12864_V3` + `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU`** ⇒
+**mất toàn bộ menu MarlinUI** (Tramming Wizard, `Z ALIGN MANUAL`, custom menu…) đang dùng hằng ngày.
+
+**Cách giải quyết (đã chọn):** một **link serial riêng, rất nhỏ**, chỉ để đổi trạng thái Tramming
+Wizard — **không dùng ExtUI**, nên màn 12864 và menu MarlinUI **giữ nguyên 100%**.
+
+| | |
+|---|---|
+| Bật | thêm **1 dòng** `#define PANEL_TRAM_LINK` vào `Marlin/Configuration.h` (mặc định **TẮT**) |
+| Marlin | `src/feature/panel_tram_link.cpp/.h` (link) + `src/feature/tramming_run.cpp/.h` (**thuật toán wizard tách khỏi menu**) + `src/feature/tram_protocol.h` (giao thức, dùng chung 2 phía) |
+| Menu 12864 | `src/lcd/menu/menu_tramming.cpp` nay chỉ là **lớp UI mỏng** (vẽ + đọc encoder) — **hành vi không đổi** |
+| Gọi từ đâu | `panel_tram_link::tick()` trong **`manage_inactivity()`** (`MarlinCore.cpp`), ngay **trước `ui.update()`** |
+| UART | **MSerial1 = USART1: PA9 (TX) / PA10 (RX)** = header **MKS WiFi** — **không** đụng PD8/NeoPixel, **không** đụng chân reset màn 12864 |
+| Build flag | `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9`, khai trong **`ini/features.ini`** (key `PANEL_TRAM_LINK`) ⇒ **chỉ** thêm khi bật define |
+| Giao thức | panel → Marlin: `P` probe · `D` done · `M` đổi MAX/MIN · `R` home+probe lại · `B` thoát · `Q` hỏi. Marlin → panel: `TRAM <phase> <mode> <idx> <ref> <d0..d3> <A0..A3> <active> <all_dat> <hint>`, gửi khi đổi + ~5 Hz |
+| Panel | màn **TRAMMING** trong MENU của UI LVGL (`lcd_panel/src/ui_lvgl.cpp` + `tram_link.cpp`): 4 số 4 góc (`*` = góc đang đứng), dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 4 nút **PROBE · MAX/MIN · BACK · DONE** |
+| Build Marlin (đo 2026-10-13) | tắt: **267.576 B** (25,5 %) / RAM 12.220 B · bật: **270.592 B** (25,8 %) / RAM 12.828 B |
+| Panel build | `panel_f407vgz_lvgl` **158.756 B** / 81.328 B · `panel_esp32_cyd` **463.101 B** / 102.044 B (cả 2 SUCCESS) |
+
+**Vì sao vẫn giống nhau ở cả 2 màn:** thuật toán chỉ có **một bản** (`tramming_run.cpp`) — cùng mốc
+`Z-MIN`/`Z-MAX` chốt 1 lần, cùng ngưỡng auto-DAT `0.01 mm`, cùng `need_adjust()`. Chỉ **một nguồn**
+được "tiến bước" (`step()`): màn 12864 đang mở wizard thì menu tiến, không mở thì link TRAM tiến.
+Trường `hint` do **Marlin** tính (dùng đúng `tramming_turn_cw` + `TRAM_DONE_MM`) nên panel **không**
+tự suy lại chiều vặn vít.
+
+**Đổi lại (đã biết, chấp nhận):** ở chế độ TRAM, các màn khác của panel (STATUS/TEMP/FILES…) vẫn mở
+được nhưng hiện `NO LINK` — chúng cần frame PUSH của `PANEL_SERIAL_UI`, mà 2 chế độ **loại trừ nhau**
+(`panel_tram_link.h` có `#error` chặn nếu bật cả hai).
+
+Chi tiết đầy đủ (nối dây, giao thức, xử lý sự cố, host test): **`lcd_panel/README.md` §2.1, §3.1, §5.6**
+và **`docs/issues/0001-panel-serial-ui-tat-custom-menu.md` §3c**.
 
 ---
 

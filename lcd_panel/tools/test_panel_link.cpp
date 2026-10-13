@@ -33,6 +33,7 @@ int    PanelSerialStub::availableForWrite() { return 1024; }
 uint32_t panel_millis() { return g_ms; }
 
 // Nap truc tiep code cua panel de test (sau khi da co stub)
+#include "../src/tram_link.cpp"       // duong TRAMMING (ASCII) dung chung UART voi frame PUSH
 #include "../src/panel_link.cpp"
 
 // ---------------------------------------------------------------------------
@@ -245,6 +246,103 @@ int main() {
   clear_tx();
   panel_tx_begin(&MT, PANEL_F_EVENT); panel_tx_u8(&MT, PANEL_EV_TONE); panel_tx_u16(&MT, 1000); panel_tx_u16(&MT, 200); panel_tx_str(&MT, "", 0); from_marlin(0);
   CHECK(panel.event == PANEL_EV_TONE && panel.event_v1 == 1000 && panel.event_v2 == 200, "EVENT: TONE 1000Hz/200ms");
+
+  // ---------------- 11. TRAM: dinh dang + doc lai dong trang thai (ASCII) ----------------
+  {
+    char b[16];
+    tram_fmt_mm(b, 0.0f);      CHECK(!strcmp(b, "0.000"), "TRAM fmt: 0 -> '0.000'");
+    tram_fmt_mm(b, 0.15f);     CHECK(!strcmp(b, "0.150"), "TRAM fmt: 0.15 -> '0.150'");
+    tram_fmt_mm(b, -1.2346f);  CHECK(!strcmp(b, "-1.235"), "TRAM fmt: -1.2346 -> '-1.235' (lam tron am)");
+    tram_fmt_mm(b, -1.2344f);  CHECK(!strcmp(b, "-1.234"), "TRAM fmt: -1.2344 -> '-1.234'");
+    tram_fmt_mm(b, -0.005f);   CHECK(!strcmp(b, "-0.005"), "TRAM fmt: -0.005 -> '-0.005' (giu dau am)");
+    tram_fmt_mm(b, 12.3456f);  CHECK(!strcmp(b, "12.346"), "TRAM fmt: 12.3456 -> '12.346'");
+
+    tram_status_t st; memset(&st, 0, sizeof(st));
+    st.phase = TRAM_PH_PROBING; st.mode_max = 1; st.idx = 2; st.ref = 12.345f;
+    st.d[0] = 0.021f; st.ok[0] = 1;
+    st.d[1] = -0.005f; st.ok[1] = 1; st.accepted[1] = 1;
+    st.ok[2] = 0;                                  // goc chua probe -> "---.---"
+    st.d[3] = 1.5f;   st.ok[3] = 1;
+    st.active = 1; st.all_dat = 0;
+    strcpy(st.hint, "CCW:0.021");
+
+    char line[160];
+    const int n = tram_status_format(line, sizeof(line), &st);
+    printf("  [info] dong TRAM: %s", line);
+    CHECK(n > 20 && line[n - 1] == '\n', "TRAM format: co '\\n' o cuoi");
+
+    tram_status_t p; memset(&p, 0, sizeof(p));
+    CHECK(tram_status_parse(line, &p), "TRAM parse: doc lai duoc dong vua tao");
+    CHECK(p.phase == TRAM_PH_PROBING && p.mode_max == 1 && p.idx == 2, "TRAM parse: phase/mode/idx");
+    CHECK(p.ref > 12.34f && p.ref < 12.35f, "TRAM parse: ref (mm)");
+    CHECK(p.ok[0] && p.d[0] > 0.020f && p.d[0] < 0.022f, "TRAM parse: d0 + ok0");
+    CHECK(p.accepted[1] == 1 && p.accepted[0] == 0, "TRAM parse: co/khong co DONE");
+    CHECK(!p.ok[2] && p.ok[3], "TRAM parse: goc chua probe = '---.---'");
+    CHECK(p.active == 1 && p.all_dat == 0, "TRAM parse: active/all_dat");
+    CHECK(strcmp(p.hint, "CCW:0.021") == 0, "TRAM parse: hint");
+
+    // Dong theo dinh dang TOI THIEU (thieu 3 field mo rong) van phai doc duoc
+    tram_status_t m;
+    CHECK(tram_status_parse("TRAM 0 1 0 0.000 0.010 -0.020 0.000 0.000 0 0 1 0\n", &m),
+          "TRAM parse: ban toi thieu (thieu active/all_dat/hint)");
+    CHECK(m.active == 0 && m.all_dat == 0 && m.hint[0] == '\0', "TRAM parse: field thieu -> mac dinh rong");
+
+    // Dong loi
+    CHECK(!tram_status_parse("TRAMX 0 1 0 0 0 0 0 0 0 0 0 0\n", &m), "TRAM parse: ten sai -> false");
+    CHECK(!tram_status_parse("HELLO 1 2 3\n", &m), "TRAM parse: khong phai TRAM -> false");
+    CHECK(!tram_status_parse("TRAM 0 1 0\n", &m), "TRAM parse: thieu field -> false");
+
+    // Lenh 1 ky tu (phia Marlin dung ban _exact -> byte rac khong the giai thanh lenh)
+    CHECK(tram_cmd_parse_exact("P") == 'P', "TRAM cmd: 'P'");
+    CHECK(tram_cmd_parse_exact("d\n") == 'D', "TRAM cmd: 'd' -> 'D'");
+    CHECK(tram_cmd_parse_exact("") == 0, "TRAM cmd: dong rong -> 0");
+    CHECK(tram_cmd_parse_exact("PX") == 0, "TRAM cmd: 'PX' -> 0 (khong nhan lenh rac)");
+    CHECK(tram_cmd_parse_exact("R \n") == 'R', "TRAM cmd: 'R ' -> 'R'");
+    CHECK(tram_cmd_parse("Q") == 'Q', "TRAM cmd: ban long 'Q' = 'Q'");
+  }
+
+  // ---------------- 12. TRAM: nhan dong tren CUNG UART voi frame PUSH ----------------
+  {
+    tram_link_begin();
+
+    // (a) 'T','R','A' duoc giu tam; lech thi phai tra lai DAY DU cho bo giai frame PUSH
+    uint8_t f[4];
+    CHECK(tram_link_feed('T', f) == 0, "TRAM feed: 'T' (dau dong) duoc giu tam");
+    CHECK(tram_link_feed('R', f) == 0, "TRAM feed: 'R' duoc giu tam");
+    CHECK(tram_link_feed('X', f) == 3 && f[0] == 'T' && f[1] == 'R' && f[2] == 'X',
+          "TRAM feed: lech -> tra lai day du 'TRX' (khong mat byte)");
+
+    // (b) 1 dong TRAM ca dong phai bi tieu thu, trang thai phai cap nhat
+    const char *l = "TRAM 2 1 3 10.000 0.100 -0.200 0.000 0.000 0 0 0 0 1 0 CCW:0.100\n";
+    uint8_t leaked = 0;
+    for (const char *q = l; *q; q++) leaked = (uint8_t)(leaked + tram_link_feed((uint8_t)*q, f));
+    CHECK(leaked == 0, "TRAM feed: ca dong TRAM bi tieu thu (0 byte lot ra)");
+    CHECK(tram.lines == 1 && tram.ever && tram.linked, "TRAM feed: nhan duoc 1 dong -> linked");
+    CHECK(tram.st.phase == TRAM_PH_PROBING && tram.st.idx == 3, "TRAM feed: phase/idx");
+    CHECK(tram.st.ok[0] && !tram.st.ok[2], "TRAM feed: ok[] tung goc");
+
+    // (c) Frame PUSH co payload chua 'T' VA chuoi "TRAM" VAN phai nguyen ven
+    //     (chuoi nam giua payload, khong o dau dong -> khong bi bo sniff an)
+    panel.n_files = 0; panel.files_done = false;
+    panel_tx_begin(&MT, PANEL_F_FILES);
+    panel_tx_u8(&MT, 0x01); panel_tx_i32(&MT, 0);
+    panel_tx_str(&MT, "TRAM PROJECTS", 31);
+    {
+      const uint8_t total = panel_tx_finish(&MT);
+      feed(MT.buf, total);
+    }
+    CHECK(panel.n_files == 1 && !strcmp(panel.files[0].name, "TRAM PROJECTS"),
+          "TRAM feed: frame PUSH van nguyen ven ('T'/'TRAM' trong payload khong bi an");
+
+    // (d) O che do TRAM thi KHONG gui PING nua (tranh byte nhi phan lot vao parser ASCII cua Marlin)
+    clear_tx();
+    g_ms += 2000;
+    panel_link_task();
+    {
+      uint8_t pbuf[8]; uint8_t plen = 0;
+      CHECK(!tx_find_frame(PANEL_F_PING, pbuf, &plen, sizeof(pbuf)), "TRAM feed: da o che do TRAM -> khong PING");
+    }
+  }
 
   printf("== %d kiem tra, %d loi ==\n", checks, fails);
   return fails ? 1 : 0;

@@ -1,0 +1,108 @@
+/**
+ * tram_link.cpp -- Phia PANEL: link TRAMMING (ASCII) voi Marlin - xem tram_link.h.
+ *
+ * VI SAO "SNIFF" DONG THAY VI TU DOC UART:
+ *   UART nay (PANEL_MARLIN_SERIAL) do panel_link.cpp so huu (no giai frame PUSH cua ExtUI
+ *   panel_serial). tram_link_feed() duoc goi cho TUNG byte ngay trong vong doc do, nen 2 duong
+ *   khong bao gio tranh nhau doc.
+ *
+ *   KHONG BAO GIO MAT BYTE CUA FRAME PUSH: khi doc thay 'T' (co the mo dau "TRAM") thi cac byte
+ *   'T','R','A' duoc GIU LAI tam; neu day khong phai "TRAM" thi ham tra ve DAY DU cac byte dang
+ *   giu + byte vua doc (toi da 4) de panel_link dua tiep cho bo giai frame PUSH.
+ *   Ngoai ra "TRAM" chi duoc coi la mo dau dong khi byte truoc do la '\n' (dau dong) -> mot day
+ *   "TRAM" nam lung chung trong payload cua frame PUSH khong lam hong frame.
+ *
+ *   Hai che do loai tru nhau: Marlin chi gui frame PUSH khi bat PANEL_SERIAL_UI, con link nay
+ *   chi chay khi bat PANEL_TRAM_LINK (xem Marlin/src/feature/panel_tram_link.h).
+ */
+#include "tram_link.h"
+
+#include <string.h>
+#include "panel_port.h"
+
+tram_link_data_t tram;
+
+// Trang thai bo "sniff"
+enum { TS_IDLE = 0, TS_T, TS_R, TS_A, TS_LINE };
+static uint8_t s_state = TS_IDLE;
+static bool    s_bol = true;          // byte truoc do la '\n' (hoac chua doc gi) = dau dong
+static char    s_line[TRAM_LINK_LINE_MAX];
+static uint8_t s_len = 0;
+
+void tram_link_begin(void) {
+  memset(&tram, 0, sizeof(tram));
+  s_state = TS_IDLE;
+  s_bol = true;
+  s_len = 0;
+}
+
+bool tram_link_active(void) { return tram.ever; }
+
+void tram_link_task(void) {
+  if (!tram.ever) { tram.linked = false; return; }
+  tram.linked = (panel_millis() - tram.last_rx_ms) <= TRAM_LINK_TIMEOUT_MS;
+}
+
+void tram_link_send(char cmd) {
+  if (!cmd) return;
+  PANEL_MARLIN_SERIAL.write((uint8_t)cmd);
+  PANEL_MARLIN_SERIAL.write((uint8_t)'\n');
+}
+
+// Tra ve so byte can dua cho bo giai frame PUSH (ghi vao out[], toi da 4 byte).
+// 0 = byte nay (va cac byte dang giu) da thuoc dong "TRAM ..." -> khong dua cho ai nua.
+uint8_t tram_link_feed(uint8_t c, uint8_t *out) {
+  switch (s_state) {
+
+    case TS_IDLE:
+      if (s_bol && c == 'T') { s_state = TS_T; return 0; }    // co the la mo dau "TRAM"
+      out[0] = c;
+      s_bol = (c == '\n');
+      return 1;
+
+    case TS_T:
+      if (c == 'R') { s_state = TS_R; return 0; }
+      s_state = TS_IDLE;                                      // khong phai "TRAM": tra lai CA 'T'
+      out[0] = 'T'; out[1] = c;
+      s_bol = (c == '\n');
+      return 2;
+
+    case TS_R:
+      if (c == 'A') { s_state = TS_A; return 0; }
+      s_state = TS_IDLE;
+      out[0] = 'T'; out[1] = 'R'; out[2] = c;
+      s_bol = (c == '\n');
+      return 3;
+
+    case TS_A:
+      if (c == 'M') { s_state = TS_LINE; s_len = 4; memcpy(s_line, "TRAM", 4); return 0; }
+      s_state = TS_IDLE;
+      out[0] = 'T'; out[1] = 'R'; out[2] = 'A'; out[3] = c;
+      s_bol = (c == '\n');
+      return 4;
+
+    default: {                            // TS_LINE: dang gom 1 dong
+      if (s_len < TRAM_LINK_LINE_MAX - 1) s_line[s_len++] = (char)c;
+      if (c == '\n') {
+        s_line[s_len] = '\0';
+        s_state = TS_IDLE;
+        s_len = 0;
+        s_bol = true;                     // dong moi bat dau
+        if (tram_status_parse(s_line, &tram.st)) {
+          tram.last_rx_ms = panel_millis();
+          tram.lines++;
+          tram.ever = true;
+          tram.linked = true;
+        }
+        else tram.errors++;
+      }
+      else if (s_len >= TRAM_LINK_LINE_MAX - 1) {   // dong qua dai -> bo
+        s_state = TS_IDLE;
+        s_len = 0;
+        s_bol = false;
+        tram.errors++;
+      }
+      return 0;                           // byte nay thuoc dong TRAM
+    }
+  }
+}
