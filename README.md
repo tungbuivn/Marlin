@@ -2148,7 +2148,7 @@ icon thật + hiệu chuẩn touch 4 góc) và kiểu TRAM (Tramming Wizard trê
 | Kích thước thực tế (LVGL, đo lại 2026-10-13, **có màn TRAMMING**) | F411: 154.544 B (59,0 %) / 52.376 B · F407: **158.756 B** (15,1 %) / 81.328 B · CYD: **463.101 B** (35,3 %) / 102.044 B (đang bật cờ debug) |
 | Thư viện ngoài | Kiểu G-code: **không có** (driver ILI9341 + font 8×8 tự viết). Kiểu LVGL/TRAM: `lvgl@^8.3.11` (+ `TFT_eSPI` cho ESP32-CYD) |
 | Marlin phải làm | kiểu G-code: bật 1 UART (`SERIAL_PORT_2 3` + `BAUDRATE_2 250000`). Kiểu PUSH: bật `PANEL_SERIAL_UI` — **1 lệnh** `pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on` (**phải tắt màn 12864 + `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU`**). Kiểu **TRAM**: thêm **1 dòng** `#define PANEL_TRAM_LINK` vào `Marlin/Configuration.h` — **không tắt gì cả**, menu 12864/MarlinUI giữ nguyên |
-| Dây (Monster8 → panel) | **PUSH**: EXP1 chân 5 (PD9 = USART3-**RX**) ← TX panel · chân 6 (PD8 = USART3-**TX**) → RX panel. **TRAM**: **USART1 = header MKS WiFi** — **PA10 (RX) ← TX panel** · **PA9 (TX) → RX panel**. Cả hai đều cần **GND chung** (+ 5V nếu board panel có regulator) |
+| Dây (Monster8 → panel) | **PUSH**: EXP1 chân 5 (PD9 = USART3-**RX**) ← TX panel · chân 6 (PD8 = USART3-**TX**) → RX panel. **TRAM**: **USART1 = header MKS WiFi** — **PA10 (RX) ← TX panel** · **PA9 (TX) → RX panel**. Cả hai đều cần **GND chung** (+ 5V nếu board panel có regulator). Header WiFi còn `IO0`/`IO1` (**PB14/PB15**, = UDISK) và `RESET` (**PD14**) — **không phải UART, đừng nối** (§15b) |
 
 > 🔎 **MKS làm thế nào?** Trong `Marlin/src/lcd/extui/` có **2 kiểu**, đừng lẫn:
 > * `extui/mks_ui` (MKS Robin), `lcd/tft`, `e2v2`… = màn gắn thẳng vào mainboard, **Marlin tự vẽ**

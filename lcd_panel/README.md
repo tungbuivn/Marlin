@@ -114,6 +114,10 @@ kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
 
 * Dây **chéo TX↔RX**; baud 250000 hai bên; panel cấp nguồn riêng (USB/5V) — **không** lấy 5V từ
   header vào chân 3V3 của CYD.
+* ⚠️ Header MKS WiFi còn **3 chân khác — KHÔNG dùng**: `IO0` = **PB14**, `IO1` = **PB15**
+  (`WIFI_IO0_PIN`/`WIFI_IO1_PIN`, còn gọi là UDISK), và `RESET` = **PD14** (`WIFI_RESET_PIN`). Ba chân
+  này **không phải UART** — PB14/PB15 là USB OTG_HS nên **không có AF USART**, và STM32F4 **không có
+  software-serial tổng quát** trong Marlin ⇒ nối vào cũng không chạy. Chỉ lấy đúng **TX / RX / GND**.
 * Build flag cho USART1 nằm trong **`ini/features.ini`** (key `PANEL_TRAM_LINK`):
   `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` ⇒ **chỉ** được thêm khi bật
   `#define PANEL_TRAM_LINK`, nên bản build hiện tại không đổi gì.
