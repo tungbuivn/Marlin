@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Man hinh in log 1 Hz tren cong serial USB (CH340):
-        [CYD] loop OK | t=<ms> | link PUSH=.. TRAM=.. rx=.. err=.. heap=<B>
+        [CYD] loop OK | t=<ms> | link PUSH=.. TBT=.. rx=.. err=.. heap=<B>
         [UP]  wifi=.. ssid=".." ip=.. rssi=.. sd=.. busy=.. rx=.. written=.. heap=.. heapmin=.. free=..KB | file=.. | <ket qua>
         [MRL] st=.. fl=0x.. prog=..% file=".." | SD r=<doc ok>/<doc loi> w=<ghi ok>/<ghi loi>
     va cac dong su kien:

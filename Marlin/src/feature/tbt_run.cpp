@@ -1,5 +1,5 @@
 /**
- * tramming_run.cpp -- May trang thai cua Bed Tramming Wizard (xem tramming_run.h).
+ * tbt_run.cpp -- May trang thai cua Bed Tramming Wizard (xem tbt_run.h).
  *
  * DAY LA BAN DI CHUYEN Y NGUYEN tu Marlin/src/lcd/menu/menu_tramming.cpp (ban 2026-10-12):
  * phan logic/trang thai/thuat toan duoc cat ra khoi lop UI, KHONG doi hanh vi. Nhung gi con lai
@@ -10,7 +10,7 @@
  *      MOC CUA MOI GIA TRI PROBE LA KHUNG Z SAU KHI HOME ("Z-home") - khong can probe
  *      rieng tam ban.
  *      NHUNG CON SO HIEN TREN MAN HINH / DUNG DE VAN VIT thi tinh theo
- *      MOC = Z-MIN hoac Z-MAX cua cac goc da do (xem tram_fmt_delta + G35.cpp):
+ *      MOC = Z-MIN hoac Z-MAX cua cac goc da do (xem tbt_fmt_delta + G35.cpp):
  *        che do MAX -> moc = Z-MIN: moi so >= 0 = phai HA xuong bao nhieu mm (van CCW)
  *        che do MIN -> moc = Z-MAX: moi so <= 0 = phai NANG len bao nhieu mm (van CW)
  *      Moc duoc CHOT (dong bang) sau lan do du 4 goc dau tien; PROBE lai 1 goc chi lam doi so
@@ -32,10 +32,10 @@
  *      Vi van vit lam Z-home doi nen vong lap cu lap lai cho toi khi ca 4 goc nam tren moc.
  *
  * 2026-10-13: tach khoi MarlinUI + them duong dieu khien tu man hinh rieng cydlcd
- *   (feature/cydlcd_tram_link.cpp, giao thuc ASCII tren USART3). Ca 2 duong dung CHUNG
+ *   (feature/cydlcd_tbt_link.cpp, giao thuc ASCII tren USART3). Ca 2 duong dung CHUNG
  *   trang thai trong namespace nay; chi MOT nguon duoc "tien buoc" (step):
  *     - menu 12864 dang mo wizard  -> ui_attached = true  -> menu_tramming goi step()
- *     - man hinh CYD la nguon duy nhat    -> cydlcd_tram_link::tick() goi step()
+ *     - man hinh CYD la nguon duy nhat    -> cydlcd_tbt_link::tick() goi step()
  *   => khong bao gio 2 nguon cung day trang thai.
  */
 
@@ -43,7 +43,7 @@
 
 #if ENABLED(ASSISTED_TRAMMING_WIZARD)
 
-#include "tramming_run.h"
+#include "tbt_run.h"
 
 #include "../module/motion.h"
 #include "../module/probe.h"
@@ -57,7 +57,7 @@
 //#define DEBUG_OUT 1
 #include "../core/debug_out.h"
 
-namespace tramming_run {
+namespace tbt_run {
 
 // ---------------------------------------------------------------------------
 // Hook UI (menu_tramming dat; link serial de NULL)
@@ -223,7 +223,7 @@ static void goto_index(const uint8_t i) {
 // Goc nay CON phai chinh khong?
 //   - goc nguoi dung DA BAM DONE (z_accepted) thi KHONG: coi nhu xong, du delta chua vao nguong
 //   - goc dinh nghia MOC (Z-MIN o che do MAX, Z-MAX o che do MIN) thi KHONG: no chinh la chuan
-//   - goc da trong nguong nhieu (|delta| <= TRAM_DONE_MM = 0.01mm) thi KHONG -> coi nhu "auto DAT"
+//   - goc da trong nguong nhieu (|delta| <= TBT_DONE_MM = 0.01mm) thi KHONG -> coi nhu "auto DAT"
 // ---------------------------------------------------------------------------
 bool need_adjust(const uint8_t i) {
   if (z_accepted[i]) return false;                // nguoi dung da chap nhan goc nay
@@ -233,7 +233,7 @@ bool need_adjust(const uint8_t i) {
                                            : (z_delta[i] >= z_ref_max - 0.0005f);
     if (is_ref) return false;
   }
-  return ABS(z_delta[i] - ref()) > TRAM_DONE_MM;
+  return ABS(z_delta[i] - ref()) > TBT_DONE_MM;
 }
 
 // Co goc nao (trong CA 4) con phai chinh khong? false = tat ca da dat -> chi con nut BACK
@@ -416,12 +416,12 @@ void step() {
   }
 }
 
-} // namespace tramming_run
+} // namespace tbt_run
 
 // ---------------------------------------------------------------------------
 // Diem vao cu cho lcd/menu/menu_motion.cpp ("WORST POINT = MAX"):
 // chi doi chien luoc + luu EEPROM (KHONG di chuyen nozzle nhu nut MAX<->MIN trong wizard).
 // ---------------------------------------------------------------------------
-void tramming_worst_toggle() { tramming_run::worst_toggle(); }
+void tramming_worst_toggle() { tbt_run::worst_toggle(); }
 
 #endif // ASSISTED_TRAMMING_WIZARD

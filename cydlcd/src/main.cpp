@@ -19,7 +19,7 @@
 #if CYDLCD_USE_LVGL
 
   #include "cydlcd_link.h"
-  #include "tram_link.h"          // chan doan: dem dong/byte TRAM nhan duoc
+  #include "tbt_link.h"          // chan doan: dem dong/byte TRAM nhan duoc
   #include "ui_lvgl.h"
   #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
   #include "net_upload_http.h"    // web server tren cydlcd: PC/dien thoai gui file qua WiFi
@@ -63,9 +63,9 @@
         // voi ca bool lan uint16_t neu nhanh khac doi kieu).
         // t=<ms> = millis(): doc dong DAU TIEN de biet tu reset den luc loop() chay la bao lau
         // (sau khi hoan init BT ra khoi setup() - xem README 9.17).
-        Serial.printf("[CYD] loop OK | t=%lu ms | link PUSH=%d TRAM=%d rx=%d err=%d heap=%u\n",
+        Serial.printf("[CYD] loop OK | t=%lu ms | link PUSH=%d TBT=%d rx=%d err=%d heap=%u\n",
                       (unsigned long)millis(),
-                      (int)cydlcd.linked, (int)tram.linked, (int)cydlcd.rx_frames,
+                      (int)cydlcd.linked, (int)tbt.linked, (int)cydlcd.rx_frames,
                       (int)cydlcd.rx_errors, (unsigned)ESP.getFreeHeap());
         net_upload_http_log();     // 1 dong: the TF + WiFi + phien upload qua web (rong neu tat)
       }

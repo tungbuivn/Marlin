@@ -1,17 +1,17 @@
 /**
- * tramming_run.h -- MAY TRANG THAI cua Bed Tramming Wizard, KHONG phu thuoc MarlinUI.
+ * tbt_run.h -- MAY TRANG THAI cua Bed Tramming Wizard, KHONG phu thuoc MarlinUI.
  *
  * VI SAO TACH RA:
  *   Truoc 2026-10-13 toan bo thuat toan nam trong lcd/menu/menu_tramming.cpp, nen chi man 12864
  *   moi dung duoc. Nay thuat toan nam o day de CA HAI duong cung dung chung MOT trang thai:
  *     - MarlinUI (menu 12864): menu_tramming.cpp = lop UI mong (ve + nhan encoder);
- *     - Man hinh rieng cydlcd: feature/cydlcd_tram_link.cpp (link ASCII tren USART3).
+ *     - Man hinh rieng cydlcd: feature/cydlcd_tbt_link.cpp (link ASCII tren USART3).
  *   => KHONG dung ExtUI/CYDLCD_SERIAL_UI, nen menu 12864 (Tramming Wizard, Z ALIGN MANUAL...)
  *      van nguyen ven. Xem docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md.
  *
  * THUAT TOAN KHONG DOI so voi ban cu trong menu_tramming.cpp (moc Z-MIN/Z-MAX chot 1 lan,
  * nguong auto-DAT 0.01mm, tu di tiep khi DAT, DONE = goc nay xong, BACK = thoat, ca 4 DAT ->
- * hien delta so voi tam + chi con BACK). Xem khoi chu thich dai trong tramming_run.cpp.
+ * hien delta so voi tam + chi con BACK). Xem khoi chu thich dai trong tbt_run.cpp.
  */
 #pragma once
 
@@ -40,9 +40,9 @@ enum TramProbeState : uint8_t {
 
 // Nguong "auto DAT": |delta| <= so nay (mm) thi coi nhu goc do da xong.
 // 0.01mm = muc nhieu that cua probe (do lai 20 lan lech 7-10um), duoi muc nay van nua la vo nghia.
-#define TRAM_DONE_MM 0.01f
+#define TBT_DONE_MM 0.01f
 
-namespace tramming_run {
+namespace tbt_run {
 
   // -------------------------------------------------------------------------
   // Hook cho UI (menu_tramming dat; link serial thi de NULL -> khong lam gi)

@@ -5,7 +5,7 @@
 
 #include <string.h>
 #include "cydlcd_port.h"
-#include "tram_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tram_link.h
+#include "tbt_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tbt_link.h
 #include "cyd_sd.h"        // doc sector tho cho Marlin (che do CYDLCD_SD_UART)
 
 // Log chan doan cho phan the SD (chi tren board that; ban chay tren may tinh khong co Serial)
@@ -153,9 +153,9 @@ void cydlcd_link_answer(const uint8_t answer) {
   cydlcd.prompt_active = false;
 }
 
-void cydlcd_link_send_tram_cmd(char cmd) {
+void cydlcd_link_send_tbt_cmd(char cmd) {
   if (!cmd) return;
-  cydlcd_tx_begin(&s_tx, CYDLCD_F_TRAM_CMD);
+  cydlcd_tx_begin(&s_tx, CYDLCD_F_TBT_CMD);
   cydlcd_tx_u8(&s_tx, (uint8_t)cmd);
   send_frame(cydlcd_tx_finish(&s_tx));
 }
@@ -246,7 +246,7 @@ static void handle_frame() {
         cydlcd.pos.y = cydlcd_i32(&p[4]);
         cydlcd.pos.z = cydlcd_i32(&p[8]);
         cydlcd.pos.e = cydlcd_i32(&p[12]);
-        // p[16..17] = feed mm/s*10 (chua dung), roi moi den 2 phan tram
+        // p[16..17] = feed mm/s*10 (chua dung), roi moi den 2 phan tbt
         cydlcd.pos.feed_pct = cydlcd_i16(&p[18]);
         cydlcd.pos.flow_pct = cydlcd_i16(&p[20]);
       }
@@ -261,12 +261,12 @@ static void handle_frame() {
       }
       break;
 
-    case CYDLCD_F_TRAM: {
-      // 1 dong ASCII "TRAM ..." (che do PUSH, 2026-10-13) -> dua thang vao bo giai cua tram_link,
-      // KHONG qua bo "sniff" byte (bo do chi dung cho duong UART tho cua CYDLCD_TRAM_LINK).
-      char t[TRAM_LINK_LINE_MAX];
+    case CYDLCD_F_TBT: {
+      // 1 dong ASCII "TBT ..." (che do PUSH, 2026-10-13) -> dua thang vao bo giai cua tbt_link,
+      // KHONG qua bo "sniff" byte (bo do chi dung cho duong UART tho cua CYDLCD_TBT_LINK).
+      char t[TBT_LINK_LINE_MAX];
       str_at(p, n, 0, t, sizeof(t));
-      tram_link_line(t);
+      tbt_link_line(t);
       break;
     }
 
@@ -443,7 +443,7 @@ void cydlcd_link_begin(const uint32_t baud) {
   cydlcd_rx_init(&s_rx);
   memset(&cydlcd, 0, sizeof(cydlcd));    // xoa ca 2 CO cydlcd.rx_frames / cydlcd.rx_errors ve false
   s_err_seen = 0;                      // anh bo dem loi cua cydlcd_protocol.h cung phai ve 0
-  tram_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
+  tbt_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
   s_want_full = true;
   s_next_ping_ms = 0;
 }
@@ -454,18 +454,18 @@ void cydlcd_link_task() {
   uint8_t fwd[4];
   while (CYDLCD_MARLIN_SERIAL.available()) {
     const uint8_t c = (uint8_t)CYDLCD_MARLIN_SERIAL.read();
-    // Duong TRAMMING (Marlin: CYDLCD_TRAM_LINK) dung CHUNG UART nay: tram_link_feed() tra ve 0
-    // khi byte thuoc dong "TRAM ...", nguoc lai tra ve so byte (0..4) can dua cho bo giai frame
+    // Duong TRAMMING (Marlin: CYDLCD_TBT_LINK) dung CHUNG UART nay: tbt_link_feed() tra ve 0
+    // khi byte thuoc dong "TBT ...", nguoc lai tra ve so byte (0..4) can dua cho bo giai frame
     // PUSH - cac byte 'T','R','A' dang giu de do duoc tra lai day du nen KHONG mat byte nao.
     //
-    // 2026-10-13: che do PUSH (CYDLCD_SERIAL_UI) gui dong TRAM trong frame CYDLCD_F_TRAM -> payload
-    // CUA FRAME chua chinh chuoi "TRAM ...". Neu van chay bo sniff thi no se "an" cac byte do lam
+    // 2026-10-13: che do PUSH (CYDLCD_SERIAL_UI) gui dong TBT trong frame CYDLCD_F_TBT -> payload
+    // CUA FRAME chua chinh chuoi "TBT ...". Neu van chay bo sniff thi no se "an" cac byte do lam
     // frame hong (da gap that: byte tang ~500 B/s nhung cydlcd.linked=0, khong nhan duoc frame nao).
     // => Da nhan duoc frame PUSH hop le dau tien thi TAT sniff VINH VIEN. Dung CO MOT CHIEU
     //    cydlcd.rx_frames (KHONG dung bo dem nhu truoc: bo dem tran ve 0 se bat lai sniff giua chung).
     uint8_t n;
     if (cydlcd.rx_frames) { fwd[0] = c; n = 1; }
-    else                 n = tram_link_feed(c, fwd);
+    else                 n = tbt_link_feed(c, fwd);
     for (uint8_t k = 0; k < n; k++)
       if (cydlcd_rx_byte(&s_rx, fwd[k])) handle_frame();
   }
@@ -484,7 +484,7 @@ void cydlcd_link_task() {
     }
   #endif
 
-  tram_link_task();                  // cap nhat co `tram.linked`
+  tbt_link_task();                  // cap nhat co `tbt.linked`
 
   const uint32_t now = cydlcd_millis();
 
@@ -495,9 +495,9 @@ void cydlcd_link_task() {
 
   // PING 1s/lan: vua de kiem tra lien ket, vua de Marlin biet MAN HINH CYD con song.
   // KHONG gui khi dang o che do TRAM: byte nhi phan cua frame PING co the lot vao bo giai
-  // lenh ASCII cua Marlin (cydlcd_tram_link). O che do TRAM, Marlin tu gui dong TRAM dinh ky
+  // lenh ASCII cua Marlin (cydlcd_tbt_link). O che do TRAM, Marlin tu gui dong TBT dinh ky
   // nen khong can PING.
-  if (!tram_link_active() && (!s_next_ping_ms || now >= s_next_ping_ms)) {
+  if (!tbt_link_active() && (!s_next_ping_ms || now >= s_next_ping_ms)) {
     s_next_ping_ms = now + CYDLCD_LINK_PING_MS;
     cydlcd_link_ping();
   }

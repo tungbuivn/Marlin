@@ -74,7 +74,7 @@ typedef struct {
   // Truoc day la 2 BO DEM uint16_t: nhip that ~4 frame/s -> TRAN sau 65 536 frame (~4,5 gio).
   // Tran ve 0 khong chi lam hien thi sai ma con lam dieu kien TAT SNIFFER TRAM trong
   // cydlcd_link.cpp (`if (cydlcd.rx_frames)`) tro nen SAI -> sniffer bat lai giua chung va co the
-  // an byte cua frame chua "TRAM" (dung loi da tung gap). Dung CO thi khong con so de tran.
+  // an byte cua frame chua "TBT" (dung loi da tung gap). Dung CO thi khong con so de tran.
   //
   // VI SAO GIU TEN CU (rx_frames/rx_errors) chu khong doi thanh rx_ok/rx_err: main.cpp - dong log
   // debug "[CYD] ... rx=%d err=%d" - van doc cydlcd.rx_frames / cydlcd.rx_errors (ep (int), xem
@@ -108,7 +108,7 @@ void cydlcd_link_request_dir(const char *dirname);        // vao thu muc roi lie
   void cydlcd_link_send_sd_ack(uint8_t status, uint32_t sector);   // tra loi lenh GHI (P3)
 #endif
 void cydlcd_link_answer(const uint8_t answer);            // tra loi prompt dang cho (1 = OK)
-void cydlcd_link_send_tram_cmd(char cmd);                 // lenh Tramming Wizard P/D/M/R/B/Q (frame 0x44)
+void cydlcd_link_send_tbt_cmd(char cmd);                 // lenh Tramming Wizard P/D/M/R/B/Q (frame 0x44)
 
 // Doi so nguyen trong frame thanh don vi that
 static inline float cydlcd_mm(const int32_t v)   { return (float)v / CYDLCD_POS_SCALE; }

@@ -16,8 +16,8 @@
 #include "../ui_api.h"
 #include "../../../gcode/queue.h"
 #if ENABLED(ASSISTED_TRAMMING_WIZARD)
-  #include "../../../feature/tramming_report.h"   // dong "TRAM ..." + 6 lenh (dung chung cydlcd_tram_link)
-  #include "../../../feature/tramming_run.h"      // may trang thai Bed Tramming Wizard
+  #include "../../../feature/tbt_report.h"   // dong "TBT ..." + 6 lenh (dung chung cydlcd_tbt_link)
+  #include "../../../feature/tbt_run.h"      // may trang thai Bed Tramming Wizard
 #endif
 #if ENABLED(SDSUPPORT)
   #include "../../../sd/cardreader.h"
@@ -141,7 +141,7 @@ namespace {
       }
     }
 
-    // Cac frame mang LENH tu man hinh CYD (G-code / REQUEST / TRAM_CMD / ANSWER) KHONG duoc xu ly ngay trong
+    // Cac frame mang LENH tu man hinh CYD (G-code / REQUEST / TBT_CMD / ANSWER) KHONG duoc xu ly ngay trong
     // luc dang cho sector: chung co the enqueue G-code, chay M500 hay nhay DFU... -> HOAN lai, onIdle
     // xu ly sau. Payload cua chung rat ngan (<= 48 byte) nen chi ton vai chuc byte RAM.
     struct sd_defer_t { uint8_t type, len, payload[CYDLCD_STR_MAX + 8]; };
@@ -149,7 +149,7 @@ namespace {
     uint8_t    s_defer_n = 0;
 
     FORCE_INLINE bool is_cmd_frame(const uint8_t t) {
-      return t == CYDLCD_F_GCODE || t == CYDLCD_F_REQUEST || t == CYDLCD_F_ANSWER || t == CYDLCD_F_TRAM_CMD;
+      return t == CYDLCD_F_GCODE || t == CYDLCD_F_REQUEST || t == CYDLCD_F_ANSWER || t == CYDLCD_F_TBT_CMD;
     }
     // (sd_take_chunk / sd_defer / sd_flush_deferred nam SAU khai bao `rx` o duoi - chung dung rx.)
   #endif  // CYDLCD_SD_OVER_UART
@@ -300,18 +300,18 @@ namespace {
 
   #if ENABLED(ASSISTED_TRAMMING_WIZARD)
     // ------------------------------------------------- Bed Tramming Wizard ----
-    // Man TRAMMING cua man hinh CYD (thay cho che do CYDLCD_TRAM_LINK cu): gui NGUYEN 1 dong ASCII
-    // "TRAM ...\n" (tram_protocol.h) lam payload str cua CYDLCD_F_TRAM, ~5Hz. Panel gui lenh
-    // hanh dong bang CYDLCD_F_TRAM_CMD ('P','D','M','R','B','Q').
-    char tram_line[TRAM_REPORT_LINE_MAX];
-    millis_t next_tram_ms = 0;
+    // Man TRAMMING cua man hinh CYD (thay cho che do CYDLCD_TBT_LINK cu): gui NGUYEN 1 dong ASCII
+    // "TBT ...\n" (tbt_protocol.h) lam payload str cua CYDLCD_F_TBT, ~5Hz. Panel gui lenh
+    // hanh dong bang CYDLCD_F_TBT_CMD ('P','D','M','R','B','Q').
+    char tbt_line[TBT_REPORT_LINE_MAX];
+    millis_t next_tbt_ms = 0;
 
     void push_tram() {
-      const int n = tramming_report_line(tram_line, (int)sizeof(tram_line));
+      const int n = tbt_report_line(tbt_line, (int)sizeof(tbt_line));
       if (n <= 0) return;
-      tx_begin(CYDLCD_F_TRAM);
-      tx_str(tram_line, TRAM_REPORT_LINE_MAX);   // str: u8 len + n byte (co ca '\n' cuoi dong)
-      // Dong TRAM ~70-75 byte -> di qua CHINH hang doi TX (tx_send) chu khong con ghi blocking
+      tx_begin(CYDLCD_F_TBT);
+      tx_str(tbt_line, TBT_REPORT_LINE_MAX);   // str: u8 len + n byte (co ca '\n' cuoi dong)
+      // Dong TBT ~70-75 byte -> di qua CHINH hang doi TX (tx_send) chu khong con ghi blocking
       // nhu tx_send_wait() cu: hang doi giu nguyen ca frame, tx_drain() day ra theo toc do UART
       // (250000 baud = 40 us/byte) nen dong dai bao nhieu cung khong bi cat va khong chan vong lap.
       tx_send();
@@ -760,10 +760,10 @@ namespace {
         if (rx.len >= 2 && rx.payload[1]) setUserConfirmed();
         break;
       #if ENABLED(ASSISTED_TRAMMING_WIZARD)
-        case CYDLCD_F_TRAM_CMD:
+        case CYDLCD_F_TBT_CMD:
           // 1 lenh wizard ('P','D','M','R','B','Q'). Lenh hop le tu dat co "gui lai ngay"
-          // (tramming_report_force_take() o onIdle); 'Q' luon duoc xu ly ke ca khi busy.
-          if (rx.len >= 1) tramming_report_cmd((char)rx.payload[0]);
+          // (tbt_report_force_take() o onIdle); 'Q' luon duoc xu ly ke ca khi busy.
+          if (rx.len >= 1) tbt_report_cmd((char)rx.payload[0]);
           break;
       #endif
       default: break;                       // frame la khong ho tro -> bo qua
@@ -816,14 +816,14 @@ namespace ExtUI {
     #if ENABLED(ASSISTED_TRAMMING_WIZARD)
       // TRAM: day 1 buoc may trang thai. ExtUI KHONG bien dich menu 12864 (menu_tramming.cpp)
       // nen day la nguon DUY NHAT tien buoc wizard - thieu dong nay thi wizard dung o TR_HOMING.
-      // tick() cu cua cydlcd_tram_link lam dung viec nay; ui_attached giu nguyen y nghia cu.
-      if (tramming_run::active && !tramming_run::ui_attached) tramming_run::step();
+      // tick() cu cua cydlcd_tbt_link lam dung viec nay; ui_attached giu nguyen y nghia cu.
+      if (tbt_run::active && !tbt_run::ui_attached) tbt_run::step();
 
       // Gui trang thai TRAM ~5Hz, va NGAY khi co lenh hop le tu man hinh CYD ('Q' hoi trang thai).
-      const bool tram_due = !next_tram_ms || ELAPSED(now, next_tram_ms);
-      const bool tram_now = tramming_report_force_take();
-      if (tram_due) next_tram_ms = now + TRAM_REPORT_PUSH_MS;
-      if (tram_due || tram_now) push_tram();
+      const bool tbt_due = !next_tbt_ms || ELAPSED(now, next_tbt_ms);
+      const bool tbt_now = tbt_report_force_take();
+      if (tbt_due) next_tbt_ms = now + TBT_REPORT_PUSH_MS;
+      if (tbt_due || tbt_now) push_tram();
     #endif
     if (mesh_dirty && !flag_leveling) {           // mesh vua doi xong -> day 1 lan
       mesh_dirty = false;

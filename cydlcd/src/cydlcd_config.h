@@ -29,7 +29,7 @@
 #endif
 
 // Ten MAY IN hien o man INFO. O che do PUSH, ten that lay tu goi HELLO cua Marlin
-// (cydlcd.name). O che do TRAM (CYDLCD_TRAM_LINK) KHONG co goi HELLO nen dung ten nay
+// (cydlcd.name). O che do TRAM (CYDLCD_TBT_LINK) KHONG co goi HELLO nen dung ten nay
 // -> doi cho khop may cua ban, hoac -DCYDLCD_MACHINE_NAME=\"...\" trong platformio.ini.
 #ifndef CYDLCD_MACHINE_NAME
   #define CYDLCD_MACHINE_NAME "TBT"

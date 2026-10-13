@@ -6,9 +6,9 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 | | **Kiểu G-code** | **Kiểu PUSH** (mới, dùng cho màn LVGL) | **Kiểu TRAM** (mới — **không cần ExtUI**) |
 |---|---|---|---|
 | Env | `cydlcd_f411cc`, `cydlcd_f103c6` | `cydlcd_f407vgz_lvgl`, `cydlcd_f411cc_lvgl`, `cydlcd_esp32` | như kiểu PUSH |
-| Màn hình CYD lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`cydlcd_link.cpp`) | dòng ASCII `TRAM …` (`tram_link.cpp`) — **chỉ** dữ liệu Tramming Wizard |
+| Màn hình CYD lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`cydlcd_link.cpp`) | dòng ASCII `TRAM …` (`tbt_link.cpp`) — **chỉ** dữ liệu Tramming Wizard |
 | Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) — **màn NGANG 320×240**, bố cục + **icon lấy từ màn TFT của Marlin** (§5) |
-| Marlin cần | chỉ bật 1 UART trống | bật `CYDLCD_SERIAL_UI` (ExtUI `cydlcd_serial`) + tắt màn 12864 | **chỉ thêm 1 dòng `#define CYDLCD_TRAM_LINK`** — **KHÔNG** tắt gì của MarlinUI ⇒ **màn 12864 + menu MarlinUI vẫn nguyên vẹn** |
+| Marlin cần | chỉ bật 1 UART trống | bật `CYDLCD_SERIAL_UI` (ExtUI `cydlcd_serial`) + tắt màn 12864 | **chỉ thêm 1 dòng `#define CYDLCD_TBT_LINK`** — **KHÔNG** tắt gì của MarlinUI ⇒ **màn 12864 + menu MarlinUI vẫn nguyên vẹn** |
 | Dữ liệu nặng (file SD, bed mesh, PID/steps/mm, prompt…) | **không có** | **có** (Marlin đẩy hết) | **không có** (chỉ Tramming Wizard — §5.6) |
 | Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font + ~17 KB icon) | như kiểu PUSH (+0,3 KB khi thêm màn TRAMMING — xem §1.1) |
 
@@ -26,9 +26,9 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 > **Vì sao có thêm kiểu TRAM (2026-10-13)?** Kiểu PUSH bắt buộc bật `CYDLCD_SERIAL_UI` (ExtUI), mà
 > ExtUI **chiếm `MarlinUI::init_lcd()/update()`** nên phải **tắt màn 12864 + `CUSTOM_MENU_MAIN` +
 > `LED_CONTROL_MENU`** ⇒ **mất toàn bộ menu MarlinUI** (Tramming Wizard, `Z ALIGN MANUAL`…).
-> Kiểu TRAM chỉ thêm **một link ASCII rất nhỏ** (`Marlin/src/feature/cydlcd_tram_link.cpp`) để màn
+> Kiểu TRAM chỉ thêm **một link ASCII rất nhỏ** (`Marlin/src/feature/cydlcd_tbt_link.cpp`) để màn
 > riêng hiển thị + điều khiển **Bed Tramming Wizard**, **không dùng ExtUI** ⇒ chỉ cần thêm
-> `#define CYDLCD_TRAM_LINK` là xong, bản build 12864 không mất gì. Xem **§5.6** và
+> `#define CYDLCD_TBT_LINK` là xong, bản build 12864 không mất gì. Xem **§5.6** và
 > `docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md` §3c.
 
 ---
@@ -83,7 +83,7 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 > (cờ tạm để hiệu chuẩn touch) — tắt đi thì nhỏ hơn một chút.
 > Hai env G-code (`cydlcd_f411cc`, `cydlcd_f103c6`) **không đổi** (chúng loại `ui_lvgl*.cpp` khỏi build).
 
-> **2026-10-13** (màn **TRAMMING**, §5.6): đo lại sau khi thêm `tram_link.cpp` + màn TRAMMING:
+> **2026-10-13** (màn **TRAMMING**, §5.6): đo lại sau khi thêm `tbt_link.cpp` + màn TRAMMING:
 > `cydlcd_f411cc_lvgl` **157.152 B / 262.144 (59,9 %) · RAM 52.608 B / 131.072 (40,1 %)**;
 > `cydlcd_f407vgz_lvgl` **158.756 B (15,1 %) / 81.328 B (62,0 %)**;
 > `cydlcd_esp32` **463.101 B (35,3 %) / 102.044 B (31,1 %)** (vẫn bật `-DCYDLCD_CYD_DEBUG=1`).
@@ -119,7 +119,7 @@ kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
 | Kiểu | UART (Marlin) | Chân Monster8 | Vì sao |
 |---|---|---|---|
 | **PUSH** (`CYDLCD_SERIAL_UI`) | **USART1 (mặc định hiện nay)** hoặc USART3 | **USART1: PA10 (RX) / PA9 (TX) = header MKS WiFi** ← *đang dùng* · USART3: PD9 (RX) / PD8 (TX) = EXP1 chân 5/6 | Chọn bằng `-DCYDLCD_SERIAL_PORT=1` (USART1, header WiFi — dây đang đi sẵn) hoặc `=3` (USART3/EXP1, chỉ khi đã tháo màn 12864 vì EXP1_06 = `NEOPIXEL_PIN`). Cờ build nằm ngay trong `ini/features.ini` (key `CYDLCD_SERIAL_UI`). ⚠️ **Trước 2026-10-13 PUSH chỉ chạy USART3** ⇒ màn hình CYD báo `NO LINK` dù dây đúng ở header WiFi (đã sửa) |
-| **TRAM** (`CYDLCD_TRAM_LINK`) | **USART1** | **PA10 (RX) / PA9 (TX) = header MKS WiFi** | USART3 **hết chân TX rảnh** (PD8 = `NEOPIXEL_PIN`, PB10 = `HEATER_BED`, PC10 = `SD_SCK`); PA9/PA10 **hoàn toàn rảnh** (`//#define WIFI_SERIAL 1 // USART1` đang comment trong `pins_MKS_MONSTER8_V2.h`) |
+| **TRAM** (`CYDLCD_TBT_LINK`) | **USART1** | **PA10 (RX) / PA9 (TX) = header MKS WiFi** | USART3 **hết chân TX rảnh** (PD8 = `NEOPIXEL_PIN`, PB10 = `HEATER_BED`, PC10 = `SD_SCK`); PA9/PA10 **hoàn toàn rảnh** (`//#define WIFI_SERIAL 1 // USART1` đang comment trong `pins_MKS_MONSTER8_V2.h`) |
 
 **Kiểu TRAM (khuyến nghị cho Tramming Wizard) — KHÔNG đụng PD8/NeoPixel, KHÔNG đụng chân reset màn 12864:**
 
@@ -135,10 +135,10 @@ kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
   (`WIFI_IO0_PIN`/`WIFI_IO1_PIN`, còn gọi là UDISK), và `RESET` = **PD14** (`WIFI_RESET_PIN`). Ba chân
   này **không phải UART** — PB14/PB15 là USB OTG_HS nên **không có AF USART**, và STM32F4 **không có
   software-serial tổng quát** trong Marlin ⇒ nối vào cũng không chạy. Chỉ lấy đúng **TX / RX / GND**.
-* Build flag cho USART1 nằm trong **`ini/features.ini`** (key `CYDLCD_TRAM_LINK`):
+* Build flag cho USART1 nằm trong **`ini/features.ini`** (key `CYDLCD_TBT_LINK`):
   `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` ⇒ **chỉ** được thêm khi bật
-  `#define CYDLCD_TRAM_LINK`, nên bản build hiện tại không đổi gì.
-* ⚠️ Nếu định bật **cả** `WIFI_SERIAL` (USART1) thì phải chọn cổng khác — `cydlcd_tram_link.h` có
+  `#define CYDLCD_TBT_LINK`, nên bản build hiện tại không đổi gì.
+* ⚠️ Nếu định bật **cả** `WIFI_SERIAL` (USART1) thì phải chọn cổng khác — `cydlcd_tbt_link.h` có
   `#error` chặn sẵn.
 
 **Kiểu PUSH (`CYDLCD_SERIAL_UI`) — USART3, chỉ dùng khi chấp nhận tắt màn 12864:**
@@ -212,25 +212,25 @@ Với **CYD**: màn + cảm ứng đã nối sẵn trong board, cấu hình nằ
 
 ```powershell
 # 1) thêm ĐÚNG 1 dòng vào Marlin/Configuration.h (bất kỳ chỗ nào, ví dụ ngay dưới khối BAUDRATE):
-#        #define CYDLCD_TRAM_LINK
+#        #define CYDLCD_TBT_LINK
 # 2) build + nạp Marlin như bình thường:
 pio run -e mks_monster8 -t upload
 ```
 
-* **Mặc định TẮT** (`//#define CYDLCD_TRAM_LINK` trong `src/feature/cydlcd_tram_link.h`). Chưa thêm
+* **Mặc định TẮT** (`//#define CYDLCD_TBT_LINK` trong `src/feature/cydlcd_tbt_link.h`). Chưa thêm
   dòng nào ⇒ **không** biên dịch module, **không** chiếm UART, **không** tốn flash, và
   `Configuration.h`/`Configuration_adv.h` **giữ nguyên 100%** so với bản 12864.
 * Khi bật: `MKS_MINI_12864_V3` **vẫn bật**, `CUSTOM_MENU_MAIN` **vẫn bật**, `LED_CONTROL_MENU`
   **vẫn bật**, `NEOPIXEL_LED` **vẫn bật** (link dùng **USART1/PA9-PA10**, xem §2.1) ⇒ **không mất
   menu MarlinUI nào**.
-* Build flag USART1 được thêm tự động từ `ini/features.ini` (key `CYDLCD_TRAM_LINK`) — đúng như khi
+* Build flag USART1 được thêm tự động từ `ini/features.ini` (key `CYDLCD_TBT_LINK`) — đúng như khi
   bạn bật định nghĩa đó, không cần sửa `platformio.ini`/`stm32f4.ini`.
 * Số liệu build thật (`pio run -e mks_monster8`, đo 2026-10-13):
 
 | | Flash | RAM |
 |---|---|---|
-| `CYDLCD_TRAM_LINK` **tắt** (mặc định, 12864) | **267.576 B** (25,5 %) | **12.220 B** (9,3 %) |
-| `CYDLCD_TRAM_LINK` **bật** | **270.592 B** (25,8 %) | **12.828 B** (9,8 %) |
+| `CYDLCD_TBT_LINK` **tắt** (mặc định, 12864) | **267.576 B** (25,5 %) | **12.220 B** (9,3 %) |
+| `CYDLCD_TBT_LINK` **bật** | **270.592 B** (25,8 %) | **12.828 B** (9,8 %) |
 
 ⇒ tính năng thêm **~3,0 KB flash / ~0,6 KB RAM** khi bật; tắt thì **không có gì thay đổi**.
 
@@ -304,10 +304,10 @@ FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, và nhóm
 frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần chạy đầu đã bắt được **2 lỗi thật**
 (lệch offset 2 byte của `feed/flow %`, và điều kiện gửi PING sai) — nay **40/40 pass**.
 
-> **2026-10-13 — thêm nhóm test cho TRAM** (`src/tram_link.cpp` + `src/tram_protocol.h`): **+35 kiểm
-> tra** (tổng **~75**): định dạng số `tram_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse
+> **2026-10-13 — thêm nhóm test cho TRAM** (`src/tbt_link.cpp` + `src/tbt_protocol.h`): **+35 kiểm
+> tra** (tổng **~75**): định dạng số `tbt_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse
 > round-trip** đầy đủ trường, đọc được **dòng tối thiểu** (thiếu 3 trường mở rộng) và **từ chối
-> dòng sai**, `tram_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
+> dòng sai**, `tbt_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
 > với frame PUSH** (byte `T`/`TRAM` trong payload **không** bị ăn mất), và việc **ngừng gửi PING**
 > khi đã vào chế độ TRAM.
 ### Gửi lệnh G-code/M-code từ PC xuống Marlin (2026-10-13)
@@ -516,7 +516,7 @@ heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
 ### 5.6 Màn TRAMMING — Bed Tramming Wizard (kiểu TRAM, **không cần ExtUI**)
 
 > **2026-10-13**: màn mới cho màn hình riêng, dùng **chung thuật toán** với wizard trên màn 12864
-> (`Marlin/src/feature/tramming_run.cpp`). Phía Marlin chỉ cần **1 dòng** `#define CYDLCD_TRAM_LINK`
+> (`Marlin/src/feature/tbt_run.cpp`). Phía Marlin chỉ cần **1 dòng** `#define CYDLCD_TBT_LINK`
 > — **KHÔNG** phải tắt `MKS_MINI_12864_V3` / `CUSTOM_MENU_MAIN` / `LED_CONTROL_MENU`.
 
 **Vào màn:** STATUS → **SETTINGS** → MENU → dòng **`Tramming wizard`** (cột phải ghi `chua bat` /
@@ -540,13 +540,13 @@ TRAMMING trên màn hình CYD **dùng được độc lập**, không cần mở
 > X/Y/Z, tiến độ + tên file, quạt, lưới bed mesh, danh sách file SD, prompt) thay vì chỉ dòng `TRAM`,
 > dự án đã bật PUSH và **tắt** `MKS_MINI_12864_V3` + `NEOPIXEL_LED` + `CUSTOM_MENU_MAIN` +
 > `LED_CONTROL_MENU` (`cydlcd/tools/set_cydlcd_mode.ps1 -Mode on`), đồng thời **comment**
-> `CYDLCD_TRAM_LINK` (2 chế độ loại trừ nhau: cùng 1 UART).
+> `CYDLCD_TBT_LINK` (2 chế độ loại trừ nhau: cùng 1 UART).
 > **Màn TRAMMING trên màn hình CYD vẫn chạy**: trạng thái wizard được Marlin gửi trong frame
-> **`CYDLCD_F_TRAM` (0x0E)** — payload là **1 dòng ASCII đúng format `tram_protocol.h`** (tái dùng
-> nguyên bộ giải `tram_status_parse()`), và lệnh của màn hình CYD đi trong frame **`CYDLCD_F_TRAM_CMD` (0x44)**
+> **`CYDLCD_F_TBT` (0x0E)** — payload là **1 dòng ASCII đúng format `tbt_protocol.h`** (tái dùng
+> nguyên bộ giải `tbt_status_parse()`), và lệnh của màn hình CYD đi trong frame **`CYDLCD_F_TBT_CMD` (0x44)**
 > (`u8` ký tự `P/D/M/R/B/Q`) → `tramming_report_cmd()` phía Marlin. Nhờ vậy **không mất** wizard khi
 > đổi giao thức. Code chế độ TRAM cũ **vẫn nằm trong repo** (bật lại bằng `set_cydlcd_mode.ps1 -Mode off`
-> + `#define CYDLCD_TRAM_LINK`), màn hình CYD tự nhận cả 2 đường (`cydlcd.linked` → gửi frame; ngược lại → ASCII thô).
+> + `#define CYDLCD_TBT_LINK`), màn hình CYD tự nhận cả 2 đường (`cydlcd.linked` → gửi frame; ngược lại → ASCII thô).
 
 **Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
 | Chỗ hiển thị | Nội dung | Ghi chú |
@@ -565,12 +565,12 @@ Mọi chỗ hiển thị link đều đi qua **một hàm duy nhất** `link_ok(
 **Chẩn đoán không cần thiết bị gì thêm:** log USB của CYD (115200) in **mỗi giây** một dòng:
 
 ```
-[CYD] loop OK | link PUSH=0 TRAM=1 state=0 rx=0 err=0 heap=... | TRAM dong=67 loi=0 byte=4221 cach-day=97ms
+[CYD] loop OK | link PUSH=0 TBT=1 state=0 rx=0 err=0 heap=... | TRAM dong=67 loi=0 byte=4221 cach-day=97ms
 ```
 
-`byte` = **tổng số byte** nhận trên chân RX (đếm cả rác), `dong` = số dòng `TRAM` hợp lệ, `loi` = dòng sai khung, `cach-day` = ms từ dòng cuối. Link tốt ⇒ `dong` tăng ~**5/giây**, `loi=0`, `cach-day` < **2000 ms** (`TRAM_LINK_TIMEOUT_MS`).
+`byte` = **tổng số byte** nhận trên chân RX (đếm cả rác), `dong` = số dòng `TRAM` hợp lệ, `loi` = dòng sai khung, `cach-day` = ms từ dòng cuối. Link tốt ⇒ `dong` tăng ~**5/giây**, `loi=0`, `cach-day` < **2000 ms** (`TBT_LINK_TIMEOUT_MS`).
 
-**4 nút còn lại gửi đúng 1 ký tự xuống Marlin** (`tram_protocol.h`): `P` = probe lại góc đang đứng ·
+**4 nút còn lại gửi đúng 1 ký tự xuống Marlin** (`tbt_protocol.h`): `P` = probe lại góc đang đứng ·
 `D` = góc này xong (đi góc cần chỉnh kế tiếp; hết góc → home Z + probe lại 4 góc) · `M` = đổi mốc
 `MAX`↔`MIN` · **`BACK`** gửi `B` (thoát wizard: stow probe + đánh dấu Z chưa home) rồi về MENU.
 Ngoài ra màn hình CYD gửi `Q` khi mới vào màn. Marlin trả lời bằng **1 dòng ASCII mỗi 200 ms**:
@@ -585,13 +585,13 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
   `hint` = `DAT` / `CW:0.150` / `CCW:nhe` / `PROBE` / `ERR` / `-`.
 * **`hint` do Marlin tính sẵn** (dùng đúng `tramming_turn_cw` + `TRAM_DONE_MM` như màn 12864) nên
   màn hình CYD **không** tự suy lại chiều vặn vít ⇒ số và chiều ở 2 màn luôn giống nhau.
-* Định nghĩa **dùng chung y nguyên** ở 2 nơi: `Marlin/src/feature/tram_protocol.h` và
-  `cydlcd/src/tram_protocol.h` (sửa một bên thì **copy sang bên kia**).
+* Định nghĩa **dùng chung y nguyên** ở 2 nơi: `Marlin/src/feature/tbt_protocol.h` và
+  `cydlcd/src/tbt_protocol.h` (sửa một bên thì **copy sang bên kia**).
 * Màn hình CYD đọc dòng `TRAM …` **ngay trong vòng đọc UART của `cydlcd_link.cpp`**; byte không thuộc dòng
   TRAM được trả lại **nguyên vẹn** cho bộ giải frame PUSH (không mất byte nào), và khi đã vào chế độ
   TRAM thì màn hình CYD **ngừng gửi PING** (tránh byte nhị phân lọt vào bộ giải lệnh ASCII của Marlin).
 * Ở chế độ này các màn khác (STATUS/TEMP/FILES…) vẫn mở được nhưng hiện `NO LINK` — chúng cần frame
-  PUSH của `CYDLCD_SERIAL_UI`, mà 2 chế độ **loại trừ nhau** (`cydlcd_tram_link.h` có `#error` chặn).
+  PUSH của `CYDLCD_SERIAL_UI`, mà 2 chế độ **loại trừ nhau** (`cydlcd_tbt_link.h` có `#error` chặn).
 
 **Nối dây:** USART1 = **PA9 (TX) / PA10 (RX)** — bảng đầu §2.1.
 
@@ -603,10 +603,10 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 |---|---|
 | Màn trắng / không có gì | dây SPI (SCK/MOSI/CS/DC/RST), chân BL, `TFT_ROTATION`; thử `TFT_SPI_SPEED` thấp hơn (12 MHz) nếu dây dài |
 | Header hiện `NO LINK` | **kiểu PUSH**: dây TX/RX có **chéo** không, GND chung chưa, baud 2 bên có trùng `250000`, Marlin đã bật `CYDLCD_SERIAL_UI` chưa (và đã tắt màn 12864 chưa), cờ `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_*` có trong env chưa |
-| Màn **TRAMMING** hiện `NO LINK` | **kiểu TRAM**: Marlin đã thêm `#define CYDLCD_TRAM_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `CYDLCD_TRAM_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TRAM` nào. **Trước tiên hãy chắc chắn dây màn hình CYD đang ở `P3` (IO22+IO35) chứ KHÔNG phải `P5`/`P1` cạnh USB-C** — xem §2.1; và đọc log USB: `rx=0 err=0` = không có tín hiệu (sai cổng/chưa chung GND), `err>0` = sai baud |
+| Màn **TRAMMING** hiện `NO LINK` | **kiểu TRAM**: Marlin đã thêm `#define CYDLCD_TBT_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `CYDLCD_TBT_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TRAM` nào. **Trước tiên hãy chắc chắn dây màn hình CYD đang ở `P3` (IO22+IO35) chứ KHÔNG phải `P5`/`P1` cạnh USB-C** — xem §2.1; và đọc log USB: `rx=0 err=0` = không có tín hiệu (sai cổng/chưa chung GND), `err>0` = sai baud |
 | **Thanh trên cùng ghi `NO LINK` nhưng dòng MENU ghi `san sang`** | **Bình thường ở chế độ TRAM** (trước 2026-10-13 là lỗi hiển thị, đã sửa): thanh trên từng chỉ xét `cydlcd.linked` (**giao thức PUSH**) nên ở chế độ TRAM luôn `NO LINK` dù link TRAM tốt. Nay thanh trên xét **cả hai** (`cydlcd.linked \|\| tram.linked`) ⇒ hiện `LINK OK`. Nếu vẫn `NO LINK` thật thì đọc log USB: `TRAM dong=` có tăng không, `cach-day` có < 2000 ms không |
-| Cần biết **màn hình CYD có nhận byte nào không** (không cần thiết bị gì thêm) | Log USB của CYD (`115200`) in mỗi giây: `link PUSH=<0/1> TRAM=<0/1> rx-active=<0/1> … \| TRAM dong=<số dòng hợp lệ> loi=<dòng lỗi> byte=<TỔNG byte nhận> cach-day=<ms>`. Đọc: `byte=0` + `rx-active=0` = **không có tín hiệu** ở chân RX (sai dây/cổng/chưa chung GND/board tắt) · `rx-active=1` mà `dong=0` = **có byte nhưng sai khung/baud** (tương ứng `LINK ERR`) · `dong` tăng ~**5/giây** = link tốt · `cach-day` khi rảnh phải **< 2000 ms**, khi wizard **đang bận** cho phép tới **20 s** (`TRAM_LINK_BUSY_TIMEOUT_MS`) |
-| **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TRAM` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TRAM_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TRAM_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TRAM_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
+| Cần biết **màn hình CYD có nhận byte nào không** (không cần thiết bị gì thêm) | Log USB của CYD (`115200`) in mỗi giây: `link PUSH=<0/1> TRAM=<0/1> rx-active=<0/1> … \| TRAM dong=<số dòng hợp lệ> loi=<dòng lỗi> byte=<TỔNG byte nhận> cach-day=<ms>`. Đọc: `byte=0` + `rx-active=0` = **không có tín hiệu** ở chân RX (sai dây/cổng/chưa chung GND/board tắt) · `rx-active=1` mà `dong=0` = **có byte nhưng sai khung/baud** (tương ứng `LINK ERR`) · `dong` tăng ~**5/giây** = link tốt · `cach-day` khi rảnh phải **< 2000 ms**, khi wizard **đang bận** cho phép tới **20 s** (`TBT_LINK_BUSY_TIMEOUT_MS`) |
+| **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TRAM` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TBT_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TBT_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TBT_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
 | Màn **TRAMMING** hiện `PROBE`/`ERR` mãi | góc đó chưa probe được (đầu dò lỗi/ngoài tầm) → bấm `PROBE` lại; `ERR` = lần probe vừa rồi trả `NAN` |
 | Màn hình CYD không nhận nhiệt độ/vị trí | Marlin phải build ở **chế độ màn hình CYD** (`set_cydlcd_mode.ps1 -Mode status` để xem) — nếu còn `MKS_MINI_12864_V3` thì Marlin sẽ báo lỗi SanityCheck |
 | Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/cydlcd_config.h` |
@@ -865,7 +865,7 @@ muốn đổi phải sửa `ui_lvgl.cpp` rồi nạp lại cả firmware màn h�
   ```
   Nạp lại firmware (KHÔNG xoá NVS) → log khởi động:
   `[PRE] preset: PLA 215/65/30 | PETG 300/0/0 | ABS 250/100/40` ⇒ **giá trị sống qua reset**;
-  `[CYD] reset reason = 1 (poweron)`, `link PUSH=1 TRAM=1 rx=1 err=0` ⇒ khởi động sạch.
+  `[CYD] reset reason = 1 (poweron)`, `link PUSH=1 TBT=1 rx=1 err=0` ⇒ khởi động sạch.
   ⚠️ `PRE <i>` chỉ **đổi preset**, KHÔNG gia nhiệt, KHÔNG chuyển động (an toàn để test khi máy nguội).
 * 🐞 **Bẫy đã gặp**: lệnh `PRE` lúc đầu đặt **lồng bên trong nhánh `WIFI`** của console nên `PRE?` không khớp,
   bị **chuyển tiếp sang Marlin** (im lặng, coi như G-code lạ). Đã tách thành nhánh **ngang cấp** với
@@ -984,11 +984,31 @@ mount được thẻ, và còn chỗ (**chừa 256 KB** so với kích thước 
 | `/status` JSON `{"panel":"TBT",…}` · trường `posted_bytes` · giá trị `state` `posting` | `{"cydlcd":"TBT","device":"TBT-CYDLCD",…}` · `written_bytes` · `writing` (bộ giá trị: `idle\|receiving\|writing\|done\|error`) |
 | token HTTP `TBT-3D-up` | **giữ nguyên** `TBT-3D-up` (client gửi qua `?token=` hoặc header `X-CYDLCD-Token`) |
 | cache IP của tool: `%LOCALAPPDATA%\esp3d-upload` | `%LOCALAPPDATA%\cydlcd-upload\last-target.txt` (khoá `cydlcd=<ip>`; tool tự di trú cache cũ) |
+
+**Đổi tên tiếp 2026-10-14 — phần link TRAMMING của dự án → `TBT` (tên máy in)**:
+
+| Cũ | Mới |
+|---|---|
+| `tram_link.{cpp,h}` · `tram_protocol.h` | **`tbt_link.{cpp,h}`** · **`tbt_protocol.h`** |
+| Marlin: `cydlcd_tram_link.{cpp,h}` · `tramming_report.{cpp,h}` · `tramming_run.{cpp,h}` | **`cydlcd_tbt_link.{cpp,h}`** · **`tbt_report.{cpp,h}`** · **`tbt_run.{cpp,h}`** |
+| macro/hàm `TRAM_*` · `tram_*` · biến toàn cục `tram` · trang `PG_TRAM` | `TBT_*` · `tbt_*` · `tbt` · `PG_TBT` |
+| cờ `CYDLCD_TRAM_LINK` · `CYDLCD_TRAM_BAUD` | **`CYDLCD_TBT_LINK`** · `CYDLCD_TBT_BAUD` |
+| khung `CYDLCD_F_TRAM` · `CYDLCD_F_TRAM_CMD` (giá trị enum **không đổi**) | `CYDLCD_F_TBT` · `CYDLCD_F_TBT_CMD` |
+| dòng ASCII trên dây `TRAM <phase> …` | **`TBT <phase> …`** (đổi **cả 2 đầu**; bộ dò token cũng thành `T`,`B`,`T`) |
+| nhãn log `[CYD] loop OK … TRAM=1 …` | `… TBT=1 …` |
+
+> ⚠️ **Vì sao `TBT`, không phải `TRAM`?** `TRAM` = **tramming** — tên **tính năng** của Marlin
+> (`ASSISTED_TRAMMING` + `ASSISTED_TRAMMING_WIZARD`, lệnh `G35`, menu *Tramming Wizard*), **không phải**
+> tên máy in. Phần **do dự án này viết** (link ASCII + state machine + khung PUSH) đã đổi sang **`TBT`**
+> = tên máy in (`CUSTOM_MACHINE_NAME "TBT"`), còn **file gốc Marlin** (`feature/tramming.*`,
+> `menu_tramming.cpp`, `TRAMMING_POINT_XY`, nhãn *TRAMMING* trên UI) **giữ nguyên** để không lệch upstream.
+> Đổi token trên dây (`TRAM`→`TBT`) ⇒ **phải nạp cả 2 board** khi dùng chế độ `CYDLCD_TBT_LINK`
+> (chế độ đang dùng là PUSH nên **khung PUSH không đổi byte**).
 | file tạm trên thẻ `/btup/<ten>.tmp` | `/cydlcd_tmp/<ten>.tmp` (`CYDLCD_UPLOAD_TMP_DIR`) |
 
 > Phía **Marlin** (không đổi trong lần này): ExtUI `cydlcd_serial` (`Marlin/src/lcd/extui/cydlcd_serial/`),
-> `Marlin/src/sd/cydlcd_sd_uart.{cpp,h}`, `Marlin/src/feature/cydlcd_tram_link.{cpp,h}`; cờ
-> `CYDLCD_SERIAL_UI`, `CYDLCD_TRAM_LINK`, `CYDLCD_SD_OVER_UART`.
+> `Marlin/src/sd/cydlcd_sd_uart.{cpp,h}`, `Marlin/src/feature/cydlcd_tbt_link.{cpp,h}`; cờ
+> `CYDLCD_SERIAL_UI`, `CYDLCD_TBT_LINK`, `CYDLCD_SD_OVER_UART`.
 
 ---
 
@@ -1333,7 +1353,7 @@ như màn hình CYD chết. Luôn đặt `$p.DtrEnable=$false; $p.RtsEnable=$fal
 gốc, "Cẩm bẫy 47"). Muốn reset màn hình CYD: kéo `RtsEnable` true→false một nhịp.
 
 
-Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).
+Da nap va xac nhan tren may that (`link PUSH=1 TBT=1 err=0`).
 Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
 - `CYDLCD_F_ENDSTOPS (0x0F)` + `CYDLCD_REQ_ENDSTOPS`: trang ENDSTOP moi (6 o
   PROBE/X min/Y min/Z min/X max/Y max, xanh=mo do=CHAM, nut REFRESH gui M119).
@@ -1415,7 +1435,7 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
 * `status != OK` ⇒ màn hình CYD chỉ gửi **1 frame** (`n = 0`) để Marlin báo lỗi ngay.
 * Marlin chờ tối đa `CYDLCD_SD_TIMEOUT_MS` (1 s) + **nuôi watchdog** trong lúc chờ; hết hạn ⇒
   `readBlock()` trả `false` ⇒ Marlin báo "SD read error" và **dừng sạch**, không treo máy.
-* Frame mang **lệnh** từ màn hình CYD (G-code/REQUEST/ANSWER/TRAM_CMD) rơi vào lúc đang chờ sector sẽ được
+* Frame mang **lệnh** từ màn hình CYD (G-code/REQUEST/ANSWER/TBT_CMD) rơi vào lúc đang chờ sector sẽ được
   **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
 
 ### 12.5 Đã làm tới đâu (P1 + P2 + P3 — **đủ dùng**)
@@ -1613,13 +1633,13 @@ pio device monitor -p COM7 -b 115200
 | Truong | Lay tu | Doc the nao |
 |---|---|---|
 | `link PUSH=` | `cydlcd.linked` | **1** = da nhan duoc frame PUSH hop le (che do `CYDLCD_SERIAL_UI`) |
-| `link TRAM=` | `tram.linked` | **1** = dang nhan duoc dong `TRAM` (che do `CYDLCD_TRAM_LINK`) |
+| `link TRAM=` | `tram.linked` | **1** = dang nhan duoc dong `TBT` (che do `CYDLCD_TBT_LINK`) |
 | `rx=` | `cydlcd.rx_frames` | so **frame PUSH hop le** da nhan — phai **tang deu** khi Marlin dang chay |
 | `err=` | `cydlcd.rx_errors` | so frame **loi** — **khong duoc tang** (tang = sai baud / nhieu day) |
 | `heap=` | `ESP.getFreeHeap()` | RAM con lai — phai **on dinh**, khong tut dan qua thoi gian |
 
 > ⚠️ O **che do TRAM** thi `rx`/`err` (dem frame PUSH) **co the dung o 0** vi Marlin chi gui dong
-> ASCII `TRAM ...` chu khong gui frame PUSH. Luc do xem `link TRAM=1` va doc **man INFO** tren màn hình CYD:
+> ASCII `TBT ...` chu khong gui frame PUSH. Luc do xem `link TBT=1` va doc **man INFO** tren màn hình CYD:
 > `LINK: OK (TRAM) ...` + `RX: <n> frame / <n> loi` (`src/ui_lvgl.cpp:2013-2018`).
 
 ### Console gui lenh qua COM7 (giong het bam nut tren màn hình CYD)
@@ -1663,7 +1683,7 @@ Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen t
 | # | Kiem tra | Cach xem | Dat |
 |---|---|---|---|
 | 1 | Link PUSH | log 1 Hz tren COM7 | `link PUSH=1` |
-| 2 | Link TRAM (neu dung kieu TRAM) | log 1 Hz + man INFO | `link TRAM=1` / `LINK: OK (TRAM)` |
+| 2 | Link TRAM (neu dung kieu TRAM) | log 1 Hz + man INFO | `link TBT=1` / `LINK: OK (TRAM)` |
 | 3 | Nhan frame | `rx=` trong log | **tang deu**, khong dung yen |
 | 4 | Loi frame | `err=` trong log | **khong tang** (giu nguyen / 0) |
 | 5 | RAM | `heap=` trong log | **on dinh** qua nhieu phut, **khong tut dan** |

@@ -1,9 +1,9 @@
 /**
- * tram_protocol.h -- Giao thuc ASCII cho link TRAMMING (man hinh rieng cydlcd <-> Marlin).
+ * tbt_protocol.h -- Giao thuc ASCII cho link TRAMMING (man hinh rieng cydlcd <-> Marlin).
  *
  * FILE DUNG CHUNG: ban y nguyen nam o
- *      Marlin/src/feature/tram_protocol.h      (Marlin)
- *      cydlcd/src/tram_protocol.h           (MAN HINH CYD)
+ *      Marlin/src/feature/tbt_protocol.h      (Marlin)
+ *      cydlcd/src/tbt_protocol.h           (MAN HINH CYD)
  *   Sua file nay thi phai COPY Y NGUYEN sang file kia. Header chi dung <stdint.h>/<stdio.h>/
  *   <string.h> (khong Arduino, khong Marlin) nen test duoc tren may tinh:
  *      pwsh cydlcd/tools/run_host_test.ps1
@@ -27,7 +27,7 @@
  *     (ky tu khac / dong rong: bo qua. Nhan ca chu thuong.)
  *
  *   Marlin -> MAN HINH CYD: 1 dong trang thai, gui khi trang thai DOI + dinh ky ~5Hz:
- *        TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active> <all_dat> <hint>
+ *        TBT <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active> <all_dat> <hint>
  *        phase   : 0 IDLE / 1 HOMING / 2 PROBING / 3 GOTO / 4 POINT / 5 AUTO
  *        mode    : 1 = MAX (moc = Z-MIN, van CCW de HA goc cao) / 0 = MIN (moc = Z-MAX, van CW)
  *        idx     : goc nozzle DANG DUNG (0..3) -> MAN HINH CYD ve dau '*'
@@ -37,7 +37,7 @@
  *        active  : 1 = wizard dang chay
  *        all_dat : 1 = CA 4 GOC da dat -> man 12864 chi con nut BACK (MAN HINH CYD cung vay)
  *        hint    : viec can lam o goc dang dung, 1 token KHONG co khoang trang. Marlin tinh san
- *                  (bam theo dung tramming_turn_cw + TRAM_DONE_MM cua man 12864) de MAN HINH CYD khong
+ *                  (bam theo dung tramming_turn_cw + TBT_DONE_MM cua man 12864) de MAN HINH CYD khong
  *                  phai tu suy lai chieu van vit:
  *                    "DAT"       goc da dat (hoac ca 4 goc da dat)
  *                    "CW:0.150"  van CW 0.150 mm   (':' thay cho khoang trang)
@@ -58,41 +58,41 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TRAM_PROTO_VERSION 1
+#define TBT_PROTO_VERSION 1
 
 // So goc cua wizard. PHAI bang G35_PROBE_COUNT (= COUNT(TRAMMING_POINT_XY)) phia Marlin.
-#define TRAM_PROTO_POINTS  4
+#define TBT_PROTO_POINTS  4
 
 // ---------------------------------------------------------------------------
 // Lenh MAN HINH CYD -> Marlin
 // ---------------------------------------------------------------------------
-#define TRAM_CMD_PROBE    'P'
-#define TRAM_CMD_DONE     'D'
-#define TRAM_CMD_MINMAX   'M'
-#define TRAM_CMD_RESTART  'R'
-#define TRAM_CMD_BACK     'B'
-#define TRAM_CMD_QUERY    'Q'
+#define TBT_CMD_PROBE    'P'
+#define TBT_CMD_DONE     'D'
+#define TBT_CMD_MINMAX   'M'
+#define TBT_CMD_RESTART  'R'
+#define TBT_CMD_BACK     'B'
+#define TBT_CMD_QUERY    'Q'
 
 // ---------------------------------------------------------------------------
-// phase (khop TR_IDLE..TR_AUTO cua tramming_run.h phia Marlin)
+// phase (khop TR_IDLE..TR_AUTO cua tbt_run.h phia Marlin)
 // ---------------------------------------------------------------------------
-enum tram_phase_t : uint8_t {
-  TRAM_PH_IDLE = 0,
-  TRAM_PH_HOMING,
-  TRAM_PH_PROBING,
-  TRAM_PH_GOTO,
-  TRAM_PH_POINT,
-  TRAM_PH_AUTO
+enum tbt_phase_t : uint8_t {
+  TBT_PH_IDLE = 0,
+  TBT_PH_HOMING,
+  TBT_PH_PROBING,
+  TBT_PH_GOTO,
+  TBT_PH_POINT,
+  TBT_PH_AUTO
 };
 
-static inline const char *tram_phase_name(const uint8_t phase) {
+static inline const char *tbt_phase_name(const uint8_t phase) {
   switch (phase) {
-    case TRAM_PH_IDLE:    return "IDLE";
-    case TRAM_PH_HOMING:  return "HOMING";
-    case TRAM_PH_PROBING: return "PROBING";
-    case TRAM_PH_GOTO:    return "GOTO";
-    case TRAM_PH_POINT:   return "POINT";
-    case TRAM_PH_AUTO:    return "AUTO";
+    case TBT_PH_IDLE:    return "IDLE";
+    case TBT_PH_HOMING:  return "HOMING";
+    case TBT_PH_PROBING: return "PROBING";
+    case TBT_PH_GOTO:    return "GOTO";
+    case TBT_PH_POINT:   return "POINT";
+    case TBT_PH_AUTO:    return "AUTO";
     default:              return "?";
   }
 }
@@ -101,28 +101,28 @@ static inline const char *tram_phase_name(const uint8_t phase) {
 // Trang thai (ca 2 phia dung chung struct nay)
 // ---------------------------------------------------------------------------
 typedef struct {
-  uint8_t phase;                            // tram_phase_t
+  uint8_t phase;                            // tbt_phase_t
   uint8_t mode_max;                         // 1 = MAX, 0 = MIN
-  uint8_t idx;                              // goc dang dung (0..TRAM_PROTO_POINTS-1)
+  uint8_t idx;                              // goc dang dung (0..TBT_PROTO_POINTS-1)
   uint8_t active;                           // wizard dang chay
   uint8_t all_dat;                          // ca 4 goc da dat
   float   ref;                              // moc so sanh (mm)
-  float   d[TRAM_PROTO_POINTS];             // do lech tung goc (mm)
-  uint8_t ok[TRAM_PROTO_POINTS];            // 1 = goc da probe duoc
-  uint8_t accepted[TRAM_PROTO_POINTS];      // 1 = da bam DONE
+  float   d[TBT_PROTO_POINTS];             // do lech tung goc (mm)
+  uint8_t ok[TBT_PROTO_POINTS];            // 1 = goc da probe duoc
+  uint8_t accepted[TBT_PROTO_POINTS];      // 1 = da bam DONE
   char    hint[16];                         // viec can lam o goc dang dung (khong co khoang trang)
   // Nhiet do (2026-10-13): 4 token MO RONG o CUOI dong, don vi = do C * 100 (21050 = 210.50C).
   // Che do TRAM khong co frame PUSH (ExtUI) nen phai gui kem o day, neu khong man MAN HINH CYD khong co
   // nhiet do nao. Phia doc cu (khong biet 4 token nay) van chay binh thuong vi parser bo qua token thua.
   int16_t t_e0, t_bed, t_e0_tgt, t_bed_tgt;
-} tram_status_t;
+} tbt_status_t;
 
 // ---------------------------------------------------------------------------
 // Tien ich so (KHONG dung %f: vua nang, vua khong on dinh giua cac toolchain)
 // ---------------------------------------------------------------------------
 // mm -> "0.123" / "-12.345" (3 so le, lam tron); |v| qua lon -> "----".
 // Tra ve so ky tu da ghi (khong tinh '\0'). `out` phai >= 16 byte.
-static inline int tram_fmt_mm(char *out, const float v) {
+static inline int tbt_fmt_mm(char *out, const float v) {
   long m = (long)(v * 1000.0f + (v >= 0.0f ? 0.5f : -0.5f));
   if (m > 9999999L || m < -9999999L) { memcpy(out, "----", 5); return 4; }
 
@@ -150,39 +150,39 @@ static inline int tram_fmt_mm(char *out, const float v) {
 // Marlin -> MAN HINH CYD: tao 1 dong trang thai (co '\n' o cuoi)
 // Tra ve so byte da ghi (khong tinh '\0'). `buf` nen >= 128 byte.
 // ---------------------------------------------------------------------------
-static inline int tram_status_format(char *buf, const int len, const tram_status_t *st) {
+static inline int tbt_status_format(char *buf, const int len, const tbt_status_t *st) {
   if (len < 8) return 0;
   int n = 0;
   char mm[16];
 
-  #define TRAM_APPEND(...) do { \
+  #define TBT_APPEND(...) do { \
     if (n < len - 1) { \
       const int w = snprintf(buf + n, (size_t)(len - n), __VA_ARGS__); \
       if (w > 0) n += (w < (len - n)) ? w : (len - n - 1); \
     } \
   } while (0)
 
-  TRAM_APPEND("TRAM %u %u %u", (unsigned)st->phase, (unsigned)(st->mode_max ? 1U : 0U), (unsigned)st->idx);
+  TBT_APPEND("TBT %u %u %u", (unsigned)st->phase, (unsigned)(st->mode_max ? 1U : 0U), (unsigned)st->idx);
 
-  tram_fmt_mm(mm, st->ref);
-  TRAM_APPEND(" %s", mm);
+  tbt_fmt_mm(mm, st->ref);
+  TBT_APPEND(" %s", mm);
 
-  for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++) {
-    if (st->ok[i]) tram_fmt_mm(mm, st->d[i]);
+  for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++) {
+    if (st->ok[i]) tbt_fmt_mm(mm, st->d[i]);
     else           memcpy(mm, "---.---", 8);
-    TRAM_APPEND(" %s", mm);
+    TBT_APPEND(" %s", mm);
   }
 
-  for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++)
-    TRAM_APPEND(" %u", (unsigned)(st->accepted[i] ? 1U : 0U));
+  for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++)
+    TBT_APPEND(" %u", (unsigned)(st->accepted[i] ? 1U : 0U));
 
-  TRAM_APPEND(" %u %u %s", (unsigned)(st->active ? 1U : 0U), (unsigned)(st->all_dat ? 1U : 0U),
+  TBT_APPEND(" %u %u %s", (unsigned)(st->active ? 1U : 0U), (unsigned)(st->all_dat ? 1U : 0U),
               st->hint[0] ? st->hint : "-");
 
-  // 4 token nhiet do (do C * 100) - xem chu thich trong tram_status_t.
-  TRAM_APPEND(" %d %d %d %d\n", (int)st->t_e0, (int)st->t_bed, (int)st->t_e0_tgt, (int)st->t_bed_tgt);
+  // 4 token nhiet do (do C * 100) - xem chu thich trong tbt_status_t.
+  TBT_APPEND(" %d %d %d %d\n", (int)st->t_e0, (int)st->t_bed, (int)st->t_e0_tgt, (int)st->t_bed_tgt);
 
-  #undef TRAM_APPEND
+  #undef TBT_APPEND
   return n;
 }
 
@@ -190,7 +190,7 @@ static inline int tram_status_format(char *buf, const int len, const tram_status
 // Parser (MAN HINH CYD dung de doc dong TRAM; host test cung dung)
 // ---------------------------------------------------------------------------
 // Token ke tiep (bo qua khoang trang). Tra ve NULL khi het dong.
-static inline const char *tram_next_tok(const char **p, int *tlen) {
+static inline const char *tbt_next_tok(const char **p, int *tlen) {
   const char *s = *p;
   while (*s == ' ' || *s == '\t' || *s == '\r') s++;
   if (!*s) { *p = s; *tlen = 0; return NULL; }
@@ -202,7 +202,7 @@ static inline const char *tram_next_tok(const char **p, int *tlen) {
 }
 
 // "0".."999999" -> 0..999999; khac -> -1
-static inline int tram_tok_uint(const char *t, const int l) {
+static inline int tbt_tok_uint(const char *t, const int l) {
   if (l <= 0 || l > 6) return -1;
   int v = 0;
   for (int i = 0; i < l; i++) {
@@ -213,7 +213,7 @@ static inline int tram_tok_uint(const char *t, const int l) {
 }
 
 // "[-]<int>[.<frac>]" -> mm. "*ok = false" khi token la "---.---" (goc chua probe duoc).
-static inline float tram_tok_mm(const char *t, const int l, bool *ok) {
+static inline float tbt_tok_mm(const char *t, const int l, bool *ok) {
   *ok = true;
   if (l >= 3 && t[0] == '-' && t[1] == '-' && t[2] == '-') { *ok = false; return 0.0f; }
 
@@ -239,43 +239,43 @@ static inline float tram_tok_mm(const char *t, const int l, bool *ok) {
   return neg ? -v : v;
 }
 
-// Doc 1 dong "TRAM ..." (KHONG can '\n' o cuoi). true = dong hop le.
-static inline bool tram_status_parse(const char *line, tram_status_t *st) {
+// Doc 1 dong "TBT ..." (KHONG can '\n' o cuoi). true = dong hop le.
+static inline bool tbt_status_parse(const char *line, tbt_status_t *st) {
   if (!line || !st) return false;
 
   const char *p = line;
   int l = 0;
-  const char *t = tram_next_tok(&p, &l);
-  if (!t || l != 4 || strncmp(t, "TRAM", 4) != 0) return false;
+  const char *t = tbt_next_tok(&p, &l);
+  if (!t || l != 3 || strncmp(t, "TBT", 3) != 0) return false;
 
   int v[3];
   for (uint8_t i = 0; i < 3; i++) {
-    t = tram_next_tok(&p, &l);
+    t = tbt_next_tok(&p, &l);
     if (!t) return false;
-    v[i] = tram_tok_uint(t, l);
+    v[i] = tbt_tok_uint(t, l);
     if (v[i] < 0) return false;
   }
   st->phase    = (uint8_t)v[0];
   st->mode_max = (uint8_t)(v[1] ? 1U : 0U);
   st->idx      = (uint8_t)v[2];
-  if (st->idx >= TRAM_PROTO_POINTS) st->idx = 0;
+  if (st->idx >= TBT_PROTO_POINTS) st->idx = 0;
 
-  t = tram_next_tok(&p, &l);
+  t = tbt_next_tok(&p, &l);
   if (!t) return false;
   bool ok = false;
-  st->ref = tram_tok_mm(t, l, &ok);
+  st->ref = tbt_tok_mm(t, l, &ok);
 
-  for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++) {
-    t = tram_next_tok(&p, &l);
+  for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++) {
+    t = tbt_next_tok(&p, &l);
     if (!t) return false;
-    st->d[i] = tram_tok_mm(t, l, &ok);
+    st->d[i] = tbt_tok_mm(t, l, &ok);
     st->ok[i] = ok ? 1U : 0U;
   }
 
-  for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++) {
-    t = tram_next_tok(&p, &l);
+  for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++) {
+    t = tbt_next_tok(&p, &l);
     if (!t) return false;
-    const int a = tram_tok_uint(t, l);
+    const int a = tbt_tok_uint(t, l);
     if (a < 0) return false;
     st->accepted[i] = (uint8_t)(a ? 1U : 0U);
   }
@@ -284,11 +284,11 @@ static inline bool tram_status_parse(const char *line, tram_status_t *st) {
   st->active = 0;
   st->all_dat = 0;
   st->hint[0] = '\0';
-  t = tram_next_tok(&p, &l);
-  if (t) { const int a = tram_tok_uint(t, l); if (a >= 0) st->active = (uint8_t)(a ? 1U : 0U); }
-  t = tram_next_tok(&p, &l);
-  if (t) { const int a = tram_tok_uint(t, l); if (a >= 0) st->all_dat = (uint8_t)(a ? 1U : 0U); }
-  t = tram_next_tok(&p, &l);
+  t = tbt_next_tok(&p, &l);
+  if (t) { const int a = tbt_tok_uint(t, l); if (a >= 0) st->active = (uint8_t)(a ? 1U : 0U); }
+  t = tbt_next_tok(&p, &l);
+  if (t) { const int a = tbt_tok_uint(t, l); if (a >= 0) st->all_dat = (uint8_t)(a ? 1U : 0U); }
+  t = tbt_next_tok(&p, &l);
   if (t) {
     uint8_t n = 0;
     while (n < l && n < (uint8_t)(sizeof(st->hint) - 1U)) { st->hint[n] = t[n]; n++; }
@@ -299,9 +299,9 @@ static inline bool tram_status_parse(const char *line, tram_status_t *st) {
   // -> tuong thich nguoc voi ban Marlin cu (khong gui 4 token nay).
   st->t_e0 = st->t_bed = st->t_e0_tgt = st->t_bed_tgt = 0;
   for (uint8_t i = 0; i < 4; i++) {
-    t = tram_next_tok(&p, &l);
+    t = tbt_next_tok(&p, &l);
     if (!t) break;
-    const int a = tram_tok_uint(t, l);
+    const int a = tbt_tok_uint(t, l);
     if (a < 0) break;
     switch (i) {
       case 0:  st->t_e0      = (int16_t)a; break;
@@ -315,39 +315,39 @@ static inline bool tram_status_parse(const char *line, tram_status_t *st) {
 }
 
 // Ky tu lenh MAN HINH CYD -> Marlin (tra ve 0 neu khong phai lenh). Nhan ca chu thuong.
-static inline char tram_cmd_parse(const char *line) {
+static inline char tbt_cmd_parse(const char *line) {
   if (!line) return 0;
   while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
   char c = *line;
   if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
   switch (c) {
-    case TRAM_CMD_PROBE:
-    case TRAM_CMD_DONE:
-    case TRAM_CMD_MINMAX:
-    case TRAM_CMD_RESTART:
-    case TRAM_CMD_BACK:
-    case TRAM_CMD_QUERY:
+    case TBT_CMD_PROBE:
+    case TBT_CMD_DONE:
+    case TBT_CMD_MINMAX:
+    case TBT_CMD_RESTART:
+    case TBT_CMD_BACK:
+    case TBT_CMD_QUERY:
       return c;
     default:
       return 0;
   }
 }
 
-// Nhu tram_cmd_parse nhung CHI nhan dong DUNG 1 ky tu lenh (ngoai khoang trang).
+// Nhu tbt_cmd_parse nhung CHI nhan dong DUNG 1 ky tu lenh (ngoai khoang trang).
 // Phia Marlin dung ban nay: neu co byte rac (vi du frame nhi phan lot vao) thi khong the
 // giau thanh mot dong dung 1 ky tu -> khong bao gio chay nham lenh.
-static inline char tram_cmd_parse_exact(const char *line) {
+static inline char tbt_cmd_parse_exact(const char *line) {
   if (!line) return 0;
   while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;
   char c = *line++;
   if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
   switch (c) {
-    case TRAM_CMD_PROBE:
-    case TRAM_CMD_DONE:
-    case TRAM_CMD_MINMAX:
-    case TRAM_CMD_RESTART:
-    case TRAM_CMD_BACK:
-    case TRAM_CMD_QUERY:
+    case TBT_CMD_PROBE:
+    case TBT_CMD_DONE:
+    case TBT_CMD_MINMAX:
+    case TBT_CMD_RESTART:
+    case TBT_CMD_BACK:
+    case TBT_CMD_QUERY:
       break;
     default:
       return 0;

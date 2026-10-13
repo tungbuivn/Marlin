@@ -3170,7 +3170,7 @@
 #define CYDLCD_SERIAL_UI
 
 /**
- * CYDLCD_TRAM_LINK -- man hinh CYD rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
+ * CYDLCD_TBT_LINK -- man hinh CYD rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
  *
  * KHAC CYDLCD_SERIAL_UI: KHONG dung ExtUI -> MarlinUI (man 12864) van chay binh thuong va
  * wizard tren 12864 giu nguyen. Panel chi nhan 1 dong trang thai ASCII (~5Hz: 4 so 4 goc,
@@ -3183,10 +3183,10 @@
  * Chi tiet + man hinh TRAMMING tren man hinh CYD: cydlcd/README.md §5.6 · README.md §15b.
  *
  * 2026-10-13: TAT de chuyen sang PUSH/ExtUI (CYDLCD_SERIAL_UI) - hai che do LOAI TRU nhau
- * (cung 1 UART + cydlcd_tram_link.h co #error chan). Man TRAMMING tren man hinh CYD duoc port sang
- * kenh PUSH bang frame CYDLCD_F_TRAM / CYDLCD_F_TRAM_CMD (xem cydlcd_serial.cpp).
+ * (cung 1 UART + cydlcd_tbt_link.h co #error chan). Man TRAMMING tren man hinh CYD duoc port sang
+ * kenh PUSH bang frame CYDLCD_F_TBT / CYDLCD_F_TBT_CMD (xem cydlcd_serial.cpp).
  */
-//#define CYDLCD_TRAM_LINK
+//#define CYDLCD_TBT_LINK
 
 #if ENABLED(EXTENSIBLE_UI)
   //#define EXTUI_LOCAL_BEEPER // Enables use of local Beeper pin with external display

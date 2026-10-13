@@ -33,7 +33,7 @@
  *      blob       : u8 len + len byte (vi du diem mesh)
  *      nhiet do   : i16 = do C * CYDLCD_TEMP_SCALE
  *      vi tri     : i32 = mm * CYDLCD_POS_SCALE
- *      phan tram  : i16 = % * CYDLCD_PCT_SCALE
+ *      phan tbt  : i16 = % * CYDLCD_PCT_SCALE
  */
 #pragma once
 
@@ -76,7 +76,7 @@ enum cydlcd_frame_t : uint8_t {
   CYDLCD_F_SETTING   = 0x0B,   // u16 id, i32 value
   CYDLCD_F_PROMPT    = 0x0C,   // u8 prompt_id, u8 type, str text
   CYDLCD_F_PONG      = 0x0D,   // u8 echo_seq
-  CYDLCD_F_TRAM      = 0x0E,   // str: dung 1 dong ASCII "TRAM ...\\n" (dinh dang o tram_protocol.h;
+  CYDLCD_F_TBT      = 0x0E,   // str: dung 1 dong ASCII "TBT ...\\n" (dinh dang o tbt_protocol.h;
                               //      2026-10-13 - port tu che do TRAM link), gui ~5Hz khi wizard chay
   CYDLCD_F_ENDSTOPS  = 0x0F,   // u8 n, n * (u8 id (cydlcd_endstop_id_t), u8 hit) -- trang thai kieu M119
   CYDLCD_F_SDREQ     = 0x10,   // [proto >= 3] YEU CAU DOC/GHI the SD (Marlin -> cydlcd, vi the SD nam
@@ -88,7 +88,7 @@ enum cydlcd_frame_t : uint8_t {
   CYDLCD_F_REQUEST   = 0x41,   // u8 what (cydlcd_request_t), [str tham so]
   CYDLCD_F_PING      = 0x42,   // u8 seq
   CYDLCD_F_ANSWER    = 0x43,   // u8 prompt_id, u8 answer
-  CYDLCD_F_TRAM_CMD  = 0x44,   // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
+  CYDLCD_F_TBT_CMD  = 0x44,   // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
                               //          'R' home+probe lai, 'B' thoat wizard, 'Q' hoi trang thai
   CYDLCD_F_SDDATA    = 0x45,   // [proto >= 3] DU LIEU SECTOR, dung cho CA 2 CHIEU:
                               //   MAN HINH CYD -> Marlin (tra loi lenh DOC): u8 status, u32 sector,
