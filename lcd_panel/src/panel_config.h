@@ -345,8 +345,51 @@
 //     Cac chan da dung: 22/35 = UART Marlin, 18/19/23/5 = SPI the TF, 12/13/14/15/2 = LCD,
 //     25/32/33/36/39 = cam ung, 4/16/17 = LED RGB, 34 = cam bien anh sang, 26 = loa.
 // ---------------------------------------------------------------------------
+// [2026-10-14 - DANG DUNG] THE SD NAM O KHE MAN HINH, MARLIN LAY SECTOR QUA UART
+//   (quyet dinh cua nguoi dung: "implement kieu sdcard moi ma lay data usart")
+//
+//   Uu diem: KHONG can MUX SPI, khong cat duong, khong tranh chap bus, khong dien tro, panel nap
+//   lai firmware luc nao cung duoc. Marlin van chay dung ngan xep SD cua no (FAT, liet ke thu muc,
+//   M23/M24, tien do in...) vi SdVolume chi goi readBlock()/writeBlock() -> xem
+//   Marlin/src/sd/panel_sd_uart.* va Marlin/Configuration_adv.h (PANEL_SD_OVER_UART, SDCARD_READONLY).
+//
+//   Nhuoc diem: moi thao tac the cua Marlin phu thuoc UART + panel con song (panel chet = Marlin
+//   khong doc duoc file). Doi lai panel LA NGUOI DUY NHAT giu the nen phan mem panel don gian hon:
+//   mount 1 lan luc boot, giu luon, chi tra loi sector.
+//
+//   PANEL_SD_UART 1  -> panel lam "may chu the SD" (proto >= 3), va PANEL_SD_SHARED bi TAT.
+//   PANEL_SD_UART 0  -> quay lai cac che do cu (ESP3D hoac MUX 4053).
+// ---------------------------------------------------------------------------
+#if defined(PANEL_BOARD_CYD) && !defined(PANEL_SD_UART)
+  #define PANEL_SD_UART 1
+#endif
+#if PANEL_SD_UART && defined(PANEL_SD_SHARED) && PANEL_SD_SHARED
+  #undef  PANEL_SD_SHARED
+  #define PANEL_SD_SHARED 0        // 2 che do loai tru nhau
+#endif
+
+// ---------------------------------------------------------------------------
+// [DUONG LUI] THE SD DUNG CHUNG voi Marlin qua MUX SPI (74HC4053) -- THAY CHO DUONG ESP3D
+//   (quyet dinh cua nguoi dung, 2026-10-14: "bo ESP3D, dung 4053 chia SPI de panel ghi thang
+//    vao the SD dung chung voi Marlin") -- hien KHONG dung nua vi da chon PANEL_SD_UART.
+//
+//   SO DO: the TF nam o khe CYD. Hai master (ESP32 cua panel + STM32 cua Marlin) noi vao
+//   MUX; chan chon (A/B/C cua 4053 noi chung) do PANEL dieu khien bang PANEL_SD_MUX_PIN, va
+//   DUOC KEO XUONG GND bang dien tro 10k => muc MAC DINH (panel reset / mat dien / chan chon
+//   bo troi) = MARLIN. Nho vay Marlin khong bao gio bi panel chiem bus ngoai y muon.
+//   - 4053 co 3 cong tac: SCK, MOSI, CS. MISO dung CHUNG truc tiep (chi the lai driver MISO).
+//   - Panel CHI gianh bus khi: Marlin KHONG in, va chi trong luc nhan file ghi vao the.
+//   - Sau khi tra bus: panel gui M22 + M21 de Marlin mount lai the roi xin lai danh sach file.
+//
+//   PANEL_SD_SHARED 0 = quay lai kieu cu (panel ghi /btup/<ten>.tmp roi POST sang ESP3D).
+//   PANEL_SD_MUX_PIN: chan GPIO dieu khien chan chon cua 4053 (A/B/C noi chung).
+//     CYD: GPIO27 = chan TRONG o header CN1 (GND/IO22/IO27/3.3V) -> KHUYEN NGHI.
+//     Cach khac: dung chinh chan DEN NEN (IO21, chan thu 4 cua P3 - xem canh bao ben duoi).
+//     Cac chan da dung: 22/35 = UART Marlin, 18/19/23/5 = SPI the TF, 12/13/14/15/2 = LCD,
+//     25/32/33/36/39 = cam ung, 4/16/17 = LED RGB, 34 = cam bien anh sang, 26 = loa.
+// ---------------------------------------------------------------------------
 #if defined(PANEL_BOARD_CYD) && !defined(PANEL_SD_SHARED)
-  #define PANEL_SD_SHARED 1
+  #define PANEL_SD_SHARED 0
 #endif
 #if PANEL_SD_SHARED
   #ifndef PANEL_SD_MUX_PIN

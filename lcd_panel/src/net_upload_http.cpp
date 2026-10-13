@@ -57,7 +57,7 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  pre{white-space:pre-wrap;font-size:12px;color:#9aa;margin:8px 0 0}
 </style></head><body>
 <h1>TBT-PANEL</h1>
-<div class="s">Gui G-code tu dien thoai/PC -> panel ghi the TF -> panel day sang ESP3D -> M22/M21.</div>
+<div class="s">Gui G-code tu dien thoai/PC -> panel ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
 <div class="card">
   <input type="text" id="tok" placeholder="token (vd TBT-3D-up)">
   <input type="file" id="f">
@@ -220,7 +220,7 @@ void handle_upload_stream(void) {
       s_total = up.totalSize;
       if (s_http_state == HS_RECV) {
         net_esp3d_temp_close();
-        snprintf(s_msg, sizeof(s_msg), "da nhan xong, cho day len ESP3D");
+        snprintf(s_msg, sizeof(s_msg), "da nhan xong, cho ghi vao the SD");
         HLOG("[HTTP] nhan xong %lu B (totalSize=%lu) -> %s\n", (unsigned long)s_rx,
              (unsigned long)s_total, net_esp3d_temp_path());
       }
@@ -274,7 +274,7 @@ void handle_upload_done(void) {
   }
   // Tra loi NGAY (khong de trinh duyet cho vai chuc giay): viec ghi vao the / day sang ESP3D
   // chay o task()
-#if PANEL_SD_SHARED
+#if PANEL_SD_SHARED || PANEL_SD_UART
   snprintf(js, sizeof(js),
            "{\"status\":\"Ok\",\"file\":\"%s\",\"rx_bytes\":%lu,\"total_bytes\":%lu,"
            "\"message\":\"da nhan, panel dang ghi vao the SD\"}",
@@ -290,7 +290,7 @@ void handle_upload_done(void) {
   send_json(200, js);
   s_push_pending = true;
   s_http_state = HS_POST;
-#if PANEL_SD_SHARED
+#if PANEL_SD_SHARED || PANEL_SD_UART
   snprintf(s_msg, sizeof(s_msg), "dang ghi vao the SD");
 #else
   snprintf(s_msg, sizeof(s_msg), "dang day len ESP3D");
@@ -341,7 +341,7 @@ void net_upload_http_task(void) {
 
   // Che do THE DUNG CHUNG (PANEL_SD_SHARED): khong can WiFi de "day file" - buoc ghi the chay
   // ngay khi file tam da nhan xong. Che do ESP3D cu: phai cho WiFi ket noi truoc khi POST.
-  const bool can_push = PANEL_SD_SHARED ? true : (net_wifi_state() == 2);
+  const bool can_push = (PANEL_SD_SHARED || PANEL_SD_UART) ? true : (net_wifi_state() == 2);
   if (s_push_pending && can_push) {
     s_push_pending = false;
     uint32_t posted = 0;
@@ -350,7 +350,7 @@ void net_upload_http_task(void) {
     const bool ok = net_esp3d_push(s_file, got, &posted, err, sizeof(err));
     if (ok) {
       s_http_state = HS_DONE;
-#if PANEL_SD_SHARED
+#if PANEL_SD_SHARED || PANEL_SD_UART
       snprintf(s_msg, sizeof(s_msg), "da ghi vao the SD va gui M22/M21");
       HLOG("[HTTP] DONE: %lu B -> the SD (M22/M21 da gui)\n", (unsigned long)posted);
 #else
@@ -377,6 +377,9 @@ bool net_upload_http_active(void) { return s_started; }
 // true = dang co phien nhan/ghi file (UI dung de chan cac lenh lam Marlin doc the SD)
 bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state == HS_POST; }
 
+// Xoa file ngay tren panel (che do the qua UART). Xem net_upload_http.h.
+bool net_sd_delete_file(const char *name) { return net_esp3d_delete(name); }
+
 #else   // ---- PANEL_WIFI_UPLOAD = 0: stub (moi env van link duoc) ----
 
 void net_upload_http_begin(void) {}
@@ -384,5 +387,6 @@ void net_upload_http_task(void) {}
 void net_upload_http_log(void) {}
 bool net_upload_http_active(void) { return false; }
 bool net_upload_active(void) { return false; }
+bool net_sd_delete_file(const char *name) { (void)name; return false; }
 
 #endif  // PANEL_WIFI_UPLOAD

@@ -109,6 +109,49 @@ namespace {
     }
   }
 
+  // ------------------------------------------------- SD qua UART (proto 3) ----
+  // Marlin KHONG tu doc the SPI nua (the nam o khe man hinh): moi sector 512 B duoc hoi panel qua
+  // chinh UART nay. Xem panel_serial.h + lcd_panel/README.md muc 12.
+  #if ENABLED(PANEL_SD_OVER_UART)
+    void handle_frame();               // dinh nghia o duoi file (can cho sd_flush_deferred)
+    uint8_t *s_sd_dst = nullptr;       // noi ghep 4 manh 128 B vao (do panel_serial_sd_read dat)
+    uint8_t  s_sd_have = 0;            // bitmask: da nhan duoc manh nao
+    uint8_t  s_sd_err  = 0;            // PANEL_SD_ST_* (khac OK = loi)
+    bool     s_sd_done = false;        // du 4 manh
+    bool     s_sd_busy = false;        // dang cho sector -> hoan cac frame mang LENH lai
+    bool     s_sd_present = false;     // panel bao co the (tu lan panel_serial_sd_init)
+
+    // Ghi THANG ra UART, khong qua hang doi TX: chi dung cho yeu cau SD (5 byte). Co tran thoi gian
+    // + nuoi watchdog nen khong bao gio treo vinh vien du UART bi ket.
+    void tx_write_now(const uint8_t *b, const uint16_t n) {
+      uint16_t sent = 0;
+      const millis_t t0 = millis();
+      while (sent < n) {
+        const int space = PANEL_SERIAL.availableForWrite();
+        if (space > 0) {
+          uint16_t k = (uint16_t)(n - sent);
+          if (k > (uint16_t)space) k = (uint16_t)space;
+          PANEL_SERIAL.write(b + sent, k);
+          sent = (uint16_t)(sent + k);
+        }
+        else if (ELAPSED(millis(), t0 + 1000)) break;
+        else hal.watchdog_refresh();
+      }
+    }
+
+    // Cac frame mang LENH tu panel (G-code / REQUEST / TRAM_CMD / ANSWER) KHONG duoc xu ly ngay trong
+    // luc dang cho sector: chung co the enqueue G-code, chay M500 hay nhay DFU... -> HOAN lai, onIdle
+    // xu ly sau. Payload cua chung rat ngan (<= 48 byte) nen chi ton vai chuc byte RAM.
+    struct sd_defer_t { uint8_t type, len, payload[PANEL_STR_MAX + 8]; };
+    sd_defer_t s_defer[2];
+    uint8_t    s_defer_n = 0;
+
+    FORCE_INLINE bool is_cmd_frame(const uint8_t t) {
+      return t == PANEL_F_GCODE || t == PANEL_F_REQUEST || t == PANEL_F_ANSWER || t == PANEL_F_TRAM_CMD;
+    }
+    // (sd_take_chunk / sd_defer / sd_flush_deferred nam SAU khai bao `rx` o duoi - chung dung rx.)
+  #endif  // PANEL_SD_OVER_UART
+
   FORCE_INLINE int32_t scaled(const float v, const float s) {
     return (int32_t)(v * s + (v < 0 ? -0.5f : 0.5f));
   }
@@ -564,6 +607,46 @@ namespace {
   millis_t last_rx_ms = 0;
   bool     panel_alive = false;
 
+  #if ENABLED(PANEL_SD_OVER_UART)
+    // Nhan 1 manh cua sector (goi tu handle_frame khi dang cho du lieu)
+    void sd_take_chunk() {
+      if (rx.len < 7) return;
+      const uint8_t st   = rx.payload[0];
+      const uint8_t idx  = rx.payload[5];
+      const uint8_t n    = rx.payload[6];
+      if (st != PANEL_SD_ST_OK) {                    // ERR / NOCARD
+        s_sd_err = st ? st : (uint8_t)PANEL_SD_ST_ERR;
+        if (st == PANEL_SD_ST_NOCARD) s_sd_present = false;
+        return;
+      }
+      if (!s_sd_dst || idx >= PANEL_SD_CHUNKS || n > PANEL_SD_CHUNK) return;
+      if ((uint16_t)rx.len < (uint16_t)(7 + n)) return;   // frame thieu du lieu
+      memcpy(s_sd_dst + (uint16_t)idx * PANEL_SD_CHUNK, &rx.payload[7], n);
+      s_sd_have |= (uint8_t)(1u << idx);
+      if (s_sd_have == (uint8_t)((1u << PANEL_SD_CHUNKS) - 1u)) { s_sd_done = true; s_sd_present = true; }
+    }
+
+    void sd_defer() {
+      if (s_defer_n >= 2) return;                    // hang hoan day -> bo (cuc hiem)
+      sd_defer_t &d = s_defer[s_defer_n++];
+      uint8_t n = rx.len;
+      if (n > (uint8_t)sizeof(d.payload)) n = (uint8_t)sizeof(d.payload);
+      d.type = rx.type; d.len = n;
+      memcpy(d.payload, rx.payload, n);
+    }
+
+    void sd_flush_deferred() {
+      for (uint8_t i = 0; i < s_defer_n; i++) {
+        rx.type = s_defer[i].type;
+        rx.len  = s_defer[i].len;
+        memcpy(rx.payload, s_defer[i].payload, s_defer[i].len);
+        s_sd_busy = false;                           // de handle_frame xu ly that su
+        handle_frame();
+      }
+      s_defer_n = 0;
+    }
+  #endif  // PANEL_SD_OVER_UART
+
   void do_request() {
     const uint8_t what = rx.len ? rx.payload[0] : (uint8_t)PANEL_REQ_FULL;
     switch (what) {
@@ -628,6 +711,11 @@ namespace {
   void handle_frame() {
     last_rx_ms = millis();
     panel_alive = true;
+    #if ENABLED(PANEL_SD_OVER_UART)
+      // Dang cho du lieu sector: tra loi SD xu ly NGAY, cac frame mang lenh thi HOAN lai.
+      if (rx.type == PANEL_F_SDDATA) { sd_take_chunk(); return; }
+      if (s_sd_busy && is_cmd_frame(rx.type)) { sd_defer(); return; }
+    #endif
     switch ((panel_frame_t)rx.type) {
       case PANEL_F_PING: {
         tx_begin(PANEL_F_PONG);
@@ -683,6 +771,12 @@ namespace ExtUI {
   }
 
   void onIdle() {
+    #if ENABLED(PANEL_SD_OVER_UART)
+      // Cac frame mang lenh bi hoan lai trong luc cho sector SD -> xu ly tai day (dung ngu canh
+      // vong lap chinh, khong phai trong disk_read).
+      if (s_defer_n) sd_flush_deferred();
+    #endif
+
     // Day hang doi TX ra UART TRUOC TIEN (khong cho doi - xem tx_drain): vua giai phong cho
     // trong hang doi, vua tra cac frame dang ton dong ra duong truyen.
     tx_drain();
@@ -727,8 +821,62 @@ namespace ExtUI {
     tx_pump();
   }
 
-  void onStatusChanged(const char * const msg) { push_message(PANEL_SEV_INFO, msg); }
+  #if ENABLED(PANEL_SD_OVER_UART)
+    // ------------------------------------------------------------------------
+    // SD qua UART: Marlin hoi panel tung sector 512 B (4 manh 128 B).
+    // Xem panel_serial.h + lcd_panel/README.md muc 12.
+    // ------------------------------------------------------------------------
+    bool panel_serial_sd_read(uint32_t sector, uint8_t *dst, uint32_t timeout_ms) {
+      if (!dst) return false;
 
+      // 1) Gui yeu cau (di THANG ra UART, khong qua hang doi -> khong bi tre sau cac frame PUSH)
+      panel_tx_begin(&tx, PANEL_F_SDREQ);
+      panel_tx_u8(&tx, (uint8_t)PANEL_SD_OP_READ);
+      panel_tx_u32(&tx, sector);
+      const uint8_t total = panel_tx_finish(&tx);
+
+      s_sd_dst = dst; s_sd_have = 0; s_sd_err = 0; s_sd_done = false;
+      const bool busy_prev = s_sd_busy;
+      s_sd_busy = true;
+      tx_write_now(tx.buf, total);
+
+      // 2) Cho du 4 manh (bom RX + day TX + nuoi watchdog)
+      const millis_t t0 = millis();
+      while (!s_sd_done && !s_sd_err) {
+        if (ELAPSED(millis(), t0 + timeout_ms)) break;
+        while (PANEL_SERIAL.available())
+          if (panel_rx_byte(&rx, (uint8_t)PANEL_SERIAL.read())) handle_frame();
+        tx_drain();
+        if (!s_sd_done && !s_sd_err) hal.watchdog_refresh();
+      }
+
+      s_sd_busy = busy_prev;
+      s_sd_dst = nullptr;
+      if (!s_sd_done || s_sd_err) {
+        s_sd_present = (s_sd_err == PANEL_SD_ST_ERR);   // ERR = co the nhung loi; NOCARD = khong the
+        return false;
+      }
+      return true;
+    }
+
+    // Ghi sector: GIAI DOAN 1 (P1) CHUA ho tro - Marlin chay voi SDCARD_READONLY (xem README muc 12).
+    bool panel_serial_sd_write(uint32_t sector, const uint8_t *src, uint32_t timeout_ms) {
+      UNUSED(sector); UNUSED(src); UNUSED(timeout_ms);
+      return false;
+    }
+
+    bool panel_serial_sd_init() {
+      // Hoi panel bang 1 lan doc sector 0 (boot sector / BPB). Tra loi duoc = co the + UART song.
+      static uint8_t tmp[PANEL_SD_SECTOR];
+      const bool ok = panel_serial_sd_read(0, tmp, PANEL_SD_TIMEOUT_MS);
+      s_sd_present = ok;
+      return ok;
+    }
+
+    bool panel_serial_sd_present() { return s_sd_present; }
+  #endif  // PANEL_SD_OVER_UART
+
+  void onStatusChanged(const char * const msg) { push_message(PANEL_SEV_INFO, msg); }
   void onUserConfirmRequired(const char * const msg) {
     push_prompt(PANEL_PROMPT_USER_CONFIRM, msg);
   }

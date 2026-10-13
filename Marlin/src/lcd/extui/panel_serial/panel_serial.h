@@ -61,7 +61,27 @@
     #define PANEL_TXQ_SLOTS   8
   #endif
 
+  #ifndef PANEL_SD_TIMEOUT_MS
+    #define PANEL_SD_TIMEOUT_MS  1000   // cho toi da 1 sector (binh thuong ~25 ms) truoc khi bao loi
+  #endif
+
   void panel_serial_init();              // goi tu ExtUI::onStartup()
   void panel_serial_task();              // goi tu ExtUI::onIdle()
+
+  // ---------------------------------------------------------------------------
+  // SD QUA UART (PANEL_SD_OVER_UART, proto >= 3) -- xem lcd_panel/README.md muc 12
+  //   The TF nam o khe MAN HINH. Marlin khong doc SPI nua: moi sector 512 B duoc hoi panel qua
+  //   chinh UART nay (PANEL_F_SDREQ -> 4 frame PANEL_F_SDDATA). Nho vay KHONG can MUX SPI, khong
+  //   tranh chap bus, panel nap lai firmware luc nao cung duoc.
+  //   Cac ham nay CHAN (toi da `timeout_ms`) va tu bom TX/RX + nuoi watchdog trong luc cho.
+  // ---------------------------------------------------------------------------
+  #if ENABLED(PANEL_SD_OVER_UART)
+  namespace ExtUI {
+    bool     panel_serial_sd_init();                    // hoi panel: co the khong? (goi tu driver->init)
+    bool     panel_serial_sd_read(uint32_t sector, uint8_t *dst, uint32_t timeout_ms);
+    bool     panel_serial_sd_write(uint32_t sector, const uint8_t *src, uint32_t timeout_ms);
+    bool     panel_serial_sd_present();                 // panel bao co the (cache tu lan hoi cuoi)
+  }
+  #endif
 
 #endif // PANEL_SERIAL_UI

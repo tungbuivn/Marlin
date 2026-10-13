@@ -50,6 +50,13 @@ bool net_esp3d_printer_busy(void);     // Marlin dang in? (de tu choi phien uplo
 // Tra true = OK. Khi false: `err` (co the NULL) nhan ly do, *posted = so byte da day duoc.
 bool net_esp3d_push(const char *name, uint32_t size, uint32_t *posted, char *err, size_t errn);
 
+// ---- DOC/GHI SECTOR THO + XOA FILE (che do PANEL_SD_UART: panel la "may chu the SD" cho Marlin) ----
+// panel_link.cpp goi net_esp3d_raw_read() khi Marlin hoi 1 sector (frame PANEL_F_SDREQ) roi tra
+// ket qua qua PANEL_F_SDDATA. Xem lcd_panel/README.md muc 12.
+bool net_esp3d_raw_read(uint32_t sector, uint8_t *dst);
+bool net_esp3d_raw_write(uint32_t sector, const uint8_t *src);   // P1: chua ho tro -> false
+bool net_esp3d_delete(const char *name);      // xoa file o GOC the + bao Marlin mount lai
+
 // Ket qua phien upload gan nhat (de /status tra JSON, khong chan)
 const char *net_esp3d_last_result(void);   // "DONE 12345" / "ERR ..." / ""
 uint32_t    net_esp3d_last_posted(void);

@@ -6,6 +6,7 @@
 #include <string.h>
 #include "panel_port.h"
 #include "tram_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tram_link.h
+#include "net_esp3d.h"        // doc sector tho cho Marlin (che do PANEL_SD_UART)
 
 panel_data_t panel;
 
@@ -25,6 +26,34 @@ static uint16_t    s_err_seen = 0;
 static void send_frame(const uint8_t total) {
   if (total) PANEL_MARLIN_SERIAL.write(s_tx.buf, total);
 }
+
+#if PANEL_SD_UART
+// ---------------------------------------------------------------------------
+// May chu the SD cho Marlin (proto >= 3): tra 1 sector 512 B = PANEL_SD_CHUNKS frame, moi frame
+// PANEL_SD_CHUNK byte. Ly do chia manh: truong `len` cua khung chi co 1 BYTE (max 255).
+//   status != OK -> gui DUNG 1 frame (n = 0) de Marlin biet ngay ma khong doi du 4 manh.
+// ---------------------------------------------------------------------------
+static uint8_t s_sd_sector_buf[PANEL_SD_SECTOR];   // buffer tinh: khong dung stack cua vong lap chinh
+
+void panel_link_send_sd_data(const uint8_t status, const uint32_t sector, const uint8_t *data) {
+  for (uint8_t idx = 0; idx < PANEL_SD_CHUNKS; idx++) {
+    panel_tx_begin(&s_tx, PANEL_F_SDDATA);
+    panel_tx_u8(&s_tx, status);
+    panel_tx_u32(&s_tx, sector);
+    panel_tx_u8(&s_tx, idx);
+    if (status == PANEL_SD_ST_OK && data) {
+      panel_tx_u8(&s_tx, PANEL_SD_CHUNK);
+      panel_tx_raw(&s_tx, data + (uint16_t)idx * PANEL_SD_CHUNK, PANEL_SD_CHUNK);
+    }
+    else {
+      panel_tx_u8(&s_tx, 0);
+      send_frame(panel_tx_finish(&s_tx));
+      return;                                  // loi -> chi 1 frame
+    }
+    send_frame(panel_tx_finish(&s_tx));
+  }
+}
+#endif  // PANEL_SD_UART
 
 void panel_link_ping() {
   panel_tx_begin(&s_tx, PANEL_F_PING);
@@ -299,6 +328,26 @@ static void handle_frame() {
 
     case PANEL_F_PONG:
       break;                                   // da nhan duoc gi -> linked = true
+
+    #if PANEL_SD_UART
+      case PANEL_F_SDREQ: {
+        // Marlin hoi 1 sector 512 B cua the SD (the nam o khe CYD - xem README muc 12).
+        // Tra loi NGAY trong handler nay: 4 frame PANEL_F_SDDATA, moi frame 128 B.
+        if (n >= 5) {
+          const uint8_t  op     = p[0];
+          const uint32_t sector = panel_u32(&p[1]);
+          if (op == PANEL_SD_OP_READ) {
+            // Buffer TINH (khong dung stack): 512 B + vong lap chinh cua ESP32.
+            const bool ok = net_esp3d_raw_read(sector, s_sd_sector_buf);
+            panel_link_send_sd_data(ok ? PANEL_SD_ST_OK : PANEL_SD_ST_ERR, sector, ok ? s_sd_sector_buf : nullptr);
+          }
+          else {
+            panel_link_send_sd_data(PANEL_SD_ST_ERR, sector, nullptr);   // P1: chua ho tro ghi
+          }
+        }
+        break;
+      }
+    #endif
 
     default:
       break;

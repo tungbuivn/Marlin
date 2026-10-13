@@ -506,8 +506,16 @@ void ui_port_display_init(void) {
       // Bat lai bang -DPANEL_CYD_DEBUG=1 trong env panel_esp32_cyd khi can chan doan:
       // muon biet den nen di chan nao thi doi PANEL_BL_PIN giua 21 / 27, va thu fillScreen(TFT_RED)
       // de tach loi "den nen" khoi loi "driver/SPI".
-      Serial.printf("[CYD] TFT_eSPI init xong: width=%d height=%d | den nen: BL_PIN=%d, chan chon MUX=%d\n",
-                    s_lcd.width(), s_lcd.height(), (int)PANEL_BL_PIN, (int)PANEL_SD_MUX_PIN);
+      Serial.printf("[CYD] TFT_eSPI init xong: width=%d height=%d | den nen: BL_PIN=%d | the SD: %s\n",
+                    s_lcd.width(), s_lcd.height(), (int)PANEL_BL_PIN,
+                    #if PANEL_SD_UART
+                      "qua UART (panel la may chu the)"
+                    #elif PANEL_SD_SHARED
+                      "dung chung qua MUX"
+                    #else
+                      "ESP3D"
+                    #endif
+                    );
     #endif
   }
 

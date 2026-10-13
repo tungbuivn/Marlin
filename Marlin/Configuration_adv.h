@@ -1784,13 +1784,34 @@
   //#define NO_SD_DETECT
   //
   // >>> TBT-PANEL (2026-10-14): THE SD DUNG CHUNG qua MUX SPI 74HC4053 <<<
+  // (GIU LAI lam duong lui: neu sau nay quay lai dung MUX thi bo PANEL_SD_OVER_UART o duoi)
   // The TF thuc te nam o khe cua MAN HINH (CYD); SPI cua Marlin (PC9/PC10/PC11/PC12) di qua MUX
   // toi khe do, con CONG TAC NHAN THE (SD_DETECT_PIN PC4) van o khe TRONG cua MKS Monster8
   // => Marlin se bao "khong co the" va KHONG mount. Vi vay phai TAT cong tac nhan the.
   // Khi tat: IS_SD_INSERTED() luon = true => Marlin mount 1 lan luc khoi dong roi giu nguyen
   // (khong tu mount lai), dung y do muon (panel gianh bus khi nhan file, xong tra lai + M22/M21).
-  // CHI BAT khi da han 4053 xong; neu con dung the o khe Marlin nhu cu thi KHONG can.
   #define NO_SD_DETECT
+
+  /**
+   * >>> TBT-PANEL (2026-10-14): THE SD NAM O KHE MAN HINH, MARLIN LAY SECTOR QUA UART <<<
+   *
+   * Marlin KHONG tu doc the SPI nua: moi sector 512 B duoc hoi panel qua chinh UART cua kenh PUSH
+   * (frame PANEL_F_SDREQ / PANEL_F_SDDATA, proto 3). Nho vay:
+   *   - KHONG can MUX SPI (74HC4053), KHONG cat duong, KHONG tranh chap bus, khong can dien tro;
+   *   - panel nap lai firmware / reset luc nao cung duoc (Marlin chi thay the "ban" tam thoi);
+   *   - Marlin van chay dung toan bo ngan xep SD cua no (FAT16/32, liet ke thu muc, M23/M24,
+   *     M25/M524, tien do in, M32 subroutine...) vi tat ca chi di qua readBlock()/writeBlock().
+   *
+   * GIAI DOAN 1 (P1): CHI DOC. Kem theo SDCARD_READONLY o duoi (Marlin khong ghi the). Nut XOA FILE
+   * tren panel do PANEL tu xoa (no giu the), khong di qua M30.
+   * CANH BAO: moi thao tac the cua Marlin gio phu thuoc UART + panel con song.
+   * Xem them: src/sd/panel_sd_uart.*, src/lcd/extui/panel_serial/, lcd_panel/README.md muc 12.
+   */
+  #define PANEL_SD_OVER_UART
+
+  #if ENABLED(PANEL_SD_OVER_UART)
+    #define SDCARD_READONLY           // P1: khong ghi the (M28/M29/M30 -> bao loi ro rang)
+  #endif
 
   /**
    * Multiple volume support - EXPERIMENTAL.

@@ -100,6 +100,12 @@ void panel_link_send_gcode(const char *line);            // 1 dong, khong can '\
 void panel_link_send_gcode2(const char *a, const char *b); // 2 dong lien tiep
 void panel_link_request(const uint8_t what);             // panel_request_t
 void panel_link_request_dir(const char *dirname);        // vao thu muc roi liet ke
+
+// Tra loi Marlin 1 sector 512 B cua the SD (che do PANEL_SD_UART - xem README muc 12):
+// gui PANEL_SD_CHUNKS frame PANEL_F_SDDATA. status != OK -> chi gui 1 frame (n = 0).
+#if PANEL_SD_UART
+  void panel_link_send_sd_data(uint8_t status, uint32_t sector, const uint8_t *data);
+#endif
 void panel_link_answer(const uint8_t answer);            // tra loi prompt dang cho (1 = OK)
 void panel_link_send_tram_cmd(char cmd);                 // lenh Tramming Wizard P/D/M/R/B/Q (frame 0x44)
 

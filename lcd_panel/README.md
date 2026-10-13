@@ -1735,7 +1735,10 @@ thật mới thấy: (3) tên file bị thêm đuôi sai `V300_Part3_proj.gcode`
 `wifi_leave_esp3d()` ở nhánh lỗi) — đã sửa.
 
 
-## 11. THẺ SD DÙNG CHUNG với Marlin qua MUX SPI (74HC4053) — **bỏ ESP3D** (2026-10-14)
+## 11. [ĐƯỜNG LUI] THẺ SD DÙNG CHUNG với Marlin qua MUX SPI (74HC4053) — **bỏ ESP3D** (2026-10-14)
+
+> ⚠️ Mục này **không còn dùng** (đã chuyển sang mục 12: thẻ qua UART, không cần MUX). Giữ lại làm
+> đường lui + tài liệu đấu dây nếu sau này quay lại.
 
 Quyết định của người dùng: *"bỏ ESP3D, dùng 4053 chia SPI để panel ghi thẳng vào thẻ SD dùng chung
 với Marlin"*. Từ đây **đường upload không cần mạng của ESP3D nữa**: file được panel ghi thẳng vào
@@ -1903,6 +1906,86 @@ Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.
   `panel.flags & PANEL_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.
 - Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) duoc gan font mono GFX (chi co o che do 4);
   KHONG gan font do cho ca cay (xem cam bay 43 o README goc). O che do 0, 3 nhan nay ra o vuong.
+
+## 12. **ĐANG DÙNG** — THẺ SD Ở KHE MÀN HÌNH, MARLIN LẤY SECTOR QUA UART (2026-10-14)
+
+Quyết định của người dùng: *"hoặc có thể thêm lệnh khi marlin đọc từng line sdcard thì gọi sang lcd
+để lấy data thì sao? … hay implement kiểu sdcard mới mà lấy data usart"* → **P1 đã xong và chạy thật**.
+
+**Ý tưởng**: không MUX, không chia bus, không ai tranh ai. **Panel là người DUY NHẤT giữ thẻ**; Marlin
+không tự đọc SPI nữa mà **hỏi panel từng sector 512 B** qua chính UART của kênh PUSH. Toàn bộ ngăn xếp
+SD của Marlin (SdVolume / SdBaseFile / FAT16-32 / liệt kê thư mục / `M23`-`M24` / tiến độ / `M32`) vẫn
+chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock()` / `writeBlock()`.
+
+```
+   Panel (ESP32) ── WiFi ── PC/điện thoại          Marlin (STM32)
+   ┌──────────────┐                                ┌───────────────────────────────┐
+   │ giữ thẻ TF   │  ◀── PANEL_F_SDREQ{sector} ───  │ DiskIODriver_PanelUART        │
+   │ SD.readRAW() │  ──▶ PANEL_F_SDDATA ×4 (128 B)  │  (SdVolume gọi readBlock)     │
+   └──────────────┘                                └───────────────────────────────┘
+```
+
+### 12.1 Vì sao đi hướng này (và vì sao KHÔNG hook "từng line")
+
+| | Hook từng dòng G-code | **Sector qua UART (đang dùng)** | MUX 4053 (mục 11) |
+|---|---|---|---|
+| Phải viết lại gì ở Marlin | `M20/M23/M24/M25/M524/M27/M30/M32/M98`, seek, PLR… (**rất nhiều**) | **1 class driver ~150 dòng** (`src/sd/panel_sd_uart.*`) | không |
+| Phần cứng | không | **không** | 4053 + 3 dây + 10 kΩ |
+| Tranh chấp bus | không | **không** | không (phần cứng cách ly) |
+| Panel reset/nạp firmware | — | Marlin mất thẻ **tạm thời**, tự có lại khi panel lên | Marlin không hề hấn |
+| Băng thông | thấp nhất | ~21–25 ms/sector ⇒ trần ~20 KB/s | — |
+
+### 12.2 Số liệu (đo trên máy thật)
+
+| Đại lượng | Giá trị |
+|---|---|
+| Link | 250 000 baud = 25 000 B/s; 1 sector = 4 frame × 134 B ≈ 22 ms ⇒ trần **~23 KB/s** |
+| In thực tế cần | 1–4 KB/s G-code ⇒ dùng **~5–20 %** băng thông |
+| Đệm chịu trễ của Marlin | queue + planner ⇒ chịu được panel trả lời trễ vài chục ms |
+| Đã kiểm | `M20` liệt kê đúng thẻ **của panel**; upload WiFi 63.472 B → `/status` done → **Marlin thấy file mới qua UART**; panel **nạp lại firmware xong Marlin tự đọc lại được** |
+| RAM | Marlin 13,5 % (17 720 B, +~3 KB), panel 28,6 % |
+
+### 12.3 Cấu hình (đã bật sẵn)
+
+| Nơi | Nội dung |
+|---|---|
+| `Marlin/Configuration_adv.h` | `#define PANEL_SD_OVER_UART` + `#define SDCARD_READONLY` (P1 chỉ đọc) + `NO_SD_DETECT` |
+| `Marlin/src/inc/Conditionals_post.h` | `NEED_SD2CARD_PANEL_UART` (thay cho `NEED_SD2CARD_SPI`) |
+| `Marlin/src/sd/cardreader.h`, `SdVolume.h` | chọn `DiskIODriver_PanelUART` |
+| `Marlin/ini/features.ini` | env `PANEL_SD_OVER_UART` (thêm file driver) + `SERIAL_RX_BUFFER_SIZE=1024` (frame 141 B) |
+| `lcd_panel/src/panel_config.h` | `PANEL_SD_UART 1` (CYD) — tự tắt `PANEL_SD_SHARED` |
+| `lcd_panel/src/panel_link.cpp` | trả lời `PANEL_F_SDREQ` → `net_esp3d_raw_read()` → 4 frame `PANEL_F_SDDATA` |
+| `lcd_panel/src/net_esp3d.cpp` | `net_esp3d_raw_read/raw_write/delete`; mount thẻ lúc boot và **giữ luôn** |
+
+### 12.4 Giao thức (proto **3** — PHẢI nạp cả 2 board)
+
+| Frame | Chiều | Payload |
+|---|---|---|
+| `PANEL_F_SDREQ` (0x10) | Marlin → panel | `u8 op` (0=đọc, 1=ghi), `u32 sector` |
+| `PANEL_F_SDDATA` (0x45) | panel → Marlin | `u8 status`, `u32 sector`, `u8 idx` (0..3), `u8 n`, `n` byte |
+
+* 1 sector 512 B = **4 frame × 128 B** vì trường `len` của khung chỉ có **1 byte** (tối đa 255 B) —
+  nhờ vậy **không phải đổi định dạng khung**, `PANEL_MAX_PAYLOAD` vẫn 192, không tăng RAM.
+* `status != OK` ⇒ panel chỉ gửi **1 frame** (`n = 0`) để Marlin báo lỗi ngay.
+* Marlin chờ tối đa `PANEL_SD_TIMEOUT_MS` (1 s) + **nuôi watchdog** trong lúc chờ; hết hạn ⇒
+  `readBlock()` trả `false` ⇒ Marlin báo "SD read error" và **dừng sạch**, không treo máy.
+* Frame mang **lệnh** từ panel (G-code/REQUEST/ANSWER/TRAM_CMD) rơi vào lúc đang chờ sector sẽ được
+  **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
+
+### 12.5 Giới hạn của P1 (và việc còn lại)
+
+* **Chỉ ĐỌC**: `writeBlock()` trả `false`; Marlin nạp với `SDCARD_READONLY`. `M28/M29` (ghi log ra thẻ)
+  và `POWER_LOSS_RECOVERY` (đang tắt) không dùng được.
+* **Nút `XOA FILE`** trên panel giờ do **panel tự xoá** (`net_sd_delete_file` → `SD.remove` +
+  `files_init_sd()` để Marlin mount lại), không đi qua `M30` nữa (Marlin read-only).
+* **P2 (chưa làm)**: in thử thật một file dài để kiểm tra băng thông/độ trễ khi Marlin đọc liên tục.
+* **P3 (tuỳ)**: đường GHI — panel dùng `sd_write_raw(pdrv, buf, sector)` (core ESP32 `sd_diskio.h:32`)
+  và Marlin bỏ `SDCARD_READONLY` ⇒ `M28/M29/M30/PLR` chạy được.
+* ⚠️ **Mọi thao tác thẻ của Marlin giờ phụ thuộc UART + panel còn sống.** Panel chết/bận ⇒ Marlin
+  không đọc được file ⇒ **bản in dừng**. Đây là đánh đổi lớn nhất so với MUX 4053 (mục 11 vẫn giữ
+  nguyên code để quay lại: chỉ cần bỏ `PANEL_SD_OVER_UART` ở Marlin và bật `PANEL_SD_SHARED` ở panel).
+
+
 
 ## Thanh day (status bar) + phan trang noi dung
 Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky giong header:

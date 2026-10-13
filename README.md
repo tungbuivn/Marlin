@@ -2766,3 +2766,20 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
 - Board CYD co 2 ban: den nen `IO21` (ILI9341/CYD thuong) hoac `IO27` (nhieu ban ST7789) -> doi
   `-DPANEL_BL_PIN`; nham chan thi trieu chung la **man toi nhung van cham duoc** (cam ung van chay).
 
+## Cam bay 50 - The SD qua UART: Marlin khong tu doc SPI nua (2026-10-14, DANG DUNG)
+- Marlin 2.1.2 da co san interface driver the SD (`src/sd/disk_io_driver.h` + `CardReader::media_driver_sdcard`
+  chon bang `NEED_SD2CARD_SDIO/SPI` trong `Conditionals_post.h`), va `SdVolume`/`SdBaseFile` **chi goi
+  `readBlock()`/`writeBlock()`**. Nho vay "the SD ao qua UART" chi can **1 class ~150 dong**
+  (`src/sd/panel_sd_uart.*`) - KHONG phai viet lai FAT/liet ke thu muc/M23/M24/tien do in.
+- Khung frame cua panel_serial chi co **1 byte `len`** (toi da 255 B) => KHONG the nhet 1 sector 512 B
+  vao 1 frame. Chia **4 frame x 128 B** thi khong phai doi dinh dang khung (giu `PANEL_MAX_PAYLOAD 192`).
+- `MarlinHAL::init()` van `OUT_WRITE(SDSS, HIGH)` va `card.mount()` van chay: driver UART phai tu tra loi
+  `init()` (doc sector 0). Neu panel chua san sang -> "SD init fail" (khong treo).
+- Trong `disk_read` **PHAI nuoi watchdog** (`hal.watchdog_refresh()`) + co tran thoi gian, neu khong
+  watchdog 4 s se reset board khi panel khong tra loi.
+- Frame mang LENH tu panel (G-code/REQUEST/ANSWER/TRAM_CMD) roi vao luc dang cho sector phai **hoan lai**
+  roi xu ly o `onIdle()` - khong duoc `queue.enqueue_one_now()` trong luc `disk_read`.
+- `SDCARD_READONLY` + P1: nut XOA FILE tren panel phai **tu xoa** (`net_sd_delete_file` -> `SD.remove`
+  + `files_init_sd()`), khong dung `M30` (Marlin read-only se bao loi).
+
+

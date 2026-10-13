@@ -147,6 +147,12 @@ static uint8_t sd_state_now(void) {
 extern "C" bool net_upload_active(void) __attribute__((weak));
 static bool sd_host_busy(void) { return net_upload_active && net_upload_active(); }
 
+// HOP DONG voi net_upload_http.cpp: XOA 1 file NGAY TREN PANEL (che do PANEL_SD_UART - the nam o
+// khe man hinh, panel giu the, con Marlin chay SDCARD_READONLY nen lenh M30 se bi tu choi).
+// Tra true = da xoa xong; UI PHAI tu bao Marlin mount lai the (files_init_sd() -> M22/M21 qua UART).
+// Vang mat (mode khac) -> con tro NULL -> UI roi ve duong M30 nhu cu.
+extern "C" bool net_sd_delete_file(const char *name) __attribute__((weak));
+
 // HOP DONG voi nhanh BT/WiFi (panel_bt_upload.cpp): TIEN DO NHAN FILE qua Bluetooth.
 //   true  = dang nhan qua BT; *got = so byte da nhan; *total = tong byte (0 = khong biet truoc).
 // Linkage C++ (KHONG `extern "C"`) vi ham duoc dinh nghia trong .cpp - giong panel_bt_upload_sd_ready().
@@ -1707,6 +1713,15 @@ static void files_delete_now(void) {
   // Kiem lai co "thu muc" o day nua: hop xac nhan khong khoa duoc vung phia duoi (cham van lot),
   // nen lua chon co the da doi trong luc hop dang mo.
   if (s_del_flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }
+
+  // THE QUA UART (P1): panel giu the -> TU XOA, roi bao Marlin mount lai the (files_init_sd gui
+  // M22+M21 -> Marlin doc lai FAT qua UART) va xin lai danh sach. Khong dung M30 vi Marlin dang
+  // chay SDCARD_READONLY (M30 se bao loi).
+  if (net_sd_delete_file && net_sd_delete_file(s_del_name)) {
+    files_note("da xoa file", false);
+    files_init_sd();
+    return;
+  }
 
   char cmd[PANEL_FILE_NAME_LEN + 6];
   snprintf(cmd, sizeof(cmd), "M30 %s", s_del_name);

@@ -39,9 +39,14 @@
 
 #include <stdint.h>
 
-#define PANEL_PROTO_VERSION     2     // 2: HELLO them str version; them F_ENDSTOPS + REQ_ENDSTOPS/DFU
+#define PANEL_PROTO_VERSION     3     // 2: HELLO them str version; them F_ENDSTOPS + REQ_ENDSTOPS/DFU
+                                      // 3: them F_SDREQ/F_SDDATA (Marlin lay sector the SD qua UART)
 #define PANEL_SYNC0             0xA5
 #define PANEL_SYNC1             0x5A
+// LUU Y: truong `len` trong khung chi co 1 BYTE (buf[4]) => payload toi da 255 byte. Vi vay 1 sector
+// 512 byte KHONG the nam trong 1 frame: PANEL_F_SDDATA chia thanh PANEL_SD_CHUNKS frame, moi frame
+// PANEL_SD_CHUNK byte (xem khoi "SD qua UART" o duoi). Giu nguyen 192 cho tuong thich voi moi frame
+// khac (STATUS/TRAMES/MESH...) va voi tools/ test tren may tinh.
 #define PANEL_MAX_PAYLOAD       192
 #define PANEL_FRAME_OVERHEAD    6                     // sync0 sync1 type seq len crc
 #define PANEL_MAX_FRAME         (PANEL_MAX_PAYLOAD + PANEL_FRAME_OVERHEAD)
@@ -74,14 +79,39 @@ enum panel_frame_t : uint8_t {
   PANEL_F_TRAM      = 0x0E,   // str: dung 1 dong ASCII "TRAM ...\\n" (dinh dang o tram_protocol.h;
                               //      2026-10-13 - port tu che do TRAM link), gui ~5Hz khi wizard chay
   PANEL_F_ENDSTOPS  = 0x0F,   // u8 n, n * (u8 id (panel_endstop_id_t), u8 hit) -- trang thai kieu M119
+  PANEL_F_SDREQ     = 0x10,   // [proto >= 3] YEU CAU DOC/GHI the SD (Marlin -> panel, vi the SD nam
+                              // o khe man hinh): u8 op (panel_sd_op_t), u32 sector.
+                              // (op = WRITE: theo sau la PANEL_SD_CHUNKS frame nua - xem duoi.)
 
   // ---- panel -> Marlin ----
   PANEL_F_GCODE     = 0x40,   // str: 1 dong G-code (khong can '\\n')
   PANEL_F_REQUEST   = 0x41,   // u8 what (panel_request_t), [str tham so]
   PANEL_F_PING      = 0x42,   // u8 seq
   PANEL_F_ANSWER    = 0x43,   // u8 prompt_id, u8 answer
-  PANEL_F_TRAM_CMD  = 0x44    // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
+  PANEL_F_TRAM_CMD  = 0x44,   // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
                               //          'R' home+probe lai, 'B' thoat wizard, 'Q' hoi trang thai
+  PANEL_F_SDDATA    = 0x45    // [proto >= 3] TRA LOI PANEL_F_SDREQ, chia PANEL_SD_CHUNKS frame:
+                              //   u8 status (panel_sd_status_t), u32 sector, u8 idx (0..3), u8 n, n byte
+                              //   -> Marlin ghep lai thanh 1 sector 512 byte.
+                              //   status = ERR/NOCARD: chi can frame dau (n = 0).
+};
+
+// ---------------------------------------------------------------------------
+// SD qua UART (proto >= 3): Marlin KHONG tu doc the SPI nua, moi sector duoc hoi panel.
+//   1 sector 512 B = PANEL_SD_CHUNKS frame, moi frame PANEL_SD_CHUNK byte.
+//   Payload 1 frame = 1 + 4 + 1 + 1 + 128 = 135 byte (<= PANEL_MAX_PAYLOAD 192).
+// ---------------------------------------------------------------------------
+#define PANEL_SD_SECTOR     512
+#define PANEL_SD_CHUNK      128
+#define PANEL_SD_CHUNKS     (PANEL_SD_SECTOR / PANEL_SD_CHUNK)   // 4
+enum panel_sd_op_t : uint8_t {
+  PANEL_SD_OP_READ  = 0,      // doc sector -> panel tra PANEL_SD_CHUNKS frame
+  PANEL_SD_OP_WRITE = 1       // ghi sector -> Marlin gui kem PANEL_SD_CHUNKS frame
+};
+enum panel_sd_status_t : uint8_t {
+  PANEL_SD_ST_OK    = 0,      // thanh cong
+  PANEL_SD_ST_ERR   = 1,      // loi the / sector ngoai pham vi
+  PANEL_SD_ST_NOCARD= 2       // panel khong co the
 };
 
 // ---------------------------------------------------------------------------

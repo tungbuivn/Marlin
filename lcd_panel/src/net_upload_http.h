@@ -35,6 +35,11 @@ bool net_upload_http_active(void);  // true = WebServer dang chay (de main.cpp k
 // trong luc panel dang giu bus SPI cua the dung chung (xem ui_lvgl.cpp: sd_host_busy).
 bool net_upload_active(void);
 
+// XOA 1 file NGAY TREN PANEL (che do PANEL_SD_UART: the o khe man hinh, panel giu the con Marlin
+// chay SDCARD_READONLY nen M30 se loi). Tra true = da xoa xong. Nguoi goi PHAI tu bao Marlin mount
+// lai the (ui_lvgl.cpp goi files_init_sd() -> M22/M21 qua UART + xin lai danh sach file).
+bool net_sd_delete_file(const char *name);
+
 #ifdef __cplusplus
 }
 #endif

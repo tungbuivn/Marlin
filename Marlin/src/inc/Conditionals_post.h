@@ -544,7 +544,10 @@
   #endif
 
   #if DISABLED(USB_FLASH_DRIVE_SUPPORT) || BOTH(MULTI_VOLUME, VOLUME_SD_ONBOARD)
-    #if ENABLED(SDIO_SUPPORT)
+    #if ENABLED(PANEL_SD_OVER_UART)
+      // The SD nam o khe MAN HINH: Marlin lay du lieu qua UART, KHONG dung driver SPI/SDIO.
+      #define NEED_SD2CARD_PANEL_UART 1
+    #elif ENABLED(SDIO_SUPPORT)
       #define NEED_SD2CARD_SDIO 1
     #else
       #define NEED_SD2CARD_SPI 1
