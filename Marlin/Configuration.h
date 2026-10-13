@@ -3167,6 +3167,21 @@
  */
 //#define PANEL_SERIAL_UI
 
+/**
+ * PANEL_TRAM_LINK -- panel rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
+ *
+ * KHAC PANEL_SERIAL_UI: KHONG dung ExtUI -> MarlinUI (man 12864) van chay binh thuong va
+ * wizard tren 12864 giu nguyen. Panel chi nhan 1 dong trang thai ASCII (~5Hz: 4 so 4 goc,
+ * moc, goc dang dung, mode MAX/MIN, huong van vit) va gui lenh P/D/M/R/B/Q.
+ *
+ * Chan: PA9 = USART1_TX, PA10 = USART1_RX -- header MKS WiFi (KHONG dung PD8/NeoPixel).
+ * Build flag (-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9) duoc them
+ * tu dong qua ini/features.ini khi bat dong nay.
+ *
+ * Chi tiet + man hinh TRAMMING tren panel: lcd_panel/README.md §5.6 · README.md §15b.
+ */
+#define PANEL_TRAM_LINK
+
 #if ENABLED(EXTENSIBLE_UI)
   //#define EXTUI_LOCAL_BEEPER // Enables use of local Beeper pin with external display
 #endif
