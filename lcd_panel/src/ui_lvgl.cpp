@@ -161,8 +161,8 @@ static uint8_t sd_state_now(void) {
   #define WIFI_GLYPH_ON    "\xEE\x80\x80"   // U+E000 wifi        -> DA ket noi
   #define WIFI_GLYPH_CONN  "\xEE\x80\x82"   // U+E002 3 vach      -> DANG ket noi
   #define WIFI_GLYPH_OFF   "\xEE\x80\x81"   // U+E001 wifi_off    -> WiFi tat / chua cau hinh
-  #define SD_GLYPH_OK      "\xEE\x80\x84"   // U+E004 the nho     -> the dang dung duoc
-  #define SD_GLYPH_ERR     "\xEE\x80\x85"   // U+E005 the loi     -> khong co the / loi / chua biet
+  // (U+E004/U+E005 'the nho' / 'the loi' co trong font nhung KHONG dung nua: man STATUS da co san
+  //  icon the 64x64 cua Marlin, chi doi mau - xem status_sd_icon_mark())
 #endif
 
 // Font co DAU tieng Viet (sinh bang lv_font_conv, cung thong so: size 14, bpp 4):
@@ -759,7 +759,7 @@ static void page_scroll(const int8_t dir);   // forward (phan trang noi dung, di
 static void bot_sync(const bool remeasure);   // forward (dong bo thanh day, dinh nghia duoi MENU)
 static void files_rebuild(void);             // forward
 static void files_delete_now(void);          // forward (nut XOA FILE, dinh nghia o man FILES)
-static void status_icons_create(lv_obj_t *p); // forward (2 icon the+wifi man STATUS, dinh nghia cuoi file)
+static void status_icons_create(lv_obj_t *p, lv_obj_t *sd_icon);  // forward (icon WiFi + mau icon the)
 static void refocus_page(void);              // forward (dinh nghia o cuoi file)
 static void do_action(const int a);          // forward
 static void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);  // forward
@@ -918,7 +918,9 @@ static void page_status_create(lv_obj_t *p) {
   // ---- nut SD (0,130) va nut SETTINGS (256,130): icon 64x64 nhu Marlin ----
   lv_obj_t *sd = mk_hit(p, MR_SD_X, MR_TILE_Y, MR_TILE_SZ, MR_TILE_SZ,
                         cb_action, (void *)(intptr_t)A_GOTO_FILES);
-  mk_icon(sd, 0, 0, &ui_icon_sd, MR_TIME);
+  // Icon THE co SAN cua Marlin: giu nguyen bitmap 64x64, chi DOI MAU theo trang thai the TF cua
+  // panel (xem status_sd_icon_mark()). Truoc day mau co dinh MR_TIME (khong cho nao khac doi).
+  lv_obj_t *sd_icon = mk_icon(sd, 0, 0, &ui_icon_sd, MR_TIME);
 
   lv_obj_t *set = mk_hit(p, MR_SET_X, MR_TILE_Y, MR_TILE_SZ, MR_TILE_SZ,
                          cb_action, (void *)(intptr_t)A_GOTO_MENU);
@@ -950,9 +952,10 @@ static void page_status_create(lv_obj_t *p) {
   lv_obj_set_pos(st_msg, MR_MSG_X, MR_MSG_Y);
   lv_obj_set_style_text_align(st_msg, LV_TEXT_ALIGN_CENTER, 0);
 
-  // ---- 2 icon nho CANH NHAU: THE NHO + WiFi (xem khoi "2 icon ... man STATUS" o cuoi file) ----
+  // ---- 2 icon trang thai: WiFi (giua o the va khoi FR/FL) + luu lai icon THE co san cua Marlin
+  // de to mau theo trang thai the TF cua panel (xem khoi "Icon trang thai WiFi" o cuoi file).
   // Tao CUOI CUNG de ve de len tren; la con cua trang STATUS nen tu an/hien theo man.
-  status_icons_create(p);
+  status_icons_create(p, sd_icon);
 }
 
 static void page_status_update(void) {
@@ -2962,9 +2965,10 @@ static void show_page(uint8_t p) {
 // "LINK ERR" chi can 8x8 = 64 px (font mono advance 8) nen 78/80 px van hien du; ten may dai hon
 // thi tu cuon vong nhu truoc (xem mk_label_w).
 static lv_obj_t  *s_wifi;                  // glyph o HEADER (hoac hinh tron khi chua co font icon)
-static lv_obj_t  *s_st_sd, *s_st_wifi;     // 2 glyph tren man STATUS: the nho + wifi
+static lv_obj_t  *s_st_sd_icon;            // icon THE 64x64 CO SAN cua Marlin (o SD man STATUS)
+static lv_obj_t  *s_st_wifi;               // glyph WiFi nho tren man STATUS
 static uint8_t    s_wifi_drawn = 0xFF;     // trang thai WiFi dang ve (dung CHUNG cho ca 2 noi)
-static uint8_t    s_sd_drawn   = 0xFF;     // trang thai THE dang ve (0xFF = chua ve lan nao)
+static uint8_t    s_sd_icon_st = 0xFE;     // mau icon the dang to (0xFE = chua to lan nao)
 
 // Vat chi bao: KHONG cho bam (khong nhan touch) va KHONG vao group encoder.
 static lv_obj_t *mk_wifi_icon(lv_obj_t *parent) {
@@ -3022,75 +3026,56 @@ static void wifi_icon_mark(void) {
 }
 
 // ===========================================================================
-//  2 icon nho tren man STATUS dat CANH NHAU: THE NHO (panel_bt_upload_sd_ready) + WiFi.
+//  Icon WiFi nho tren man STATUS: dat NGAY SAU icon THE cua Marlin, phia duoi khoi FR/FL.
 //
-//  TOA DO: (65,178) cho the va (81,178) cho wifi - vung TRONG cua bo cuc Marlin:
-//    - o SD   (0,130,64,64)   -> x <= 63            | nhan thoi gian (96,176,128,20) -> x >= 96
-//    - hang FR/FL ket thuc o y = 168                | thanh tien do (4,198,312,9) bat dau y = 198
-//    => vung 64..95 x 168..197 la TRONG; 2 glyph rong 14 px + 2 px khe = 30 px vua khit 32 px.
-//  Dat y = 178: glyph the cao 12 px (yAdvance 12) -> 178..189, con 8 px tren va 8 px duoi.
+//  TOA DO (65,178) - da doi chieu tung vung bo cuc Marlin trong code:
+//    - icon THE (0,130,64,64) -> x 0..63                 | nhan thoi gian (96,176,128,20) -> x >= 96
+//    - khoi FR/FL (70/170,136,80,32) -> y 136..167       | thanh tien do (4,198,312,9) -> y >= 198
+//  KHE GIUA icon the va khoi FR chi rong 6 px (x 64..69) -> KHONG du cho glyph 14 px; dai 8 px
+//  phia TREN khoi FR (y 128..135) cung khong du cao 12 px, va moi phuong an dat o do deu de len
+//  bitmap icon FEED (70..101). Vi vay chon vung TRONG 64..95 x 168..197 (duoi khoi FR, ngay ben
+//  phai icon the) - do la cho gan nhat voi y nguoi dung muon ma khong de vat nao.
 //  Man STATUS KHONG dung flex (mk_page_full) nen dat toa do tuyet doi bang lv_obj_set_pos().
 // ===========================================================================
-#define ST_SD_X    65
-#define ST_WIFI_X  81
+#define ST_WIFI_X  65
 #define ST_ICON_Y  178
 
-// Ap trang thai the len 1 vat: OK -> xanh, khong co the -> do, chua co module -> xam (khong phai loi).
-static void sd_glyph_apply(lv_obj_t *o, const uint8_t st) {
-  if (!o) return;
-  const lv_color_t col = (st == SD_ST_OK) ? COL_OK : ((st == SD_ST_NO) ? COL_ERR : COL_DIM);
-#if UI_HAVE_ICON_FONT
-  lv_obj_set_style_text_color(o, col, 0);
-  lv_label_set_text(o, (st == SD_ST_OK) ? SD_GLYPH_OK : SD_GLYPH_ERR);
-#else
-  lv_obj_set_style_bg_color(o, col, 0);
-#endif
-}
+// Trang thai dac biet: dang in / tam dung tu the SD -> GIU NGUYEN mau cu cua icon the.
+#define SD_ICON_KEEP 0xFF
 
-// Vat chi bao: KHONG cho bam (khong nhan touch) va KHONG vao group encoder.
-static lv_obj_t *mk_sd_icon(lv_obj_t *parent) {
-#if UI_HAVE_ICON_FONT
-  lv_obj_t *l = lv_label_create(parent);
-  lv_obj_set_style_text_font(l, gfx4_font_icons_get(), 0);   // cung font icon voi icon WiFi
-  lv_obj_set_style_text_color(l, COL_DIM, 0);               // mac dinh: chua biet -> xam
-  lv_label_set_text(l, SD_GLYPH_ERR);
-  lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_clear_flag(l, LV_OBJ_FLAG_SCROLLABLE);
-  return l;
-#else
-  // Duong lui khi chua co font icon: cham tron 12x12 nhu icon WiFi o header.
-  lv_obj_t *o = lv_obj_create(parent);
-  lv_obj_set_size(o, WIFI_ICON_SZ, WIFI_ICON_SZ);
-  lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(o, COL_DIM, 0);
-  lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(o, 0, 0);
-  lv_obj_set_style_shadow_width(o, 0, 0);
-  lv_obj_set_style_pad_all(o, 0, 0);
-  lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(o, LV_OBJ_FLAG_CLICKABLE);
-  return o;
-#endif
-}
-
-// Tao 2 icon man STATUS - goi 1 LAN trong page_status_create() (xem forward declaration dau file).
-// Invalidate ca 2 cache de nhip cham ke tiep ve dung trang thai (khong phai cho trang thai doi).
-static void status_icons_create(lv_obj_t *p) {
-  s_st_sd = mk_sd_icon(p);
-  lv_obj_set_pos(s_st_sd, ST_SD_X, ST_ICON_Y);
-  s_st_wifi = mk_wifi_icon(p);
+// Tao vat trang thai cho man STATUS - goi 1 LAN trong page_status_create() (xem forward decl).
+//  - sd_icon: icon THE CO SAN cua Marlin (o SD) - chi DOI MAU, khong ve them gi.
+//  - icon WiFi: tao moi, dat canh icon the.
+// Invalidate ca 2 cache de nhip cham ke tiep ve dung trang thai ngay.
+static void status_icons_create(lv_obj_t *p, lv_obj_t *sd_icon) {
+  s_st_sd_icon = sd_icon;
+  s_st_wifi    = mk_wifi_icon(p);
   lv_obj_set_pos(s_st_wifi, ST_WIFI_X, ST_ICON_Y);
-  s_sd_drawn   = 0xFF;
+  s_sd_icon_st = 0xFE;      // 0xFE = chua to lan nao (0xFF danh cho "dang in -> giu mau cu")
   s_wifi_drawn = 0xFF;
 }
 
-// Cap nhat icon THE (nhip cham 400 ms, chi ghi khi trang thai doi). Icon WiFi tren man STATUS do
-// wifi_icon_mark() lo (dung chung cache voi icon o header).
-static void status_sd_mark(void) {
-  const uint8_t sd = sd_state_now();
-  if (sd == s_sd_drawn) return;
-  s_sd_drawn = sd;
-  sd_glyph_apply(s_st_sd, sd);
+// Doi mau icon THE co san theo trang thai the TF cua panel (nhip cham 400 ms, chi ghi khi doi -
+// icon la bitmap 64x64 nen moi lan doi mau la ve lai 64x64 pixel qua SPI).
+//
+// THU TU UU TIEN:
+//   1) Dang IN / TAM DUNG tu the SD (PANEL_SF_SD_PRINTING | PANEL_SF_PAUSED): GIU NGUYEN mau cu
+//      (MR_TIME - dung nhu truoc day, vi luc do the dang duoc Marlin doc lien tuc nen trang thai
+//      the panel khong con la thong tin chinh; va day cung la hanh vi cu, tranh doi hinh).
+//   2) Khi ranh: to theo the TF cua PANEL qua panel_bt_upload_sd_ready():
+//        OK (the dung duoc)            -> COL_OK  (xanh)
+//        co module nhung chua mount/loi -> COL_ERR (do)
+//        accessor vang / khong co module (weak NULL) -> COL_DIM (xam, KHONG phai do)
+static void status_sd_icon_mark(void) {
+  uint8_t st;
+  if (panel.flags & (PANEL_SF_SD_PRINTING | PANEL_SF_PAUSED)) st = SD_ICON_KEEP;
+  else                                                        st = sd_state_now();
+  if (st == s_sd_icon_st) return;
+  s_sd_icon_st = st;
+  icon_color(s_st_sd_icon, (st == SD_ST_OK)   ? COL_OK
+                         : (st == SD_ST_NO)   ? COL_ERR
+                         : (st == SD_ST_NONE) ? COL_DIM
+                                              : MR_TIME);   // SD_ICON_KEEP -> mau cu
 }
 
 // ===========================================================================
@@ -3462,10 +3447,10 @@ void ui_lvgl_task(void) {
   if (now - s_slow_ms >= 400U) {
     s_slow_ms = now;
 
-    // Icon WiFi (header + man STATUS) va icon THE NHO (man STATUS): nhip CHAM (~400 ms), chi ghi
+    // Icon WiFi (header + man STATUS) va mau icon THE (man STATUS): nhip CHAM (~400 ms), chi ghi
     // style khi trang thai DOI. Nam ngoai switch(s_page_act) vi icon thuoc dong tieu de/STATUS.
     wifi_icon_mark();
-    status_sd_mark();
+    status_sd_icon_mark();
 
     switch (s_page_act) {
       case PG_FILES:    page_files_update();    break;
