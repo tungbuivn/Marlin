@@ -408,11 +408,16 @@ python lcd_panel/tools/make_lvgl_icons.py
 >   **`PETG 240/80`** · **`ABS 250/100`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`) và **`COOLDOWN`**
 >   (`M104 S0` + `M140 S0`).
 > * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
->   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện `-` / `+` / `OK` (bước nhảy
->   theo số lẻ của dòng) → gửi M-code tương ứng (`M92` steps · `M203` max feed · `M201` max accel ·
->   `M205` jerk · `M851` probe offset · `M206` home offset · `M220/M221` feed/flow · `M301/M304` PID ·
->   `M104/M140/M106` nhiệt & quạt) rồi tự xin lại thông số. Hàng nút ở đáy: **`UP` · `DOWN` · `SAVE EEPROM`**
->   (SAVE = `M500`).
+>   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện lớp phủ có **4 nút bước
+>   `0.01` · `0.1` · `1` · `10`** (nút đang chọn được tô nổi) + `-` / `+` (giữ nút = nhảy nhanh) + `OK` /
+>   `HUY` → `OK` gửi M-code tương ứng (`M92` steps · `M203` max feed · `M201` max accel ·
+>   `M205` jerk · `M851` probe offset · `M220/M221` feed/flow · `M304` PID bàn · `M104/M140/M106`
+>   nhiệt & quạt) rồi tự xin lại thông số. Hàng nút ở đáy: **`UP` · `DOWN` · `SAVE EEPROM`** (SAVE = `M500`).
+>   ⚠️ **KHÔNG còn dòng `Z offset mm`** (nó trùng `Probe Z mm` vì cùng là `probe.offset.z`, và từng gửi
+>   nhầm `M206 Z` = home offset) — chỉ dùng **`Probe Z mm` → `M851 Z`**.
+> * **Chữ tiếng Việt có dấu**: UI dùng font **Segoe UI 14** sinh riêng bằng `lv_font_conv`
+>   (`lcd_panel/src/font_segoe_vn_14.c`, dải `0x1EA0-0x1EF9` + `Ă ă Đ đ Ơ ơ Ư ư`) — font Montserrat mặc
+>   định của LVGL **không có dấu** nên nếu sinh lại font thì phải giữ đủ dải này.
 > * **FEED/FLOW**: sau mỗi lần `+/-` (gửi `M220`/`M221`) panel **tự xin lại thông số** nên con số trên màn
 >   cập nhật ngay (trước đây bị đứng ở 100%).
 > * **JOG**: X/Y nhích ở **`F3000` = 50 mm/s** (bằng tốc độ home), Z giữ **`F600` = 10 mm/s** (trần `M203 Z10`).

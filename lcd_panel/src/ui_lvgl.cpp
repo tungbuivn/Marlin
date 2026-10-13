@@ -47,13 +47,13 @@
  *             + thoi gian + thanh tien do + dong trang thai).
  *   MENU    : menu doc kieu Marlin, mo bang nut SETTINGS tren STATUS.
  *   TEMP    : +/- 1/10 do C cho nozzle & bed -> M104 S... / M140 S..., hang FAN -> M106 S...,
- *             1 hang preset PLA 210/60 | PETG 240/80 | ABS 250/100 (M104 + M140), COOLDOWN.
+ *             1 hang preset PLA 200/60 | PETG 230/60 | ABS 240/60 (M104 + M140), COOLDOWN.
  *   JOG     : chon truc X/Y/Z, nut -0.1/+0.1/-1/+1/-10/+10 mm -> G91 + G1 <truc><d> F600 + G90,
  *             nut HOME ALL -> G28.
  *   FILES   : lv_roller danh sach panel.files[], PRINT (M23 + M24), DIR, UP, REFRESH,
  *             PAUSE (M25), RESUME (M24), STOP (M524).
  *   SETTINGS: bang thong so panel_setting(PANEL_SET_*), cham 1 dong -> lop phu -/+/OK de SUA
- *             (gui M92/M203/M201/M205/M851/M206/M220/M221/M301/M304/M106/M104/M140) +
+ *             (gui M92/M203/M201/M205/M851/M220/M221/M301/M304/M106/M104/M140) +
  *             SAVE EEPROM (PANEL_REQ_SAVE_SETTINGS).
  *   MESH    : bang luoi bed mesh (panel.mesh[col][row]), o cao = xanh, o thap = do,
  *             REFRESH -> PANEL_REQ_MESH; khong co PANEL_HAS_MESH thi bao "khong ho tro".
@@ -67,7 +67,10 @@
  * Prompt cua Marlin (panel.prompt_active) -> lv_msgbox OK/CANCEL -> panel_link_answer().
  * Thong bao (panel.message) -> lv_msgbox theo panel.message_sev, tu dong dong sau 6s.
  *
- * LUU Y: chu tren man hinh phai la ASCII (font montserrat_14 khong co dau tieng Viet).
+ * LUU Y: chu tren man hinh PHAI la ASCII, vi font montserrat_14 cua LVGL khong co dau
+ * tieng Viet (U+1EA0..U+1EF9). NGOAI LE: lop phu SUA trong SETTINGS + hang PREHEAT duoc gan
+ * font_segoe_vn_14 (sinh bang lv_font_conv, xem font_segoe_vn_14.c) nen 2 cho do co the dung
+ * chu co dau; chu co dau van viet bang ma UTF-8 (\x..) de file nguon giu duoc ASCII thuan.
  * Khong dung %f khi format so: fmt_scaled() in so nguyen da nhan 10/100/1000.
  */
 #include "ui_lvgl.h"
@@ -81,6 +84,11 @@
 #include "panel_link.h"
 #include "tram_link.h"              // Bed Tramming Wizard cua Marlin (link ASCII, xem tram_link.h)
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
+
+// Font co DAU tieng Viet (Segoe UI 14, sinh bang lv_font_conv -> font_segoe_vn_14.c):
+// font Montserrat co san cua LVGL KHONG co U+1EA0..U+1EF9 nen chu co dau se ra o vuong.
+// Font nay chi gan cho nhung cho can dau (lop phu SUA trong SETTINGS + hang PREHEAT).
+LV_FONT_DECLARE(font_segoe_vn_14);
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
 static_assert(LV_COLOR_DEPTH == 16, "UI nay chi ho tro LV_COLOR_DEPTH 16");
@@ -288,6 +296,15 @@ static void set_text(lv_obj_t *lbl, const char *txt) {
   const char *old = lv_label_get_text(lbl);
   if (old && strcmp(old, txt) == 0) return;
   lv_label_set_text(lbl, txt);
+}
+
+// Dat font CO DAU tieng Viet cho ca 1 nhanh vat the (nut + nhan con ben trong).
+// Font Montserrat co san cua LVGL khong co U+1EA0..U+1EF9 -> chu co dau se ra o vuong,
+// nen nhung cho co chu tieng Viet phai gan font_segoe_vn_14 (xem dau file + font .c).
+static void vn_font_all(lv_obj_t *o) {
+  lv_obj_set_style_text_font(o, &font_segoe_vn_14, 0);
+  const uint32_t n = lv_obj_get_child_cnt(o);
+  for (uint32_t k = 0; k < n; k++) vn_font_all(lv_obj_get_child(o, k));
 }
 
 static void style_flat(lv_obj_t *o, lv_color_t bg) {
@@ -803,15 +820,18 @@ static void fan_row(lv_obj_t *p) {
   mk_btn(r, "MAX", TP_BTN_BIG, TP_ROW_H - 2, cb_temp_adj, TEMP_ADJ(2, +100));
 }
 
-// Preset preheat (giong ban UI cu: main.cpp ACT_PLA/PETG/ABS - 210/60, 240/80, 250/100)
+// Preset preheat: giong Configuration.h (PREHEAT_1/2/3) cua may nay -
+//   PLA 200/60 - PETG 230/60 - ABS 240/60 (ban chi toi 60 do C nen ca 3 deu 60).
+// KHONG gui M106: ca 3 FAN_SPEED trong Configuration.h deu = 0 va Marlin khong dung
+// define do khi preheat -> gui M106 S0 se TAT quat ngoai y muon.
 #define TP_PRE_H    28                                 // nut preset cao 28 >= 26 (du de cham)
 #define TP_PRE_PLA  0
 #define TP_PRE_PETG 1
 #define TP_PRE_ABS  2
 
 static void cb_temp_preheat(lv_event_t *e) {
-  static const uint16_t NOZ[3] = { 210, 240, 250 };
-  static const uint16_t BED[3] = {  60,  80, 100 };
+  static const uint16_t NOZ[3] = { 200, 230, 240 };
+  static const uint16_t BED[3] = {  60,  60,  60 };
   const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
   if (k > 2) return;
 
@@ -829,11 +849,12 @@ static void page_temp_create(lv_obj_t *p) {
   temp_row(p, "BED",    1, &tp_bed);
   fan_row(p);
 
-  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140 nhu ban UI cu)
+  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140, giong menu preheat cua Marlin)
   lv_obj_t *rp = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_PRE_H, 0, GAP);
-  mk_btn_grow(rp, "PLA 210/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
-  mk_btn_grow(rp, "PETG 240/80", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
-  mk_btn_grow(rp, "ABS 250/100", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
+  mk_btn_grow(rp, "PLA 200/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
+  mk_btn_grow(rp, "PETG 230/60", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
+  mk_btn_grow(rp, "ABS 240/60",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
+  vn_font_all(rp);              // hang nay dung font co dau (nhan "Huy"/"Buoc" cung font nay)
 
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 34, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
@@ -1127,7 +1148,9 @@ typedef struct {
 } set_row_t;
 
 static const set_row_t SET_ROWS[] = {
-  { PANEL_SET_Z_OFFSET,      "Z offset mm",   1000, 3 },
+  // KHONG co dong "Z offset": PANEL_SET_Z_OFFSET va PANEL_SET_PROBE_OFFSET_Z cung la
+  // getZOffset_mm() (probe.offset.z) -> se trung 2 dong, va sua bang M206 Z se ghi vao
+  // HOME OFFSET (sai cho Voron Tap). Chi giu "Probe Z mm" -> M851 Z.
   { PANEL_SET_PROBE_OFFSET_Z,"Probe Z mm",    1000, 3 },
   { PANEL_SET_PROBE_OFFSET_X,"Probe X mm",    1000, 2 },
   { PANEL_SET_PROBE_OFFSET_Y,"Probe Y mm",    1000, 2 },
@@ -1191,34 +1214,65 @@ static void settings_fill_table(void) {
 
 // ---------------------------------------------------------------------------
 //  Lop phu SUA 1 dong: cham vao 1 dong cua bang -> hien khung nho ngay TREN bang
-//  gom ten thong so + gia tri dang sua + 4 nut: - | + | OK | HUY.
-//  Buoc nhay = 10^(-dec) don vi HIEN THI (vi du Steps X: scale 1000 dec 2 -> 0.01).
-//  Gia tri lam viec la "raw" (da nhan scale, dung nhu panel_setting() tra ve) nen
-//  buoc quy ve raw = scale / 10^dec -> khong dung so thuc, khong cap phat dong.
+//  gom ten thong so + gia tri dang sua + 4 NUT BUOC 0.01 | 0.1 | 1 | 10
+//  + 2 nut - | + de ap buoc do vao gia tri + OK | Huy.
+//  Buoc nguoi dung chon la don vi HIEN THI -> quy ve raw = buoc * scale, va KHONG nho hon
+//  1 don vi hien thi cuoi cua dong (scale / 10^dec); nho vay gia tri luon nam dung so le
+//  hien thi (khong bao gio co nhieu chu so thap phan hon dong do). Moi tinh toan la so nguyen.
 //  Bam OK: gui M-code dung voi .id (xem se_send_mcode) roi xin Marlin gui lai thong so.
+//  Chu trong lop phu dung font_segoe_vn_14 (co dau tieng Viet - xem font_segoe_vn_14.c).
 // ---------------------------------------------------------------------------
-#define OV_W       240                              // khung noi dung (giua man 320)
-#define OV_H       76
-#define OV_BTN_H   28
+#define OV_W       260                              // khung noi dung (giua man 320)
+#define OV_H       112
+#define OV_BTN_H   28                               // nut >= 26 px cho de cham
+#define OV_LINE_H  20                               // 1 dong chu cua font Segoe (line_height 18)
 #define OV_PAD     4
-#define OV_VCAP    120                              // be rong toi da cua o gia tri
+#define OV_VCAP    150                              // be rong o gia tri
 #define OV_RAW_LIM 100000000L                       // tran raw (du moi thong so o day)
 #define OV_ADJ(d)  ((void *)(intptr_t)(int8_t)(d))
+#define OV_STEP(d) ((void *)(intptr_t)(d))
 
 static const uint32_t OV_TEN_POW[4] = {1, 10, 100, 1000};
 
+// 4 muc buoc, don vi HIEN THI nhan 100 (giu so nguyen: 0.01 -> 1)
+static const int32_t OV_STEP100[4] = { 1, 10, 100, 1000 };
+static const char *const OV_STEP_TXT[4] = { "0.01", "0.1", "1", "10" };
+
 static lv_obj_t *ov_bd, *ov_box, *ov_name, *ov_val, *ov_hint, *ov_minus;
+static lv_obj_t *ov_step_btn[4];
+static uint8_t  ov_step_k = 0;   // muc buoc dang chon (0..3)
 static uint8_t  ov_i = 0;        // chi so THAT trong SET_ROWS[] (khong phai chi so dong dang hien)
 static int32_t  ov_raw = 0;      // gia tri dang sua (raw = gia tri hien thi * scale)
 static bool     ov_open = false;
 static bool     ov_rep = false;  // da nhay do GIU nut -> bo qua lan CLICKED luc nhac tay
 
-// Buoc nhay (raw) cua 1 dong: 10^(-dec) don vi hien thi
-static int32_t ov_step(const uint8_t i) {
+// 1 don vi HIEN THI cuoi cung cua dong (raw) = scale / 10^dec
+static int32_t ov_quantum(const uint8_t i) {
   const uint8_t  dec = (SET_ROWS[i].dec > 3) ? 3 : SET_ROWS[i].dec;
   const uint32_t sc  = SET_ROWS[i].scale ? SET_ROWS[i].scale : 1;
-  const uint32_t st  = sc / OV_TEN_POW[dec];
-  return (int32_t)(st ? st : 1);
+  const uint32_t q   = sc / OV_TEN_POW[dec];
+  return (int32_t)(q ? q : 1);
+}
+
+// Buoc ap dung (raw) = buoc dang chon * scale, nhung khong nho hon 1 don vi hien thi cuoi
+static int32_t ov_step(const uint8_t i) {
+  const uint32_t sc = SET_ROWS[i].scale ? SET_ROWS[i].scale : 1;
+  const int32_t  q  = ov_quantum(i);
+  const int32_t  st = (int32_t)(((int64_t)OV_STEP100[ov_step_k] * (int64_t)sc) / 100);
+  return (st > q) ? st : q;
+}
+
+// Muc buoc gan nhat voi 10^(-dec) cua dong (dec 2/3 -> 0.01 - dec 1 -> 0.1 - dec 0 -> 1)
+static uint8_t ov_step_default(const uint8_t i) {
+  const uint8_t dec = (SET_ROWS[i].dec > 3) ? 3 : SET_ROWS[i].dec;
+  return (dec >= 2) ? 0 : (uint8_t)(2 - dec);
+}
+
+// To nut buoc dang chon (giong cach jg_axis[] to COL_ACCENT)
+static void ov_marks(void) {
+  for (uint8_t k = 0; k < 4; k++)
+    if (ov_step_btn[k])
+      lv_obj_set_style_bg_color(ov_step_btn[k], (k == ov_step_k) ? COL_ACCENT : COL_BTN, 0);
 }
 
 // Tim dong khai bao cua 1 id (de in so dung so le nhu bang dang hien)
@@ -1259,8 +1313,6 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     snprintf(cmd, sizeof(cmd), "M205 %c%s", ax, v);
   else if ((ax = se_axis_char(id, PANEL_SET_PROBE_OFFSET_X, 3)) != 0)
     snprintf(cmd, sizeof(cmd), "M851 %c%s", ax, v);
-  else if (id == PANEL_SET_Z_OFFSET)          // home offset (M206 Z)
-    snprintf(cmd, sizeof(cmd), "M206 Z%s", v);
   else if (id == PANEL_SET_FEEDRATE_PCT)
     snprintf(cmd, sizeof(cmd), "M220 S%s", v);
   else if (id == PANEL_SET_FLOW_PCT)
@@ -1306,13 +1358,16 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
   return true;
 }
 
-// Hien lai gia tri dang sua + buoc nhay cua dong do
+// Hien lai gia tri dang sua + buoc dang ap dung.
+// Chu co dau duoc viet bang MA UTF-8 (\x..) de file nguon van la ASCII thuan - xem ghi chu
+// "font tieng Viet" o dau file. Hai chuoi o day la "Gia tri: <v>" va "Buoc <buoc>".
 static void ov_refresh(void) {
-  char a[16], b[32];
+  char a[16], b[40];
   fmt_scaled(a, sizeof(a), ov_raw, SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
-  set_text(ov_val, a);
+  snprintf(b, sizeof(b), "Gi\xC3\xA1 tr\xE1\xBB\x8B: %s", a);     // "Gia tri: <v>" (co dau)
+  set_text(ov_val, b);
   fmt_scaled(a, sizeof(a), ov_step(ov_i), SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
-  snprintf(b, sizeof(b), "buoc %s", a);
+  snprintf(b, sizeof(b), "B\xC6\xB0\xE1\xBB\x9B\x63 %s", a);      // "Buoc <buoc>" (co dau)
   set_text(ov_hint, b);
 }
 
@@ -1358,6 +1413,15 @@ static void cb_se_ov_ok(lv_event_t *e) {
 
 static void cb_se_ov_cancel(lv_event_t *e) { (void)e; ov_close(); }
 
+// Chon buoc: to lai nut dang chon + cap nhat dong "Buoc ..." (khong doi gia tri dang sua)
+static void cb_se_ov_step(lv_event_t *e) {
+  const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  if (k > 3) return;
+  ov_step_k = k;
+  ov_marks();
+  if (ov_open) ov_refresh();
+}
+
 static void ov_create(void) {
   lv_obj_t *scr = lv_scr_act();
 
@@ -1388,19 +1452,25 @@ static void ov_create(void) {
   lv_obj_set_flex_align(ov_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   lv_obj_add_flag(ov_box, LV_OBJ_FLAG_HIDDEN);
 
+  // Dong 1: ten thong so (ten tieng Anh lay tu SET_ROWS, khong co dau)
   ov_name = mk_label_w(ov_box, "-", MR_MENU, OV_W - 2 * OV_PAD);
 
-  lv_obj_t *rv = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, ROW_H, 0, GAP);
-  ov_val  = mk_label(rv, "-", COL_OK);
-  lv_obj_set_style_text_align(ov_val, LV_TEXT_ALIGN_LEFT, 0);
-  lv_obj_set_width(ov_val, OV_VCAP);
-  ov_hint = mk_label_w(rv, "", COL_DIM, 90);
+  // Dong 2: "Gia tri: <so>" (xanh la) + "Buoc <buoc>" (xam) - xem ov_refresh()
+  lv_obj_t *rv = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_LINE_H, 0, GAP);
+  ov_val  = mk_label_w(rv, "-", COL_OK, OV_VCAP);
+  ov_hint = mk_label_w(rv, "", COL_DIM, OV_W - 2 * OV_PAD - OV_VCAP - GAP);
 
+  // Dong 3: 4 NUT BUOC co dinh - nut dang chon duoc to COL_ACCENT (nhu jg_axis[])
+  lv_obj_t *rs = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
+  for (uint8_t k = 0; k < 4; k++)
+    ov_step_btn[k] = mk_btn_grow(rs, OV_STEP_TXT[k], OV_BTN_H, cb_se_ov_step, OV_STEP(k));
+
+  // Dong 4: - | + | OK | Huy
   lv_obj_t *rb = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
   ov_minus = mk_btn_grow(rb, "-",   OV_BTN_H, cb_se_ov_adj, OV_ADJ(-1));
   lv_obj_t *plus = mk_btn_grow(rb, "+", OV_BTN_H, cb_se_ov_adj, OV_ADJ(+1));
   mk_btn_grow(rb, "OK",  OV_BTN_H, cb_se_ov_ok, NULL);
-  mk_btn_grow(rb, "HUY", OV_BTN_H, cb_se_ov_cancel, NULL);
+  mk_btn_grow(rb, "H\xE1\xBB\xA7y", OV_BTN_H, cb_se_ov_cancel, NULL);   // "Huy" (co dau)
 
   // Giu nut de tang nhanh: nhan them PRESSED + LONG_PRESSED_REPEAT cho 2 nut -/+
   lv_obj_t *adj[2] = { ov_minus, plus };
@@ -1409,6 +1479,8 @@ static void ov_create(void) {
     lv_obj_add_event_cb(adj[k], cb_se_ov_adj, LV_EVENT_PRESSED, OV_ADJ(dir[k]));
     lv_obj_add_event_cb(adj[k], cb_se_ov_adj, LV_EVENT_LONG_PRESSED_REPEAT, OV_ADJ(dir[k]));
   }
+
+  vn_font_all(ov_box);        // lop phu nay dung font co dau tieng Viet
 }
 
 // Mo lop phu cho dong dang hien thu k (0..se_n-1); chi so THAT lay qua se_idx[]
@@ -1417,7 +1489,9 @@ static void ov_open_row(const uint8_t k) {
   ov_i   = se_idx[k];
   ov_raw = panel_setting(SET_ROWS[ov_i].id, 0);
   if (!ov_box) ov_create();
+  ov_step_k = ov_step_default(ov_i);      // buoc gan nhat voi 10^(-dec) cua dong
   set_text(ov_name, SET_ROWS[ov_i].name);
+  ov_marks();
   ov_refresh();
   ov_open = true;
   ov_rep  = false;
