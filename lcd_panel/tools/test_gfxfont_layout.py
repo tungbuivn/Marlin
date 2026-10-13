@@ -191,6 +191,9 @@ def main():
                          "font nguon nen khong the ve lai bang FreeType duoc.")
     ap.add_argument("--ink", action="store_true",
                     help="in bang dem pixel co muc cho tung codepoint trong --cps")
+    ap.add_argument("--max-box", type=int, default=14,
+                    help="gioi han box_w/box_h cho phep khi --no-compare (mac dinh 14 cho font "
+                         "chu / icon nho; ban icon LON dung --max-box 30)")
     ap.add_argument("--text", action="append", default=[])
     ap.add_argument("--cps", action="append", default=[],
                     help="chuoi bang ma codepoint, vd 0x4E,0x48,0x1EC6,0x54 (tranh loi ma hoa "
@@ -220,14 +223,19 @@ def main():
     print("cac dai  :", ", ".join("%s U+%04X..U+%04X yAdvance=%d" %
                                   (f["name"].split("_")[-1], f["first"], f["last"], f["yadvance"])
                                   for f in ranges))
-    # ascender/descender thuc = dung cong thuc cua driver (quet CA cac dai)
-    asc = desc = 0
+    # ascender/descender thuc = dung cong thuc cua driver (quet CA cac dai).
+    # LUU Y: descender CO THE AM (moi net nam TREN baseline, vd font icon) - do moi la gia tri
+    # that, dung ep ve 0 (neu ep ve 0 thi bao cao sai).
+    asc = 0
+    desc = None
     for f in ranges:
         for off, w, h, adv, xoff, yoff in f["glyphs"]:
             if w == 0 or h == 0:
                 continue
             asc = max(asc, -yoff)
-            desc = max(desc, yoff + h)
+            desc = (yoff + h) if desc is None else max(desc, yoff + h)
+    if desc is None:
+        desc = 0
     line_height = ranges[0]["yadvance"]
     base_line = line_height - asc
     print("driver   : ascender=%d descender=%d  line_height=%d base_line=%d "
@@ -295,7 +303,8 @@ def main():
             # vi tri trong hop dong (dung luat cua lv_draw_sw_letter)
             top_row = (line_height - base_line) - g["h"] - ofs_y
             bot_row = top_row + g["h"] - 1
-            bad = (ink == 0) or (g["w"] > 14) or (g["h"] > 14) or top_row < 0 or bot_row >= line_height
+            bad = (ink == 0) or (g["w"] > args.max_box) or (g["h"] > args.max_box) \
+                or top_row < 0 or bot_row >= line_height
             if bad:
                 fails += 1
             print("\n[%s] U+%04X  box %dx%d  xAdv %d  xOff %d  yOff %d  ofs_y %d  bytes %d"

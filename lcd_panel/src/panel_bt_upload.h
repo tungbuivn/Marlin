@@ -62,6 +62,24 @@ bool panel_bt_upload_sd_ready(void);
 void panel_bt_upload_sd_retry(void);
 
 // ---------------------------------------------------------------------------
+// HOP DONG VOI NHANH UI: TIEN DO PHA 1 (dang nhan file qua BT) - de UI ve o THANH TIEU DE.
+//   Tra ve true  = DANG o PHA 1 (dang nhan file qua BT).
+//   *got         = so byte da nhan duoc (byte, KHONG phai KB).
+//   *total       = tong so byte theo header cua app; 0 = app khong bao truoc kich thuoc.
+//   got / total co the la NULL (chi can biet "dang nhan hay khong").
+//   CHI doc bien da CACHE (khong chan, khong cap phat, khong cham vao BT/LVGL/the TF) nen goi
+//   duoc tu ui_lvgl_task() o nhip ~400 ms. Cap nhat moi lan hut duoc du lieu + moi nhip task.
+//   Khi PHA 1 ket thuc (bat dau day sang ESP3D): tra ve false, got/total GIU gia tri cuoi cung
+//   cua phien (UI tu quyet dinh con hien hay khong) - tranh nhay ve 0 ngay truoc lop phu PHA 2.
+//   PHA 1 KHONG khoa UI va KHONG co lop phu nao; lop phu toan man hinh + khoa UI chi xuat hien o
+//   PHA 2 (luc day file len ESP3D) - xem README 9.18.
+//   Khi PANEL_BT_UPLOAD = 0 (hoac board khac): luon tra false, got=total=0. Stub nam trong
+//   panel_bt_upload.cpp (moi env deu build file nay: platformio.ini build_src_filter = +<*>)
+//   nen nhanh UI khong can khai bao lai - khong can weak/__has_include.
+// ---------------------------------------------------------------------------
+bool panel_bt_upload_rx(uint32_t *got, uint32_t *total);
+
+// ---------------------------------------------------------------------------
 // BAT/TAT CHE DO NHAN FILE (cho nut bam tren UI)
 //   set_enabled(true) : bat BT (co cua an toan RAM) + DISCOVERABLE de dien thoai quet thay.
 //   set_enabled(false): tu choi/ngat client hien tai + NON-DISCOVERABLE + tat BT (tra ~100 KB heap).

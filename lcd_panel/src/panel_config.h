@@ -185,8 +185,244 @@
 //                hoac doi 1 -> 0 ngay duoi day.
 // ===========================================================================
 #if defined(PANEL_BOARD_CYD) && !defined(PANEL_BT_UPLOAD)
-  #define PANEL_BT_UPLOAD 1          // UI tu ve + chuong trinh nhan file (xem panel_bt_upload.cpp)
+  // TAM TAT (theo yeu cau nguoi dung): upload qua WiFi/ESP3D nhanh hon. Bat lai = doi 0 -> 1.
+  #define PANEL_BT_UPLOAD 0
 #endif
+
+// ===========================================================================
+// QUAN LY WiFi DOC LAP (net_wifi.cpp) -- xem README 9.20
+//   CYD: mac dinh 1. Khi PANEL_BT_UPLOAD=1 thi BAT BUOC 1 (module BT upload dung CHUNG
+//   net_wifi, khong tu goi WiFi.begin/mode/disconnect nua -> khong co 2 noi cung dieu khien WiFi).
+//   Board khac: 0 => net_wifi.cpp chi con stub (moi ham tra 0/rong/false) nen nhanh UI van build.
+// ===========================================================================
+#ifndef PANEL_WIFI_MGMT
+  #if defined(PANEL_BOARD_CYD)
+    #define PANEL_WIFI_MGMT 1
+  #else
+    #define PANEL_WIFI_MGMT 0
+  #endif
+#endif
+#if defined(PANEL_BT_UPLOAD) && PANEL_BT_UPLOAD && !PANEL_WIFI_MGMT
+  #undef  PANEL_WIFI_MGMT
+  #define PANEL_WIFI_MGMT 1      // module BT upload PHAI co net_wifi (khong the thieu)
+#endif
+
+#if PANEL_WIFI_MGMT
+// Tu ket noi lai luc BOOT neu da co cau hinh da luu trong NVS:
+//   1 = WiFi chay MOT MINH (PANEL_BT_UPLOAD=0): panel tu vao mang de icon xanh + trang settings.
+//   0 = dang bat BT upload: WiFi chi duoc bat o PHA 2 (BT va WiFi KHONG the cung luc - README 9.11).
+#ifndef PANEL_WIFI_AUTOSTART
+  #if defined(PANEL_BT_UPLOAD) && PANEL_BT_UPLOAD
+    #define PANEL_WIFI_AUTOSTART 0
+  #else
+    #define PANEL_WIFI_AUTOSTART 1
+  #endif
+#endif
+
+// ---------------------------------------------------------------------------
+// WiFi + module ESP3D   (TRUOC DAY nam trong khoi PANEL_BT_UPLOAD - da chuyen ra day de
+// net_wifi.cpp dung duoc ca khi BT TAT; khoi BT van dung chung cac macro nay.)
+//   PANEL_ESP3D_SSID/PASS: AP cua chinh module ESP3D. DANG DUNG (mac dinh trong
+//        D:\arduino\ESP3D-direct-sd\esp3d\config.h:370-371):
+//            "Voron2308" / "v0r0n24s3cur3"
+//        (Neu sau nay doi qua web UI ESP3D thi sua 2 dong duoi. Bo gia tri khac tung gap:
+//         AP "ESP32-Access-Point"/"123456789" cua Arduino-ESP32, mang nha "Voron20623"/"v0r0n24s3cur3".)
+//        Day chi la gia tri MAC DINH: cau hinh nguoi dung luu trong NVS (Preferences, namespace
+//        "wifi") se duoc uu tien (xem net_wifi.cpp + PANEL_WIFI_NVS_NS).
+//   PANEL_ESP3D_HOST     : 192.168.0.1 = AP IP STATIC cua module (config.h:376 DEFAULT_IP_VALUE
+//                          {192,168,0,1} + DEFAULT_AP_IP_MODE = STATIC_IP_MODE -> config.cpp:954 ghi
+//                          vao EP_AP_IP_VALUE), nen IP nay CO DINH. Neu noi duoc host nay thi dung
+//                          luon, KHONG do; chi do khi no khong tra loi. De "" neu muon tu do tu dau.
+//   !!! CANH BAO TRUNG DAI IP: 192.168.0.0/24 TRUNG voi mang nha cua nguoi dung (router TP-Link
+//       cung thuong la 192.168.0.1). Panel chi noi AP cua module nen binh thuong khong sao, nhung
+//       neu sau nay panel noi mang nha ma van POST toi 192.168.0.1 thi se gui nham vao ROUTER.
+//       Vi vay truoc khi POST LUON phai kiem tra "day co PHAI ESP3D khong" bang cach gui lenh
+//       [ESP800] va doi phan hoi chua "FW version:" (KHONG duoc chi kiem "port 80 mo").
+//   PANEL_ESP3D_PATH     : endpoint upload cua ESP3D-direct-sd (esp3d/webinterface.cpp:386)
+//   PANEL_ESP3D_DIR      : ESP3D-direct-sd LUON ghi vao GOC the SD khi la admin
+//                          (AUTHENTICATION_FEATURE tat -> is_authenticated() = LEVEL_ADMIN);
+//                          gia tri nay chi de ghi tai lieu/doi chieu.
+// ---------------------------------------------------------------------------
+#ifndef PANEL_ESP3D_SSID
+  #define PANEL_ESP3D_SSID "Voron2308"     // AP cua module ESP3D (config.h:370)
+#endif
+#ifndef PANEL_ESP3D_PASS
+  #define PANEL_ESP3D_PASS "v0r0n24s3cur3" // (config.h:371)
+#endif
+#ifndef PANEL_ESP3D_HOST
+  #define PANEL_ESP3D_HOST "192.168.0.1"   // AP IP static cua module (config.h:376); "" = tu do
+#endif
+#ifndef PANEL_ESP3D_PORT
+  #define PANEL_ESP3D_PORT 80
+#endif
+#ifndef PANEL_ESP3D_PATH
+  #define PANEL_ESP3D_PATH "/files"
+#endif
+#ifndef PANEL_ESP3D_DIR
+  #define PANEL_ESP3D_DIR  "/"
+#endif
+
+// ---------------------------------------------------------------------------
+// net_wifi: NVS + kich thuoc dem + thoi gian (tat ca chi co tac dung khi PANEL_WIFI_MGMT=1)
+// ---------------------------------------------------------------------------
+#ifndef PANEL_WIFI_NVS_NS
+  #define PANEL_WIFI_NVS_NS   "wifi"    // namespace Preferences (NVS) - rieng, khong dung cua WiFi core
+#endif
+#ifndef PANEL_WIFI_SSID_MAX
+  #define PANEL_WIFI_SSID_MAX 32        // chuan 802.11: SSID toi da 32 ky tu (+1 cho '\0')
+#endif
+#ifndef PANEL_WIFI_PASS_MAX
+  #define PANEL_WIFI_PASS_MAX 64        // WPA2 8..63 ky tu (+1); de 64 de chua ca PSK dang hex
+#endif
+#ifndef PANEL_WIFI_SCAN_MAX
+  #define PANEL_WIFI_SCAN_MAX 16        // so mang LUU LAI sau khi quet (sap xep RSSI manh truoc)
+#endif
+#ifndef PANEL_WIFI_RETRY_MS
+  #define PANEL_WIFI_RETRY_MS 8000u     // thu ket noi lai moi 8 s khi dang mat (khong chan loop)
+#endif
+#ifndef PANEL_WIFI_MIN_HEAP
+  #define PANEL_WIFI_MIN_HEAP  (72u * 1024u)    // heap toi thieu TRUOC khi bat WiFi STA
+#endif
+#ifndef PANEL_WIFI_MIN_BLOCK
+  #define PANEL_WIFI_MIN_BLOCK (32u * 1024u)    // khoi LIEN TUC lon nhat toi thieu cho lwip/WiFi
+#endif
+
+// ---------------------------------------------------------------------------
+// GIA TRI MAC DINH GOI Y (chi dung khi NVS con TRONG): mang nha cua nguoi dung.
+//   Nguoi dung doi duoc tu trang WiFi settings (net_wifi_connect(..., save=true) -> ghi NVS);
+//   khi do gia tri o day KHONG con duoc dung nua.
+// ---------------------------------------------------------------------------
+#ifndef PANEL_WIFI_SSID_DEF
+  #define PANEL_WIFI_SSID_DEF "TP-Link_31A0"    // mang nha 2.4 GHz (ESP32 khong co 5 GHz)
+#endif
+#ifndef PANEL_WIFI_PASS_DEF
+  #define PANEL_WIFI_PASS_DEF "89278062"
+#endif
+
+// ---------------------------------------------------------------------------
+// UPLOAD QUA WiFi: PANEL TU LAM WEB SERVER (net_upload_http.cpp) -- xem README 9.21
+//   PC/dien thoai -> WiFi -> http://<panel>/ -> POST /upload -> panel ghi /btup/<ten>.tmp
+//   -> panel TU DAY sang ESP3D (dung lai dung pha 2 cua duong BT) -> M22/M21 -> xoa file tam.
+//   MAC DINH: 1 voi CYD, nhung TU DONG = 0 khi PANEL_BT_UPLOAD=1 (BT va WiFi KHONG the cung luc:
+//   Bluedroid ~100 KB + WiFi ~45 KB khong du cho trong heap). Muon dung WiFi -> tat BT.
+// ---------------------------------------------------------------------------
+#ifndef PANEL_WIFI_UPLOAD
+  #if defined(PANEL_BOARD_CYD)
+    #define PANEL_WIFI_UPLOAD 1
+  #else
+    #define PANEL_WIFI_UPLOAD 0
+  #endif
+#endif
+#if defined(PANEL_BT_UPLOAD) && PANEL_BT_UPLOAD && PANEL_WIFI_UPLOAD
+  #undef  PANEL_WIFI_UPLOAD
+  #define PANEL_WIFI_UPLOAD 0    // BT dang bat => khong the chay web server WiFi cung luc
+#endif
+#if PANEL_WIFI_UPLOAD && !PANEL_WIFI_MGMT
+  #undef  PANEL_WIFI_MGMT
+  #define PANEL_WIFI_MGMT 1      // web server can net_wifi (quan ly WiFi)
+#endif
+
+#if PANEL_WIFI_UPLOAD
+#ifndef PANEL_HTTP_PORT
+  #define PANEL_HTTP_PORT 80                // cong web server tren panel
+#endif
+// Token bao mat (giong duong BT): phai co trong query ?token=... hoac header X-Panel-Token.
+// De "" = KHONG kiem (khong khuyen nghi). Mac dinh dung lai token cua duong BT.
+#ifndef PANEL_HTTP_TOKEN
+  #define PANEL_HTTP_TOKEN "TBT-3D-up"
+#endif
+// Ten mDNS cua panel: PC/ dien thoai vao http://TBTPANEL.local/ (khong can biet IP).
+// ESPmDNS ton ~2 KB DRAM + ~10 KB flash. Dat PANEL_HTTP_USE_MDNS 0 de TAT.
+#ifndef PANEL_HTTP_USE_MDNS
+  #define PANEL_HTTP_USE_MDNS 1
+#endif
+#ifndef PANEL_HTTP_MDNS_NAME
+  #define PANEL_HTTP_MDNS_NAME "TBTPANEL"
+#endif
+// Cac macro dung chung voi duong BT (BT block ben duoi cung khai bao qua #ifndef nen khong trung):
+//   danh sach IP ung vien ESP3D + nhip theo doi the TF nong (net_esp3d.cpp dung).
+#ifndef PANEL_ESP3D_IP_LIST
+  #define PANEL_ESP3D_IP_LIST "192.168.4.1,192.168.0.1,192.168.1.1,192.168.1.50,192.168.0.50"
+#endif
+#ifndef PANEL_SD_CHECK_MS
+  #define PANEL_SD_CHECK_MS 1000u    // nhip kiem the con do (chi khi dang ranh)
+#endif
+#ifndef PANEL_SD_RETRY_MS
+  #define PANEL_SD_RETRY_MS 2500u    // nhip thu mount lai khi dang mat the
+#endif
+// ESP3D o dau so voi panel:
+//   0 = ESP3D chay AP+STA (AP "Voron2308" van phat + join them mang nha) => panel POST toi IP LAN
+//       cua ESP3D, KHONG phai doi mang. (KHUYEN NGHI - xem README 9.21)
+//   1 = ESP3D CHI phat AP: panel phai TAM doi sang AP ESP3D de POST roi quay ve mang nha.
+#ifndef PANEL_ESP3D_VIA_AP
+  #define PANEL_ESP3D_VIA_AP 0
+#endif
+// Che do 1: AP cua ESP3D (panel join tam) - dung lai SSID/PASS cua module ESP3D o tren.
+#ifndef PANEL_ESP3D_AP_SSID
+  #define PANEL_ESP3D_AP_SSID PANEL_ESP3D_SSID
+#endif
+#ifndef PANEL_ESP3D_AP_PASS
+  #define PANEL_ESP3D_AP_PASS PANEL_ESP3D_PASS
+#endif
+// Che do 0: IP cua ESP3D trong mang nha. "" = tu do (mDNS/gateway/danh sach - nhu duong BT).
+#ifndef PANEL_ESP3D_LAN_HOST
+  #define PANEL_ESP3D_LAN_HOST ""           // vd "192.168.1.50"; "" = tu do
+#endif
+// Cho phep nhan file khi Marlin dang in? 0 = tu choi (an toan: ESP3D gianh bus SPI the SD).
+#ifndef PANEL_HTTP_ALLOW_WHILE_PRINTING
+  #define PANEL_HTTP_ALLOW_WHILE_PRINTING 0
+#endif
+// Tran kich thuoc 1 file nhan qua HTTP (byte) - chan nguoi dung gui file qua lon (day the TF).
+#ifndef PANEL_HTTP_MAX_BYTES
+  #define PANEL_HTTP_MAX_BYTES (256u * 1024u * 1024u)   // 256 MB
+#endif
+// ---- Thoi gian / gioi han cua net_esp3d (day file len ESP3D tu web server) ----
+#ifndef PANEL_HTTP_WIFI_WAIT_MS
+  #define PANEL_HTTP_WIFI_WAIT_MS 15000u    // cho WiFi ket noi truoc khi POST (che do STA)
+#endif
+#ifndef PANEL_HTTP_AP_WAIT_MS
+  #define PANEL_HTTP_AP_WAIT_MS   12000u    // cho khi doi sang AP cua ESP3D (PANEL_ESP3D_VIA_AP=1)
+#endif
+#ifndef PANEL_HTTP_PROBE_MS
+  #define PANEL_HTTP_PROBE_MS     1500u     // timeout cho moi ung vien IP ESP3D ([ESP800])
+#endif
+#ifndef PANEL_HTTP_HTTP_TIMEOUT_MS
+  #define PANEL_HTTP_HTTP_TIMEOUT_MS 8000u  // timeout moi lan doc/ghi socket
+#endif
+#ifndef PANEL_HTTP_POST_TIMEOUT_MS
+  #define PANEL_HTTP_POST_TIMEOUT_MS 300000u // tran ca phien POST (5 phut)
+#endif
+#ifndef PANEL_HTTP_POST_RETRY
+  #define PANEL_HTTP_POST_RETRY    1        // so lan POST LAI khi loi ket noi
+#endif
+#ifndef PANEL_HTTP_POST_RETRY_MS
+  #define PANEL_HTTP_POST_RETRY_MS 2000u    // cho giua 2 lan POST lai
+#endif
+#ifndef PANEL_HTTP_REPLY_MAX
+  #define PANEL_HTTP_REPLY_MAX (24u * 1024u) // tran doc phan hoi ESP3D
+#endif
+#ifndef PANEL_HTTP_SDWAIT_MS
+  #define PANEL_HTTP_SDWAIT_MS     800u     // cho Marlin xu ly M22/M21 truoc khi xin lai danh sach file
+#endif
+#ifndef PANEL_HTTP_HEAP_MIN
+  #define PANEL_HTTP_HEAP_MIN      (20u * 1024u)  // heap duoi muc nay -> tu choi phien upload moi
+#endif
+
+// ---------------------------------------------------------------------------
+// The TF cua CYD -- VSPI, BUS RIENG VOI LCD (LCD dung HSPI):
+//   tools/tft_setup/User_Setup.h:56-57 "CYD: LCD o HSPI (VSPI de danh cho khe the SD:
+//   CS 5 / MOSI 23 / MISO 19 / SCLK 18)" + "#define USE_HSPI_PORT".
+//   Cam ung XPT2046 la chan rieng (25/32/39/33/36) -> khong dung bus nay.
+//   THE PHAI LA FAT32 (SD cua ESP32/Arduino core 2.0.17 khong mount exFAT).
+// ---------------------------------------------------------------------------
+#define PANEL_SD_SCK   18
+#define PANEL_SD_MISO  19
+#define PANEL_SD_MOSI  23
+#define PANEL_SD_CS     5
+#define PANEL_SD_HZ    20000000      // 20 MHz: an toan cho khe TF cua CYD
+#define PANEL_BTUP_DIR "/btup"       // thu muc file tam (Marlin chi liet ke goc the -> khong thay)
+#endif  // PANEL_WIFI_UPLOAD
+#endif  // PANEL_WIFI_MGMT
 
 #if defined(PANEL_BT_UPLOAD) && PANEL_BT_UPLOAD
 
@@ -239,44 +475,10 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// WiFi + module ESP3D
-//   PANEL_ESP3D_SSID/PASS: AP cua chinh module ESP3D. DANG DUNG (mac dinh trong
-//        D:\arduino\ESP3D-direct-sd\esp3d\config.h:370-371):
-//            "Voron2308" / "v0r0n24s3cur3"
-//        (Neu sau nay doi qua web UI ESP3D thi sua 2 dong duoi. Bo gia tri khac tung gap:
-//         AP "ESP32-Access-Point"/"123456789" cua Arduino-ESP32, mang nha "Voron20623"/"v0r0n24s3cur3".)
-//   PANEL_ESP3D_HOST     : 192.168.0.1 = AP IP STATIC cua module (config.h:376 DEFAULT_IP_VALUE
-//                          {192,168,0,1} + DEFAULT_AP_IP_MODE = STATIC_IP_MODE -> config.cpp:954 ghi
-//                          vao EP_AP_IP_VALUE), nen IP nay CO DINH. Neu noi duoc host nay thi dung
-//                          luon, KHONG do; chi do khi no khong tra loi. De "" neu muon tu do tu dau.
-//   !!! CANH BAO TRUNG DAI IP: 192.168.0.0/24 TRUNG voi mang nha cua nguoi dung (router TP-Link
-//       cung thuong la 192.168.0.1). Panel chi noi AP cua module nen binh thuong khong sao, nhung
-//       neu sau nay panel noi mang nha ma van POST toi 192.168.0.1 thi se gui nham vao ROUTER.
-//       Vi vay truoc khi POST LUON phai kiem tra "day co PHAI ESP3D khong" bang cach gui lenh
-//       [ESP800] va doi phan hoi chua "FW version:" (KHONG duoc chi kiem "port 80 mo").
-//   PANEL_ESP3D_PATH     : endpoint upload cua ESP3D-direct-sd (esp3d/webinterface.cpp:386)
-//   PANEL_ESP3D_DIR      : ESP3D-direct-sd LUON ghi vao GOC the SD khi la admin
-//                          (AUTHENTICATION_FEATURE tat -> is_authenticated() = LEVEL_ADMIN);
-//                          gia tri nay chi de ghi tai lieu/doi chieu.
+// WiFi + module ESP3D: DA CHUYEN len khoi `#if PANEL_WIFI_MGMT` (dau file) de net_wifi.cpp
+// dung duoc ca khi PANEL_BT_UPLOAD=0. Khoi BT nay dung chung cac macro do
+// (PANEL_ESP3D_SSID/PASS/HOST/PORT/PATH/DIR, PANEL_WIFI_MIN_HEAP/MIN_BLOCK).
 // ---------------------------------------------------------------------------
-#ifndef PANEL_ESP3D_SSID
-  #define PANEL_ESP3D_SSID "Voron2308"     // AP cua module ESP3D (config.h:370)
-#endif
-#ifndef PANEL_ESP3D_PASS
-  #define PANEL_ESP3D_PASS "v0r0n24s3cur3" // (config.h:371)
-#endif
-#ifndef PANEL_ESP3D_HOST
-  #define PANEL_ESP3D_HOST "192.168.0.1"   // AP IP static cua module (config.h:376); "" = tu do
-#endif
-#ifndef PANEL_ESP3D_PORT
-  #define PANEL_ESP3D_PORT 80
-#endif
-#ifndef PANEL_ESP3D_PATH
-  #define PANEL_ESP3D_PATH "/files"
-#endif
-#ifndef PANEL_ESP3D_DIR
-  #define PANEL_ESP3D_DIR  "/"
-#endif
 
 // ---------------------------------------------------------------------------
 // TU DO IP MODULE ESP3D (chi chay khi bat dau PHA 2, ket qua duoc CACHE lai)
@@ -350,14 +552,23 @@
 //   bo nho: no goi esp_spp_deinit + esp_bluedroid_disable/deinit + btStop()
 //   (BluetoothSerial.cpp:710-751; btStop -> esp_bt_controller_disable/deinit o esp32-hal-bt.c:62-88).
 // ---------------------------------------------------------------------------
-#ifndef PANEL_WIFI_MIN_HEAP
-  #define PANEL_WIFI_MIN_HEAP  (72u * 1024u)    // heap toi thieu TRUOC khi bat WiFi STA
-#endif
-#ifndef PANEL_WIFI_MIN_BLOCK
-  #define PANEL_WIFI_MIN_BLOCK (32u * 1024u)    // khoi LIEN TUC lon nhat toi thieu cho lwip/WiFi
-#endif
+// PANEL_WIFI_MIN_HEAP / PANEL_WIFI_MIN_BLOCK: da chuyen len khoi `#if PANEL_WIFI_MGMT` (dau file)
+// vi net_wifi.cpp (cua an toan RAM truoc khi bat WiFi) dung chung.
 #ifndef PANEL_BT_END_MIN_GAIN
   #define PANEL_BT_END_MIN_GAIN (60u * 1024u)   // SerialBT.end() phai tra >= muc nay (chi de CANH BAO)
+#endif
+// ---------------------------------------------------------------------------
+// HOAN INIT RA SAU KHI MAN HINH DA HIEN (nguoi dung phan nan boot lau) - xem README 9.17
+//   panel_bt_upload_begin() chi DAT CO; viec that (mount the + bat BT, ~2-3 s) chay trong
+//   panel_bt_upload_task() theo TUNG NHIP, co lop phu + khoa UI + dong tien do, va tu goi
+//   lv_timer_handler() de ve duoc. Chia nhieu nhip de main loop khong bi doi qua lau
+//   (panel coi mat PUSH sau PANEL_LINK_TIMEOUT_MS = 3 s).
+// ---------------------------------------------------------------------------
+#ifndef PANEL_BT_INIT_DELAY_MS
+  #define PANEL_BT_INIT_DELAY_MS 200u           // cho UI on dinh roi moi bat dau init
+#endif
+#ifndef PANEL_BT_INIT_OK_MS
+  #define PANEL_BT_INIT_OK_MS   1200u           // hien "SAN SANG" bao lau roi tu go lop phu
 #endif
 // The TF: theo doi nong (rut ra / cam vao) - xem README 9.12
 #ifndef PANEL_SD_CHECK_MS
@@ -366,21 +577,51 @@
 #ifndef PANEL_SD_RETRY_MS
   #define PANEL_SD_RETRY_MS    2500u            // nhip thu mount lai khi dang mat the
 #endif
+// ---------------------------------------------------------------------------
+// SPP SERVER / SDP RECORD (dien thoai-PC khong thay dich vu SPP - xem README 9.15):
+//   Core Arduino dang ky SPP server trong callback ESP_SPP_INIT_EVT va **BO QUA ma tra ve**
+//   (BluetoothSerial.cpp:271: `esp_spp_start_srv(...)` khong kiem tra) -> that bai la AM THAM.
+//   Vi vay firmware: (1) log khi thay ESP_SPP_INIT_EVT (kem heap/khoi lien tuc) va CANH BAO neu
+//   KHONG thay trong PANEL_BT_SPP_WAIT_MS; (2) neu PANEL_BT_SPP_RETRY=1 thi TU GOI LAI
+//   esp_spp_start_srv() 1 lan va LOG ma tra ve.
+//   LUU Y: esp_spp_start_srv() chi XEP HANG DOI (ESP_OK = da gui yeu cau, KHONG phai da dang ky).
+//   Muon biet chac co record hay khong: (a) CORE_DEBUG_LEVEL >= 2 de thay log loi core/Bluedroid,
+//   (b) thu tu Windows/dien thoai xem co thay dich vu SPP khong.
+#ifndef PANEL_BT_SPP_RETRY
+  #define PANEL_BT_SPP_RETRY 1                  // 1 = neu KHONG thay ESP_SPP_START_EVT thi TU DANG KY LAI
+#endif
+#ifndef PANEL_BT_SPP_WAIT_MS
+  #define PANEL_BT_SPP_WAIT_MS 2000u            // cho ESP_SPP_INIT_EVT/START_EVT bao lau truoc khi canh bao
+#endif
+// Du phong cuoi (README 9.19): neu SPP server VAN khong dang ky duoc sau khi thu lai (dien thoai/PC
+// se khong thay dich vu SPP => phai reset panel) thi TU KHOI DONG LAI panel de phien sau chac chan
+// noi duoc. 1 = bat (tu restart, khong can nguoi dung bam reset); 0 = chi bao loi trong log.
+// Mac dinh 0: chi bat khi do that thay ban va retry KHONG cuu duoc.
+#ifndef PANEL_BT_SPP_FAIL_REBOOT
+  #define PANEL_BT_SPP_FAIL_REBOOT 0
+#endif
+// Duong nhan du lieu SPP:
+//   1 = custom_data_callback (BluetoothSerial::onData): core goi callback CUA TA truc tiep voi ca
+//       goi (BluetoothSerial.cpp:337-338), KHONG qua queue 512 byte va khong day TUNG BYTE
+//       (bo luon gioi han 6 KB/s + loi "RX Full! Discarding" - xem README 9.16). => NHANH.
+//   0 = duong cu: task btup_rx hut queue bang read() (cham, chi de doi chieu khi can).
+#ifndef PANEL_BT_USE_DATA_CB
+  #define PANEL_BT_USE_DATA_CB 1
+#endif
 // WiFi: giu lai bao lau sau lan day cuoi roi tat (0 = tat ngay sau moi lan POST)
 #ifndef PANEL_ESP3D_KEEP_MS
   #define PANEL_ESP3D_KEEP_MS  0u               // 0 = tat WiFi ngay sau khi POST xong
 #endif
-// 2 buffer lam viec lay tu HEAP (khong phai bien tinh - xem panel_bt_upload.cpp):
+// 2 buffer lam vung dem lam viec lay tu HEAP (khong phai bien tinh - xem panel_bt_upload.cpp):
 //   vong dem BT -> loop (PHAI la luy thua cua 2) + khoi ghi xuong the TF.
-// GIU NHO: pha 1 ghi thang xuong the, pha 2 doc lai theo khoi -> khong can buffer lon; heap la
-// tai nguyen khan hiem nhat cua board (WiFi + BT Classic can ~80-130 KB heap luc chay).
-// Doi 2 so nay chi anh huong vong dem/khoi ghi, KHONG anh huong bien tinh hay kich thuoc file.
-//   Vong dem 4 KB = chiu duoc ~68 ms the ghi cham o 60 KB/s (du cho 1 khoi SD 2 KB).
-//   Neu log bao `drop=` > 0 thi tang PANEL_BT_RING_BYTES len 8192 (va nguoc lai, co the giam
-//   xuong 2048 neu can them heap).
-#define PANEL_BT_RING_BYTES     4096              // vong dem BT -> loop (luy thua cua 2)
-#define PANEL_BT_SD_CHUNK       2048              // khoi ghi xuong the TF (2 KB = 4 sector 512B)
-#define PANEL_BT_PROG_STEP      (64u * 1024u)     // bao tien do qua BT moi 64 KB
+//   12 KB (thay vi 8 KB) tu khi bat PANEL_BT_USE_DATA_CB: duong callback day CA GOI vao vong dem
+//   (khong con 512 byte cua core), nen vong dem phai du rong cho cua so dieu khien luong (script
+//   Windows gui toi da WindowKB = 12 KB dang bay). Doi lai: BT-ready heap ~30 KB thay vi ~34 KB,
+//   va 2 buffer nay duoc TRA LAI cho WiFi + cho lan SerialBT.begin() thu 2 (xem buf_release()).
+//   KHOI GHI 4 KB (thay vi 2 KB): FATFS ton thoi gian cho MOI lan write() -> giam so lan goi.
+#define PANEL_BT_RING_BYTES     12288             // vong dem BT -> loop (luy thua cua 2)
+#define PANEL_BT_SD_CHUNK       4096              // khoi ghi xuong the TF (4 KB)
+#define PANEL_BT_PROG_STEP      4096u             // bao tien do qua BT moi 4 KB (de DIEU KHIEN LUONG)
 #define PANEL_BT_IDLE_MS        3000              // kieu RAW: het du lieu 3 s -> ket thuc
 #define PANEL_BT_STALL_MS       8000              // kieu header: thieu du lieu 8 s -> loi
 #define PANEL_BT_SNIFF_MS       1500              // cho dong header "PUT ..." toi da 1.5 s

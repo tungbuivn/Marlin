@@ -415,13 +415,14 @@ python lcd_panel/tools/make_lvgl_icons.py
 >   nhiệt & quạt) rồi tự xin lại thông số. Hàng nút ở đáy: **`UP` · `DOWN` · `SAVE EEPROM`** (SAVE = `M500`).
 >   ⚠️ **KHÔNG còn dòng `Z offset mm`** (nó trùng `Probe Z mm` vì cùng là `probe.offset.z`, và từng gửi
 >   nhầm `M206 Z` = home offset) — chỉ dùng **`Probe Z mm` → `M851 Z`**.
-> * **Chữ tiếng Việt có dấu**: UI dùng font **Segoe UI 14** sinh riêng bằng `lv_font_conv`
->   (`lcd_panel/src/font_segoe_vn_14.c`, dải `0x1EA0-0x1EF9` + `Ă ă Đ đ Ơ ơ Ư ư`) — font Montserrat mặc
->   định của LVGL **không có dấu** nên nếu sinh lại font thì phải giữ đủ dải này.
+> * **Chữ tiếng Việt có dấu**: chỉ có ở **chế độ font 4** (`UI_MONO_FONT 4` — mặc định): font mono
+>   **tự sinh** `gfx4_font_robotomono` (dải `0x1EA0-0x1EF9` + `Ă ă Đ đ Ơ ơ Ư ư`) qua driver
+>   `lv_font_gfxfont` — xem `tools/ttf2gfxfont.py`. Các font sinh bằng `lv_font_conv` **đã xoá khỏi
+>   repo**; ở chế độ 0 chỉ còn Montserrat của LVGL nên **không hiện được dấu**.
 > * **FEED/FLOW**: sau mỗi lần `+/-` (gửi `M220`/`M221`) panel **tự xin lại thông số** nên con số trên màn
 >   cập nhật ngay (trước đây bị đứng ở 100%).
 > * **JOG**: X/Y nhích ở **`F3000` = 50 mm/s** (bằng tốc độ home), Z giữ **`F600` = 10 mm/s** (trần `M203 Z10`).
-| **INFO** | tên firmware, proto, frame/lỗi, `UI: LVGL 8.3 + encoder/touch`; `REFRESH FULL` → `PANEL_REQ_FULL` |
+| **INFO** | 11 dong thong tin that (FW/BOARD/UI/FONT/WIFI/PROTO/MARLIN/LINK/RX-ERR/SD+SYS); khong con nut REFRESH FULL |
 
 * **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`
   → Marlin gọi `ExtUI::setUserConfirmed()`. Thông báo (`panel.message`) tự đóng sau 6 s.
@@ -889,17 +890,19 @@ Bluetooth Classic kéo theo **~38 KB `.bss`/`.data` tĩnh** của thư viện SD
 libfreertos 5,0; liblwip 3,4; libmesh 2,9; libpp 2,9; libespcoredump 2,2; libnet80211 1,4;
 libcoexist 1,2; …). Vì vậy đã phải:
 
-**Số build thật (kiểm bằng build trong thư mục riêng, 0 warning):** `panel_esp32_cyd` →
-**RAM 122.040 B / 327.680 (37,2 %) · Flash 1.770.457 B / 3.145.728 (56,3 %)** ⇒ **trần DRAM biến tĩnh
-chỉ còn dư ~2,5 KB**. Riêng khi bật `-DPANEL_ESP3D_USE_MDNS=1` (thêm `ESPmDNS`): RAM **123.960 B
-(+1.920 B)** · Flash **1.797.105 B (+26,6 KB)** — vẫn link được nhưng chỉ còn **~0,6 KB** DRAM dự
-phòng, nên mặc định **để TẮT**.
+**Số build thật (kiểm bằng build trong thư mục riêng, 0 warning kể cả `-Wall`):** `panel_esp32_cyd`
+→ **RAM 103.440 B / 327.680 (31,6 %) · Flash 1.810.581 B / 3.145.728 (57,6 %)** ⇒ **trần DRAM biến
+tĩnh còn dư ~21 KB** (trước khi hạ `LV_MEM_SIZE` + buffer vẽ thì chỉ dư ~2,5 KB và **SPP server không
+đăng ký được** — xem 9.15). Riêng khi bật `-DPANEL_ESP3D_USE_MDNS=1`: RAM **+1.920 B** · Flash
+**+26,6 KB** (nay đã đủ chỗ nhưng vẫn mặc định TẮT vì tên mDNS của ESP3D không cố định).
 
 | Thay đổi | File | Ghi chú |
 |---|---|---|
 | 2 buffer làm việc (vòng đệm BT **4 KB** + khối ghi thẻ **2 KB**) **cấp phát từ heap** thay vì mảng tĩnh | `src/panel_bt_upload.cpp` | cấp 1 lần trong `panel_bt_upload_begin()` (task BT cần vòng đệm cả khi rảnh). Trước đó để mảng tĩnh 8 KB + 4 KB thì linker báo `dram0_0_seg overflowed by 28144 bytes` |
-| `LV_MEM_SIZE` 48 KB → **30 KB** bằng file cấu hình RIÊNG | **mới** `src/lv_conf_panel.h` + `-DLV_CONF_PATH=lv_conf_panel.h` (chỉ env CYD) | `lv_conf_panel.h` **khác `lv_conf.h` đúng 1 dòng cấu hình**: `#undef LV_MEM_SIZE` + `#define LV_MEM_SIZE (30U * 1024U)` (phần còn lại chỉ là chú thích). **KHÔNG sửa trực tiếp `lv_conf.h`** vì: (1) file đó là cấu hình CHUNG cho cả 3 env LVGL (F411/F407/CYD) — hạ pool ở đó sẽ hạ luôn cả 2 board STM32 nơi không có vấn đề DRAM; (2) `lv_conf_panel.h` include `lv_conf.h` rồi chỉ ghi đè 1 macro ⇒ vẫn **một nguồn cấu hình duy nhất**, không copy file |
-| Bảng phân vùng `default.csv` (app 1.25 MB) → **`huge_app.csv`** (app 3 MB) | `platformio.ini` (env `panel_esp32_cyd`) | WiFi + BT Classic + LVGL + TFT_eSPI = **1,77 MB flash** > 1,25 MB |
+| `LV_MEM_SIZE` 48 KB → **24 KB** bằng file cấu hình RIÊNG | **mới** `src/lv_conf_panel.h` + `-DLV_CONF_PATH=lv_conf_panel.h` (chỉ env CYD) | `lv_conf_panel.h` **khác `lv_conf.h` đúng 1 dòng cấu hình**: `#undef LV_MEM_SIZE` + `#define LV_MEM_SIZE (24U * 1024U)` (phần còn lại chỉ là chú thích). Pool chỉ dùng ~17,7 KB (`lvmem=` trong log 1 Hz) ⇒ còn ~6 KB dự phòng. **KHÔNG sửa trực tiếp `lv_conf.h`** vì: (1) file đó là cấu hình CHUNG cho cả 3 env LVGL (F411/F407/CYD) — hạ pool ở đó sẽ hạ luôn cả 2 board STM32 nơi không có vấn đề DRAM; (2) `lv_conf_panel.h` include `lv_conf.h` rồi chỉ ghi đè 1 macro ⇒ vẫn **một nguồn cấu hình duy nhất**, không copy file |
+| Buffer vẽ LVGL `320×40×2` → **`320×20×2`** (nhánh UI làm) | `src/ui_lvgl.cpp` | trả **~12,8 KB** DRAM tĩnh |
+| Bảng phân vùng `default.csv` (app 1.25 MB) → **`huge_app.csv`** (app 3 MB) | `platformio.ini` (env `panel_esp32_cyd`) | WiFi + BT Classic + LVGL + TFT_eSPI = **1,8 MB flash** > 1,25 MB |
+| `-DCORE_DEBUG_LEVEL=2` (thay vì 0) | `platformio.ini` | ĐỂ THẤY `log_e` của core Arduino — với mức 0 thì `log_e` bị biên thành rỗng nên lỗi `spp init failed` / `spp register failed` **vô hình** (xem 9.15). Đặt lại 0 khi mọi thứ chạy ổn |
 
 **Vì sao đổi bảng phân vùng mà hiệu chuẩn cảm ứng KHÔNG mất:** cả hai file đều khai báo phân vùng
 `nvs` ở **cùng offset `0x9000`, size `0x5000`** (20 KB), chỉ khác phần `app`/`spiffs`:
@@ -934,15 +937,300 @@ thuộc nhánh UI khác.
 ghi thẳng xuống thẻ nên không cần buffer lớn) — đổi lại vòng đệm chỉ chịu được ~34 ms thẻ ghi chậm
 thay vì ~68 ms, nên theo dõi `drop=` trong log; nếu `drop=` > 0 thì tăng lại.
 
-**Heap lúc chạy:** tổng DRAM dùng được = `0x40000000 − 0x3FFBDB5C` = 271.524 B; trừ **122.040 B** biến
-tĩnh (số build thật) → **~146 KB heap lúc boot** (trước khi FreeRTOS/WiFi/BT cấp phát). WiFi STA +
-Bluetooth Classic (Bluedroid) lấy của heap **~80–130 KB** tuỳ lúc ⇒ **heap tự do sau khi cả hai đã
-kết nối có thể chỉ còn ~10–60 KB**, thấp hơn ngưỡng `PANEL_BT_HEAP_WARN` = 60 KB. Log 1 Hz in
-`heap=` (hiện tại) và `heapmin=` (thấp nhất kể từ lúc bắt đầu phiên gần nhất — có tính cả lúc đang
-đẩy file), cộng dòng `!! CANH BAO HEAP THAP` khi dưới 60 KB. **Đây là số ước tính từ kích thước
-biến tĩnh + tài liệu Bluedroid, KHÔNG đo được trên máy thật từ đây** — phải đọc `heap=`/`heapmin=`
-trên COM7 sau khi nạp. Nếu heap tự do < 25 KB: cắt buffer như bảng trên, và/hoặc trả DRAM bằng cách
-cho `ui_lvgl.cpp` cấp buffer vẽ từ heap.
+**Heap lúc chạy:** tổng DRAM dùng được = `0x40000000 − 0x3FFBDB5C` = 271.524 B; trừ **103.440 B** biến
+tĩnh (số build thật) → **~164 KB heap lúc boot** (trước khi FreeRTOS/WiFi/BT cấp phát). **Số ĐO THẬT
+trên máy** (trước khi hạ DRAM): sau `ui_lvgl_begin()` heap = **154.004 B**, và **ngay sau khi BT Classic
+lên chỉ còn 24.840 B** (Bluedroid ăn ~99,5 KB) — lúc đó **SPP server không đăng ký được** (README 9.15).
+Sau khi hạ `LV_MEM_SIZE` (30→24 KB) + buffer vẽ (nhánh UI) ⇒ **trả lại ~18,7 KB DRAM tĩnh** ⇒ dự kiến
+**heap ngay sau khi BT lên ≈ 43,5 KB** (≥ mục tiêu 40 KB) và khối liên tục lớn nhất ≈ 34 KB.
+Log 1 Hz in `heap=`, `heapmin=`, `lvmem=free/total`, `btcyc=`, `sd=`, `spp=`, `drop=`, cộng dòng
+`!! CANH BAO HEAP THAP` khi dưới 60 KB. Nếu heap tự do < 25 KB: bỏ vòng đệm BT xuống 2 KB, giảm
+`TASK_STACK`, hoặc để LVGL cấp pool từ heap.
+
+### 9.15 🔴 SPP KHÔNG CÓ RECORD (điện thoại/PC không thấy dịch vụ) — chẩn đoán & cách xử lý
+
+> **⚠️ ĐÍNH CHÍNH (đo lại bằng script socket `bt-upload-socket.ps1`, xem §9.14):** kết luận cũ
+> *"không có kênh RFCOMM nào ⇒ SPP server không lên"* là **SAI** — nó do **lỗi layout/byte-order ở
+> phía script Windows**, không phải lỗi panel. Sau khi sửa (`SOCKADDR_BTH` pack=1 / 30 byte,
+> `btAddr` = MAC đọc như số hex bình thường), **kênh RFCOMM 1 NỐI ĐƯỢC** và panel **trả lời đúng giao
+> thức** (`ERR heap thap (16484 B)`) ⇒ **SPP server của panel CÓ chạy**. Cái panel thiếu chỉ là
+> **record SDP công khai** (nên Windows không tạo cổng COM) — vẫn upload được nếu nối thẳng kênh 1.
+
+**Bằng chứng thật từ Windows** (script socket, `SOCKADDR_BTH`/`WSAQUERYSET` đúng layout):
+```
+port=0 + serviceClassId SPP -> connect() HET THOI GIAN 12000..30000 ms
+SDP: WSALookupServiceBegin(NS_BTH, '(48:AF:F3:70:B1:FA)') -> 10108 (0x277C) No such service is known
+     (ca khi co LUP_FLUSHCACHE: query that su qua khong trung gian, mat ~5..35 s)
+quet kenh RFCOMM 1..30 (moi kenh 2500 ms) -> KENH 1 NOI DUOC (~0,9 s), cac kenh khac timeout
+Device inquiry (NS_BTH + LUP_CONTAINERS) -> thay TBT-PANEL (bt=0x48AFF370B1FA, authenticated=1)
+```
+⇒ Thiết bị **có** Bluetooth, **pair được**, **SPP server có chạy** (kênh RFCOMM 1 nhận kết nối và
+panel trả lời giao thức), nhưng **không có record SPP trong SDP** ⇒ Windows không tạo cổng COM
+(Control Panel: *"does not have a serial port service running"*).
+
+**Chặn hiện tại KHÔNG nằm ở kết nối mà ở RAM của panel** (đo được, cùng buổi):
+```
+[BTUP] heap thap (16484 B) -> tu choi phien moi          <- log COM7
+[panel] ERR heap thap (16484 B)                          <- panel tra qua BT cho client
+heap luc ranh (BT bat, chua co client) = 21.552 B ; khi CO client SPP = 16.476 B
+PANEL_BT_HEAP_MIN = 20 KB (panel_config.h:416)           -> thieu ~4 KB
+MTU RFCOMM 128 / 672 / 990 (SO_BTH_MTU) -> heap panel 16.460 / 16.448 / 16.476 B (khong doi)
+```
+⇒ Muốn upload chạy được phải **sửa phía firmware panel**: hạ `PANEL_BT_HEAP_MIN` (ví dụ 14 KB) hoặc
+trả thêm ~4 KB heap (§9.8). Script Windows đã đúng và sẽ chạy ngay khi qua được cổng RAM này.
+
+**Nguyên nhân (đọc mã nguồn core + IDF, không phải phỏng đoán):**
+
+| Bằng chứng | Ý nghĩa |
+|---|---|
+| `BluetoothSerial.cpp:262-272`: trong callback `ESP_SPP_INIT_EVT`, core gọi `esp_spp_start_srv(ESP_SPP_SEC_NONE, ESP_SPP_ROLE_SLAVE, 0, _spp_server_name)` rồi **`break`** — **KHÔNG kiểm tra mã trả về** | Đăng ký SPP server thất bại ⇒ **im lặng tuyệt đối** |
+| `_init_bt()` chỉ kiểm `esp_spp_register_callback` + `esp_spp_init` (`:669-677`) và với `CORE_DEBUG_LEVEL=0` thì `log_e(...)` **bị biên thành rỗng** | Lỗi `spp init failed` / `spp register failed` **vô hình** trong log — vì vậy mới không ai biết |
+| `esp_spp_api.c`: `esp_spp_start_srv()` chỉ `btc_transfer_context(...)` → trả `ESP_OK` khi **đã xếp hàng đợi**, không phải khi đã đăng ký; không có API nào truy vấn record cục bộ (`Stack`/`sdp_api.h` không expose trong SDK cài đặt) | Không thể biết chắc bằng mã trả về; phải suy ra từ log core/Bluedroid + thử từ máy ngoài |
+| Số đo: heap ngay sau khi BT lên **24.840 B**, khối liên tục lớn nhất **15.348 B** | Bluedroid Classic đã ăn ~99,5 KB; SPP/SDP cần thêm vài KB **liên tục** ⇒ nghi hết RAM |
+
+**Đã sửa / thêm trong firmware:**
+
+1. `LV_MEM_SIZE` **30 KB → 24 KB** (`src/lv_conf_panel.h`) ⇒ trả **6.144 B** DRAM; cộng với việc nhánh
+   UI hạ buffer vẽ `320×40 → 320×20` (**~12,8 KB**) ⇒ tổng **~18,7 KB** trả về heap (số build thật:
+   RAM biến tĩnh **122.184 → 103.440 B**).
+2. `-DCORE_DEBUG_LEVEL=2` (thay vì 0) trong `platformio.ini` ⇒ **thấy được `log_e` của core Arduino**
+   (nếu `esp_spp_init`/`esp_spp_start_srv` lỗi, sẽ có dòng `[E][BluetoothSerial.cpp:…]`).
+3. Theo dõi `ESP_SPP_INIT_EVT` bằng callback riêng và log:
+   * có sự kiện ⇒ `[BTUP] SPP: da nhan ESP_SPP_INIT_EVT sau N ms -> SPP stack init OK ... heap=…`;
+   * **không** có trong `PANEL_BT_SPP_WAIT_MS` (2 s) ⇒ `[BTUP] !! CANH BAO: KHONG thay ESP_SPP_INIT_EVT ...`
+     (đây là dấu hiệu SPP init thất bại).
+4. Log heap + khối liên tục **ngay trước và ngay sau** `SerialBT.begin()`.
+5. `-DPANEL_BT_SPP_RETRY=1` (mặc định **0**): tự gọi lại `esp_spp_start_srv()` một lần sau khi thấy
+   `ESP_SPP_INIT_EVT` và **log mã trả về** (`spp_err_str()` dịch cả `ESP_ERR_NO_MEM`). Mặc định để 0 vì
+   gọi lại khi server **đã** lên có thể tạo record SDP thứ hai; chỉ bật khi biết chắc SPP không lên.
+6. Log 1 Hz thêm `spp=1/0` (đã thấy `ESP_SPP_INIT_EVT` chưa).
+
+**Cách kiểm trên máy thật:** nạp → xem log có `SPP: da nhan ESP_SPP_INIT_EVT ... heap=…` (mong đợi
+heap ~43 KB) và **không** có `CANH BAO ... KHONG thay ESP_SPP_INIT_EVT`; sau đó chạy script socket của
+Windows **không cần SPP record / cổng COM**:
+`.\lcd_panel\tools\bt-upload-socket.ps1 -File .\benchy.gco -Channel 1` → phải thấy `OK <ten> <so_byte>`,
+`PROG …`, `DONE …`. (Nếu vẫn `ERR heap thap` thì chưa qua được cổng RAM 20 KB ở trên.) Có SPP record
+thì Windows mới tạo cổng COM Outgoing để dùng `lcd_panel/tools/bt-upload.ps1`.
+
+**Phương án dự phòng (nếu SPP vẫn không lên được):**
+* (a) **Upload qua WiFi/ESP3D** — đường này **đang chạy được ngay** (không cần BT): phần "pha 2" đã có
+  (POST multipart lên ESP3D + M22/M21); chỉ cần nạp file lên panel bằng cách khác (thẻ TF của CYD,
+  hoặc mở rộng sau: HTTP server nhỏ trên panel để nhận file qua WiFi).
+* (b) **BLE (GATT) thay Classic SPP** — BLE tốn ít RAM hơn Classic (~20-30 KB thay vì ~100 KB) và
+  không cần SDP record RFCOMM, nhưng **chậm (5–20 KB/s)** ⇒ chỉ hợp file nhỏ (< 1 MB).
+* (c) **Bỏ tính năng BT**, giữ đường WiFi/ESP3D.
+
+### 9.16 MẤT BYTE KHI GỬI BT (queue 512 B của Bluedroid) — đã sửa
+
+**Số đo thật (sau khi SPP đã lên):** gửi `V300_Part3_proj.gcode` 63.472 B từ Windows (20,6 KB/s, khối
+1 KB) → panel báo `ERR thieu du lieu (57101/63472 B)`; phía Windows đã gửi **đủ 63.472 B trong 3,0 s**.
+
+**Chẩn đoán:** thông báo là **`thieu du lieu`** (đường *stall*) chứ **không phải**
+`mat du lieu BT (vong dem day)` ⇒ **`drop=` = 0** ⇒ vòng đệm của panel **không** tràn. Byte mất ở
+**queue nhận 512 byte của Bluedroid**:
+
+| Bằng chứng | Ý nghĩa |
+|---|---|
+| `BluetoothSerial.cpp:337-345`: `for (i…data_ind.len) if (xQueueSend(_spp_rx_queue, data_ind.data+i, 0) != pdTRUE) { log_e("RX Full! Discarding %u bytes", …); break; }` | Queue chỉ **512 byte** và đẩy **từng byte** với timeout 0 ⇒ khi đầy thì **DISCARD cả phần đuôi của gói** (gói RFCOMM ~1 KB > 512 B) — và dòng `log_e` đó **bị vô hình hoá bởi `CORE_DEBUG_LEVEL=0`** (nay bật mức 2 nên thấy trực tiếp) |
+| Hàm hút BT cũ: `while (available()>0) read(); vTaskDelay(1);` | Task **ngủ 1 ms mỗi vòng**; gói ~1 KB đến đúng lúc đang ngủ ⇒ queue 512 B đầy giữa chừng ⇒ mất ~478 B/gói. Đây là gốc rễ — **không phải** thẻ TF chậm |
+
+**Đã sửa (3 lớp):**
+1. **Hàm hút BT đọc BLOCKING**: `read()` (timeout 20 ms) **thức dậy NGAY** khi có byte đầu tiên rồi hút
+   nốt phần còn lại trong cùng lượt (`while (available())`) ⇒ queue 512 B luôn gần rỗng, gói ~1 KB không
+   còn bị cắt đuôi. Handshake `s_bt_pump_parked` giữ nguyên (task báo đã ra khỏi vùng đọc trước khi main
+   gọi `SerialBT.end()`; với timeout 20 ms thì chờ ≤ 20 ms).
+2. **Vòng đệm 4 KB → 8 KB** (`PANEL_BT_RING_BYTES`) + **khối ghi thẻ 2 KB → 4 KB**
+   (`PANEL_BT_SD_CHUNK`) ⇒ thêm độ dư cho lúc `loop()` bận ghi thẻ/vẽ màn hình, và ít lần gọi `write()`
+   hơn (FATFS tốn thời gian mỗi lần gọi).
+3. **Điều khiển luồng end-to-end**: `PROG` báo **mỗi 4 KB** (`PANEL_BT_PROG_STEP`) và **script Windows
+   chờ theo `PROG`** — cửa sổ byte đang bay `-WindowKB 8` (mặc định) ⇒ panel không bị dồn. Script in
+   `panel da nhan … KB` và cảnh báo nếu số panel xác nhận < số đã gửi.
+
+**Heap sau thay đổi** (tính từ số đo thật 40.072 B lúc BT sẵn sàng): ring +4 KB, khối ghi +2 KB ⇒
+**≈ 34 KB** ngay sau khi BT lên (mục tiêu ≥ 30 KB ✓); pha 2 (WiFi) vẫn ~127 KB vì `SerialBT.end()` trả
+~99,5 KB. Muốn thêm heap: hạ `PANEL_BT_RING_BYTES` về 4096 (1 dòng).
+
+**Kiểm trên máy thật:** log 1 Hz phải có `drop=0`; với `CORE_DEBUG_LEVEL=2`, nếu còn mất byte sẽ thấy
+`[E][BluetoothSerial.cpp:…] RX Full! Discarding…` ⇒ tăng ring / tăng cửa sổ chờ.
+
+### 9.17 HOÃN INIT RA SAU KHI MÀN HÌNH ĐÃ HIỆN (boot nhanh) — đã sửa
+
+Trước đây `panel_bt_upload_begin()` (trong `setup()`) làm hết: **leo thang mount thẻ 20→10→4 MHz +
+`SerialBT.begin()` (~1–1,5 s)** ⇒ màn hình chưa hiện đã chờ 2–3 s.
+
+**Cách làm mới:** `panel_bt_upload_begin()` **chỉ đặt cờ** (`s_init_state = INIT_WAIT`); việc thật chạy
+trong `panel_bt_upload_task()` theo **4 nhịp** (mỗi nhịp ngắn để main loop vẫn chạy, PUSH không đói quá
+`PANEL_LINK_TIMEOUT_MS` = 3 s):
+
+| Nhịp | Việc | Trên màn hình |
+|---|---|---|
+| `INIT_WAIT` | chờ `PANEL_BT_INIT_DELAY_MS` (200 ms) cho UI ổn định | bình thường |
+| `INIT_OVERLAY` | hiện lớp phủ **toàn màn hình** + **khoá mọi indev** | “DANG KHOI TAO… / The TF: dang mount…” |
+| `INIT_SD` | `sd_mount()` (leo thang tốc độ) + dọn `/btup` | “The TF: dang mount…” |
+| `INIT_BT` | buffer + `bt_start()` (+ scan mode + bật chế độ nhận file) | “Bluetooth: dang bat…” |
+| `INIT_OK_WAIT` | hiện **“SAN SANG”** (hoặc lỗi) 1,2 s rồi **mở khoá + gỡ lớp phủ** | “SAN SANG” |
+
+* Vì init là blocking, mỗi bước **tự gọi `lv_timer_handler()`** để dialog vẽ được (giống pha 2).
+* **Mở khoá + gỡ lớp phủ ở MỌI đường thoát** (thành công / thẻ lỗi / BT lỗi / hết RAM): mọi đường đều đi
+  qua `INIT_OK_WAIT` nên `ui_lock(false)` + `ov_destroy()` luôn chạy.
+* Log đo thời gian: `[BTUP] bat dau init (sau khi UI da hien): t=… ms`, `[BTUP] init xong sau X ms
+  (the TF=…, BT=…, …) heap=…`, cộng `t=<ms>` ở dòng `[CYB] loop OK` đầu tiên ⇒ so được **trước/sau**
+  (trước: loop đầu ~2,5–3 s; sau: ~0,7–0,9 s vì `setup()` chỉ còn LVGL + frame đầu).
+* Thẻ chưa cắm: init vẫn xong bình thường, `sd_poll()` tự mount lại mỗi 2,5 s (README 9.12).
+
+
+### 9.18 BA GIAI ĐOẠN HIỂN THỊ — INIT (khoá UI) / PHA 1 (KHÔNG khoá) / PHA 2 (khoá UI) — đã sửa
+
+Người dùng chốt: **chỉ khoá UI khi thật cần**, tiến độ nhận file hiện ở **thanh tiêu đề** (nhánh UI vẽ),
+và **không hiện tên file** ở bất kỳ đâu (tốn diện tích).
+
+| Giai đoạn | Lớp phủ | Khoá UI | Hiển thị |
+|---|---|---|---|
+| **INIT** (thẻ TF + BT, ~2–3 s sau frame đầu) | toàn màn hình | **CÓ** | `DANG KHOI TAO…` → `The TF: dang mount…` → `Bluetooth: dang bat…` → `SAN SANG` (giữ 1,2 s rồi tự gỡ) |
+| **PHA 1** (app gửi file qua BT) | **KHÔNG có lớp phủ** | **KHÔNG** | **thanh tiêu đề** do nhánh UI vẽ qua `panel_bt_upload_rx()` + log 1 Hz `rx=… B` |
+| **PHA 2** (đẩy file sang ESP3D) | toàn màn hình, nền mờ 90 % | **CÓ** | dòng **trạng thái** (`DANG DAY LEN ESP3D…` / `THU LAI KET NOI…`) + dòng `%  KB đã đẩy/tổng KB  KB/s` + thanh tiến độ |
+| Kết quả (sau PHA 2) | hộp nhỏ giữa màn hình | không | `DONE` hoặc `ERR …` (6 s rồi tự gỡ) |
+
+**Hợp đồng API cho nhánh UI (thanh tiêu đề)** — `src/panel_bt_upload.h`:
+
+```c
+// true = đang ở PHA 1 (đang nhận file qua BT). *got = byte đã nhận, *total = tổng theo header
+// (0 = app không báo trước). got/total có thể là NULL. Chỉ đọc biến đã cache -> không chặn,
+// không cấp phát, không đụng BT/LVGL/thẻ TF -> gọi được từ ui_lvgl_task() ở nhịp ~400 ms.
+bool panel_bt_upload_rx(uint32_t *got, uint32_t *total);
+```
+
+* Khi PHA 1 kết thúc: hàm trả về `false` **ngay** (đặt trong `finish_recv()`/`fail_session()`/`reject_token()`
+  nên không phụ thuộc nhịp task, vì PHA 2 chạy blocking), nhưng `got/total` **giữ giá trị cuối cùng** để UI
+  khỏi thấy số nhảy về 0.
+* Cập nhật ở **mỗi lần hút được dữ liệu** (`st_recv`) + **mỗi nhịp** `panel_bt_upload_task()`.
+* Khi module tắt (`PANEL_BT_UPLOAD=0`) hoặc board khác: **stub trong `panel_bt_upload.cpp`** luôn trả
+  `false, 0, 0` — mọi env đều build file này (`platformio.ini`: `build_src_filter = +<*>`), nên nhánh UI
+  **không cần** khai báo lại, không cần `weak`/`__has_include`.
+* Lớp phủ PHA 2 dùng thêm font **`lv_font_montserrat_20`** cho dòng trạng thái (chữ to) — font được bật
+  trong `src/lv_conf_panel.h` (chỉ env CYD): tốn **flash** (~22 KB), **không tốn DRAM** vì font là `const`.
+* Vòng đời lớp phủ: chỉ `ov_create()` ở PHA 2/INIT; PHA 1 **không tạo object LVGL nào** (không tốn LVGL heap).
+
+### 9.19 🔴 SAU PHIÊN ĐẦU KHÔNG NỐI LẠI ĐƯỢC (`end()/begin()` + SPP không lên) — nguyên nhân & cách sửa
+
+**Hiện tượng (đo trên máy thật):** sau chuỗi `end() → POST → begin()` (`btcyc=1`), Windows `connect()`
+hết thời gian với **mọi kênh 1..30** dù inquiry vẫn thấy panel (`connected=0`, `remembered=1`) và log panel
+vẫn `bt=1 spp=1 st=idle` + `scan mode -> DISCOVERABLE [esp_err=0]`. **Heap sau khi bật lại BT chỉ còn
+21.452 B** (trước phiên 39.856 B) ⇒ thiếu ~18 KB so với lần `begin()` đầu ⇒ `esp_spp_start_srv()`
+**thất bại âm thầm** (core bỏ qua mã trả về — đúng cơ chế 9.15) ⇒ SDP record thiếu ⇒ phải **reset panel**
+mỗi lần upload.
+
+**Đã sửa 3 lớp:**
+
+1. **Trả buffer làm việc của module cho `begin()` lần 2** — `buf_release()` gọi ngay sau `bt_stop()`
+   (PHA 2, lúc BT đã tắt): trả `PANEL_BT_RING_BYTES` (12 KB) + `PANEL_BT_SD_CHUNK` (4 KB) = **16 KB**.
+   Lợi cả hai phía: (a) WiFi có thêm 16 KB khối liên tục; (b) `SerialBT.begin()` lần 2 có thêm 16 KB ⇒
+   SPP server mới đăng ký được. Sau khi `bt_start()` xong mới `buf_alloc()` **lại** (thứ tự quan trọng:
+   `begin()` cần RAM liền trước, buffer lấy sau). Nếu `buf_alloc()` thất bại, phiên mới bị từ chối rõ
+   ràng bằng `ERR thieu RAM cho vong dem` (không mất dữ liệu âm thầm).
+2. **Kiểm chứng thật bằng `ESP_SPP_START_EVT`** (không dùng mã trả về của `esp_spp_start_srv()` — nó chỉ
+   là “đã xếp hàng đợi”): callback SPP ghi lại `s_spp_start_seen`, `SCN`, `status`. Nếu sau
+   `PANEL_BT_SPP_WAIT_MS` (2000 ms) **có `INIT_EVT` mà không có `START_EVT`** ⇒ `PANEL_BT_SPP_RETRY=1`
+   (mặc định mới) **tự gọi lại `esp_spp_start_srv()`** và log mã trả về + `spp_err_str()`. Nếu vẫn không
+   có `START_EVT` sau lần thử lại ⇒ log `!! SPP KHÔNG đăng ký được… phải KHOI DONG LAI panel`; đặt
+   `PANEL_BT_SPP_FAIL_REBOOT 1` để **tự `ESP.restart()`** (phiên sau chắc chắn nối được, người dùng không
+   phải bấm reset) — mặc định `0`.
+3. **Log đo từng bước** để biết 18 KB đi đâu: mỗi bước in `heap` + **khối liên tục lớn nhất**:
+   `bt_stop` (trước/sau `end()` + `ctrl=`/`bd=` sau khi tắt), `buf_release`, `cua an toan WiFi`,
+   `wifi_off_now`, `bt_start` (trước/sau `begin()`), `buf_alloc` lại, và log 1 Hz thêm `blk=` +
+   `spp=<INIT>/<START>`.
+   *Giả thuyết cần log xác nhận:* `WiFi.mode(WIFI_OFF)` → `espWiFiStop()` → `esp_wifi_stop()` +
+   `esp_wifi_deinit()` (WiFiGeneric.cpp:728-741) nhưng `wifiLowLevelDeinit()` **không** huỷ 2 `esp_netif`
+   tạo trong `wifiLowLevelInit()` ⇒ mỗi chu kỳ WiFi để lại rác (lwIP/netif/event). Nếu `heap` sau
+   `wifi_off_now` thấp hơn `heap` trước `wifi_up` ~18 KB thì đúng là rác WiFi — khi đó 16 KB trả từ
+   `buf_release()` chính là phần bù, và có thể tăng tiếp bằng cách **không bật WiFi cho mỗi phiên**
+   (`PANEL_ESP3D_KEEP_MS` > 0 giữ WiFi lại giữa các phiên — đổi lại BT không bật lại được ngay).
+
+**Đường nhận dữ liệu NHANH (bỏ trần 6 KB/s):** core 2.0.17 **có** đường callback —
+`BluetoothSerial::onData(cb)` (`BluetoothSerial.cpp:415`) đặt `custom_data_callback`, và
+`ESP_SPP_DATA_IND_EVT` khi đó gọi **thẳng callback của ta với CẢ gói** (`:337-338`), **không** đẩy từng
+byte vào queue 512 B (`:339-345`) ⇒ hết `RX Full! Discarding`, hết trần 6 KB/s.
+`PANEL_BT_USE_DATA_CB 1` (mặc định mới) dùng đường này: `bt_data_cb()` chạy trong task BTC, chỉ `memcpy`
+vào vòng đệm (không SD/LVGL/printf), và **không tạo task `btup_rx`** nữa (tiết kiệm ~2-3 KB heap).
+Vòng đệm tăng lên **12 KB** cho khớp cửa sổ điều khiển luồng của script Windows (`-WindowKB 12`,
+`-ChunkKB 4`); script **không nên** đặt `WindowKB` > 12 vì có thể tràn vòng đệm ⇒ mất byte (`drop=`).
+`PANEL_BT_USE_DATA_CB 0` quay lại đường queue cũ để đối chiếu khi cần.
+
+
+### 9.20 WiFi TÁCH KHỎI BLUETOOTH (`net_wifi.cpp`, cờ `PANEL_WIFI_MGMT`) — đã sửa
+
+Trước đây phần WiFi nằm trong `panel_bt_upload.cpp`, nên khi `PANEL_BT_UPLOAD 0` (tắt BT để upload qua
+WiFi/ESP3D) thì `net_wifi_state()` biến mất ⇒ icon WiFi ở header thành **xám** và không bấm vào đâu được.
+
+**Cách tách cờ** (`panel_config.h`):
+* `PANEL_WIFI_MGMT` — mặc định **1 với board CYD**, 0 với board khác; `net_wifi.cpp` compile theo cờ này.
+* `PANEL_BT_UPLOAD 1` ⇒ **ép** `PANEL_WIFI_MGMT 1`: module BT dùng chung `net_wifi`, KHÔNG tự gọi
+  `WiFi.begin/mode/disconnect` nữa ⇒ **một nơi duy nhất** điều khiển WiFi.
+* `PANEL_WIFI_MGMT 0` ⇒ `net_wifi.cpp` chỉ còn **stub** (mọi hàm trả 0/`""`/false) nên nhánh UI vẫn build.
+* `PANEL_WIFI_AUTOSTART` — 1 khi BT tắt (panel tự vào mạng nhà lúc boot), 0 khi bật BT (WiFi chỉ bật ở PHA 2).
+
+**8 API cho nhánh UI** (`net_wifi.h`, tất cả **`extern "C"`** ⇒ symbol **không mạng hoá**; đã kiểm bằng `nm`:
+`T net_wifi_state`, `T net_wifi_scan`, … khớp khai báo `extern "C"` + weak trong `ui_lvgl.cpp`):
+
+```c
+uint8_t     net_wifi_state(void);          // 0 tat/loi, 1 dang ket noi, 2 da ket noi (cache, khong chan)
+const char *net_wifi_ssid(void);           // SSID dang ket noi ("" neu chua bat)
+const char *net_wifi_ip(void);             // "192.168.0.42" ("" neu chua ket noi)
+int8_t      net_wifi_rssi(void);           // dBm, 0 = khong biet
+int         net_wifi_scan(void);           // !!! CHAN ~2-4 s (Arduino scanNetworks dong bo)
+const char *net_wifi_scan_ssid(int i);     // NULL neu i ngoai khoang
+int8_t      net_wifi_scan_rssi(int i);     // 0 neu i ngoai khoang
+bool        net_wifi_connect(const char *ssid, const char *pass, bool save);  // khong chan (save=true -> NVS)
+void        net_wifi_disconnect(bool forget);                                 // khong chan
+// them (khong bat buoc): net_wifi_configured/saved_ssid/scan_max/scan_ms + net_wifi_join_temp/leave_temp
+```
+
+* **NVS**: `Preferences`, namespace `"wifi"`, khoá `ssid`/`pass`. Chưa có NVS ⇒ dùng giá trị **gợi ý mặc định**
+  `PANEL_WIFI_SSID_DEF`/`PANEL_WIFI_PASS_DEF` (= `TP-Link_31A0` / `89278062`); đổi từ trang settings ⇒ ghi NVS.
+* **Tự kết nối lại**: mất mạng thì thử lại mỗi `PANEL_WIFI_RETRY_MS` (8 s); cache cập nhật ở `net_wifi_task()`.
+* **Console COM7** (test không cần UI): `WIFI?`, `WIFI SCAN`, `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS),
+  `WIFI OFF`, `WIFI FORGET`.
+* RAM tĩnh thêm ~0,9 KB (SSID 33 + pass 65 + NVS + 16 mạng quét). **Lưu ý**: đừng bật WiFi từ trang settings
+  khi `PANEL_BT_UPLOAD 1` (BT + WiFi không đủ RAM) — cờ `PANEL_WIFI_UPLOAD` đã tự tắt trong trường hợp đó.
+
+### 9.21 UPLOAD QUA WiFi: WEB SERVER TRÊN PANEL (`net_upload_http.cpp`, cờ `PANEL_WIFI_UPLOAD`)
+
+Luồng: **PC/điện thoại → WiFi → panel ghi `/btup/<tên>.tmp` trên thẻ TF → panel tự đẩy sang ESP3D
+(`POST /files` multipart + `Content-Length`) → `M22`+`M21` → xoá file tạm.** ESP3D giữ nguyên (vẫn phát AP
+`Voron2308`).
+
+* **Cờ**: `PANEL_WIFI_UPLOAD` (mặc định 1 với CYD nhưng **tự ép 0 khi `PANEL_BT_UPLOAD 1`** — BT + WiFi không
+  thể cùng tồn tại trong heap), `PANEL_HTTP_PORT` 80, `PANEL_HTTP_TOKEN` (`TBT-3D-up`),
+  `PANEL_HTTP_MDNS_NAME` (`TBTPANEL` ⇒ `http://TBTPANEL.local/`), `PANEL_HTTP_MAX_BYTES` 256 MB,
+  `PANEL_HTTP_ALLOW_WHILE_PRINTING` 0.
+* **Hợp đồng HTTP** (đã chốt với nhánh script):
+
+  | Endpoint | Trả về |
+  |---|---|
+  | `GET /` | HTML (chứa chuỗi `TBT-PANEL`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
+  | `GET /status` | JSON: `panel:"TBT"`, `device:"TBT-PANEL"`, `state` (`idle\|receiving\|posting\|done\|error`), `rx_bytes`, `total_bytes`, `posted_bytes`, `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `POST /upload?token=…` | `multipart/form-data`: field text `name="name"` (tên đích, **đặt TRƯỚC** phần file) + phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF) |
+
+* **Token**: query `?token=` **hoặc** header `X-Panel-Token` (`PANEL_HTTP_TOKEN ""` = tắt kiểm, không khuyến nghị).
+* **Trả lời ngay** sau khi nhận đủ file, rồi mới đẩy sang ESP3D ở `net_upload_http_task()` (có lớp phủ + khoá
+  UI) ⇒ trình duyệt không bị treo; client theo dõi qua `/status` (`posting` → `done/error`).
+* **Mạng — 2 chế độ** (`PANEL_ESP3D_VIA_AP`):
+  * **0 (khuyến nghị)**: panel ở mạng nhà (STA) và POST tới **IP LAN của ESP3D** ⇒ **cho ESP3D chạy AP+STA**
+    (AP `Voron2308` vẫn phát như cũ + join thêm `TP-Link_31A0`). IP lấy từ `PANEL_ESP3D_LAN_HOST`, không thì
+    tự dò (gateway → `PANEL_ESP3D_IP_LIST`), luôn xác nhận bằng `[ESP800]`/`"FW version:"`.
+  * **1**: panel **tạm đổi** sang AP `Voron2308` để POST rồi quay lại mạng nhà
+    (`net_wifi_join_temp()`/`net_wifi_leave_temp()`); không cần đổi ESP3D nhưng mỗi lần upload mất ~5-10 s
+    đổi mạng và web server tạm không truy cập được.
+* ⚠️ **Đã kiểm lại multipart gửi lên ESP3D** (theo cảnh báo của nhánh script): `panel_bt_upload.cpp` gửi
+  `Content-Disposition: form-data; name="file"; filename="<tên>"` — **có dấu `"` bao quanh** và `name=` đứng
+  trước `filename=` ⇒ **không mất ký tự đầu/cuối** của tên file trong lần chạy hôm qua. `net_esp3d.cpp` (đường
+  WiFi) gửi thêm field `name="name"` trước phần file; phía panel **parse** có/không có dấu `"` đều được
+  (`unquote()`), KHÔNG dùng cách cắt chuỗi `substring(idx+2, len-1)`.
+* **Test nhanh**: nạp bản `PANEL_BT_UPLOAD 0` → xem COM7 (`[UP] wifi=2 ssid="…" ip=192.168.x.y …`) hoặc gõ
+  `WIFI?`/`WIFI SCAN` → trên PC mở `http://TBTPANEL.local/?token=TBT-3D-up` (hoặc `http://<ip>/`) → chọn file
+  `.gco` → Gửi → theo dõi `state`/`posted_bytes`; kiểm Marlin thấy file mới (M22/M21 đã gửi) và `/btup` sạch
+  file tạm.
+
 
 ### 9.9 Kiểm trên máy thật
 
@@ -1127,12 +1415,318 @@ Script tự tính số byte, gửi theo khối, in tiến độ % + KB/s và in 
 ⚠️ Sau khi pair Windows thường tạo **2 cổng COM** (Incoming + Outgoing) — phải dùng cổng **Outgoing**
 (thường có tên chứa `TBT-PANEL`); script liệt kê `Get-PnpDevice -Class Ports` để bạn chọn.
 
+**Windows KHÔNG có cổng COM SPP — `lcd_panel/tools/bt-upload-socket.ps1` (socket RFCOMM trực tiếp):**
+
+Nếu Control Panel báo *"The device you selected does not have a serial port service running"* thì máy
+đó **không bao giờ** có cổng COM SPP ⇒ `bt-upload.ps1` (dùng `System.IO.Ports.SerialPort`) không dùng
+được. Script thứ hai gửi thẳng qua **socket Bluetooth RFCOMM** (`ws2_32.dll`: `AF_BTH` +
+`BTHPROTO_RFCOMM`), **không cần cổng COM, không cần quyền admin**:
+
+```powershell
+cd D:\Marlin
+# Tự dò MAC từ Get-PnpDevice (FriendlyName 'TBT-PANEL'):
+powershell -ExecutionPolicy Bypass -File D:\Marlin\lcd_panel\tools\bt-upload-socket.ps1 `
+    -File d:\0in\V300_Part3_proj.gcode
+# Nối thẳng kênh (nhanh nhất, không cần SDP - panel CYD ở KÊNH 1):
+.\lcd_panel\tools\bt-upload-socket.ps1 -File .\benchy.gco -Channel 1
+# Ghi đè MAC / token / tên file / cỡ khối:
+.\lcd_panel\tools\bt-upload-socket.ps1 -File .\benchy.gco -Mac 48:AF:F3:70:B1:FA -Name B2.gco -ChunkKB 2
+```
+
+Tham số: `-File` (**bắt buộc**), `-Token` (mặc định `TBT-3D-up`), `-Name` (mặc định = tên file),
+`-NoSize` (gửi `PUT <token> <ten> *`), `-ChunkBytes` (mặc định **256** — xem mục điều khiển luồng
+bên dưới), `-ChunkKB` (nếu > 0 thì được ưu tiên hơn `-ChunkBytes`), `-PaceKBps` (mặc định **6**),
+`-WindowKB` (mặc định 8), `-ProgTimeoutMs` (4000), `-ProgProbeMs` (1200), `-TimeoutSec` (600),
+`-ReconnectSec` (90 — sau khi gửi xong còn nối lại để nhận `DONE`/`ERR` đã lưu), `-Mac`, `-Channel`,
+`-PrimaryTimeoutMs` (4000), `-ChannelTimeoutMs` (1200), `-ScanMaxChannel` (30), `-ForceSdp`,
+`-Port0First`. Mã thoát: `0` = `DONE`, `2` = `ERR`, `3` = không nối được, `4` = hết thời gian.
+
+```powershell
+# Lệnh ĐÃ CHẠY THÀNH CÔNG (đo thật: 63.472 B / 13,4 s, 0 lần mất dữ liệu, DONE 63472):
+powershell -ExecutionPolicy Bypass -File D:\Marlin\lcd_panel\tools\bt-upload-socket.ps1 `
+    -File d:\0in\V300_Part3_proj.gcode -Channel 1
+# (mặc định đã là khối 256 B + nhịp 6 KB/s; chỉ cần -Channel 1 cho nhanh/chắc)
+```
+
+Cách nối thực tế đo được trên máy này (Windows + Intel BT, panel `TBT-PANEL` `48:AF:F3:70:B1:FA`):
+
+| Cách | Kết quả đo được |
+|---|---|
+| 1. `connect()` với `port = 0` + `serviceClassId` SPP (Windows tự tra kênh) | **HẾT THỜI GIAN** (12–30 s) — không dùng được |
+| 2. `WSALookupServiceBegin/Next` (`NS_BTH` + UUID SPP + `LUP_RETURN_ADDR`) | `10108 WSASERVICE_NOT_FOUND` (cả khi `LUP_FLUSHCACHE`) — panel không có record SPP |
+| 3. **Quét kênh RFCOMM 1..30** (không cần SDP) | **KÊNH 1 NỐI ĐƯỢC** (~0,9 s lần đầu, ~0,1 s khi đã có link) |
+
+⇒ Script ưu tiên: `-Channel n` → **kênh 1 trước tiên (timeout 4 s)** → SDP (chỉ là tối ưu, **không** để
+SDP chặn đường) → quét kênh **2..30** (timeout 1,2 s mỗi kênh) → `port = 0` (cuối cùng). Kênh RFCOMM
+của Bluedroid SPP mặc định là **1** nên `-Channel 1` là đường nhanh nhất và chắc nhất.
+
+**Trạng thái đo được (firmware đang chạy trong panel):** kết nối + giao thức **chạy đúng** (nối kênh 1,
+gửi dòng header, panel **trả lời ngay** qua socket), nhưng panel **từ chối mở phiên vì RAM của chính nó**:
+```
+[panel] ERR heap thap (16432 B)                    <- panel tra qua BT
+[BTUP] heap thap (16484 B) -> tu choi phien moi    <- log COM7
+```
+`PANEL_BT_HEAP_MIN = 20 KB` (`panel_config.h:416`) trong khi heap của panel khi **có** client SPP là
+**~16,5 KB** (lúc rảnh ~21,5 KB) ⇒ thiếu ~4 KB. Đã thử `SO_BTH_MTU` 128/672/990 → heap panel **không
+đổi** ⇒ **không thể** sửa từ phía Windows; phải nạp firmware panel có bản sửa RAM ở §9.8/§9.15
+(`LV_MEM_SIZE` 24 KB + buffer vẽ nhỏ lại ⇒ heap sau khi bật BT ~43 KB). *Bằng chứng panel đang chạy bản
+cũ: log in `lvmem=…/30720` (30 KB) trong khi `src/lv_conf_panel.h` hiện đặt `LV_MEM_SIZE = 24 KB`.*
+
+Hai chi tiết kỹ thuật **bắt buộc** đúng (đã kiểm bằng đo thật, xem §9.15):
+
+* `SOCKADDR_BTH` trong `ws2bth.h` nằm giữa `<pshpack1.h>…<poppack.h>` ⇒ **PACK = 1, 30 byte**:
+  `addressFamily` +0, `btAddr` +2, `serviceClassId` +10, **`port` +26** (dùng layout 40 byte kiểu
+  pack 8 sẽ được `10049 WSAEADDRNOTAVAIL`).
+* `btAddr` = **chính chuỗi MAC đọc như số hex bình thường**: `48:AF:F3:70:B1:FA` → `0x48AFF370B1FA`
+  (**KHÔNG đảo byte**; đảo byte ⇒ `connect()` luôn hết thời gian vì Windows đi tìm một địa chỉ không
+  tồn tại). Bằng chứng: `WSALookupServiceNext` với `NS_BTH` + `LUP_CONTAINERS` trả về `SOCKADDR_BTH`
+  của chính panel, đọc `ULONGLONG` tại offset 2 được `0x48AFF370B1FA`.
+* `lpszContext` của `WSALookupServiceBegin` phải là chuỗi do `WSAAddressToString()` tạo ra (ví dụ
+  `"(48:AF:F3:70:B1:FA)"`), **không phải** chuỗi MAC thô ⇒ sai thì trả `10022 WSAEINVAL`.
+
+**ĐIỀU KHIỂN LUỒNG — nguyên nhân thật của các lần mất dữ liệu (đo 2026-10, `CORE_DEBUG_LEVEL=2`):**
+
+Core Arduino chỉ có **queue nhận 512 byte** (`BluetoothSerial.cpp:43 RX_QUEUE_SIZE 512`) và callback
+SPP đẩy **từng byte** vào queue với timeout 0 (`:339-345`); queue đầy thì core **vứt luôn phần đuôi
+của gói** và chỉ in log:
+```
+[E][BluetoothSerial.cpp:342] esp_spp_cb(): RX Full! Discarding 605 bytes
+```
+Đây là mất dữ liệu **âm thầm**: `drop=` của panel (vòng đệm 4 KB) vẫn bằng **0**. Vì vậy **không thể**
+chỉ dựa vào `PROG` — phải **gửi khối nhỏ + giữ nhịp**:
+
+| Cấu hình | Kết quả đo thật (file 63.472 B) |
+|---|---|
+| khối 1 KB, không hạn nhịp | 20,6 KB/s, panel chỉ nhận 57.101 B ⇒ `ERR thieu du lieu` |
+| khối 1 KB, nhip 8 KB/s | 35 lần `RX Full` ⇒ `ERR thieu du lieu (34.762/63.472 B)` |
+| khối 1 KB, nhip 4 KB/s | 35 lần `RX Full` ⇒ `ERR thieu du lieu (56.322/63.472 B)` |
+| **khối 256 B, nhịp 6 KB/s** | **0 lần `RX Full`**, gửi đủ 63.472 B trong 13,4 s ⇒ `DONE 63472` ✅ |
+
+Script `bt-upload-socket.ps1` vì vậy có **2 lớp** điều khiển luồng: `-ChunkBytes` (mặc định **256 B**)
++ `-PaceKBps` (mặc định **6 KB/s**, kiểu leaky bucket), và lớp thứ hai theo `PROG`: `-WindowKB`
+(mặc định 8 KB — **phải lớn hơn bước PROG của panel**, nếu không sẽ deadlock vì gửi hết cửa sổ rồi
+ngồi đợi một dòng `PROG` không bao giờ tới). Firmware cũ (PROG mỗi 64 KB) ⇒ script tự nhận ra (không
+thấy `PROG` trong `-ProgProbeMs`) và chỉ dùng lớp nhịp, có in cảnh báo.
+
+Kết quả chạy thật đầy đủ (log COM7 của panel, cùng phiên):
+```
+[BTUP] phien moi tu 70:08:10:56:57:83: V300_Part3_proj.gcode (63472 B)
+[BTUP] ... st=recv rx=8192 B ... 5,2 KB/s ring=0/4094 drop=0      (khong co dong RX Full nao)
+[BTUP] ket thuc pha 1 -> TAT BT (lan 1): heap 34748 -> 134140 B (+99392 B), khoi lien tuc=51188 B
+[BTUP] cua an toan WiFi: heap=138612 B, khoi lien tuc=51188 B (can >= 73728 / 32768)
+[BTUP] WiFi bat dau ket noi "Voron2308" ... (heap truoc khi bat: 89292 B)
+[BTUP] POST 192.168.0.1/files (63472 B + 165 B multipart)
+[BTUP] POST xong -> TAT WiFi: heap 88388 -> 122244 B
+[BTUP] POST OK 63472 B -> M22/M21
+[BTUP] SPP: da nhan ESP_SPP_INIT_EVT sau 129 ms -> SPP stack init OK ...
+[BTUP] da gui ket qua phien truoc cho app qua BT: DONE 63472
+```
+⇒ `posted=63472` (file đã lên thẻ SD của Marlin qua ESP3D), app nhận `DONE 63472`.
+
+⚠️ **VẤN ĐỀ CÒN LẠI (đo được, cần sửa phía firmware panel):** sau khi phiên kết thúc (panel đã
+`SerialBT.end()` → POST → `SerialBT.begin()` lại, `btcyc=1`), panel **không nhận kết nối RFCOMM nữa**:
+`connect()` **hết thời gian** với **mọi** kênh 1..30 (đã thử lại nhiều lần, kể cả timeout 15 s), trong
+khi:
+* `WSALookupServiceNext` (device inquiry) **vẫn thấy** `TBT-PANEL` (`bt=0x48AFF370B1FA`,
+  `remembered=1 authenticated=1 connected=0`) ⇒ radio + pair vẫn tốt;
+* log panel vẫn `bt=1 spp=1 st=idle`, `scan mode -> DISCOVERABLE [esp_err=0]`, và đã thấy
+  `ESP_SPP_INIT_EVT` ⇒ app tưởng BT sẵn sàng;
+* **heap sau khi bật lại BT chỉ còn 21.452 B** (trước phiên là **39.856 B**) ⇒ chu kỳ
+  `end()`/`begin()` **KHÔNG trả lại hết RAM** (−18 KB); với `khoi lien tuc=15348 B` thì
+  `esp_spp_start_srv()` (core **bỏ qua mã trả về**) rất dễ thất bại âm thầm — đúng cơ chế đã ghi ở §9.15.
+⇒ Trong lúc chờ bản firmware sửa (ví dụ `PANEL_BT_SPP_RETRY=1`, hoặc đăng ký lại SPP sau mỗi
+`bt_start()`, hoặc trả lại RAM sạch sau `end()`): **reset/nguồn lại panel trước mỗi lần upload** thì
+kết nối lại được (lần đầu sau boot luôn nối được ở kênh 1).
+
+Đọc log panel để đối chiếu: `lcd_panel/tools/panel-log.ps1 -Seconds 120` (chỉ đọc COM7 @115200,
+DTR bật; **chỉ một tiến trình** được giữ cổng COM).
+
 **Android (app BT serial, ví dụ "Serial Bluetooth Terminal"):** pair `TBT-PANEL` (PIN `74196328` nếu
 được hỏi) → mở kết nối → gõ và gửi dòng `PUT TBT-3D-up ten.gco *` → rồi dùng chức năng **Send file**
 của app để gửi file (panel tự kết thúc khi im 3 giây). Nếu app cho nhập số byte thì điền cho chắc
 (`PUT TBT-3D-up ten.gco 1234567`). ⚠️ **Đừng ngắt kết nối BT giữa lúc đang gửi** — panel coi đó là lỗi
 (`ERR BT mat ket noi giua pha 1`) và xoá file tạm. Trong lúc panel đẩy lên ESP3D, BT sẽ **tự tắt** một
 lúc (§9.11) → app mất kết nối là bình thường; kết nối lại để nhận `DONE`.
+
+> 🚀 **Nhanh hơn nhiều và không cần app: xem §10** — upload qua **WiFi** (`panel-upload.ps1` /
+> hàm `in3d`), gửi cho **HTTP server của panel** trong mạng nhà (panel tự đẩy sang ESP3D + tự gửi
+> `M22`/`M21`), tự dò thiết bị, có theo dõi tiến độ qua `GET /status`.
+
+
+## 10. Upload G-code qua **WiFi** — gửi cho **PANEL** (khuyến nghị) hoặc thẳng **ESP3D**
+
+> Đường **Bluetooth** (§9) vẫn còn, nhưng chậm (nhịp ~6 KB/s vì queue 512 B của Bluedroid) và phải
+> nối lại sau mỗi phiên. Đường WiFi dưới đây nhanh hơn **hàng trăm lần** và **tự tìm máy in**.
+
+Hai script (một bản code duy nhất, script thứ hai chỉ là vỏ bọc):
+
+| Script | Việc |
+|---|---|
+| `lcd_panel/tools/panel-upload.ps1` | Bản chính: `-Target panel` (mặc định) **hoặc** `-Target esp3d` |
+| `lcd_panel/tools/esp3d-upload.ps1` | Vỏ bọc gọi `panel-upload.ps1 -Target esp3d` (giữ tên lệnh cũ) |
+
+### 10.1 Chọn đường nào
+
+| | **A. `-Target panel`** (mặc định) | **B. `-Target esp3d`** (dự phòng) |
+|---|---|---|
+| Đường đi | PC → **HTTP server của panel** → thẻ TF panel → panel `POST /files` lên ESP3D → **thẻ SD Marlin** | PC → ESP3D `POST /files` → **thẻ SD Marlin** |
+| PC phải ở mạng nào | **Cùng mạng WiFi với panel** (mạng nhà `TP-Link_31A0`) — **không phải đổi mạng** | Phải nối **AP `Voron2308`** của module (192.168.0.1 — **mất internet tạm thời**), hoặc ESP3D đặt **AP+STA** |
+| `M22` + `M21` | **Panel tự gửi** sau khi đẩy xong ⇒ **không cần `-InitSd`** | ESP3D **không** gửi ⇒ nên dùng `-InitSd -MarlinPort COM4` |
+| Theo dõi tiến độ | **Có**: `GET /status` (panel nhận bao nhiêu byte, đang đẩy ESP3D, kết quả) | Không (chỉ có phản hồi HTTP của `POST /files`) |
+| Nhận dạng thiết bị | `GET /status` ⇒ JSON `{"panel":"TBT"}` (hoặc `GET /` chứa `TBT-PANEL`) | `GET /command?plain=[ESP800]` ⇒ có `FW version:` |
+
+### 10.2 Hợp đồng HTTP của PANEL (nhánh firmware panel phải khớp)
+
+| Endpoint | Nội dung |
+|---|---|
+| `GET /status` | `200 application/json`. **Phải trả JSON cả khi rảnh** (đang init / không có phiên ⇒ `state:"idle"`), vì client dùng chính nó để **nhận dạng panel**. Trường nhận dạng: **`"panel":"TBT"`** (nhận thêm `device`, hoặc chuỗi `TBT-PANEL` trong body). Trường tiến độ: `state` (`idle\|receiving\|posting\|done\|error`), `rx_bytes`, `total_bytes`, `posted_bytes`, `file`, `result`/`message` |
+| `GET /` | Trang HTML cho điện thoại/PC gửi file (không cần app), **có chứa chuỗi `TBT-PANEL`** (dự phòng nhận dạng) |
+| `POST /upload?token=<token>` | `multipart/form-data`; field text **`name="name"`** = tên file đích (**đứng TRƯỚC**), phần file **`name="file"` + `filename="<tên>"`** ⇒ `200 {"status":"Ok"}` hoặc `{"status":"Error","message":"..."}` |
+| Header | Client gửi kèm **`X-Panel-Token: <token>`** (nhận cả `?token=` lẫn header) |
+| Token | `TBT-3D-up` (cùng `PANEL_BT_TOKEN` trong `panel_config.h`); đổi được lúc chạy: `-Token <khác>` |
+
+### 10.3 ⚠️⚠️ BÀI HỌC QUAN TRỌNG: mọi giá trị trong `Content-Disposition` **PHẢI có dấu `"`**
+
+`Parsing-impl.h::_parseForm` (ESP8266WebServer 3.1.2 — platform `espressif8266@4.2.1` trong
+`D:\arduino\ESP3D-direct-sd\platformio.ini`) cắt chuỗi theo dấu `=` **ĐẦU TIÊN** và **luôn bỏ 1 ký
+tự ngay sau `=`**, rồi bỏ **ký tự cuối**; `Parsing.cpp` của ESP32 core 2.0.17 (thư viện panel dùng)
+cắt **y hệt**:
+
+```
+argName     = line.substring(line.indexOf('=') + 2);            // bỏ luôn 1 ký tự sau '='
+argFilename = argName.substring(idx + 2, argName.length() - 1); // bỏ luôn ký tự cuối
+```
+
+| `Content-Disposition` gửi đi | `upload.filename` nhận được | Kết quả |
+|---|---|---|
+| `name="file"; filename="benchy.gcode"` | `benchy.gcode` | ✅ đúng |
+| `name=file; filename=benchy.gcode` | `enchy.gcod` | ❌ **mất ký tự đầu + cuối** (file lên thẻ SD sai tên) |
+
+⇒ **Windows PowerShell 5.1 / .NET Framework sinh `Content-Disposition` KHÔNG có dấu `"`** cho các
+giá trị dạng token (`name`, `file`, `benchy.gcode`) ⇒ **KHÔNG dùng `Invoke-WebRequest -Form` /
+`MultipartFormDataContent`** (kể cả `-Form` cũng chỉ có từ PowerShell 6.1). `panel-upload.ps1` vì
+vậy **tự dựng body multipart bằng byte** (ASCII) và gửi bằng `TcpClient` thô: `Content-Length` tự
+tính, **không** chunked, **không** `Expect: 100-continue`, và in được tiến độ %/KB/s.
+
+Kiểm chứng (đã chạy, xem §10.7): một parser chép đúng logic trên chạy trong Node cho ra
+`{"argName":"file","argFilename":"enchy.gcod"}` với body **thiếu dấu `"`**.
+
+### 10.4 Cách dò thiết bị (`panel-upload.ps1`)
+
+Thứ tự (bỏ qua khi có `-NoDiscover`), mỗi ứng viên timeout **1–1,5 s**, buổi quét có trần
+`-ScanBudgetSec` (mặc định 25 s). Nguồn tìm được in ra ở dòng `[PANEL] thay <IP> (nguon: ...)`:
+
+1. `-Host` (nếu có) — **vẫn xác nhận** chữ ký;
+2. **mDNS**: `TBTPANEL.local`, `tbtpanel.local`, rồi dự phòng `esp3d.local`, `MYESP.local`;
+3. **gateway** của card mạng đang dùng (nối AP của module thì gateway chính là module);
+4. **quét LAN** `/24` của card đang hoạt động, **song song** `-ScanThreads` luồng (mặc định 40):
+   lọc “port 80 mở” trước, rồi mới **xác nhận chữ ký** ⇒ nguồn `quet`;
+5. **danh sách cố định**: `192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50`.
+
+IP tìm được **lưu cache** ở `%LOCALAPPDATA%\esp3d-upload\last-target.txt` (dùng khi `-NoDiscover`).
+Tối ưu: nếu `/status` **thất bại ngay ở tầng TCP** thì **không** thử tiếp ESP800/`/` cho IP đó
+(ứng viên “chết” chỉ tốn **1** lần timeout).
+
+### 10.5 Lệnh mẫu
+
+```powershell
+cd D:\Marlin
+# 1) MẶC ĐỊNH (khuyến nghị): tự tìm PANEL trong mạng nhà rồi gửi; panel tự đẩy ESP3D + tự M22/M21
+.\lcd_panel\tools\panel-upload.ps1 -File .\benchy.gcode
+.\lcd_panel\tools\panel-upload.ps1 -File d:\0in\V300_Part3_proj.gcode -Name PART3.GCO
+
+# 2) Ép IP panel / đổi token / chờ panel đẩy lâu hơn
+.\lcd_panel\tools\panel-upload.ps1 -File big.gcode -Host 192.168.0.174 -Token TBT-3D-up
+
+# 3) DỰ PHÒNG: gửi thẳng ESP3D (PC phải nối AP Voron2308) + gửi M22/M21 cho Marlin
+.\lcd_panel\tools\panel-upload.ps1 -File part.gcode -Target esp3d -InitSd -MarlinPort COM4
+.\lcd_panel\tools\esp3d-upload.ps1 -File part.gcode -InitSd -MarlinPort COM4     # y het dong tren
+
+# 4) Hàm in3d (đã cập nhật trong cả 2 profile PowerShell)
+in3d                                   # liệt kê .gcode trong D:\0in (hành vi cũ giữ nguyên)
+in3d V300_Part3_proj.gcode             # -> PANEL qua WiFi
+in3d part.gcode -Target esp3d          # -> ESP3D (tự thêm -InitSd -MarlinPort COM4)
+in3d part.gcode -Bt                    # -> Bluetooth cũ (bt-upload-socket.ps1)
+```
+
+Chuột phải `.gcode`/`.bin` (**GuiLenIn3D**) và Send-to (`lcd_panel/tools/in3d-sendto.cmd`) nay đều
+gọi `panel-upload.ps1 -File "%1" -Token "TBT-3D-up"` (đường PANEL).
+
+Tham số: `-File` (**bắt buộc**), `-Target panel|esp3d` (mặc định `panel`), `-Host`, `-Port` (80),
+`-Name`, `-Token` (`TBT-3D-up`), `-PanelMarker`, `-InitSd`, `-MarlinPort` (COM4 @250000, `DtrEnable`
+bắt buộc), `-TimeoutSec` (300), `-NoDiscover`, `-ScanThreads` (40), `-ScanTimeoutMs` (1000),
+`-ScanBudgetSec` (25), `-ProbeTimeoutMs` (1500), `-StatusIntervalMs` (1000), `-StatusTimeoutSec`
+(900), `-NoStatus`.
+**Mã thoát**: `0` gửi OK · `2` lỗi phía server · `3` không tìm thấy thiết bị · `4` lỗi file/tham số.
+
+### 10.6 Mạng + `M22`/`M21`
+
+* **Panel** vào WiFi **STA** của mạng nhà (`TP-Link_31A0`, 2.4 GHz) ⇒ PC đang ở mạng nhà là gửi
+  được ngay. Nếu panel chưa nối được WiFi thì nó **chưa có IP** ⇒ không dò ra (xem trang STATUS /
+  `panel-log.ps1`).
+* **ESP3D** đang phát **AP riêng** `Voron2308`, IP tĩnh **192.168.0.1** (`config.h:370-376`),
+  **trùng dải LAN nhà** (router TP-Link cũng thường là `192.168.0.1`) ⇒ khi PC ở mạng nhà thì
+  `192.168.0.1` là **ROUTER**, không phải ESP3D. Vì vậy đường `-Target esp3d` **chỉ chạy khi PC nối
+  AP `Voron2308`** (mất internet tạm thời) **hoặc** ESP3D được đặt **AP+STA** để nó cũng vào mạng
+  nhà (khuyến nghị — khi đó upload **không cần đổi mạng**). Script **luôn** kiểm chữ ký `[ESP800]`
+  nên **không bao giờ** gửi nhầm file vào router.
+* **Vì sao cần `M22`+`M21`**: ESP3D ghi trực tiếp lên thẻ SD của Marlin nhưng **Marlin không tự
+  biết** thẻ vừa đổi (§9.6). Panel làm việc này sau khi đẩy xong; đường `-Target esp3d` thì **phải**
+  tự gửi (`-InitSd`) hoặc **mở màn FILES trên panel** để panel gửi.
+* ⚠️ Mở cổng COM4 (USB CDC STM32) làm **board reset** ~2,5 s rồi mới gửi `M22`/`M21` (giống
+  `send-gcode.ps1`) — đừng chạy `-InitSd` khi đang in.
+
+### 10.7 Đã thử thật những gì (2026-10, máy này)
+
+| Phép thử | Kết quả |
+|---|---|
+| `Test-NetConnection 192.168.0.1 -Port 80` + `GET /command?plain=[ESP800]` khi PC ở `TP-Link_31A0` | Port **mở** nhưng trả **HTTP 403** ⇒ đúng là **router**, không phải ESP3D (đúng như dự đoán; `panel-upload.ps1` cũng từ chối nó) |
+| mDNS `MYESP.local` / `esp3d.local` | `DNS name does not exist` (không có responder trong mạng hiện tại) |
+| Dò đầy đủ (mDNS → gateway → quét 253 IP → danh sách cố định), không có panel | **23 s** rồi **thoát mã 3**; riêng **quét 253 IP = 7,2 s** (40 luồng) — chỉ 1 IP mở port 80 (router) |
+| **Gửi lên mock HTTP server** (Node, chép đúng parser ESP8266/ESP32) — đường PANEL | **exit 0**; mock xác nhận: `Content-Length` khớp, có `name="name"` **trước** phần file, `argFilename="benchy.gcode"`, `X-Panel-Token` có mặt, body kết thúc `--boundary--`, **0 vấn đề**; theo dõi `/status`: `receiving` → `posting` → `done` |
+| **Gửi lên mock ESP3D** — đường `-Target esp3d` (và qua vỏ bọc `esp3d-upload.ps1`) | **exit 0**, mock nhận đúng tên file |
+| Toàn vẹn dữ liệu (file 1.348.648 B = 1,29 MB) | **SHA256 trùng khớp** ở cả 2 đường (panel: `received/panel-benchy.gcode`, esp3d: `received/esp3d-benchy.gcode`) |
+| Parser với body **thiếu dấu `"`** | trả về `enchy.gcod` ⇒ chứng minh §10.3 |
+| `-InitSd -MarlinPort COM99` (không có cổng) | cảnh báo rõ, **không** làm hỏng kết quả upload (exit 0) |
+| `in3d` trong cả 2 profile | parse OK; `in3d` (không tham số) **vẫn liệt kê** `D:\0in`; `in3d <file>` → PANEL; `-Target esp3d` tự thêm `-InitSd -MarlinPort COM4` |
+| File lớn 9.860.011 B (9,4 MB) qua cả 2 đường | **exit 0**, SHA256 khớp (đo qua loopback nên tốc độ không có ý nghĩa; điểm cần kiểm là không mất byte ở cỡ 10 MB) |
+| `-Target panel` gặp **ESP3D** | từ chối đúng: “đây là ESP3D, KHÔNG phải panel” + gợi ý `-Target esp3d`, thoát mã **3** |
+| `/status` báo `state=error` | thoát mã **2** (không báo thành công giả) |
+| `/status` giữ **kết quả phiên trước** (done + tên file khác) | **bỏ qua** trạng thái cũ, chờ phiên của mình; quá 30 s vẫn mơ hồ ⇒ báo “chưa xác nhận được”, thoát mã **0** (file đã lên panel) |
+| ❌ **CHƯA nạp lên panel thật** | Firmware panel **đã có trong repo** (`src/net_upload_http.cpp`, xem §9.21 — chưa nạp), nên **chưa** upload thật được. Các phép thử ở trên dùng **mock cục bộ** (`%TEMP%\esp3d-mock\mock-target.js`, có bản chép đúng parser của ESP8266/ESP32) |
+
+Khi panel đã nạp firmware có HTTP server: chạy `panel-upload.ps1 -File <file>` (hoặc `in3d <file>`),
+kỳ vọng thấy `[PANEL] thay <IP> (nguon: mdns|gateway|quet|danh sach)` rồi tiến độ `receiving →
+posting → done` và `=> File DA DUOC GUI THANH CONG.`
+
+### 10.8 Đối chiếu với firmware panel **đã có** trong repo (`src/net_upload_http.cpp`)
+
+Đã đọc `src/net_upload_http.cpp` + `panel_config.h` và **khớp hợp đồng §10.2** (xem thêm §9.21):
+
+| Mục | Firmware | Client |
+|---|---|---|
+| `GET /status` | `{"panel":"TBT","device":"TBT-PANEL","state":"idle\|receiving\|posting\|done\|error",...}` — **trả cả khi rảnh** (`net_upload_http.cpp:150-163`) | nhận dạng bằng `panel`/`device`; đọc `state/rx_bytes/total_bytes/posted_bytes/file/result` ✅ |
+| `GET /` | HTML PROGMEM **có chuỗi `TBT-PANEL`** (`:42-90`) | có, dùng làm nhận dạng dự phòng ✅ |
+| `POST /upload` | `server.on("/upload", HTTP_POST, handle_upload_done, handle_upload_stream)` (`:288`) | `POST /upload?token=...` + header `X-Panel-Token` ✅ |
+| Token | `server.arg("token")` **hoặc** `server.header("X-Panel-Token")` (`:124-131`); `PANEL_HTTP_TOKEN "TBT-3D-up"` (`panel_config.h:332`) | gửi **cả hai**, cùng giá trị ✅ |
+| Cổng / mDNS | `PANEL_HTTP_PORT 80`; `PANEL_HTTP_MDNS_NAME "TBTPANEL"` ⇒ `TBTPANEL.local` (`panel_config.h:327,340`) | `-Port 80`; mDNS thử `TBTPANEL.local` **đầu tiên** ✅ |
+| Tên file đích | ưu tiên field text `server.arg("name")`, không có thì `up.filename`; `unquote()` bỏ dấu `"` (`:178-182`) | gửi `name="name"` **trước** + `filename="<tên>"` ✅ |
+| Mã lỗi | `401` sai token · `409` Marlin đang in (`PANEL_HTTP_ALLOW_WHILE_PRINTING 0`) · `500` lỗi thẻ/ghi · `400` không có dữ liệu | in gợi ý riêng cho 401/409/403, thoát mã **2** ✅ |
+| Bật/tắt | `PANEL_WIFI_UPLOAD 1` với CYD, nhưng **tự = 0 khi `PANEL_BT_UPLOAD=1`** (`panel_config.h:306-319`) | — (không tìm thấy panel thì kiểm tra `PANEL_BT_UPLOAD` có đang = 1 không) |
+
+⚠️ **Hai việc phía firmware nên sửa** (client đã chịu được, nhưng sửa thì đúng hợp đồng hơn):
+
+1. **`total_bytes` luôn = 0.** `net_upload_http.cpp:176` đọc `s_total = up.totalSize` ở
+   `UPLOAD_FILE_START`, nhưng **ESP32 core 2.0.17 đặt `totalSize = 0`** ở trạng thái đó
+   (`Parsing.cpp`: `_currentUpload->totalSize = 0;` — nó chỉ **cộng dồn dần trong lúc ghi**).
+   ⇒ `/status` luôn trả `total_bytes: 0` (trang HTML của panel cũng vì thế mà thanh tiến độ chỉ chạy
+   nhờ `xhr.upload.onprogress`). **Sửa**: gán `s_total = up.totalSize` ở nhánh `UPLOAD_FILE_END`
+   (lúc đó đã là tổng thật), hoặc lấy `Content-Length` của request.
+   *Client đã tự chịu được*: khi `total_bytes <= 0` thì lấy **kích thước file của chính nó** làm mốc
+   và in `rx=…/<size>*` (dấu `*` = số ước tính từ phía client).
+2. **Chú thích lệch code**: `panel_config.h:329` ghi token nhận qua header `X-Token`, nhưng code
+   (`net_upload_http.cpp:128`) kiểm `X-Panel-Token`. Client gửi `X-Panel-Token` (theo **code**);
+   nên sửa chú thích cho khỏi nhầm.
 
 
 ## Cap nhat 2026-10-13 (protocol v2 + UI mo rong)
@@ -1152,8 +1746,8 @@ Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.
 - CUSTOM: `M600 B0`, toggle `M412`, `REBOOT DFU`.
 - Thanh tieu de: 2 nut nho `II` (pause) / `[]` (stop) chi hien khi
   `panel.flags & PANEL_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.
-- Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) dung `font_segoe_vn_14`;
-  KHONG dung font nay cho ca cay (xem cam bay 43 o README goc).
+- Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) duoc gan font mono GFX (chi co o che do 4);
+  KHONG gan font do cho ca cay (xem cam bay 43 o README goc). O che do 0, 3 nhan nay ra o vuong.
 
 ## Thanh day (status bar) + phan trang noi dung
 Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky giong header:
@@ -1172,32 +1766,22 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
 
-## Font chu (doi 2026-10-13 theo yeu cau)
-Toan bo UI gio dung font **MONO** `font_consola_vn_14` (Consolas 14, bpp 4, sinh bang lv_font_conv):
-moi ky tu rong 7,7 px nen so dang chay (nhiet do, XYZ, %, gia tri setting) **khong nhay ngang**
-khi do dai gia tri doi; so thang cot dep hon.
-- Cong tac: `#define UI_MONO_FONT 1` trong `src/ui_lvgl.cpp` (0 = quay lai Montserrat 14 cu).
-- Dat font o cap MAN HINH trong `build_chrome()` (`text_font` la thuoc tinh THUA KE nen moi vat
-  tao sau deu dung mono) + dat rieng cho `lv_layer_top()` vi `lv_msgbox_create(NULL, ...)` nam o
-  layer_top, KHONG thua ke tu man hinh.
-- Khi `UI_MONO_FONT = 1` thi `vn_font()` khong lam gi (ca man da la font co dau). Khi = 0 thi
-  `vn_font()`/`vn_font_btn()` moi gan `font_segoe_vn_14` cho dung 3 nhan co dau.
-- `line_height` 17 (Montserrat 14 la 16) nen hang cao 16 px co the bi cat 1 px: hay kiem tra trang
-  INFO va danh sach FILES; neu thay cut thi hoac doi sang sinh font `--size 13`, hoac chi gan mono
-  cho rieng cac o GIA TRI.
-- Theme mac dinh cua LVGL chi dat font cuc bo cho `cb_marker_checked` (khong dung) => roller/table
-  deu thua ke font cua man hinh, khong bi lan font.
-
-Lenh sinh lai font (chay trong `lcd_panel`, giu NGUYEN `--size 14 --bpp 4` va dai ky tu):
-```
-npx --yes lv_font_conv --font C:\Windows\Fonts\consola.ttf --range 0x20-0x7E,0xA0-0xFF,0x0102-0x0103,0x0110-0x0111,0x01A0-0x01B1,0x1EA0-0x1EF9 --size 14 --bpp 4 --format lvgl -o src/font_consola_vn_14.c --force-fast-kern-format
-npx --yes lv_font_conv --font C:\Windows\Fonts\segoeui.ttf --range 0x20-0x7E,0xA0-0xFF,0x0102-0x0103,0x0110-0x0111,0x01A0-0x01B1,0x1EA0-0x1EF9 --size 14 --bpp 4 --format lvgl -o src/font_segoe_vn_14.c --force-fast-kern-format
-```
-Sau khi sinh **phai sua tay khoi include** o dau file thanh `#include "lvgl.h"` (lv_font_conv sinh ra
-`#ifdef LV_LVGL_H_INCLUDE_SIMPLE ... #else #include "lvgl/lvgl.h"`, ma PlatformIO chi them
-`<lvgl-src>` vao duong include -> loi bien dich).
-Nho: linker `--gc-sections` TU BO du lieu glyph cua font khong duoc tham chieu, nen giu ca 2 file
-font trong `src/` khong ton them Flash (do lai: 484 061 B = 36.9%).
+## Font chu (cap nhat: chi con font TU SINH)
+UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co the ep tu ngoai:
+`-DUI_MONO_FONT=0` de thu che do 0 ma khong phai sua file):
+- **`UI_MONO_FONT 4` (MAC DINH)**: font **mono TU SINH** `gfx4_font_robotomono` (4 bpp, xAdvance 8,
+  yAdvance 17, 5 dai roi rac) qua driver `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man
+  (`s_title`) giu Montserrat. **CO DU DAU tieng Viet** (U+1EA0..U+1EF9 + Ă ă Đ đ Ơ ơ Ư ư).
+  Sinh lai font bang `tools/ttf2gfxfont.py` (KHONG dung `lv_font_conv`).
+- **`UI_MONO_FONT 0`**: chi Montserrat 14 mac dinh cua LVGL (du phong). **KHONG HIEN DUOC DAU tieng
+  Viet** -> `vn_font()`/`vn_font_btn()` thanh no-op, 3 nhan co dau o lop phu SUA ("Gia tri" / "Buoc" /
+  "Huy") se ra **O VUONG**. Muon co dau thi PHAI dung che do 4.
+- Font ICON (WiFi / the nho) dung rieng `gfx4_font_icons` (ban nho 14 px cho header) va
+  `gfx4_font_icons_big` (ban to 30 px cho man STATUS), cung sinh bang `tools/ttf2gfxfont.py`.
+- Cac font sinh bang `lv_font_conv` **DA XOA khoi repo** (che do 1 va 2 gan o cap man hinh / tung
+  vat deu da thu tren may that va **MAT HET CHU**; che do 3 chua lam) — dung lai la vo ich.
+- `line_height` cua font mono la 17 (Montserrat 14 la 16): chieu cao moi man da duoc tinh theo 17 px
+  (JOG 197 / FILES 167 / INFO 197 / MESH 203 / SETTINGS 206 - deu <= 206 nen khong tran).
 
 ## EEPROM tren trang SETTINGS (doi 2026-10-13)
 - **Da BO nut `M501 LOAD`** theo yeu cau: M501 chi DOC LAI toan bo thong so tu chip EEPROM I2C
@@ -1355,8 +1939,9 @@ Vi sao: font sinh bang `lv_font_conv` (Consolas/Roboto Mono) **lam mat het chu**
   **2926 byte bitmap**, tong 5714 byte flash (nam o DROM). Du 100% dau tieng Viet.
 - `src/lv_font_gfxfont.c/.h` - driver `lv_font_t` doc GFXfont (repack sang dang lien tuc cua LVGL) +
   `lv_font_gfxfont_selftest()` in ra COM7: box/adv/ofs/checksum cua 'A' '0' 'a' U+1EC7 U+0110.
-- Cong tac `UI_MONO_FONT` trong `ui_lvgl.cpp`: 0 = Montserrat + Segoe (mac dinh an toan), 4 = mono GFX
-  gan tung nhan (**dang dung**), 1/2 = mono kieu cu (**da biet lam mat chu**, giu de tham chieu).
+- Cong tac `UI_MONO_FONT` trong `ui_lvgl.cpp`: **0 = chi Montserrat (khong dau tieng Viet, du phong)**,
+  **4 = mono GFX gan tung nhan (MAC DINH, dang dung, co du dau)**. Che do 1/2/3 (font sinh bang
+  `lv_font_conv`) da **XOA** khoi repo vi da thu tren may that deu mat chu.
 - Doi font mono: sua DUY NHAT `UI_MONO_FACE` trong `ui_lvgl.cpp`.
 - Kiem tra tren may: reset board roi doc COM7 -> khoi `[GFXFONT]` phai khop gia tri trong
   `tools/test_gfxfont_layout.py` (tool nay con so TUNG PIXEL voi FreeType: 0 lech cho ca tieng Viet).

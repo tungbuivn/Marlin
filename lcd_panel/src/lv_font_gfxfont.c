@@ -40,8 +40,13 @@
 /* So dai toi da trong 1 font (font tieng Viet cua ta dung 5: ascii + 4 dai dau). */
 #define LV_FONT_GFXFONT_MAX_RANGES   8U
 
-/* So descriptor font dung dong thoi (UI chi can 1; de 2 cho an toan neu sau nay them font). */
-#define LV_FONT_GFXFONT_MAX_FONTS    2U
+/* So descriptor font dung dong thoi. UI can 3: font CHU mono (ui_lvgl.cpp) + font ICON ban NHO
+ * (icon WiFi o header) + font ICON ban TO (icon WiFi tren man STATUS). Cac descriptor nay chi
+ * duoc cap khi co nguoi goi lv_font_gfxfont_get[_ex]() voi tap `ranges` khac nhau; HET SLOT thi
+ * driver dung lai slot 0 -> descriptor cu bi ghi de (chu ve bang font khac = hong man hinh), nen
+ * so nay PHAI >= so font gfxfont dung dong thoi. Moi slot ton 52 byte DRAM tinh (do bang nm tren
+ * lv_font_gfxfont.c.o: s_slots = 104 byte cho 2 slot): 2 -> 3 slot la +52 byte. */
+#define LV_FONT_GFXFONT_MAX_FONTS    3U
 
 /* Buffer repack cho font bpp 1 (bitmap Adafruit canh hang). Glyph lon nhat cua font 13px la
  * 9x14 -> 17 byte; 128 byte du cho toi 16x64 pixel. Chi MOT buffer dung chung vi LVGL ve

@@ -42,6 +42,7 @@
 #endif
 
 #include "panel_bt_upload.h"
+#include "net_wifi.h"            // quan ly WiFi (mot noi duy nhat - xem README 9.20)
 #include "panel_link.h"
 #include "ui_lvgl.h"             // UI_LCD_HOR_RES / UI_LCD_VER_RES
 
@@ -66,7 +67,10 @@ constexpr size_t   SNIFF_MAX   = 96;                       // du cho "PUT <ten 3
 // Stack cua task hut BT: task chi goi available()/read() (xQueueReceive) + vTaskDelay, khong
 // printf/khong goi sau -> 2 KB la du (vua du de tiet kiem heap; tang len 3072 neu gap panic
 // "Stack canary watchpoint triggered (btup_rx)").
+// (Chi dung khi PANEL_BT_USE_DATA_CB=0 - che do callback khong tao task hut nao.)
+#if !PANEL_BT_USE_DATA_CB
 constexpr uint32_t TASK_STACK  = 2048;
+#endif
 
 // Mau: lay DUNG gia tri cua ui_lvgl.cpp (MR_BG / MR_PROGBG / MR_PROGBAR / MR_FRAME /
 // MR_RATE100 / MR_HOTEND) de lop phu dong bo, nhung khong include/sua file do.
@@ -81,10 +85,7 @@ bool            s_bt_ready = false;
 bool            s_sd_ready = false;
 
 // WiFi: BAT SAN tu luc khoi dong (icon trang thai o header can trang thai THAT, xem net_upload.h).
-// s_wifi_state la bien DA CACHE de net_wifi_state() tra ve ngay, khong goi WiFi.* trong vong lap UI.
-bool              s_wifi_started = false;
-volatile uint8_t  s_wifi_state = 0;        // 0 tat/chua cau hinh, 1 dang ket noi, 2 da ket noi
-uint32_t          s_wifi_retry_ms = 0;
+// WiFi: KHONG con bien trang thai o day - net_wifi.cpp giu (net_wifi_state() doc tu do).
 bool              s_post_retryable = false; // loi ket noi -> cho phep POST lai
 bool              s_both_ready_logged = false;
 uint32_t          s_heap_min = 0xFFFFFFFFu; // heap thap nhat trong phien (in ra o log 1 Hz)
@@ -118,6 +119,14 @@ uint32_t s_rx = 0;                         // so byte da nhan duoc (pha 1)
 uint32_t s_next_prog = 0;                  // moc gui "PROG" qua BT ke tiep
 uint32_t s_bytes_posted = 0;               // so byte da POST (pha 2)
 uint32_t s_state_ms = 0;
+
+// ---- CACHE TIEN DO PHA 1 CHO NHANH UI (thanh tieu de) ----
+// Nhanh UI goi panel_bt_upload_rx() o nhip ~400 ms -> CHI doc 3 bien nay: khong chan, khong cap
+// phat, khong cham vao BT/LVGL/the TF. Cap nhat trong ui_rx_publish() (moi lan hut duoc du lieu
+// trong st_recv + moi nhip panel_bt_upload_task + moi lan pha 1 ket thuc).
+volatile bool     s_ui_rx_recv  = false;    // true = dang o PHA 1 (dang nhan file qua BT)
+volatile uint32_t s_ui_rx_got   = 0;        // byte da nhan (phien dang chay; giu lai sau khi xong)
+volatile uint32_t s_ui_rx_total = 0;        // tong byte theo header; 0 = khong biet truoc
 uint32_t s_note_ms = 0;
 uint32_t s_sdinit_ms = 0;
 uint32_t s_discard_until = 0;              // bo qua byte vun cua phien truoc
@@ -131,11 +140,12 @@ uint32_t s_ov_ms = 0;
 uint8_t  s_sniff[SNIFF_MAX];
 size_t   s_sniff_len = 0;
 
-// lop phu LVGL (lv_layer_top)
+// lop phu LVGL (lv_layer_top) - CHI dung o PHA 2 (toan man hinh) va hop thong bao DONE/ERR.
+//   full: tieu de + TRANG THAI (chu to 20px) + "% / KB / KB/s" + thanh tien do. KHONG ten file.
+//   note: chi con dong trang thai, hop nho giua man hinh.
 lv_obj_t *s_ov = nullptr;
-lv_obj_t *s_ov_name = nullptr, *s_ov_pct = nullptr, *s_ov_rate = nullptr,
-         *s_ov_state = nullptr, *s_ov_bar = nullptr;
-char      s_txt_name[24], s_txt_pct[32], s_txt_rate[24], s_txt_state[48];
+lv_obj_t *s_ov_title = nullptr, *s_ov_state = nullptr, *s_ov_info = nullptr, *s_ov_bar = nullptr;
+char      s_txt_state[48], s_txt_info[48];
 
 // ---- Theo doi THE TF nong (rut ra / cam vao) - xem README 9.12 ----
 uint32_t s_sd_check_ms = 0;                 // lan kiem tra "the con do" gan nhat
@@ -164,6 +174,29 @@ bool     s_scan_hidden = false;             // da chuyen NON-DISCOVERABLE sau la
 bool     s_client_ever = false;             // da tung co client ket noi (dat trong callback SPP)
 bool     s_task_created = false;            // task hut BT da tao (chi tao 1 lan)
 char     s_peer_mac[20] = "?";              // MAC client (log ra COM7 + callback SPP)
+// ---- HOAN INIT (README 9.17): begin() chi dat co, init that chay theo nhip trong task() ----
+enum : uint8_t { INIT_WAIT = 0, INIT_OVERLAY, INIT_SD, INIT_BT, INIT_OK_WAIT, INIT_DONE };
+uint8_t  s_init_state = INIT_DONE;          // INIT_DONE = khong phai init (truong hop PANEL_BT_UPLOAD=0)
+uint32_t s_init_req_ms = 0;                 // luc begin() duoc goi
+uint32_t s_init_t0 = 0;                     // moc bat dau init that (de do thoi gian)
+uint32_t s_init_ok_ms = 0;
+bool     s_init_ok = false;
+char     s_init_msg[32];
+
+// ---- SPP server / SDP record (xem README 9.15 + 9.19) ----
+// (volatile: ghi tu callback SPP trong task BTC, doc tu vong lap chinh)
+volatile bool     s_spp_init_seen = false;  // da nhan ESP_SPP_INIT_EVT (SPP stack init OK)
+volatile uint32_t s_spp_init_evt_ms = 0;
+// ESP_SPP_START_EVT = SDP record + RFCOMM server DA DANG KY XONG (bang chung THAT SU, khac han
+// ma tra ve cua esp_spp_start_srv() chi la "da xep hang doi"). Khong thay su kien nay = dien
+// thoai/PC se KHONG thay dich vu SPP -> phai dang ky lai / khoi dong lai panel.
+volatile bool     s_spp_start_seen = false;
+volatile uint32_t s_spp_start_ms = 0;
+volatile int16_t  s_spp_scn = -1;           // kenh RFCOMM (SCN) ma SPP server dung
+volatile int16_t  s_spp_start_status = -1;  // status trong ESP_SPP_START_EVT (0 = ESP_SPP_SUCCESS)
+uint32_t s_bt_up_ms = 0;                    // luc BT bat xong (de canh bao neu khong thay INIT_EVT)
+uint8_t  s_spp_warned = 0;                  // 0 cho, 1 da canh bao + thu dang ky lai, 2 ket thuc theo doi
+bool     s_spp_retried = false;             // da tu goi lai esp_spp_start_srv() 1 lan
 
 // ===========================================================================
 // Vong dem BT (SPSC)
@@ -187,6 +220,21 @@ bool buf_alloc(void) {
   return true;
 }
 
+// TRA LAI 2 buffer lam viec cho heap - dung o PHA 2 (BT da tat, chua bat WiFi):
+//   (1) WiFi co them RING_BYTES + SD_CHUNK de cap phat (lwip/TCP can khoi lien tuc);
+//   (2) QUAN TRONG: lan SerialBT.begin() THU 2 (sau chu ky end()/begin()) chi con ~21 KB heap
+//       (do that tren may: 21.452 B so voi 39.856 B truoc phien) => esp_spp_start_srv() that bai
+//       AM THAM => phien sau khong noi duoc, phai reset panel. Tra 2 buffer nay truoc khi bat lai
+//       BT la lay lai ~16 KB cho begin() (xem README 9.19).
+void buf_release(void) {
+  if (s_ring)  { free(s_ring);  s_ring  = nullptr; }
+  if (s_stage) { free(s_stage); s_stage = nullptr; }
+  __sync_synchronize();
+  s_head = 0;
+  s_tail = 0;
+  s_stage_len = 0;
+}
+
 // Lay toi da max_len byte ra khoi vong dem. Tra ve so byte lay duoc.
 size_t ring_take(uint8_t *dst, const size_t max_len) {
   __sync_synchronize();
@@ -205,32 +253,83 @@ void ring_discard(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Task hut queue BT -> vong dem. KHONG cham the SD/LVGL (chi doc BT).
+// Nhan du lieu SPP.
+//   PANEL_BT_USE_DATA_CB = 1 (mac dinh): core goi bt_data_cb() TRUC TIEP voi CA GOI
+//     (BluetoothSerial.cpp:337-338, qua BluetoothSerial::onData) -> KHONG qua queue 512 byte,
+//     khong day tung byte => khong con tran 6 KB/s va khong con "RX Full! Discarding".
+//     Chay trong context task BTC: CHI memcpy vao vong dem (khong SD/LVGL/printf).
+//   PANEL_BT_USE_DATA_CB = 0: task btup_rx hut queue bang read() nhu truoc.
 // ---------------------------------------------------------------------------
+#if PANEL_BT_USE_DATA_CB
+// Ghi 1 loat byte vao vong dem; phan khong con cho bi DEM vao s_drop (khong the biet tu phia app).
+void bt_push_bulk(const uint8_t *d, const size_t n) {
+  uint32_t h = s_head;
+  const uint32_t t = s_tail;
+  uint32_t space = (t - h - 1u) & RING_MASK;          // cho trong thuc te (chua 1 o)
+  const uint32_t take = (n <= space) ? (uint32_t)n : space;
+  if (take) {
+    const uint32_t first = RING_MASK + 1u - (h & RING_MASK);
+    const uint32_t n1 = (take < first) ? take : first;
+    memcpy(s_ring + h, d, n1);
+    if (take > n1) memcpy(s_ring, d + n1, take - n1);
+    __sync_synchronize();
+    s_head = (h + take) & RING_MASK;
+  }
+  if (take < n) s_drop += (uint32_t)(n - take);
+}
+
+void bt_data_cb(const uint8_t *d, const size_t n) {
+  s_bt_rx_ms = millis();
+  if (!d || n == 0) return;
+  if (s_bt_pump_pause || s_ring == nullptr) { s_drop += (uint32_t)n; return; }
+  bt_push_bulk(d, n);
+}
+#else
+// ---------------------------------------------------------------------------
+// Task hut queue BT -> vong dem. KHONG cham the SD/LVGL (chi doc BT).
+// VI SAO DOC BLOCKING (khong polling available()+delay): queue nhan cua Bluedroid chi 512 byte va
+// day theo TUNG BYTE voi timeout 0; neu queue day thi core DISCARD luon phan duoi cua goi
+// (BluetoothSerial.cpp:341 "RX Full! Discarding N bytes") => MAT BYTE AM THAM (doc lap voi `drop=`
+// cua ta). Truoc day task ngu 1 ms moi vong => mot goi ~1 KB den trong luc ngu lam tran queue.
+// xQueueReceive THUC DAY NGAY khi co byte dau tien => hut kip truoc khi goi tiep theo duoc day vao.
+// ---------------------------------------------------------------------------
+void bt_push_byte(const uint8_t b) {
+  const uint32_t h = s_head;
+  if (((h - s_tail) & RING_MASK) >= RING_KEEP) {
+    s_drop++;                                       // het cho -> mat byte nay
+  } else {
+    s_ring[h] = b;
+    __sync_synchronize();
+    s_head = (h + 1u) & RING_MASK;
+  }
+  s_bt_rx_ms = millis();
+}
+
 void bt_pump_task(void *) {
   for (;;) {
-    if (!s_bt_pump_pause && s_ring != nullptr) {
-      int guard = 0;
-      while (s_bt.available() > 0) {
-        const int c = s_bt.read();
-        if (c < 0) break;
-        const uint32_t h = s_head;
-        if (((h - s_tail) & RING_MASK) >= RING_KEEP) {
-          s_drop++;                                   // het cho -> mat byte nay
-        } else {
-          s_ring[h] = (uint8_t)c;
-          __sync_synchronize();
-          s_head = (h + 1u) & RING_MASK;
-        }
-        s_bt_rx_ms = millis();
-        if (++guard >= 1024) break;                    // nhuong CPU cho task khac
-      }
+    if (s_bt_pump_pause || s_ring == nullptr) {
+      s_bt_pump_parked = true;                      // da ra khoi vung doc BT -> main goi end() duoc
+      vTaskDelay(1);
+      continue;
+    }
+    const int c0 = s_bt.read();                     // BLOCK toi da 20 ms, thuc day NGAY khi co du lieu
+    if (c0 < 0) {                                   // het du lieu -> nhuong CPU
+      s_bt_pump_parked = s_bt_pump_pause;
+      vTaskDelay(1);
+      continue;
+    }
+    bt_push_byte((uint8_t)c0);
+    int guard = 0;                                  // hut not trong CUNG luot (khong block nua)
+    while (s_bt.available() > 0 && ++guard < 2048) {
+      const int c = s_bt.read();
+      if (c < 0) break;
+      bt_push_byte((uint8_t)c);
     }
     // Bao cho main biet da ROI khoi vung doc BT (de no goi SerialBT.end() an toan).
     s_bt_pump_parked = s_bt_pump_pause;
-    vTaskDelay(1);
   }
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Tra loi text qua BT (app dien thoai doc duoc)
@@ -267,28 +366,71 @@ bool bt_alive(void) {
 
 // ===========================================================================
 // Lop phu LVGL tren lv_layer_top (KHONG dung ui_lvgl.cpp)
+//   - PHA 2 (day file len ESP3D): lop phu TOAN MAN HINH + khoa UI (xem finish_recv()).
+//   - Ket qua cuoi (DONE / ERR ...): thu nho thanh hop thong bao giua man hinh.
+//   - PHA 1 (nhan file qua BT) KHONG dung lop phu nao: tien do do nhanh UI ve o THANH TIEU DE
+//     qua panel_bt_upload_rx(); module chi log 1 Hz (rx=... B).
+//   - KHONG ve TEN FILE (ton dien tich): chi trang thai + % + KB da day + KB/s.
 // ===========================================================================
-lv_obj_t *ov_label(const char *txt, const uint32_t col) {
-  lv_obj_t *l = lv_label_create(s_ov);
+lv_obj_t *ov_label(lv_obj_t *parent, const char *txt, const uint32_t col, const lv_font_t *font) {
+  lv_obj_t *l = lv_label_create(parent);
   if (!l) return nullptr;
   lv_label_set_text(l, txt);
   lv_obj_set_style_text_color(l, lv_color_hex(col), 0);
+  if (font) lv_obj_set_style_text_font(l, font, 0);
+  lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
   return l;
 }
 
-// Dat lai vi tri/kich thuoc cho 2 che do: nho (pha 1) va toan man hinh (pha 2).
+// Dat lai vi tri/kich thuoc: full = lop phu TOAN MAN HINH (pha 2); !full = hop thong bao DONE/ERR.
 void ov_layout(const bool full) {
   if (!s_ov) return;
-  const lv_coord_t x  = full ? 8 : 6;
-  const lv_coord_t w  = UI_LCD_HOR_RES - (full ? 16 : 12);
-  const lv_coord_t y0 = full ? 56 : 4;
-  if (full) lv_obj_set_pos(s_ov, 0, 0), lv_obj_set_size(s_ov, UI_LCD_HOR_RES, UI_LCD_VER_RES);
-  else      lv_obj_set_pos(s_ov, 4, 28), lv_obj_set_size(s_ov, UI_LCD_HOR_RES - 8, 92);
-  if (s_ov_name)  lv_obj_set_pos(s_ov_name, x, y0);
-  if (s_ov_state) lv_obj_set_pos(s_ov_state, x, y0 + 20);
-  if (s_ov_pct)   lv_obj_set_pos(s_ov_pct, x, y0 + 40);
-  if (s_ov_rate)  lv_obj_set_pos(s_ov_rate, x + 170, y0 + 40);
-  if (s_ov_bar)   { lv_obj_set_pos(s_ov_bar, x, y0 + 62); lv_obj_set_size(s_ov_bar, w, 10); }
+  const lv_coord_t W = UI_LCD_HOR_RES, H = UI_LCD_VER_RES;
+  if (full) {
+    lv_obj_set_pos(s_ov, 0, 0);
+    lv_obj_set_size(s_ov, W, H);
+    lv_obj_set_style_radius(s_ov, 0, 0);
+    lv_obj_set_style_border_width(s_ov, 0, 0);
+    lv_obj_set_style_bg_opa(s_ov, LV_OPA_90, 0);          // mo phu ca UI ben duoi
+    if (s_ov_title) {
+      lv_obj_clear_flag(s_ov_title, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_width(s_ov_title, (lv_coord_t)(W - 16));
+      lv_obj_align(s_ov_title, LV_ALIGN_TOP_MID, 0, 18);
+    }
+    if (s_ov_state) {
+      lv_obj_clear_flag(s_ov_state, LV_OBJ_FLAG_HIDDEN);
+      lv_label_set_long_mode(s_ov_state, LV_LABEL_LONG_WRAP);
+      lv_obj_set_width(s_ov_state, (lv_coord_t)(W - 16));
+      lv_obj_align(s_ov_state, LV_ALIGN_TOP_MID, 0, 54);   // chu TO (montserrat 20)
+    }
+    if (s_ov_info) {
+      lv_obj_clear_flag(s_ov_info, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_width(s_ov_info, (lv_coord_t)(W - 16));
+      lv_obj_align(s_ov_info, LV_ALIGN_TOP_MID, 0, 96);    // "%   KB   KB/s"
+    }
+    if (s_ov_bar) {
+      lv_obj_clear_flag(s_ov_bar, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_size(s_ov_bar, (lv_coord_t)(W - 32), 16);
+      lv_obj_align(s_ov_bar, LV_ALIGN_TOP_MID, 0, 128);
+    }
+  } else {                                                 // hop thong bao ket qua (giua man hinh)
+    const lv_coord_t w = (lv_coord_t)(W - 20), h = 84;
+    lv_obj_set_size(s_ov, w, h);
+    lv_obj_align(s_ov, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_radius(s_ov, 6, 0);
+    lv_obj_set_style_border_width(s_ov, 1, 0);
+    lv_obj_set_style_bg_opa(s_ov, LV_OPA_COVER, 0);
+    if (s_ov_title) lv_obj_add_flag(s_ov_title, LV_OBJ_FLAG_HIDDEN);
+    if (s_ov_info)  lv_obj_add_flag(s_ov_info, LV_OBJ_FLAG_HIDDEN);
+    if (s_ov_bar)   lv_obj_add_flag(s_ov_bar, LV_OBJ_FLAG_HIDDEN);
+    if (s_ov_state) {
+      lv_obj_clear_flag(s_ov_state, LV_OBJ_FLAG_HIDDEN);
+      lv_label_set_long_mode(s_ov_state, LV_LABEL_LONG_WRAP);
+      lv_obj_set_width(s_ov_state, (lv_coord_t)(w - 16));
+      lv_obj_align(s_ov_state, LV_ALIGN_CENTER, 0, 0);
+    }
+  }
+  lv_obj_invalidate(s_ov);
 }
 
 bool ov_create(const bool full) {
@@ -304,16 +446,13 @@ bool ov_create(const bool full) {
   lv_obj_set_style_bg_opa(s_ov, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(s_ov, 0, 0);
   lv_obj_clear_flag(s_ov, LV_OBJ_FLAG_SCROLLABLE);
-  // Pha 1: lop phu nho -> KHONG an cam ung (nguoi dung van dung duoc UI cho khac).
+  // Lop phu KHONG an cam ung; input bi chan bang ui_lock() (chi o PHA 2).
   lv_obj_clear_flag(s_ov, LV_OBJ_FLAG_CLICKABLE);
 
-  lv_obj_t *title = ov_label("BT UPLOAD", OV_FILL);
-  if (title) lv_obj_set_pos(title, 6, full ? 30 : 4);
-
-  s_ov_name  = ov_label("?", OV_TXT);
-  s_ov_state = ov_label("...", OV_TXT);
-  s_ov_pct   = ov_label("", OV_TXT);
-  s_ov_rate  = ov_label("", OV_TXT);
+  // 3 dong: tieu de (nho) / trang thai (TO) / thong tin "% KB KB/s" (nho). KHONG co dong ten file.
+  s_ov_title = ov_label(s_ov, "BT UPLOAD", OV_FILL, nullptr);
+  s_ov_state = ov_label(s_ov, "...", OV_TXT, &lv_font_montserrat_20);
+  s_ov_info  = ov_label(s_ov, "", OV_TXT, nullptr);
 
   s_ov_bar = lv_bar_create(s_ov);
   if (s_ov_bar) {
@@ -332,51 +471,28 @@ bool ov_create(const bool full) {
 void ov_destroy(void) {
   if (s_ov) lv_obj_del(s_ov);
   s_ov = nullptr;
-  s_ov_name = s_ov_pct = s_ov_rate = s_ov_state = s_ov_bar = nullptr;
-  s_txt_name[0] = s_txt_pct[0] = s_txt_rate[0] = s_txt_state[0] = '\0';
-}
-
-// Pha 2: lop phu TOAN MAN HINH (nen mo phu ca UI) + khoa input.
-void ov_set_full(const bool full) {
-  if (!s_ov) return;
-  ov_layout(full);
-  lv_obj_set_style_bg_opa(s_ov, full ? LV_OPA_90 : LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(s_ov, full ? 0 : 1, 0);
-  lv_obj_invalidate(s_ov);
+  s_ov_title = s_ov_state = s_ov_info = s_ov_bar = nullptr;
+  s_txt_state[0] = s_txt_info[0] = '\0';
 }
 
 // Cap nhat text. Dung buffer tinh + lv_label_set_text_static de KHONG ton them LVGL heap
-// (pool LVGL da bi ha xuong 30 KB cho du DRAM - xem src/lv_conf_panel.h); phai tu goi
+// (pool LVGL da bi ha xuong 24 KB cho du DRAM - xem src/lv_conf_panel.h); phai tu goi
 // lv_obj_invalidate vi static khong tu invalidate.
-void ov_set(const char *state, const char *name, const char *pct, const char *rate,
-            const bool ok_col) {
+// state = dong TRANG THAI (chu to, mau xanh/do), info = dong phu "% / KB / KB/s" (co the rong).
+void ov_set(const char *state, const char *info, const bool ok_col) {
   if (!s_ov) return;
-  if (name && s_ov_name) {
-    snprintf(s_txt_name, sizeof(s_txt_name), "%s", name);
-    lv_label_set_text_static(s_ov_name, s_txt_name);
-    lv_obj_invalidate(s_ov_name);
-  }
   if (state && s_ov_state) {
     snprintf(s_txt_state, sizeof(s_txt_state), "%s", state);
     lv_obj_set_style_text_color(s_ov_state, lv_color_hex(ok_col ? OV_OK : OV_ERR), 0);
     lv_label_set_text_static(s_ov_state, s_txt_state);
     lv_obj_invalidate(s_ov_state);
   }
-  if (pct && s_ov_pct) {
-    snprintf(s_txt_pct, sizeof(s_txt_pct), "%s", pct);
-    lv_label_set_text_static(s_ov_pct, s_txt_pct);
-    lv_obj_invalidate(s_ov_pct);
-  }
-  if (rate && s_ov_rate) {
-    snprintf(s_txt_rate, sizeof(s_txt_rate), "%s", rate);
-    lv_label_set_text_static(s_ov_rate, s_txt_rate);
-    lv_obj_invalidate(s_ov_rate);
+  if (info && s_ov_info) {
+    snprintf(s_txt_info, sizeof(s_txt_info), "%s", info);
+    lv_label_set_text_static(s_ov_info, s_txt_info);
+    lv_obj_invalidate(s_ov_info);
   }
   if (s_ov_bar) lv_obj_invalidate(s_ov_bar);
-}
-
-void ov_rate_str(char *dst, const size_t n) {
-  snprintf(dst, n, "%u.%u KB/s", (unsigned)(s_rate_x10 / 10u), (unsigned)(s_rate_x10 % 10u));
 }
 
 void ov_bar_pct(const uint32_t done, const uint32_t total) {
@@ -384,37 +500,25 @@ void ov_bar_pct(const uint32_t done, const uint32_t total) {
   lv_bar_set_value(s_ov_bar, total ? (int32_t)((uint64_t)done * 100u / total) : 0, LV_ANIM_OFF);
 }
 
-void ov_phase1(const char *state) {
-  if (millis() - s_ov_ms < 200) return;
-  s_ov_ms = millis();
-  char pct[32], rate[24];
-  if (s_have_size && s_declared)
-    snprintf(pct, sizeof(pct), "%u%%  %u/%u KB",
-             (unsigned)((uint64_t)s_rx * 100u / s_declared),
-             (unsigned)(s_rx / 1024u), (unsigned)(s_declared / 1024u));
-  else
-    snprintf(pct, sizeof(pct), "%u KB", (unsigned)(s_rx / 1024u));
-  ov_rate_str(rate, sizeof(rate));
-  ov_set(state, s_name, pct, rate, true);
-  ov_bar_pct(s_rx, s_have_size ? s_declared : 0);
-}
-
+// PHA 2: chi trang thai + % + KB da day + KB/s (KHONG ten file).
 void ov_phase2(const uint32_t done, const uint32_t total) {
-  if (millis() - s_ov_ms < 200) return;
+  if (!s_ov) return;
+  if (millis() - s_ov_ms < 200) return;         // du muot cho mat nguoi, khong nong CPU
   s_ov_ms = millis();
-  char pct[32], rate[24];
-  snprintf(pct, sizeof(pct), "%u%%  %u/%u KB",
+  char info[48];
+  snprintf(info, sizeof(info), "%u%%   %u/%u KB   %u.%u KB/s",
            (unsigned)((uint64_t)done * 100u / (total ? total : 1u)),
-           (unsigned)(done / 1024u), (unsigned)(total / 1024u));
-  ov_rate_str(rate, sizeof(rate));
-  ov_set("DANG DAY LEN ESP3D", s_name, pct, rate, true);
+           (unsigned)(done / 1024u), (unsigned)(total / 1024u),
+           (unsigned)(s_rate_x10 / 10u), (unsigned)(s_rate_x10 % 10u));
+  ov_set("DANG DAY LEN ESP3D...", info, true);
   ov_bar_pct(done, total);
 }
 
+// Thong bao ket qua cuoi cung (DONE / ERR ...): hop nho giua man hinh, chi 1 dong trang thai.
 void ov_note(const char *state, const bool ok_col) {
   if (!s_ov) return;
-  ov_set_full(false);
-  ov_set(state, s_name[0] ? s_name : "?", "", "", ok_col);
+  ov_layout(false);
+  ov_set(state, "", ok_col);
 }
 
 // Tat/mo TAT CA input device (cam ung + encoder). API LVGL 8.4: lv_indev_get_next nam trong
@@ -426,6 +530,24 @@ void ui_lock(const bool lock) {
     i = lv_indev_get_next(i);
   }
   BTLOG("[BTUP] UI %s\n", lock ? "KHOA" : "MO KHOA");
+}
+
+// ---------------------------------------------------------------------------
+// CACHE TIEN DO PHA 1 CHO NHANH UI (thanh tieu de) - xem panel_bt_upload_rx().
+//   PHA 1 = ST_SNIFF (dang nhan header) hoac ST_RECV (dang nhan du lieu). Vua roi khoi pha 1
+//   (ST_POST tro di) thi tra ve false NGAY, nhung GIU LAI got/total cuoi cung de UI khong phai
+//   thay so nhay ve 0 (UI tu quyet dinh hien hay an).
+//   Goi ham nay o: moi lan hut duoc du lieu (st_recv), moi nhip panel_bt_upload_task(), va ngay
+//   tai cho pha 1 ket thuc (finish_recv/fail_session/reject_token) - pha 2 chay BLOCKING nen
+//   khong the cho tới nhip task ke tiep.
+// ---------------------------------------------------------------------------
+void ui_rx_publish(void) {
+  const bool recv = (s_state == ST_SNIFF || s_state == ST_RECV);
+  if (recv) {
+    s_ui_rx_got   = s_rx;
+    s_ui_rx_total = s_have_size ? s_declared : 0u;
+  }
+  s_ui_rx_recv = recv;
 }
 
 // ===========================================================================
@@ -701,55 +823,31 @@ bool stage_push(const uint8_t *p, size_t n) {
 // WiFi: bat san tu boot, tu ket noi lai khi mat, va cap nhat bien trang thai da cache.
 // KHONG block (chi goi tu panel_bt_upload_task() / vong cho cua pha 2).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// WiFi: TAT CA diu nam trong net_wifi.cpp (mot noi duy nhat dieu khien WiFi - xem README 9.20).
+// Cac ham duoi day chi la lop mong cho code pha 2 cua duong BT.
+// ---------------------------------------------------------------------------
 void wifi_start(void) {
-  if (PANEL_ESP3D_SSID[0] == '\0') {
-    BTLOG("[BTUP] PANEL_ESP3D_SSID rong -> khong bat WiFi (net_wifi_state = 0)\n");
-    return;
-  }
-  WiFi.persistent(false);          // KHONG ghi credential xuong NVS moi lan ket noi (do flash)
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);     // driver tu ket noi lai khi mat
-  WiFi.setSleep(true);             // pha 2 khi day file se tat lai; pha 1 WiFi TAT han
-  WiFi.begin(PANEL_ESP3D_SSID, PANEL_ESP3D_PASS);
-  s_wifi_started = true;
-  s_wifi_state = 1;
-  s_wifi_retry_ms = millis();
-  BTLOG("[BTUP] WiFi bat dau ket noi \"%s\" ... (heap truoc khi bat: %u B)\n",
-        PANEL_ESP3D_SSID, (unsigned)ESP.getFreeHeap());
+  net_wifi_up();                   // khong chan; loi RAM/cau hinh da duoc net_wifi_up() bao
 }
 
 // Tat WiFi NGAY (khong cho) - dung sau khi POST xong: tra ~40-50 KB heap + nhuong radio cho BT.
 void wifi_off_now(const char *why) {
-  if (!s_wifi_started) return;
-  s_wifi_started = false;          // dat truoc de wifi_poll() khong bat lai
-  const uint32_t before = ESP.getFreeHeap();
-  WiFi.disconnect(true);           // ngat ket noi + tat STA
-  WiFi.mode(WIFI_OFF);
-  s_wifi_state = 0;                // net_wifi_state() = 0 -> icon WiFi xam
-  s_both_ready_logged = false;
-  heap_track();
-  BTLOG("[BTUP] %s -> TAT WiFi: heap %u -> %u B (khoi lien tuc=%u B)\n", why,
-        (unsigned)before, (unsigned)ESP.getFreeHeap(),
-        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  BTLOG("[BTUP] %s -> tat WiFi (net_wifi_down)\n", why);
+  net_wifi_down();
 }
 
 // Cua an toan RAM TRUOC khi bat WiFi (sau khi da tat BT): WiFi STA (driver + lwip + supplicant)
 // can ~40-50 KB, va lwip/TCP can vai khoi lien tuc.
 bool wifi_ram_ok(void) {
-  const uint32_t freeb = ESP.getFreeHeap();
-  const size_t   big   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
-  BTLOG("[BTUP] cua an toan WiFi: heap=%u B, khoi lien tuc=%u B (can >= %u / %u)\n",
-        (unsigned)freeb, (unsigned)big, (unsigned)PANEL_WIFI_MIN_HEAP,
-        (unsigned)PANEL_WIFI_MIN_BLOCK);
-  return (freeb >= PANEL_WIFI_MIN_HEAP) && (big >= PANEL_WIFI_MIN_BLOCK);
+  return net_wifi_ram_ok();        // cua an toan RAM nam trong net_wifi.cpp (dung chung)
 }
 
 // Tat WiFi khi da ranh (chi la luoi an toan - duong chinh da goi wifi_off_now() sau moi POST).
 // Goi tu st_idle()/st_note(); moc "ranh" = s_note_ms (luc phien truoc ket thuc).
 void wifi_stop_idle(void) {
-  if (!s_wifi_started) return;
   if (PANEL_ESP3D_KEEP_MS && (millis() - s_note_ms) < PANEL_ESP3D_KEEP_MS) return;
-  wifi_off_now("ranh");
+  net_wifi_down();
 }
 
 // Theo doi heap thap nhat (goi ca trong vong lap blocking cua pha 2 - luc do log 1 Hz KHONG chay).
@@ -761,16 +859,51 @@ void heap_track(void) {
 // ===========================================================================
 // BAT / TAT BT Classic (chay TUAN TU voi WiFi - xem README 9.11) + scan mode (README 9.13)
 // ===========================================================================
-// Callback SPP rieng: CHI de lay MAC cua client (core goi custom callback cho MOI su kien SPP -
-// BluetoothSerial.cpp:414). Chay trong context task BTC -> chi ghi chuoi/co, KHONG goi LVGL/SD.
+// Callback SPP rieng: lay MAC client + theo doi ESP_SPP_INIT_EVT (dau hieu SPP stack da init OK).
+// Core goi custom callback cho MOI su kien SPP, SAU handler cua no (BluetoothSerial.cpp:414) -
+// nghia la khi ta thay ESP_SPP_INIT_EVT thi core DA goi esp_spp_start_srv() (va da BO QUA ket qua).
+// Chay trong context task BTC -> chi ghi chuoi/co, KHONG goi LVGL/SD.
 void spp_evt_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   if (event == ESP_SPP_SRV_OPEN_EVT && param) {
     snprintf(s_peer_mac, sizeof(s_peer_mac), "%02X:%02X:%02X:%02X:%02X:%02X",
              param->srv_open.rem_bda[0], param->srv_open.rem_bda[1], param->srv_open.rem_bda[2],
              param->srv_open.rem_bda[3], param->srv_open.rem_bda[4], param->srv_open.rem_bda[5]);
     s_client_ever = true;
+    BTLOG("[BTUP] SPP: client KET NOI (%s, handle=%u, status=%d)\n", s_peer_mac,
+          (unsigned)param->srv_open.handle, (int)param->srv_open.status);
+  } else if (event == ESP_SPP_INIT_EVT) {
+    s_spp_init_evt_ms = millis();
+    s_spp_init_seen   = true;
+  } else if (event == ESP_SPP_START_EVT && param) {
+    // BANG CHUNG server da len: SDP record + RFCOMM da dang ky xong (khac ma tra ve cua
+    // esp_spp_start_srv - chi la "da xep hang doi"). Xem README 9.15/9.19.
+    s_spp_start_ms     = millis();
+    s_spp_start_seen   = true;
+    s_spp_scn          = (int16_t)param->start.scn;
+    s_spp_start_status = (int16_t)param->start.status;
+    BTLOG("[BTUP] SPP: ESP_SPP_START_EVT -> server DA DANG KY (SCN=%d, handle=%u, status=%d)\n",
+          (int)param->start.scn, (unsigned)param->start.handle, (int)param->start.status);
+  } else if (event == ESP_SPP_SRV_STOP_EVT) {
+    s_spp_start_seen = false;                 // server da dung (BT tat / dang ky lai)
   }
 }
+
+// Ma esp_err_t -> chuoi ngan (de doc log). Chi dung khi bat PANEL_BT_SPP_RETRY.
+#if PANEL_BT_SPP_RETRY
+const char *spp_err_str(const esp_err_t e) {
+  switch ((int)e) {
+    case 0:     return "ESP_OK (chi la DA XEP HANG DOI - khong co nghia la da dang ky!)";
+    case -1:    return "ESP_FAIL";
+    case 0x101: return "ESP_ERR_NO_MEM (HET RAM!)";
+    case 0x102: return "ESP_ERR_INVALID_ARG";
+    case 0x103: return "ESP_ERR_INVALID_STATE";
+    case 0x104: return "ESP_ERR_INVALID_SIZE";
+    case 0x105: return "ESP_ERR_NOT_FOUND";
+    case 0x106: return "ESP_ERR_NOT_SUPPORTED";
+    default:    return "?";
+  }
+}
+#endif
 
 // Doi phan DISCOVERABLE cua scan mode: CONNECTABLE luon bat => may DA PAIR van ket noi duoc.
 //   DISCOVERABLE     = hien trong danh sach quet (de pair may moi / pair lai sau khi "quen" thiet bi)
@@ -790,8 +923,15 @@ void bt_scan_mode(const bool discoverable, const char *why) {
 
 // Cho task hut BT "dung bai" truoc khi goi SerialBT.end() (end() xoa _spp_rx_queue; neu task dang
 // nam trong xQueueReceive tren queue do thi dung handle da bi xoa -> hong).
+// Che do PANEL_BT_USE_DATA_CB khong co task hut: chi can cho 1 nhip de callback (chay trong task
+// BTC) dang xu ly xong - bt_data_cb doc s_bt_pump_pause va tu bo du lieu ke tu do.
 void bt_pump_pause_wait(void) {
   s_bt_pump_pause = true;
+  if (!s_task_created) {
+    delay(3);
+    s_bt_pump_parked = true;
+    return;
+  }
   const uint32_t t0 = millis();
   while (!s_bt_pump_parked && (millis() - t0) < 200u) {
     lv_timer_handler();
@@ -816,11 +956,27 @@ bool bt_start(void) {
   // BluetoothSerial.cpp:686-688 -> btSetPin()). _pin_* la bien STATIC nen gia tri con sau end(),
   // nhung cu dat lai moi lan cho chac chan (ca lan begin lai sau khi end - xem README 9.11).
   s_bt.setPin(PANEL_BT_PIN);
-  s_bt.register_callback(spp_evt_cb);    // de biet MAC client (log ai da gui)
+  s_bt.register_callback(spp_evt_cb);    // MAC client + ESP_SPP_INIT_EVT/START_EVT (SPP co len khong)
+#if PANEL_BT_USE_DATA_CB
+  // Duong NHANH: core goi thang bt_data_cb() voi CA GOI (khong qua queue 512 byte cua core).
+  // Dat TRUOC begin() de khong kip roi vao queue neu co client noi ngay.
+  s_bt.onData(bt_data_cb);
+#endif
+  s_spp_init_seen = false;               // cho lai ESP_SPP_INIT_EVT cua lan bat nay
+  s_spp_start_seen = false;              // ... va ESP_SPP_START_EVT (server da dang ky)
+  s_spp_scn = -1;
+  s_spp_start_status = -1;
+  s_spp_retried = false;
+  s_spp_warned    = 0;
+  const uint32_t heap_b0 = ESP.getFreeHeap();
+  const size_t   big_b0  = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   if (!s_bt.begin(PANEL_BT_NAME)) {
     BTLOG("[BTUP] BluetoothSerial.begin(\"%s\") THAT BAI\n", PANEL_BT_NAME);
     return false;
   }
+  BTLOG("[BTUP] sau SerialBT.begin(): heap %u -> %u B, khoi lien tuc %u -> %u B\n",
+        (unsigned)heap_b0, (unsigned)ESP.getFreeHeap(), (unsigned)big_b0,
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 #if PANEL_BT_JUST_WORKS
   // Ghi de IO capability ve NONE de pair "Just Works" (khong hoi ma). Phai goi SAU begin() vi
   // begin() moi dat ESP_BT_IO_CAP_IO (BluetoothSerial.cpp:694) - goi sau thi gia tri nay thang.
@@ -841,9 +997,12 @@ bool bt_start(void) {
           ctrl_st, bd_st);
     return false;
   }
-  s_bt.setTimeout(1);                    // read() chi block toi da 1 tick
+  // read() BLOCK toi da 20 ms - task hut BT thuc day NGAY khi co byte (xem bt_pump_task; KHONG dung
+  // gia tri nho nhu 1 ms vi khi do task ngu lien tuc va co the bo lo thoi diem goi du lieu den).
+  s_bt.setTimeout(20);
   s_bt_pump_parked = false;
   s_bt_pump_pause  = false;
+#if !PANEL_BT_USE_DATA_CB
   if (!s_task_created) {
     const BaseType_t r = xTaskCreatePinnedToCore(bt_pump_task, "btup_rx", TASK_STACK, nullptr, 5,
                                                  nullptr, 1);
@@ -853,7 +1012,11 @@ bool bt_start(void) {
     }
     s_task_created = true;
   }
+#else
+  s_task_created = true;   // khong co task hut: du lieu den qua bt_data_cb() trong task BTC
+#endif
   s_bt_ready = true;
+  s_bt_up_ms = millis();
   heap_track();
   // SCAN MODE: LUON DISCOVERABLE (yeu cau nguoi dung) => bat ky dien thoai nao cung thay TBT-PANEL
   // va pair duoc bat cu luc nao. Bao mat nam o TOKEN (dong dau phien) chu khong o scan mode.
@@ -863,6 +1026,12 @@ bool bt_start(void) {
         PANEL_BT_JUST_WORKS ? ", SSP Just Works" : "",
         ctrl_st, bd_st, (unsigned)ESP.getFreeHeap(),
         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  BTLOG("[BTUP] duong nhan du lieu: %s (vong dem %u B, khoi ghi %u B)\n",
+        PANEL_BT_USE_DATA_CB ? "CALLBACK - core goi thang, KHONG qua queue 512 B (nhanh)"
+                             : "QUEUE 512 B + task btup_rx (cham)",
+        (unsigned)RING_BYTES, (unsigned)SD_CHUNK);
+  BTLOG("[BTUP] cho ESP_SPP_INIT_EVT + ESP_SPP_START_EVT (server dang ky) toi da %u ms...\n",
+        (unsigned)PANEL_BT_SPP_WAIT_MS);
   return true;
 }
 
@@ -874,14 +1043,17 @@ uint32_t bt_stop(const char *why) {
   s_bt_ready = false;                    // chan moi bt_send/bt_alive tu day
   bt_pump_pause_wait();
   const uint32_t before = ESP.getFreeHeap();
+  const size_t   big_before = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   s_bt.end();
   const uint32_t after = ESP.getFreeHeap();
+  const size_t   big_after = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   const uint32_t gain = (after > before) ? (after - before) : 0;
   s_bt_cycles++;
   heap_track();
-  BTLOG("[BTUP] %s -> TAT BT (lan %u): heap %u -> %u B (+%u B), khoi lien tuc=%u B\n", why,
-        (unsigned)s_bt_cycles, (unsigned)before, (unsigned)after, (unsigned)gain,
-        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  BTLOG("[BTUP] %s -> TAT BT (lan %u): heap %u -> %u B (+%u B), khoi lien tuc %u -> %u B, "
+        "ctrl=%d bd=%d\n", why, (unsigned)s_bt_cycles, (unsigned)before, (unsigned)after,
+        (unsigned)gain, (unsigned)big_before, (unsigned)big_after,
+        (int)esp_bt_controller_get_status(), (int)esp_bluedroid_get_status());
   if (gain < PANEL_BT_END_MIN_GAIN)
     BTLOG("[BTUP] !! CANH BAO: SerialBT.end() chi tra %u B (< %u B). Neu lap lai nhieu lan ma "
           "khong tra du thi phai cat DRAM tinh (xem README 9.11)\n",
@@ -907,56 +1079,35 @@ void result_try_send(void) {
 }
 
 void wifi_poll(void) {
-  if (!s_wifi_started) { s_wifi_state = 0; return; }   // WiFi dang TAT (lazy) -> icon xam
-  if (WiFi.status() == WL_CONNECTED) {
-    if (s_wifi_state != 2)
-      BTLOG("[BTUP] WiFi DA ket noi, IP %s, heap=%u B\n",
-            WiFi.localIP().toString().c_str(), (unsigned)ESP.getFreeHeap());
-    s_wifi_state = 2;
-    if (s_bt_ready && !s_both_ready_logged) {
-      // Con so quan trong nhat de quyet dinh cat buffer: heap NGAY SAU khi ca WiFi lan BT da len.
-      s_both_ready_logged = true;
-      heap_track();
-      BTLOG("[BTUP] WiFi + BT Classic DA SAN SANG: heap tu do = %u B "
-            "(buffer cua module da lay %u B)\n",
-            (unsigned)ESP.getFreeHeap(), (unsigned)(RING_BYTES + SD_CHUNK + TASK_STACK));
-    }
-    return;
-  }
-  s_wifi_state = 1;                                     // dang thu / dang thu lai -> icon DO
-  const uint32_t now = millis();
-  if (now - s_wifi_retry_ms >= PANEL_BT_WIFI_RETRY_MS) {
-    s_wifi_retry_ms = now;
-    if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA);
-    WiFi.begin(PANEL_ESP3D_SSID, PANEL_ESP3D_PASS);     // autoReconnect lo phan lon; day la chot ha
-    BTLOG("[BTUP] WiFi mat ket noi -> thu lai\n");
+  net_wifi_poll();                                     // cap nhat cache + tu ket noi lai (khong chan)
+  if (net_wifi_connected() && s_bt_ready && !s_both_ready_logged) {
+    // Con so quan trong nhat de quyet dinh cat buffer: heap NGAY SAU khi ca WiFi lan BT da len.
+    s_both_ready_logged = true;
+    heap_track();
+    BTLOG("[BTUP] WiFi + BT Classic DA SAN SANG: heap tu do = %u B "
+          "(buffer cua module da lay %u B)\n",
+          (unsigned)ESP.getFreeHeap(), (unsigned)(RING_BYTES + SD_CHUNK));
   }
 }
 
 void wifi_ps(const bool power_save) {
-  if (!s_wifi_started) return;
-  WiFi.setSleep(power_save);      // pha 2: tat tiet kiem de day nhanh; pha 1: WiFi da TAT han
+  net_wifi_ps(power_save);       // pha 2: tat tiet kiem de day nhanh; xong: bat lai
 }
 
 // Cho WiFi ket noi (co ve lop phu + nuoi UART; khong chan cung vi van goi lv_timer_handler).
 // WIFI DUOC BAT O DAY (lazy) - khong bat luc boot, de SerialBT.begin() chay mot minh.
 bool wifi_up(void) {
-  if (PANEL_ESP3D_SSID[0] == '\0') { err_set("chua cau hinh WiFi ESP3D"); return false; }
-  if (WiFi.status() == WL_CONNECTED) { s_wifi_state = 2; return true; }
-  if (!s_wifi_started) {
-    // Bat WiFi lan dau (chi tu pha 2, sau khi da tat BT) - co cua an toan RAM.
-    if (!wifi_ram_ok()) { err_set("thieu RAM cho WiFi"); return false; }
-    wifi_start();
-  }
+  if (!net_wifi_configured()) { err_set("chua cau hinh WiFi ESP3D"); return false; }
+  if (net_wifi_connected()) return true;
+  if (!net_wifi_up()) { err_set("thieu RAM cho WiFi"); return false; }
   const uint32_t t0 = millis();
-  while (WiFi.status() != WL_CONNECTED) {
+  while (!net_wifi_connected()) {
     if (millis() - t0 > PANEL_BT_WIFI_MS) { err_set("WiFi khong ket noi"); return false; }
-    wifi_poll();
+    net_wifi_poll();
     lv_timer_handler();
     panel_link_task();
     delay(10);
   }
-  s_wifi_state = 2;
   return true;
 }
 
@@ -1174,13 +1325,13 @@ bool http_read_reply(WiFiClient &sock, uint16_t *code, char *status, const size_
 }
 
 bool http_post(const uint32_t size) {
-  ov_set("KET NOI WIFI...", s_name, "", "", true);
+  ov_set("KET NOI WIFI...", "", true);
   if (!wifi_up()) { s_post_retryable = true; return false; }
 
   // Tim IP module ESP3D (cache lai; chi do khi chua biet hoac IP cu da fail).
   // Luu y: 192.168.0.0/24 trung dai IP mang nha nguoi dung -> BAT BUOC phai xac nhan day dung la
   // ESP3D (probe_esp3d gui [ESP800] va doi "FW version:"), khong chi kiem "port 80 mo".
-  ov_set("TIM ESP3D...", s_name, "", "", true);
+  ov_set("TIM ESP3D...", "", true);
   if (!esp3d_ensure()) {
     err_set("khong tim thay ESP3D");
     s_post_retryable = true;
@@ -1189,7 +1340,7 @@ bool http_post(const uint32_t size) {
   char ipbuf[16];
   ip_str(ipbuf, sizeof(ipbuf), s_esp3d_ip);
 
-  ov_set("KET NOI ESP3D...", s_name, "", "", true);
+  ov_set("KET NOI ESP3D...", "", true);
   WiFiClient sock;
   sock.setTimeout(PANEL_BT_HTTP_TIMEOUT_MS);
   if (!sock.connect(s_esp3d_ip, PANEL_ESP3D_PORT, PANEL_BT_HTTP_TIMEOUT_MS)) {
@@ -1254,7 +1405,7 @@ bool http_post(const uint32_t size) {
   const uint32_t t0 = millis();
   while (ok && sent < size) {
     // WiFi rá»›t giá»¯a lÃºc Ä‘ang Ä‘áº©y -> há»§y sáº¡ch (Ä‘Ã³ng socket á»Ÿ dÆ°á»›i, má»Ÿ khÃ³a UI á»Ÿ finish_recv).
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!net_wifi_connected()) {
       err_set("WiFi mat ket noi");
       s_post_retryable = true;
       ok = false;
@@ -1319,8 +1470,8 @@ void fail_session(void) {
   const char *why = s_err[0] ? s_err : "loi khong ro";
   BTLOG("[BTUP] ERR: %s\n", why);
   bt_send("ERR %s\n", why);
-  if (s_ov) ov_note(why, false);
   s_state = ST_DRAIN;
+  ui_rx_publish();                 // pha 1 ket thuc -> UI thay false ngay (pha 1 KHONG co lop phu)
   s_state_ms = millis();
 }
 
@@ -1346,25 +1497,37 @@ void finish_recv(void) {
 
   // 2) TAT BT de TRA ~100 KB heap cho WiFi (BT va WiFi KHONG BAO GIO bat dong thoi - README 9.11)
   s_state = ST_POST;
+  ui_rx_publish();               // PHA 1 KET THUC ngay tai day (pha 2 chay blocking ben duoi)
   bt_stop("ket thuc pha 1");
+
+  // 2b) TRA LUON 2 buffer lam viec (vong dem + khoi ghi) cho heap - xem buf_release() + README 9.19:
+  //     (a) WiFi co them ~16 KB de cap phat (lwip/TCP can khoi lien tuc);
+  //     (b) lan SerialBT.begin() THU HAI (sau end()) chi con ~21 KB heap -> esp_spp_start_srv()
+  //         that bai am tham -> phien sau khong noi duoc, phai reset panel. Tra 2 buffer nay thi
+  //         begin() lan 2 co them ~16 KB. Buffer duoc cap phat LAI ngay sau khi bat lai BT.
+  buf_release();
+  BTLOG("[BTUP] tra buffer lam viec (ring %u + stage %u B): heap=%u B, khoi lien tuc=%u B\n",
+        (unsigned)RING_BYTES, (unsigned)SD_CHUNK, (unsigned)ESP.getFreeHeap(),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
   // 3) Cua an toan RAM cho WiFi: khong du thi KHONG co bat WiFi (tranh panic), bao ERR + bat lai BT
   if (!wifi_ram_ok()) {
     err_set("thieu RAM cho WiFi");
     result_set("ERR %s", s_err);
     if (s_tmp[0]) del_temp("thieu RAM cho WiFi");
+    buf_alloc();                   // tra lai buffer lam viec TRUOC khi bat lai BT
     bt_start();
     BTLOG("[BTUP] het pha 1 nhung khong du RAM cho WiFi -> da bat lai BT, bao ERR cho app\n");
-    if (s_ov) ov_note(s_err, false);
     s_note_ms = millis();
     s_state = ST_NOTE;
     if (s_have_size) s_discard_until = millis() + PANEL_BT_DISCARD_MS;
     return;
   }
 
-  // ---- PHA 2: khoa UI roi day len ESP3D (BT dang TAT, chi WiFi chay) ----
+  // ---- PHA 2: khoa UI + lop phu TOAN MAN HINH roi day len ESP3D (BT dang TAT, chi WiFi chay) ----
+  // (lop phu chi duoc TAO o day - pha 1 khong co lop phu nao)
   s_ov_ms = 0;
-  ov_set_full(true);
+  ov_create(true);
   ui_lock(true);
   bool ok = false;
   for (uint8_t attempt = 0;; attempt++) {
@@ -1373,7 +1536,7 @@ void finish_recv(void) {
     if (ok || !s_post_retryable || attempt >= PANEL_BT_POST_RETRY) break;
     // Loi ket noi (WiFi/ESP3D): thu lai sau it giay. File tam van con tren the -> khong phai gui lai qua BT.
     BTLOG("[BTUP] POST loi (%s) -> thu lai lan %u\n", s_err, (unsigned)(attempt + 1));
-    ov_set("THU LAI KET NOI...", s_name, "", "", true);
+    ov_set("THU LAI KET NOI...", "", true);
     const uint32_t tr = millis();
     while (millis() - tr < PANEL_BT_POST_RETRY_MS) {
       wifi_poll();
@@ -1383,11 +1546,21 @@ void finish_recv(void) {
     }
   }
   ui_lock(false);
-  ov_set_full(false);
 
-  // 4) Tat WiFi (tra ~40-50 KB) roi BAT LAI BT (an lai ~100 KB) de san sang phien sau
+  // 4) Tat WiFi (tra ~40-50 KB) roi BAT LAI BT (an lai ~100 KB) de san sang phien sau.
+  //    THU TU QUAN TRONG: bt_start() TRUOC buf_alloc() de SerialBT.begin() co nhieu RAM lien tuc
+  //    nhat (day la cho tung that bai: begin() lan 2 thieu RAM -> SPP server khong dang ky duoc).
   wifi_off_now("POST xong");
-  bt_start();
+  const bool bt_ok = bt_start();
+  if (!bt_ok) BTLOG("[BTUP] !! CANH BAO: khong bat lai duoc BT sau POST -> phien sau phai reset\n");
+  if (!buf_alloc())
+    BTLOG("[BTUP] !! CANH BAO: khong cap phat lai duoc buffer lam viec (%u + %u B) -> tam thoi "
+          "KHONG nhan duoc file (khong du RAM); xem README 9.19\n",
+          (unsigned)RING_BYTES, (unsigned)SD_CHUNK);
+  else
+    BTLOG("[BTUP] cap phat lai buffer lam viec xong: heap=%u B, khoi lien tuc=%u B\n",
+          (unsigned)ESP.getFreeHeap(),
+          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
   if (!ok) {
     if (s_tmp[0]) del_temp("post loi");     // khong giu file tam: lan sau gui lai file khac
@@ -1414,7 +1587,6 @@ void start_raw(void) {
   s_have_size = false;
   s_declared = 0;
   bt_send("OK %s RAW\n", s_name);
-  ov_set("DANG NHAN (RAW)", s_name, "", "", true);
   if (!open_temp()) { fail_session(); return; }
   if (s_sniff_len) {
     s_rx += (uint32_t)s_sniff_len;
@@ -1433,10 +1605,10 @@ void reject_token(void) {
   s_tmp[0] = '\0';                         // chac chan khong co file tam nao
   s_stage_len = 0;
   s_rx = 0;
-  if (s_ov) ov_note("sai ma token", false);
   s_note_ms = millis();
   s_discard_until = millis() + PANEL_BT_IDLE_MS;
   s_state = ST_DRAIN;                      // bo het du lieu con lai cua ke gui sai
+  ui_rx_publish();
   s_state_ms = millis();
 }
 
@@ -1502,7 +1674,6 @@ void start_header(const size_t nl) {
           s_peer_mac, s_name);
     bt_send("OK %s *\n", s_name);
   }
-  ov_set("DANG NHAN QUA BT", s_name, "", "", true);
   if (!open_temp()) { fail_session(); return; }
 
   // Byte di kem SAU dong header trong buffer sniff (neu co) -> dua vao file luon.
@@ -1531,6 +1702,15 @@ void st_idle(void) {
   if (millis() < s_discard_until) { ring_discard(); return; }
 
   if (printer_busy()) { bt_send("ERR dang in\n"); s_state = ST_DRAIN; s_state_ms = millis(); return; }
+  // Khong con buffer lam viec (buf_release() o pha 2 ma buf_alloc() that bai - het RAM): khong the
+  // nhan byte nao => tu choi NGAY va noi ro ly do, khong de app gui roi mat du lieu am tham.
+  if (!s_ring || !s_stage) {
+    BTLOG("[BTUP] TU CHOI phien: chua co buffer lam viec (het RAM - xem log buf_alloc)\n");
+    bt_send("ERR thieu RAM cho vong dem\n");
+    s_state = ST_DRAIN;
+    s_state_ms = millis();
+    return;
+  }
   // Che do nhan file co the bi khoa bang panel_bt_upload_set_enabled(false) (mac dinh la BAT)
   if (!s_enabled) {
     BTLOG("[BTUP] TU CHOI phien: che do nhan file dang KHOA (tu %s)\n", s_peer_mac);
@@ -1571,9 +1751,10 @@ void st_idle(void) {
   s_drop = 0;
   s_heap_min = ESP.getFreeHeap();        // moc heap luc bat dau phien (log in heapmin=)
   s_state_ms = millis();
-  ov_create(false);
-  ov_set("NHAN QUA BT...", "?", "", "", true);
+  // PHA 1: KHONG tao lop phu, KHONG khoa UI - tien do do nhanh UI ve o THANH TIEU DE
+  // (panel_bt_upload_rx) va module log 1 Hz (rx=... B). Lop phu + khoa UI chi o PHA 2.
   s_state = ST_SNIFF;
+  ui_rx_publish();                       // UI thay ngay "dang nhan, 0 B"
 }
 
 void st_sniff(void) {
@@ -1624,7 +1805,7 @@ void st_recv(void) {
     s_next_prog += PANEL_BT_PROG_STEP;
   }
   rate_tick(s_rx);
-  ov_phase1("DANG NHAN QUA BT");
+  ui_rx_publish();               // UI (thanh tieu de) doc: dang nhan, bao nhieu byte / tong bao nhieu
 
   if (s_have_size) {
     if (s_rx >= s_declared) { finish_recv(); return; }
@@ -1710,14 +1891,16 @@ void heartbeat_log(void) {
   const uint32_t heap = ESP.getFreeHeap();
   lv_mem_monitor_t m;
   lv_mem_monitor(&m);
-  Serial.printf("[BTUP] bt=%d wifi=%u(st=%d) sd=%d st=%s rx=%lu B posted=%lu B %u.%u KB/s "
-                "ring=%lu/%lu drop=%lu heap=%lu heapmin=%lu btcyc=%u lvmem=%u/%u\n",
-                (int)s_bt_ready, (unsigned)net_wifi_state(), (int)WiFi.status(),
-                (int)s_sd_ready, state_name(s_state),
+  Serial.printf("[BTUP] bt=%d wifi=%u(st=%d) sd=%d spp=%d/%d st=%s rx=%lu B posted=%lu B %u.%u KB/s "
+                "ring=%lu/%lu drop=%lu heap=%lu blk=%u heapmin=%lu btcyc=%u lvmem=%u/%u\n",
+                (int)s_bt_ready, (unsigned)net_wifi_state(), (int)net_wifi_connected(),
+                (int)s_sd_ready, (int)s_spp_init_seen, (int)s_spp_start_seen, state_name(s_state),
                 (unsigned long)s_rx, (unsigned long)s_bytes_posted,
                 (unsigned)(s_rate_x10 / 10u), (unsigned)(s_rate_x10 % 10u),
                 (unsigned long)ring_used(), (unsigned long)RING_KEEP, (unsigned long)s_drop,
-                (unsigned long)heap, (unsigned long)s_heap_min, (unsigned)s_bt_cycles,
+                (unsigned long)heap,
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                (unsigned long)s_heap_min, (unsigned)s_bt_cycles,
                 (unsigned)m.free_size, (unsigned)m.total_size);
   if (heap < PANEL_BT_HEAP_WARN)
     Serial.printf("[BTUP] !! CANH BAO HEAP THAP: %lu B < %lu B (xem README muc BT upload)\n",
@@ -1734,56 +1917,172 @@ void heartbeat_log(void) {
 // API cong khai (main.cpp + nhanh UI)
 // ===========================================================================
 void panel_bt_upload_begin(void) {
-  // =========================================================================
-  // THU TU KHOI DONG (xem README 9.10-9.13):
-  //   1) Buffer lam viec (heap) truoc -> biet chac con bao nhieu RAM.
-  //   2) The TF: mount + don file tam mo coi. Khong mount duoc thi VAN tiep tuc (the cam sau duoc -
-  //      sd_poll() thu lai moi ~2,5 s, va phien se bi tu choi khi the chua san sang).
-  //   3) Che do nhan file: mac dinh TAT (PANEL_BT_UPLOAD_AUTOSTART=0) => KHONG bat BT (tiet kiem
-  //      ~100 KB heap). Bat bang panel_bt_upload_set_enabled(true) (nut UI / lenh console BTUP ON).
-  //   4) KHONG bat WiFi o day (WiFi chi bat khi vao pha 2, sau khi da tat BT - README 9.11).
-  // =========================================================================
+  // KHONG lam gi nang o day (truoc day: mount the + SerialBT.begin() ~2-3 s => man hinh chua hien
+  // ma da phai cho). Chi DAT CO; viec that chay trong panel_bt_upload_task() theo TUNG NHIP, co lop
+  // phu + khoa UI + dong tien do (xem init_task() va README 9.17).
+  s_init_state = INIT_WAIT;
+  s_init_req_ms = millis();
+}
 
-  // 1) Buffer lam viec (heap)
-  if (!buf_alloc()) {
-    BTLOG("[BTUP] TAT tinh nang nhan file: khong du heap cho %u B vong dem + %u B khoi ghi "
-          "(heap=%u B)\n", (unsigned)RING_BYTES, (unsigned)SD_CHUNK, (unsigned)ESP.getFreeHeap());
-    return;
+// ---------------------------------------------------------------------------
+// INIT THEO NHIP (goi tu panel_bt_upload_task() - SAU khi UI da ve frame dau)
+//   nhip 1: hien lop phu + khoa UI + dong "DANG KHOI TAO..."
+//   nhip 2: mount the TF (leo thang 20->10->4 MHz) + don file tam mo coi
+//   nhip 3: buffer lam viec + bat BT Classic (+ scan mode) + bat che do nhan file
+//   nhip 4: hien "SAN SANG" ~1,2 s roi tu go lop phu + mo khoa UI
+// Moi nhip deu ngan, giua cac nhip main loop chay binh thuong (PUSH khong bi doi qua 3 s).
+// ---------------------------------------------------------------------------
+void init_task(void) {
+  switch (s_init_state) {
+    case INIT_WAIT:
+      if (millis() - s_init_req_ms < PANEL_BT_INIT_DELAY_MS) return;   // cho UI on dinh
+      s_init_t0 = millis();
+      BTLOG("[BTUP] bat dau init (sau khi UI da hien): t=%u ms\n", (unsigned)s_init_t0);
+      s_init_state = INIT_OVERLAY;
+      return;
+
+    case INIT_OVERLAY:
+      ov_create(true);
+      ui_lock(true);
+      ov_set("DANG KHOI TAO...", "The TF: dang mount...", true);
+      lv_timer_handler();                     // ve ngay (init la blocking)
+      s_init_state = INIT_SD;
+      return;
+
+    case INIT_SD:
+      ov_set("DANG KHOI TAO...", "The TF: dang mount...", true);
+      lv_timer_handler();
+      if (sd_mount(true)) {
+        clean_dir("luc khoi dong", true);      // (co the mat ~100 ms neu the co nhieu file tam)
+      } else {
+        BTLOG("[BTUP] CANH BAO: chua mount duoc the TF (cam the FAT32 - se tu thu lai moi 2,5 s)\n");
+        s_sd_retry_ms = millis();
+      }
+      s_init_state = INIT_BT;
+      return;
+
+    case INIT_BT:
+      ov_set("DANG KHOI TAO...", "Bluetooth: dang bat...", true);
+      lv_timer_handler();
+      if (!buf_alloc()) {
+        BTLOG("[BTUP] TAT tinh nang nhan file: khong du heap cho buffer lam viec\n");
+        s_init_ok = false;
+        snprintf(s_init_msg, sizeof(s_init_msg), "LOI: khong du RAM");
+        s_init_state = INIT_OK_WAIT;
+        s_init_ok_ms = millis();
+        ov_set(s_init_msg, "xem log COM7", false);
+        lv_timer_handler();
+        return;
+      }
+      {
+        const bool ok = bt_start();
+        if (ok) {
+          s_init_ok = true;
+          snprintf(s_init_msg, sizeof(s_init_msg), "SAN SANG");
+          BTLOG("[BTUP] bao mat: token=%s, RAW=%s, PIN=%s%s\n",
+                (PANEL_BT_TOKEN[0] != '\0') ? "BAT (PUT <token> <ten> <so_byte>)"
+                                            : "TAT (khong khuyen nghi)",
+                PANEL_BT_ALLOW_RAW ? "CHO PHEP (khong can token!)" : "khong cho",
+                PANEL_BT_PIN, PANEL_BT_JUST_WORKS ? ", SSP Just Works" : "");
+          if (PANEL_BT_ALLOW_RAW && PANEL_BT_TOKEN[0] != '\0')
+            BTLOG("[BTUP] !! CANH BAO: PANEL_BT_ALLOW_RAW=1 => kieu gui THO bo qua lop TOKEN\n");
+          if (PANEL_BT_UPLOAD_AUTOSTART) panel_bt_upload_set_enabled(true);
+        } else {
+          s_init_ok = false;
+          snprintf(s_init_msg, sizeof(s_init_msg), "LOI: khong bat duoc Bluetooth");
+        }
+      }
+      s_init_state = INIT_OK_WAIT;
+      s_init_ok_ms = millis();
+      ov_set(s_init_msg, s_init_ok ? "the TF + Bluetooth" : "xem log COM7", s_init_ok);
+      lv_timer_handler();
+      BTLOG("[BTUP] init xong sau %u ms (the TF=%d, BT=%d, %s) heap=%u B\n",
+            (unsigned)(millis() - s_init_t0), (int)s_sd_ready, (int)s_bt_ready, s_init_msg,
+            (unsigned)ESP.getFreeHeap());
+      return;
+
+    case INIT_OK_WAIT:                        // dang hien ket qua -> nha UI ra roi go lop phu
+      ui_lock(false);                         // MO KHOA ngay khi da co ket qua (moi duong thoat)
+      if (millis() - s_init_ok_ms < PANEL_BT_INIT_OK_MS) return;
+      ov_destroy();
+      s_init_state = INIT_DONE;
+      BTLOG("[BTUP] init hoan tat: san sang nhan file (t=%u ms tu luc reset)\n", (unsigned)millis());
+      return;
+
+    default:
+      s_init_state = INIT_DONE;
+      return;
   }
-
-  // 2) The TF + don rac
-  if (sd_mount(true)) {
-    clean_dir("luc khoi dong", true);
-  } else {
-    BTLOG("[BTUP] CANH BAO: chua mount duoc the TF luc khoi dong (cam the FAT32 roi doi ~2,5 s)\n");
-    s_sd_retry_ms = millis();
-  }
-
-  // Thong tin bao mat (de doi chieu tren COM7)
-  BTLOG("[BTUP] bao mat: token=%s, RAW=%s, PIN=%s%s, tu dong nhan file=%s\n",
-        (PANEL_BT_TOKEN[0] != '\0') ? "BAT (PUT <token> <ten> <so_byte>)" : "TAT (khong khuyen nghi)",
-        PANEL_BT_ALLOW_RAW ? "CHO PHEP (khong can token!)" : "khong cho",
-        PANEL_BT_PIN, PANEL_BT_JUST_WORKS ? ", SSP Just Works" : "",
-        PANEL_BT_UPLOAD_AUTOSTART ? "CO" : "KHONG (phai bat bang API/UI)");
-  if (PANEL_BT_ALLOW_RAW && PANEL_BT_TOKEN[0] != '\0')
-    BTLOG("[BTUP] !! CANH BAO: PANEL_BT_ALLOW_RAW=1 => kieu gui THO bo qua lop TOKEN\n");
-
-  // 3) Che do nhan file
-  if (PANEL_BT_UPLOAD_AUTOSTART) {
-    panel_bt_upload_set_enabled(true);
-  } else {
-    s_enabled = false;
-    BTLOG("[BTUP] che do nhan file DANG TAT -> khong bat BT (tiet kiem ~100 KB heap). "
-          "Bat bang nut tren UI hoac lenh console 'BTUP ON'. The TF: %s\n",
-          s_sd_ready ? "co" : "chua co");
-  }
-  s_state_ms = millis();
 }
 
 void panel_bt_upload_task(void) {
+  if (s_init_state != INIT_DONE) { init_task(); return; }   // init (co dialog) chiem uu tien
+
   wifi_poll();                     // cap nhat net_wifi_state() + thu ket noi lai (khong chan)
   sd_poll();                       // theo doi the TF nong (chi khi ranh) + tu mount lai
   result_try_send();               // gui lai DONE/ERR cua phien truoc khi app da noi lai
+
+  // ---- SPP server / SDP record co duoc dang ky khong? (README 9.15) ----
+  // Core Arduino dang ky trong callback ESP_SPP_INIT_EVT va BO QUA ma tra ve -> that bai am tham.
+  // ---- SPP server / SDP record co duoc dang ky khong? (README 9.15 + 9.19) ----
+  // Bang chung THAT SU la ESP_SPP_START_EVT (SDP record + RFCOMM da len). Ma tra ve cua
+  // esp_spp_start_srv() chi la "da xep hang doi" nen KHONG dung de ket luan duoc.
+  if (s_bt_ready && s_spp_warned < 2) {
+    const uint32_t up_ms = millis() - s_bt_up_ms;
+    if (s_spp_start_seen) {
+      s_spp_warned = 2;                      // xong: da co bang chung server dang ky duoc
+      BTLOG("[BTUP] SPP: server DA DANG KY (ESP_SPP_START_EVT, SCN=%u, status=%d) sau %u ms; "
+            "heap=%u B, khoi lien tuc=%u B -> dien thoai/PC se THAY dich vu SPP\n",
+            (unsigned)(s_spp_scn < 0 ? 0 : s_spp_scn), (int)s_spp_start_status,
+            (unsigned)(s_spp_start_ms ? (s_spp_start_ms - s_bt_up_ms) : up_ms),
+            (unsigned)ESP.getFreeHeap(),
+            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    } else if (s_spp_init_seen && up_ms >= PANEL_BT_SPP_WAIT_MS) {
+      // SPP stack da init nhung server KHONG len => SDP record thieu => phai dang ky LAI.
+      if (!s_spp_retried) {
+        s_spp_retried = true;
+        BTLOG("[BTUP] !! SPP: co ESP_SPP_INIT_EVT nhung KHONG co ESP_SPP_START_EVT sau %u ms -> "
+              "server/SDP record CO THE da that bai (core bo qua ma tra ve). heap=%u B, khoi lien "
+              "tuc=%u B -> TU DANG KY LAI...\n", (unsigned)up_ms, (unsigned)ESP.getFreeHeap(),
+              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+#if PANEL_BT_SPP_RETRY
+        {
+          const uint32_t h0 = ESP.getFreeHeap();
+          const size_t   b0 = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+          const esp_err_t e = esp_spp_start_srv(ESP_SPP_SEC_NONE, ESP_SPP_ROLE_SLAVE, 0,
+                                                PANEL_BT_NAME);
+          BTLOG("[BTUP] SPP: goi lai esp_spp_start_srv -> %d (%s); heap %u -> %u B, "
+                "khoi lien tuc %u -> %u B (doi tiep ESP_SPP_START_EVT %u ms)\n", (int)e,
+                spp_err_str(e), (unsigned)h0, (unsigned)ESP.getFreeHeap(), (unsigned)b0,
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                (unsigned)PANEL_BT_SPP_WAIT_MS);
+        }
+#else
+        BTLOG("[BTUP] (PANEL_BT_SPP_RETRY=0: khong tu dang ky lai)\n");
+#endif
+      } else if (up_ms >= (2u * PANEL_BT_SPP_WAIT_MS)) {
+        // Thu lai xong ma van khong thay START_EVT: dich vu SPP coi nhu KHONG co.
+        s_spp_warned = 2;
+        BTLOG("[BTUP] !! SPP KHONG dang ky duoc sau khi thu lai: dien thoai/PC se KHONG thay dich vu "
+              "SPP (phai KHOI DONG LAI panel). heap=%u B, khoi lien tuc=%u B. Xem README 9.19.\n",
+              (unsigned)ESP.getFreeHeap(),
+              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+#if PANEL_BT_SPP_FAIL_REBOOT
+        BTLOG("[BTUP] PANEL_BT_SPP_FAIL_REBOOT=1 -> TU KHOI DONG LAI panel de phien sau noi duoc\n");
+        delay(50);
+        ESP.restart();
+#endif
+      }
+    } else if (!s_spp_init_seen && up_ms >= PANEL_BT_SPP_WAIT_MS) {
+      s_spp_warned = 2;
+      BTLOG("[BTUP] !! CANH BAO: KHONG thay ESP_SPP_INIT_EVT sau %u ms -> esp_spp_init() co the da "
+            "THAT BAI (dien thoai/PC se KHONG thay dich vu SPP). heap=%u B, khoi lien tuc=%u B. Bat "
+            "-DCORE_DEBUG_LEVEL=2 de xem log loi cua core/Bluedroid; xem README 9.15.\n",
+            (unsigned)PANEL_BT_SPP_WAIT_MS, (unsigned)ESP.getFreeHeap(),
+            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    }
+  }
+
   if (!s_bt_ready) return;
   switch (s_state) {
     case ST_IDLE:   st_idle();   break;
@@ -1794,6 +2093,7 @@ void panel_bt_upload_task(void) {
     case ST_DRAIN:  st_drain();  break;
     default:        s_state = ST_IDLE; break;      // ST_POST chi la moc trong luc chay blocking
   }
+  ui_rx_publish();               // cap nhat cache tien do PHA 1 cho nhanh UI (thanh tieu de)
 }
 
 // Khoa/mo che do nhan file (khong co nut UI - de danh cho sau nay; mac dinh AUTOSTART=1 nen luon BAT).
@@ -1827,14 +2127,21 @@ bool panel_bt_upload_enabled(void) {
   return s_enabled;
 }
 
-// Hop dong voi nhanh UI: chi doc bien da cache, khong goi WiFi.*, khong chan, khong cap phat.
-uint8_t net_wifi_state(void) {
-  return s_wifi_state;
-}
+// (net_wifi_state() KHONG con o day: net_wifi.cpp giu - xem net_wifi.h / README 9.20.)
 
 // Hop dong voi nhanh UI: the TF con dung duoc khong (cache; khong SPI, khong chan).
 bool panel_bt_upload_sd_ready(void) {
   return s_sd_ready;
+}
+
+// Hop dong voi nhanh UI (THANH TIEU DE): tien do PHA 1 - dang nhan file qua BT.
+//   CHI doc 3 bien da cache (s_ui_rx_*) -> khong chan, khong cap phat, khong cham vao BT/LVGL/the
+//   TF: goi duoc tu ui_lvgl_task() o nhip ~400 ms. got/total co the la NULL.
+bool panel_bt_upload_rx(uint32_t *got, uint32_t *total) {
+  const bool recv = s_ui_rx_recv;
+  if (got)   *got   = s_ui_rx_got;
+  if (total) *total = s_ui_rx_total;
+  return recv;
 }
 
 // UI yeu cau thu mount lai the NGAY: chi bat co, viec that su chay trong panel_bt_upload_task().
@@ -1860,12 +2167,18 @@ void panel_bt_upload_task(void) {}
 void panel_bt_upload_log(void) {}
 bool panel_bt_upload_busy(void) { return false; }
 
-// 0 = khong co module / WiFi tat: nhanh UI ve icon trang thai "tat".
-uint8_t net_wifi_state(void) { return 0; }
+// (net_wifi_state() do net_wifi.cpp cung cap - ke ca khi moi tinh nang deu tat.)
 
 // Khong co module nhan file => luon bao "chua co the TF dung duoc".
 bool panel_bt_upload_sd_ready(void) { return false; }
 void panel_bt_upload_sd_retry(void) {}
+
+// Khong co module => khong bao gio o pha 1: UI ve thanh tieu de nhu binh thuong.
+bool panel_bt_upload_rx(uint32_t *got, uint32_t *total) {
+  if (got)   *got   = 0;
+  if (total) *total = 0;
+  return false;
+}
 
 // Khong co module: coi nhu KHONG bat che do nhan file (UI se ve nut o trang thai tat).
 void panel_bt_upload_set_enabled(bool on) { (void)on; }

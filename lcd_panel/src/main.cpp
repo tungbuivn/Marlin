@@ -23,6 +23,8 @@
   #include "ui_lvgl.h"
   #include "panel_bt_upload.h"    // nhan file G-code qua BT -> the TF panel -> POST len ESP3D
                                   // (rong neu PANEL_BT_UPLOAD = 0; xem panel_config.h)
+  #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
+  #include "net_upload_http.h"    // web server tren panel: PC/dien thoai gui file qua WiFi
 
   #if defined(PANEL_CYD_DEBUG)
     #include <esp_system.h>
@@ -46,9 +48,11 @@
     #if defined(PANEL_CYD_DEBUG)
       Serial.printf("[CYD] ui_lvgl_begin() xong, free heap = %u B\n", (unsigned)ESP.getFreeHeap());
     #endif
-    // BT SPP (nhan file) + WiFi (bat san de icon trang thai o header dung ngay). Xem
-    // panel_bt_upload.cpp / net_upload.h. Khong lam gi neu PANEL_BT_UPLOAD = 0.
+    // BT SPP (nhan file) + WiFi. Xem panel_bt_upload.cpp / net_wifi.cpp / net_upload_http.cpp.
+    // Khong lam gi neu tinh nang tuong ung = 0.
     panel_bt_upload_begin();
+    net_wifi_begin();          // doc NVS + (PANEL_WIFI_AUTOSTART) vao mang nha - KHONG chan
+    net_upload_http_begin();   // the TF + WebServer + mDNS (rong neu PANEL_WIFI_UPLOAD = 0)
     DBGLN("panel ready (LVGL, push mode)");
   }
 
@@ -60,10 +64,14 @@
         dbg_next = millis() + 1000;
         // rx/err la 2 CO bool trong panel_data_t (panel_link.h) -> in ra 0/1 (ep (int) de dung
         // voi ca bool lan uint16_t neu nhanh khac doi kieu).
-        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx=%d err=%d heap=%u\n",
+        // t=<ms> = millis(): doc dong DAU TIEN de biet tu reset den luc loop() chay la bao lau
+        // (sau khi hoan init BT ra khoi setup() - xem README 9.17).
+        Serial.printf("[CYD] loop OK | t=%lu ms | link PUSH=%d TRAM=%d rx=%d err=%d heap=%u\n",
+                      (unsigned long)millis(),
                       (int)panel.linked, (int)tram.linked, (int)panel.rx_frames,
                       (int)panel.rx_errors, (unsigned)ESP.getFreeHeap());
         panel_bt_upload_log();     // 1 dong: BT/WiFi/phien upload + heap (+ canh bao heap thap)
+        net_upload_http_log();     // 1 dong: the TF + WiFi + phien upload qua web (rong neu tat)
       }
     #endif
 
@@ -77,6 +85,7 @@
     }
     panel_link_task();     // nhan frame tu Marlin + giu PING/lien ket
     panel_bt_upload_task();// BT SPP -> the TF panel -> POST ESP3D (blocking + khoa UI khi dang day)
+    net_upload_http_task();// web server (nhan file qua WiFi) + day file len ESP3D khi can
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
 
     // CONSOLE G-CODE QUA CONG USB CUA PANEL (tinh nang, 2026-10-13): nhan tung dong G-code/M-code
@@ -105,6 +114,49 @@
             Serial.printf("[BTUP] lenh console: '%s' -> enabled=%d, the TF=%d, heap=%u B\n",
                           s_fwd, (int)panel_bt_upload_enabled(), (int)panel_bt_upload_sd_ready(),
                           (unsigned)ESP.getFreeHeap());
+          } else if (strncmp(s_fwd, "WIFI", 4) == 0) {
+            // LENH RIENG CUA PANEL (khong gui sang Marlin) - thu WiFi/trang settings khong can UI:
+            //   WIFI?                          -> in trang thai + IP + RSSI + ssid da luu
+            //   WIFI SCAN                      -> quet mang (~2-4 s, CHAN) + liet ke kem RSSI
+            //   WIFI CONNECT <ssid> <pass> [S] -> ket noi (co S = luu vao NVS de tu ket noi lai)
+            //   WIFI OFF                       -> tat WiFi        WIFI FORGET -> xoa cau hinh da luu
+            const char *arg = s_fwd + 4;
+            while (*arg == ' ') arg++;
+            if (strncmp(arg, "SCAN", 4) == 0) {
+              Serial.println("[WIFI] dang quet (2-4 s)...");
+              const int n = net_wifi_scan();
+              for (int i = 0; i < n; i++)
+                Serial.printf("[WIFI]  %2d) %-32s %d dBm\n", i + 1,
+                              net_wifi_scan_ssid(i) ? net_wifi_scan_ssid(i) : "?",
+                              (int)net_wifi_scan_rssi(i));
+              Serial.printf("[WIFI] quet xong: %d mang\n", n);
+            } else if (strncmp(arg, "CONNECT", 7) == 0) {
+              const char *p1 = arg + 7;
+              while (*p1 == ' ') p1++;
+              char ssid[33], pass[65];
+              size_t a = 0;
+              while (*p1 && *p1 != ' ' && a < sizeof(ssid) - 1u) ssid[a++] = *p1++;
+              ssid[a] = '\0';
+              while (*p1 == ' ') p1++;
+              size_t b = 0;
+              while (*p1 && *p1 != ' ' && b < sizeof(pass) - 1u) pass[b++] = *p1++;
+              pass[b] = '\0';
+              const bool save = (strchr(p1, 'S') != nullptr);
+              const bool ok = net_wifi_connect(ssid, pass, save);
+              Serial.printf("[WIFI] connect \"%s\" (luu NVS=%d) -> %s; doi ket noi...\n",
+                            ssid, (int)save, ok ? "da bat dau" : "TU CHOI");
+            } else if (strncmp(arg, "OFF", 3) == 0) {
+              net_wifi_disconnect(false);
+              Serial.println("[WIFI] da tat");
+            } else if (strncmp(arg, "FORGET", 6) == 0) {
+              net_wifi_disconnect(true);
+              Serial.println("[WIFI] da xoa cau hinh da luu");
+            } else {
+              Serial.printf("[WIFI] state=%u ssid=\"%s\" ip=%s rssi=%d saved=\"%s\" heap=%u B\n",
+                            (unsigned)net_wifi_state(), net_wifi_ssid(), net_wifi_ip(),
+                            (int)net_wifi_rssi(), net_wifi_saved_ssid(),
+                            (unsigned)ESP.getFreeHeap());
+            }
           } else {
             snprintf(s_forward_pending, sizeof(s_forward_pending), "%s", s_fwd);
           }

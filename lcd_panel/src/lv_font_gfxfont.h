@@ -2,7 +2,7 @@
  * lv_font_gfxfont.h -- driver LVGL 8.4 cho font 1-bit dinh dang Adafruit GFXfont.
  *
  * VI SAO CO FILE NAY
- *   Cac font sinh bang lv_font_conv (font_consola_vn_14.c, font_robotomono_vn_14.c) deu lam
+ *   Cac font sinh bang lv_font_conv (nay da XOA khoi repo) deu lam
  *   MAN HINH THAT mat het chu, du file hop le. Thay vi di tim nguyen nhan trong dinh dang
  *   nang do, ta tu sinh font 1-bit (nho, kiem soat hoan toan du lieu) va tu viet driver.
  *

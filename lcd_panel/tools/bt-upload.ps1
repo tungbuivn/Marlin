@@ -37,7 +37,10 @@ param(
     [Parameter(Mandatory = $true)][string]$Token,    # token trong panel_config.h (PANEL_BT_TOKEN)
     [Parameter(Mandatory = $true)][string]$File,     # duong dan file G-code tren PC
     [string]$Name,                                   # ten file tren the SD Marlin (mac dinh: ten file PC)
-    [int]$ChunkKB = 1,                               # gui theo khoi bao nhieu KB (1 KB = 1024 byte)
+    [int]$ChunkKB = 4,                               # gui theo khoi bao nhieu KB (1 KB = 1024 byte)
+    [int]$WindowKB = 12,                             # cua so byte "dang bay" toi da - cho theo moc PROG
+                                                     # (panel: vong dem 12 KB + PANEL_BT_PROG_STEP 4 KB;
+                                                     #  dat > 12 KB co the lam TRAN vong dem -> mat byte)
     [switch]$NoSize,                                 # gui "PUT <token> <ten> *" (khong biet truoc so byte)
     [int]$TimeoutSec = 600,                          # tong thoi gian cho DONE/ERR
     [int]$Baud = 115200
@@ -156,6 +159,9 @@ Write-Host "Da mo $Port (115200 8N1)." -ForegroundColor Green
 $script:rxbuf = ""
 $script:done = $false
 $script:err  = $false
+$script:acked = [int64]0          # so byte panel XAC NHAN da tieu hoa (tu dong PROG <n>)
+$script:prog_seen = $false        # da thay dong PROG nao chua (de biet panel co ho tro khong)
+$script:flow = $true              # bat dieu khien luong theo PROG
 
 function Read-Panel([int]$ms) {
     $t0 = Get-Date
@@ -175,7 +181,16 @@ function Read-Panel([int]$ms) {
                     if ($line -like "DONE*") { $col = "Green";  $script:done = $true }
                     if ($line -like "OK*")   { $col = "Cyan" }
                     if ($line -like "POST*") { $col = "Magenta" }
-                    Write-Host ("  [panel] {0}" -f $line) -ForegroundColor $col
+                    if ($line -like "PROG*") {
+                        $col = "DarkGray"
+                        # "PROG <so_byte_da_nhan>" -> moc dieu khien luong
+                        if ($line -match '^PROG\s+(\d+)') {
+                            $script:acked = [int64]$Matches[1]
+                            $script:prog_seen = $true
+                        }
+                    }
+                    # KHONG in moi dong PROG (4 KB/lan se rat nhieu) - chi ghi de dong tien do
+                    if ($line -notlike "PROG*") { Write-Host ("  [panel] {0}" -f $line) -ForegroundColor $col }
                 }
             }
         } else {
@@ -208,12 +223,34 @@ $buf = New-Object byte[] $chunk
 $sent = [int64]0
 $t0 = Get-Date
 $lastPrint = -1
-Write-Host "Dang gui du lieu..." -ForegroundColor Cyan
+$window = [int64]$WindowKB * 1024
+$flowToldShown = $false
+Write-Host ("Dang gui du lieu... (dieu khien luong theo PROG, cua so {0} KB)" -f $WindowKB) -ForegroundColor Cyan
 try {
     while (($read = $fs.Read($buf, 0, $buf.Length)) -gt 0) {
+        # --- Cho den khi cua so byte "dang bay" tut xuong duoi nguong (panel bao PROG) ---
+        if ($script:flow) {
+            $stall0 = Get-Date
+            while ((($sent - $script:acked) -gt $window) -and -not $script:done -and -not $script:err) {
+                Read-Panel 20
+                if (((Get-Date) - $stall0).TotalSeconds -gt 10) {
+                    Write-Host "`nCANH BAO: panel khong bao PROG trong 10 s -> tat dieu khien luong." -ForegroundColor Yellow
+                    $script:flow = $false
+                    break
+                }
+            }
+            # Panel khong ho tro PROG (ban firmware cu): chi canh bao 1 lan roi di tiep
+            if (-not $script:prog_seen -and -not $flowToldShown -and $sent -gt (2 * $window)) {
+                $flowToldShown = $true
+                Write-Host "`nCANH BAO: chua thay dong PROG nao - panel co the la ban cu (khong dieu khien luong)." -ForegroundColor Yellow
+                $script:flow = $false
+            }
+        }
+        if ($script:err -or $script:done) { break }
+
         $sp.Write($buf, 0, $read)
         $sent += $read
-        # doc phan hoi (PROG...) xen ke, khong de day dem
+        # doc phan hoi (OK/PROG/DONE/ERR) xen ke, khong de day dem
         if ($sp.BytesToRead -gt 0) { Read-Panel 1 }
         if ($script:err) { break }
 
@@ -222,7 +259,8 @@ try {
         $sec = ($now - $t0).TotalSeconds
         if ($pct -ne $lastPrint -and ($sec -ge 0.5)) {
             $kbs = if ($sec -gt 0) { ($sent / 1KB) / $sec } else { 0 }
-            Write-Host ("  gui {0,3}%  {1,8:N0}/{2:N0} KB  {3,6:N1} KB/s" -f $pct, ($sent / 1KB), ($size / 1KB), $kbs) -NoNewline
+            Write-Host ("  gui {0,3}%  {1,8:N0}/{2:N0} KB  {3,6:N1} KB/s (panel da nhan {4:N0} KB)" -f `
+                        $pct, ($sent / 1KB), ($size / 1KB), $kbs, ($script:acked / 1KB)) -NoNewline
             Write-Host "`r" -NoNewline
             $lastPrint = $pct
         }
@@ -234,7 +272,11 @@ try {
     }
 } finally {
     $fs.Close()
-    Write-Host ("`nDa gui {0:N0}/{1:N0} byte ({2:N1} KB) trong {3:N1} s." -f $sent, $size, ($sent / 1KB), ((Get-Date) - $t0).TotalSeconds) -ForegroundColor Cyan
+    Write-Host ("`nDa gui {0:N0}/{1:N0} byte ({2:N1} KB) trong {3:N1} s; panel xac nhan {4:N0} KB." -f `
+                $sent, $size, ($sent / 1KB), ((Get-Date) - $t0).TotalSeconds, ($script:acked / 1KB)) -ForegroundColor Cyan
+    if (-not $NoSize -and $script:acked -lt $sent) {
+        Write-Host ("CANH BAO: panel moi xac nhan {0}/{1} byte - co the con dang xu ly hoac bi mat byte (xem log COM7 'drop=')." -f $script:acked, $sent) -ForegroundColor Yellow
+    }
 }
 
 # ---------------------------------------------------------------------------
