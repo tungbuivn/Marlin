@@ -22,6 +22,15 @@
 #if ENABLED(SDSUPPORT)
   #include "../../../sd/cardreader.h"
 #endif
+#include "../../../MarlinCore.h"                    // printer_busy()
+#include "../../../module/planner.h"                // planner.settings / finish_and_disable()
+#include "../../../module/temperature.h"            // thermalManager.disable_all_heaters()
+#if HAS_TRINAMIC_CONFIG
+  #include "../../../module/stepper/indirection.h" // stepperX/Y/Z/E0.val_mA
+#endif
+#if HAS_FILAMENT_SENSOR
+  #include "../../../feature/runout.h"             // runout.enabled
+#endif
 
 using namespace ExtUI;
 
@@ -145,6 +154,9 @@ namespace {
     #else
       tx_str((const char*)getFirmwareName_str());
     #endif
+    // Proto >= 2: them 1 str = SHORT_BUILD_VERSION (vd "2.1.2"). Panel doc kieu "neu con byte thi doc"
+    // nen panel ban cu (chi doc den het `name`) van chay binh thuong.
+    tx_str(SHORT_BUILD_VERSION);
     tx_send();
   }
 
@@ -247,6 +259,47 @@ namespace {
     tx_send();
   }
 
+  // Trang thai endstop/probe kieu M119 (frame PANEL_F_ENDSTOPS).
+  // Doc y nhu Marlin: module/endstops.cpp report_states() -- READ(PIN) != PIN_ENDSTOP_INVERTING.
+  // LUU Y may nay: Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN (Configuration.h) => chan Z_MIN chinh la
+  // dau probe, nen bao no voi id PANEL_ES_PROBE (0) va KHONG bao trung id PANEL_ES_Z_MIN (3).
+  void push_endstops() {
+    tx_begin(PANEL_F_ENDSTOPS);
+    tx_u8(0);                                              // cho trong: so luong (dien sau)
+    uint8_t n = 0;
+    #if HAS_Z_MIN
+      #if ENABLED(Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN)
+        tx_u8(PANEL_ES_PROBE);
+      #else
+        tx_u8(PANEL_ES_Z_MIN);
+      #endif
+      tx_u8(READ(Z_MIN_PIN) != Z_MIN_ENDSTOP_INVERTING ? 1 : 0);
+      n++;
+    #endif
+    #if HAS_X_MIN
+      tx_u8(PANEL_ES_X_MIN);
+      tx_u8(READ(X_MIN_PIN) != X_MIN_ENDSTOP_INVERTING ? 1 : 0);
+      n++;
+    #endif
+    #if HAS_Y_MIN
+      tx_u8(PANEL_ES_Y_MIN);
+      tx_u8(READ(Y_MIN_PIN) != Y_MIN_ENDSTOP_INVERTING ? 1 : 0);
+      n++;
+    #endif
+    #if HAS_X_MAX
+      tx_u8(PANEL_ES_X_MAX);
+      tx_u8(READ(X_MAX_PIN) != X_MAX_ENDSTOP_INVERTING ? 1 : 0);
+      n++;
+    #endif
+    #if HAS_Y_MAX
+      tx_u8(PANEL_ES_Y_MAX);
+      tx_u8(READ(Y_MAX_PIN) != Y_MAX_ENDSTOP_INVERTING ? 1 : 0);
+      n++;
+    #endif
+    tx.buf[5] = n;                                         // dien so luong vao byte dau payload
+    tx_send();
+  }
+
   void push_setting(const panel_setting_t id, const int32_t v) {
     tx_begin(PANEL_F_SETTING);
     tx_u16((uint16_t)id);
@@ -304,6 +357,28 @@ namespace {
       push_setting(PANEL_SET_PROBE_OFFSET_X, scaled(getProbeOffset_mm(X), PANEL_VAL_SCALE));
       push_setting(PANEL_SET_PROBE_OFFSET_Y, scaled(getProbeOffset_mm(Y), PANEL_VAL_SCALE));
       push_setting(PANEL_SET_PROBE_OFFSET_Z, scaled(getProbeOffset_mm(Z), PANEL_VAL_SCALE));
+    #endif
+    // M204 S/R/T: gia toc khi in / khi retract / khi travel (planner.settings)
+    push_setting(PANEL_SET_MAXACCEL_PRINT, scaled(planner.settings.acceleration, PANEL_VAL_SCALE));
+    push_setting(PANEL_SET_MAXACCEL_RETRACT, scaled(planner.settings.retract_acceleration, PANEL_VAL_SCALE));
+    push_setting(PANEL_SET_MAXACCEL_TRAVEL, scaled(planner.settings.travel_acceleration, PANEL_VAL_SCALE));
+    #if HAS_TRINAMIC_CONFIG
+      // Dong dien RMS (mA) dang dat trong driver - M906. val_mA la cung gia tri menu TMC hien.
+      #if AXIS_IS_TMC(X)
+        push_setting(PANEL_SET_TMC_CURRENT_X, (int32_t)stepperX.val_mA);
+      #endif
+      #if AXIS_IS_TMC(Y)
+        push_setting(PANEL_SET_TMC_CURRENT_Y, (int32_t)stepperY.val_mA);
+      #endif
+      #if AXIS_IS_TMC(Z)
+        push_setting(PANEL_SET_TMC_CURRENT_Z, (int32_t)stepperZ.val_mA);
+      #endif
+      #if AXIS_IS_TMC(E0)
+        push_setting(PANEL_SET_TMC_CURRENT_E, (int32_t)stepperE0.val_mA);
+      #endif
+    #endif
+    #if HAS_FILAMENT_SENSOR
+      push_setting(PANEL_SET_RUNOUT_EN, runout.enabled ? 1 : 0);
     #endif
   }
 
@@ -415,6 +490,22 @@ namespace {
         queue.enqueue_one_now("M524");       // huy in tu SD
         queue.enqueue_one_now("M410");       // dung khan cap
         break;
+      case PANEL_REQ_ENDSTOPS:
+        push_endstops();
+        break;
+      #if ENABLED(STM32_DFU_REBOOT)
+        case PANEL_REQ_DFU:
+          // Nhay vao ROM DFU bootloader de nap lai firmware qua USB (khong can BOOT0+RESET).
+          // Giong Marlin/src/lcd/menu/menu_advanced.cpp: CHI khi may dang ranh.
+          if (printer_busy())
+            push_message(PANEL_SEV_WARN, "May dang ban - khong vao DFU");
+          else {
+            thermalManager.disable_all_heaters();  // BAT BUOC: nhay kieu nay khong reset GPIO
+            planner.finish_and_disable();          // dung chuyen dong + nha motor
+            flashFirmware(0);                      // khong bao gio quay lai
+          }
+          break;
+      #endif
       default: break;
     }
   }

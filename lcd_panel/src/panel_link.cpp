@@ -98,13 +98,19 @@ static void handle_frame() {
   switch ((panel_frame_t)s_rx.type) {
 
     case PANEL_F_HELLO:
+      panel.marlin_ver[0] = '\0';
       if (n >= 6) {
         panel.marlin_fw   = (uint16_t)(p[0] | (p[1] << 8));
         panel.proto       = p[2];
         panel.hello_flags = p[3];
         panel.n_heaters   = p[4];
         panel.n_fans_max  = p[5];
-        str_at(p, n, 6, panel.name, sizeof(panel.name));
+        const uint8_t used = str_at(p, n, 6, panel.name, sizeof(panel.name));
+        // Proto >= 2: Marlin gui them 1 str SHORT_BUILD_VERSION ngay SAU `name`.
+        // Doc kieu "neu con byte thi doc" -> HELLO cua Marlin ban cu (proto 1) van doc duoc:
+        // het payload thi chuoi rong, khong loi gi.
+        if ((uint8_t)(6 + used) < n)
+          str_at(p, n, (uint8_t)(6 + used), panel.marlin_ver, sizeof(panel.marlin_ver));
       }
       // Sau HELLO xin ngay du lieu day du (ten file, thong so, mesh)
       panel.files_pending = true;
@@ -182,6 +188,23 @@ static void handle_frame() {
       break;
     }
 
+    case PANEL_F_ENDSTOPS: {
+      // u8 n, n * (u8 id, u8 hit). Xoa truoc roi nap -> id nao Marlin khong bao (vi du Z_MIN
+      // khi da bao la PROBE) coi nhu khong cham.
+      panel.n_endstops = 0;
+      for (uint8_t i = 0; i < PANEL_ENDSTOP_MAX; i++) panel.es_hit[i] = 0;
+      if (n >= 1) {
+        const uint8_t cnt = p[0];
+        uint8_t off = 1;
+        for (uint8_t i = 0; i < cnt && off + 1 < n; i++, off += 2) {
+          const uint8_t id = p[off];
+          if (id < PANEL_ENDSTOP_MAX) panel.es_hit[id] = p[off + 1] ? 1 : 0;
+          if (panel.n_endstops < PANEL_ENDSTOP_MAX) panel.n_endstops++;
+        }
+      }
+      break;
+    }
+
     case PANEL_F_SETTING:
       if (n >= 6) {
         const uint16_t id = (uint16_t)(p[0] | (p[1] << 8));
@@ -243,6 +266,11 @@ static void handle_frame() {
           case PANEL_EV_LEVELING_DONE:
             panel.mesh_rows = 0;
             panel_link_request(PANEL_REQ_MESH);
+            break;
+          case PANEL_EV_PID_DONE:
+            // Marlin da chay xong M303 (v1 = result_t: 0 = thanh cong). UI doc moc nay de
+            // hien hop "da xong" mot lan (so sanh voi lan truoc), khong hien lai mai.
+            panel.pid_done_ms = panel_millis();
             break;
           case PANEL_EV_SETTINGS_LOADED:
           case PANEL_EV_FACTORY_RESET:

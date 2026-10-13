@@ -39,7 +39,7 @@
 
 #include <stdint.h>
 
-#define PANEL_PROTO_VERSION     1
+#define PANEL_PROTO_VERSION     2     // 2: HELLO them str version; them F_ENDSTOPS + REQ_ENDSTOPS/DFU
 #define PANEL_SYNC0             0xA5
 #define PANEL_SYNC1             0x5A
 #define PANEL_MAX_PAYLOAD       192
@@ -58,6 +58,7 @@
 enum panel_frame_t : uint8_t {
   // ---- Marlin -> panel (push) ----
   PANEL_F_HELLO     = 0x01,   // u16 fw_version, u8 proto, u8 flags, u8 n_heaters, u8 n_fans, str name
+                              // [proto >= 2] str version (SHORT_BUILD_VERSION cua Marlin)
   PANEL_F_STATUS    = 0x02,   // u8 state, u8 flags, u8 progress_percent
   PANEL_F_TEMPS     = 0x03,   // u8 n, n * (u8 id, i16 cur, i16 tgt)
   PANEL_F_POSITION  = 0x04,   // i32 x, i32 y, i32 z, i32 e, u16 feed_mm_s*10, i16 feed_pct, i16 flow_pct
@@ -70,16 +71,17 @@ enum panel_frame_t : uint8_t {
   PANEL_F_SETTING   = 0x0B,   // u16 id, i32 value
   PANEL_F_PROMPT    = 0x0C,   // u8 prompt_id, u8 type, str text
   PANEL_F_PONG      = 0x0D,   // u8 echo_seq
-  PANEL_F_TRAM      = 0x0E,   // str: 1 dong ASCII "TRAM ..." (trang thai Tramming Wizard,
-                              //      format o tram_protocol.h; 2026-10-13 - port tu che do TRAM link)
+  PANEL_F_TRAM      = 0x0E,   // str: dung 1 dong ASCII "TRAM ...\\n" (dinh dang o tram_protocol.h;
+                              //      2026-10-13 - port tu che do TRAM link), gui ~5Hz khi wizard chay
+  PANEL_F_ENDSTOPS  = 0x0F,   // u8 n, n * (u8 id (panel_endstop_id_t), u8 hit) -- trang thai kieu M119
 
   // ---- panel -> Marlin ----
   PANEL_F_GCODE     = 0x40,   // str: 1 dong G-code (khong can '\\n')
   PANEL_F_REQUEST   = 0x41,   // u8 what (panel_request_t), [str tham so]
   PANEL_F_PING      = 0x42,   // u8 seq
   PANEL_F_ANSWER    = 0x43,   // u8 prompt_id, u8 answer
-  PANEL_F_TRAM_CMD  = 0x44    // u8 lenh: 'P' probe · 'D' done · 'M' doi MAX/MIN · 'R' home+probe lai
-                              // · 'B' thoat wizard · 'Q' hoi lai trang thai
+  PANEL_F_TRAM_CMD  = 0x44    // u8 lenh: 'P' probe, 'D' done, 'M' doi MAX/MIN,
+                              //          'R' home+probe lai, 'B' thoat wizard, 'Q' hoi trang thai
 };
 
 // ---------------------------------------------------------------------------
@@ -168,7 +170,9 @@ enum panel_request_t : uint8_t {
   PANEL_REQ_MESH,            // gui luoi bed mesh
   PANEL_REQ_SETTINGS,        // gui cac thong so dang hien thi
   PANEL_REQ_SAVE_SETTINGS,   // M500
-  PANEL_REQ_ABORT            // dung in ngay (M524/M410)
+  PANEL_REQ_ABORT,           // dung in ngay (M524/M410)
+  PANEL_REQ_ENDSTOPS,        // gui trang thai endstop/probe (PANEL_F_ENDSTOPS) -- kieu M119
+  PANEL_REQ_DFU              // nhay vao ROM DFU bootloader (chi khi may ranh; STM32_DFU_REBOOT)
 };
 
 // ---------------------------------------------------------------------------
@@ -208,7 +212,15 @@ enum panel_setting_t : uint16_t {
   PANEL_SET_PROBE_OFFSET_Z,
   PANEL_SET_TARGET_TEMP_E0,      // do C
   PANEL_SET_TARGET_TEMP_BED,     // do C
-  PANEL_SET_FAN_PCT_E0           // %
+  PANEL_SET_FAN_PCT_E0,          // %
+  PANEL_SET_MAXACCEL_PRINT,      // mm/s^2 (planner.settings.acceleration, M204 S)
+  PANEL_SET_MAXACCEL_RETRACT,    // mm/s^2 (planner.settings.retract_acceleration, M204 R)
+  PANEL_SET_MAXACCEL_TRAVEL,     // mm/s^2 (planner.settings.travel_acceleration, M204 T)
+  PANEL_SET_TMC_CURRENT_X,       // mA (stepperX.val_mA - chi khi HAS_TRINAMIC_CONFIG)
+  PANEL_SET_TMC_CURRENT_Y,       // mA
+  PANEL_SET_TMC_CURRENT_Z,       // mA
+  PANEL_SET_TMC_CURRENT_E,       // mA (E0)
+  PANEL_SET_RUNOUT_EN            // 1 = bat cam bien het filament (runout.enabled)
 };
 
 // Prompt (PANEL_F_PROMPT)
@@ -228,6 +240,21 @@ enum panel_temp_id_t : uint8_t {
   PANEL_TEMP_E0      = 1,
   PANEL_TEMP_CHAMBER = 0xFE,
   PANEL_TEMP_COOLER  = 0xFF
+};
+
+// ---------------------------------------------------------------------------
+// ID trong frame ENDSTOPS (PANEL_F_ENDSTOPS): 1 byte id + 1 byte hit (0/1)
+// May dung Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN thi Z_MIN chinh la chan probe
+// => bao id PANEL_ES_PROBE (0), KHONG bao them PANEL_ES_Z_MIN (3).
+// ---------------------------------------------------------------------------
+#define PANEL_ENDSTOP_MAX 6
+enum panel_endstop_id_t : uint8_t {
+  PANEL_ES_PROBE = 0,
+  PANEL_ES_X_MIN = 1,
+  PANEL_ES_Y_MIN = 2,
+  PANEL_ES_Z_MIN = 3,
+  PANEL_ES_X_MAX = 4,
+  PANEL_ES_Y_MAX = 5
 };
 
 // ---------------------------------------------------------------------------

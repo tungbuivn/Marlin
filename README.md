@@ -2455,3 +2455,24 @@ Mốc gần đây:
             So build moi: F411 154.544 B, F407 156.136 B, CYD 460.005 B. Xem muc 12 + 15
             va lcd_panel/README.md
 ```
+
+## Cam bay 41 - PUSH protocol v2: phai nap CA HAI board
+`PANEL_PROTO_VERSION` 1 -> 2 (them `PANEL_F_ENDSTOPS=0x0F`, `PANEL_REQ_ENDSTOPS`,
+`PANEL_REQ_DFU`, setting id 34..41). Panel va Marlin kiem tra version trong HELLO:
+nap lech phien ban thi panel bao `LINK ERR` du byte van chay. Moi lan doi
+`panel_protocol.h` phai nap lai CA MARLIN (M997+dfu-util) VA PANEL (pio upload COM7).
+File `Marlin/src/lcd/extui/panel_serial/panel_protocol.h` va
+`lcd_panel/src/panel_protocol.h` phai byte-identical - kiem tra bang:
+`Get-FileHash ... -Algorithm SHA256`.
+
+## Cam bay 42 - LVGL: vat the HIDDEN truoc khi tao con => layout khong bao gio duoc tinh
+Tao `lv_obj_t` voi co `LV_OBJ_FLAG_HIDDEN` roi moi tao cac con ben trong =>
+LVGL bo qua tinh layout cho cay con, nut/nhan co kich thuoc 0 px (nhin nhu "mat chu").
+Cach dung: tao vat the dang HIEN, them con, roi `lv_obj_update_layout(obj)`,
+sau do moi an/hien bang `lv_obj_add_flag/lv_obj_clear_flag`.
+
+## Cam bay 43 - Font thay the: line_height lon hon se bi cat trong hang cao co dinh
+Font `font_segoe_vn_14` (Segoe UI 14, line_height 18) > Montserrat 14 (16).
+Neu gan font nay cho CA CAY (ke thua xuong moi nhan) thi chu trong nut/hang cao
+co dinh 16-22 px bi cat mat. Chi gan cho DUNG nhan can dau tieng Viet
+(`vn_font(label)` / `vn_font_btn(btn)`), phan con lai de Montserrat.

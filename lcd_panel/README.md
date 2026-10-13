@@ -652,3 +652,23 @@ Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
 * Bước 3 có thể mất 10–60 giây; script thoát với mã lỗi = số mục còn hỏng (`0` = xong).
 * Sau khi xong, build/nạp bình thường:
   `pio run -d D:\Marlin\lcd_panel -e panel_esp32_cyd -t upload --upload-port COM3`.
+
+## Cap nhat 2026-10-13 (protocol v2 + UI mo rong)
+Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).
+Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.
+- `PANEL_F_ENDSTOPS (0x0F)` + `PANEL_REQ_ENDSTOPS`: trang ENDSTOP moi (6 o
+  PROBE/X min/Y min/Z min/X max/Y max, xanh=mo do=CHAM, nut REFRESH gui M119).
+- `PANEL_REQ_DFU`: nut `REBOOT DFU` trong CUSTOM, xac nhan 2 buoc; Marlin tu choi
+  neu dang ban (`printer_busy()`) va tra WARN.
+- Setting id 34..41: `M204 P/R/T` (accel print/retract/travel),
+  `M906 X/Y/Z/E` (mA - gui RAW, KHONG nhan he so `panel_val()`), `M412` (runout).
+- HELLO mang them `SHORT_BUILD_VERSION` -> `panel.marlin_ver`.
+- Trang TEMP: dong dau `Profile: PLA/PETG/ABS` hoac `Profile: ---` (khong con dialog).
+- Trang MESH: `G29 P1 | G29 P3T0 | G29 P4RT` + `G29 A | G29 D | G29 S0`.
+- JOG: 5 muc buoc 0.01/0.05/0.1/1/10 mm, X/Y F3000 (50 mm/s), Z F600.
+- SETTINGS: hang 2 `M501 LOAD | M502 RESET` (co xac nhan), bang 124 px.
+- CUSTOM: `M600 B0`, toggle `M412`, `REBOOT DFU`.
+- Thanh tieu de: 2 nut nho `II` (pause) / `[]` (stop) chi hien khi
+  `panel.flags & PANEL_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.
+- Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) dung `font_segoe_vn_14`;
+  KHONG dung font nay cho ca cay (xem cam bay 43 o README goc).

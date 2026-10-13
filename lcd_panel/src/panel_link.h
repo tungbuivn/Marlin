@@ -33,6 +33,8 @@ typedef struct {
   uint16_t marlin_fw;
   uint8_t  hello_flags, n_heaters, n_fans_max;
   char     name[24];
+  char     marlin_ver[24];         // proto >= 2: SHORT_BUILD_VERSION Marlin gui trong HELLO
+                                   // (panel ban cu khong gui -> chuoi rong)
 
   // ---- trang thai may ----
   uint8_t  state;                  // panel_state_t
@@ -45,9 +47,16 @@ typedef struct {
   struct { uint8_t pct; uint32_t elapsed_s, remaining_s; char file[PANEL_FILE_NAME_LEN]; } prog;
   panel_fan_t fans[4];    uint8_t n_fans;
 
+  // ---- endstop/probe (PANEL_F_ENDSTOPS, kieu M119) ----
+  // es_hit[id] = 1 khi cham; id theo panel_endstop_id_t (0 PROBE, 1 X_MIN, 2 Y_MIN,
+  // 3 Z_MIN, 4 X_MAX, 5 Y_MAX). May dung Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN thi
+  // Marlin bao chan Z_MIN voi id 0 (PROBE) va khong bao id 3.
+  uint8_t  es_hit[PANEL_ENDSTOP_MAX]; uint8_t n_endstops;
+
   // ---- thong bao / su kien moi nhat ----
   char     message[PANEL_TEXT_LEN]; uint8_t message_sev; uint32_t message_ms;
   uint8_t  event; uint16_t event_v1, event_v2; uint32_t event_ms;
+  uint32_t pid_done_ms;            // moc thoi gian PANEL_EV_PID_DONE (0 = chua xong lan nao)
 
   // ---- prompt dang cho tra loi ----
   bool     prompt_active; uint8_t prompt_id, prompt_type; char prompt_text[PANEL_TEXT_LEN];
