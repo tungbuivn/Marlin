@@ -45,16 +45,24 @@ bool tram_link_active(void) { return tram.ever; }
 //   2) chu dong hoi lai bang 'Q' khi im lang >= 1 s: chieu panel -> Marlin khong phu thuoc timeout va
 //      Marlin se gui lai trang thai ngay o tick ke tiep (panel_tram_link: TRAM_CMD_QUERY -> s_force).
 void tram_link_task(void) {
-  if (!tram.ever) { tram.linked = false; return; }
+  if (!tram.ever) { tram.linked = false; }
 
   const uint32_t now = panel_millis();
   const uint32_t age = now - tram.last_rx_ms;
-  const bool busy_phase = tram.st.active && tram.st.phase != TRAM_PH_IDLE;
-  tram.linked = age <= (busy_phase ? TRAM_LINK_BUSY_TIMEOUT_MS : TRAM_LINK_TIMEOUT_MS);
+
+  // "Con byte toi" = day noi VAN SONG, du byte do co doc duoc thanh dong TRAM hay khong.
+  // Dung de phan biet 2 kieu hong: (a) khong co byte nao (dut day/sai cong/board tat),
+  //                               (b) co byte ma khong thanh dong (sai baud/khung, nhieu, day loi).
+  tram.rx_active = (now - tram.last_byte_ms) <= TRAM_LINK_RX_ACTIVE_MS;
+
+  if (tram.ever) {
+    const bool busy_phase = tram.st.active && tram.st.phase != TRAM_PH_IDLE;
+    tram.linked = age <= (busy_phase ? TRAM_LINK_BUSY_TIMEOUT_MS : TRAM_LINK_TIMEOUT_MS);
+  }
 
   // Hoi lai khi im lang - CO GIOI HAN 1 lan / TRAM_LINK_QUERY_MS (neu khong se gui 'Q' moi vong loop)
   static uint32_t s_query_ms = 0;
-  if (age >= TRAM_LINK_QUERY_MS && (now - s_query_ms) >= TRAM_LINK_QUERY_MS) {
+  if (tram.ever && age >= TRAM_LINK_QUERY_MS && (now - s_query_ms) >= TRAM_LINK_QUERY_MS) {
     s_query_ms = now;
     tram_link_send(TRAM_CMD_QUERY);
   }
@@ -70,6 +78,7 @@ void tram_link_send(char cmd) {
 // 0 = byte nay (va cac byte dang giu) da thuoc dong "TRAM ..." -> khong dua cho ai nua.
 uint8_t tram_link_feed(uint8_t c, uint8_t *out) {
   tram.raw_bytes++;                     // chan doan: dem MOI byte UART nhan duoc (ke ca rac)
+  tram.last_byte_ms = panel_millis();   // ... va ghi nho lan cuoi co byte -> tram.rx_active
   switch (s_state) {
 
     case TS_IDLE:

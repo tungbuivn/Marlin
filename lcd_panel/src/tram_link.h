@@ -27,15 +27,18 @@
                                            // neu khong se bao "NO LINK" SAI trong luc may dang lam viec
 #define TRAM_LINK_QUERY_MS         1000    // im lang >= 1 s -> chu dong hoi lai bang 'Q' (Marlin tra loi
                                            // ngay o tick ke tiep; chieu panel -> Marlin khong phu thuoc timeout)
+#define TRAM_LINK_RX_ACTIVE_MS     3000    // con byte toi trong 3 s => day noi VAN SONG (du khong doc duoc dong)
 #define TRAM_LINK_LINE_MAX    128     // du cho 1 dong "TRAM ..." (~85 byte)
 
 typedef struct {
   tram_status_t st;                   // trang thai wizard Marlin gui xuong
   uint32_t last_rx_ms;                // lan cuoi nhan duoc 1 dong TRAM
+  uint32_t last_byte_ms;              // lan cuoi nhan duoc 1 BYTE bat ky (ke ca rac)
   uint32_t lines, errors;             // so dong nhan duoc / so dong loi
   uint32_t raw_bytes;                 // TONG so byte UART nhan duoc (chan doan day noi)
   bool     ever;                      // da tung nhan duoc dong TRAM nao chua
   bool     linked;                    // con nhan duoc dong TRAM (cap nhat trong tram_link_task)
+  bool     rx_active;                 // con BYTE toi trong TRAM_LINK_RX_ACTIVE_MS (day noi song)
 } tram_link_data_t;
 
 extern tram_link_data_t tram;

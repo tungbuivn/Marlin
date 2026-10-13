@@ -193,7 +193,7 @@ static lv_obj_t  *s_title, *s_link;
 static lv_group_t *s_group;
 static lv_obj_t  *s_focus_prev;            // doi tuong dang focus (de ve khung)
 static uint8_t    s_page_act = PG_STATUS;
-static bool       s_link_state = false;
+static uint8_t    s_link_state = 255;      // 255 = chua set lan nao (`link_state_now()` tra 0/1/2)
 static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
 
 // "Co link voi Marlin" - CO HAI giao thuc LOAI TRU nhau (PUSH: panel.linked / TRAM: tram.linked)
@@ -202,6 +202,16 @@ static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
 //   1) THANH TREN (moi man), va 2) dong trang thai + khung XYZ cua trang STATUS (home).
 // Cac man khac KHONG hien lai nua (truoc day man TRAMMING va MENU cung hien -> nhieu cho mau thuan).
 static bool link_ok(void) { return panel.linked || tram.linked; }
+
+// Trang thai link 3 muc - "co byte toi" KHONG du de coi la link tot (co the la byte rac do sai baud/
+// nhieu/day loi), nhung no phan biet duoc 2 kieu hong khac nhau:
+//   0 = NO LINK  : khong co byte nao  -> dut day / sai cong / board tat
+//   1 = LINK OK  : doc duoc dong "TRAM ..." hop le
+//   2 = LINK ERR : CO byte toi nhung khong thanh dong hop le -> sai baud / sai khung / nhieu
+static uint8_t link_state_now(void) {
+  if (link_ok()) return 1;
+  return tram.rx_active ? 2 : 0;
+}
 
 // ===========================================================================
 //  Format so/chuoi (khong dung %f)
@@ -706,7 +716,7 @@ static void page_status_update(void) {
 
   // ---- dong trang thai: mat lien ket > "STATE  ten file" ----
   if (!link_ok()) {
-    set_text(st_msg, "NO LINK");
+    set_text(st_msg, tram.rx_active ? "LINK ERR (byte khong hop le)" : "NO LINK");
     lv_obj_set_style_text_color(st_msg, COL_ERR, 0);
   }
   else {
@@ -1885,13 +1895,13 @@ void ui_lvgl_task(void) {
   s_upd_ms = now;
 
   // Thanh tren = NOI DUY NHAT hien chi bao link cho moi man (tru trang STATUS co them dong
-  // trang thai + khung XYZ cung bao mat link). Xet CA HAI giao thuc loai tru nhau:
-  //   PUSH (PANEL_SERIAL_UI): panel.linked   |   TRAM (PANEL_TRAM_LINK): tram.linked
-  const bool ok = link_ok();
-  if (ok != s_link_state) {
-    s_link_state = ok;
-    set_text(s_link, ok ? "LINK OK" : "NO LINK");
-    lv_obj_set_style_text_color(s_link, ok ? COL_OK : COL_ERR, 0);
+  // trang thai + khung XYZ cung bao mat link). 3 muc: LINK OK / LINK ERR / NO LINK
+  // (xem link_state_now() - "co byte toi" khac voi "doc duoc dong TRAM").
+  const uint8_t lst = link_state_now();
+  if (lst != s_link_state) {
+    s_link_state = lst;
+    set_text(s_link, lst == 1 ? "LINK OK" : (lst == 2 ? "LINK ERR" : "NO LINK"));
+    lv_obj_set_style_text_color(s_link, lst == 1 ? COL_OK : (lst == 2 ? COL_ACCENT : COL_ERR), 0);
   }
 
   switch (s_page_act) {

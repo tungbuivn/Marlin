@@ -52,9 +52,9 @@
       static uint32_t dbg_next = 0;
       if (millis() >= dbg_next) {
         dbg_next = millis() + 1000;
-        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d state=%u rx=%u err=%u heap=%u | TRAM dong=%u loi=%u byte=%u cach-day=%ums\n",
-                      (int)panel.linked, (int)tram.linked, (unsigned)panel.state, (unsigned)panel.rx_frames,
-                      (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap(),
+        Serial.printf("[CYD] loop OK | link PUSH=%d TRAM=%d rx-active=%d state=%u rx=%u err=%u heap=%u | TRAM dong=%u loi=%u byte=%u cach-day=%ums\n",
+                      (int)panel.linked, (int)tram.linked, (int)tram.rx_active, (unsigned)panel.state,
+                      (unsigned)panel.rx_frames, (unsigned)panel.rx_errors, (unsigned)ESP.getFreeHeap(),
                       (unsigned)tram.lines, (unsigned)tram.errors, (unsigned)tram.raw_bytes,
                       (unsigned)(millis() - tram.last_rx_ms));
       }
