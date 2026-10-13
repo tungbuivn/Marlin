@@ -43,9 +43,19 @@
 /* So descriptor font dung dong thoi (UI chi can 1; de 2 cho an toan neu sau nay them font). */
 #define LV_FONT_GFXFONT_MAX_FONTS    2U
 
-/* Buffer repack tinh san. Glyph lon nhat cua font 13px la 9x14 -> 17 byte; 128 byte du cho
- * toi 16x64 pixel. Neu font nao can hon thi driver tu cap phat bang lv_mem_alloc(). */
+/* Buffer repack cho font bpp 1 (bitmap Adafruit canh hang). Glyph lon nhat cua font 13px la
+ * 9x14 -> 17 byte; 128 byte du cho toi 16x64 pixel. Chi MOT buffer dung chung vi LVGL ve
+ * tung glyph mot (lv_draw_sw_letter goi get_glyph_bitmap roi dung ngay). Neu font nao can
+ * hon thi driver tu cap phat bang lv_mem_alloc(). Font bpp 4 KHONG dung buffer nay. */
 #define LV_FONT_GFXFONT_SCRATCH      128U
+
+/* Cach xep bitmap trong header font:
+ *   1 = Adafruit GFXfont: 1 bit/pixel, MOI HANG CANH DAU BYTE  -> driver phai REPACK
+ *   4 = dinh dang rieng cua ta: 4 bit/pixel, chuoi bit LIEN TUC dung kieu LVGL 8.4 doc
+ *       (col chan -> nibble cao, col le -> nibble thap)      -> driver tra con tro THANG
+ * (Da chung minh LVGL 8.4 luon doc dang lien tuc: xem tools/probe_lvgl_font_bitmap_layout.py) */
+#define LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1  1U
+#define LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4      4U
 
 /* ---------------------------------------------------------------------------
  *  Kieu noi bo
@@ -53,20 +63,25 @@
 typedef struct {
   const GFXfont *const *ranges;
   uint8_t               n;
+  uint8_t               bpp;             /* 1 hoac 4 - quyet dinh co repack hay khong */
   const GFXfont        *primary;         /* = ranges[0]: nguon yAdvance */
-  uint8_t              *scratch;         /* buffer bitmap da repack cho glyph vua tra */
-  uint16_t              scratch_cap;     /* suc chua thuc te cua scratch */
-  uint16_t              max_glyph_bytes; /* glyph to nhat trong CA Cac dai */
+  uint8_t              *scratch;         /* buffer repack (chi font bpp 1 moi can) */
+  uint16_t              scratch_cap;
+  uint16_t              max_glyph_bytes; /* glyph to nhat trong CA Cac dai (chi de bao cao) */
   uint8_t               in_use;
 } gfx_ctx_t;
 
 typedef struct {
   lv_font_t  font;
   gfx_ctx_t  ctx;
-  uint8_t    scratch_static[LV_FONT_GFXFONT_SCRATCH];
 } gfx_slot_t;
 
 static gfx_slot_t s_slots[LV_FONT_GFXFONT_MAX_FONTS];
+
+/* Buffer repack dung chung cho MOI font bpp 1 (tiet kiem RAM: truoc day moi slot 128 byte). */
+static uint8_t s_scratch[LV_FONT_GFXFONT_SCRATCH];
+static uint8_t *s_scratch_heap = NULL;      /* chi dung khi glyph to hon s_scratch */
+static uint16_t s_scratch_cap  = LV_FONT_GFXFONT_SCRATCH;
 
 /* ---------------------------------------------------------------------------
  *  Helper
@@ -94,10 +109,11 @@ static const GFXglyph *gfx_lookup(const gfx_ctx_t *ctx, uint32_t letter, const G
   return NULL;
 }
 
-/* So byte bitmap LIEN TUC (kieu LVGL) cua 1 glyph. */
-static uint16_t gfx_linear_bytes(uint8_t w, uint8_t h)
+/* So byte bitmap cua 1 glyph khi da o dung kieu LVGL (chuoi bit lien tuc):
+ *   bpp 1 -> ceil(w*h/8)     bpp 4 -> ceil(w*h*4/8) = ceil(w*h/2) */
+static uint16_t gfx_bitmap_bytes(uint8_t w, uint8_t h, uint8_t bpp)
 {
-  return (uint16_t)(((uint32_t)w * (uint32_t)h + 7U) >> 3);
+  return (uint16_t)(((uint32_t)w * (uint32_t)h * (uint32_t)bpp + 7U) >> 3);
 }
 
 /**
@@ -176,7 +192,7 @@ static bool gfx_get_glyph_dsc(const lv_font_t *font, lv_font_glyph_dsc_t *dsc,
    * Kiem chung: 'g' cua font nay co yOffset -7, box_h 10 -> ofs_y = -3 (chan xuong duoi
    * baseline 3 px, dung); 'A' yOffset -9, box_h 9 -> ofs_y = 0 (dung tren baseline). */
   dsc->ofs_y = (int16_t)(-((int16_t)g->yOffset + (int16_t)g->height));
-  dsc->bpp = 1;
+  dsc->bpp = ctx->bpp;                     /* 1 = Adafruit (da repack), 4 = 16 muc xam */
   dsc->is_placeholder = 0;
   return true;
 }
@@ -184,14 +200,22 @@ static bool gfx_get_glyph_dsc(const lv_font_t *font, lv_font_glyph_dsc_t *dsc,
 static const uint8_t *gfx_get_glyph_bitmap(const lv_font_t *font, uint32_t letter)
 {
   gfx_ctx_t *ctx = (gfx_ctx_t *)font->dsc;
-  if (!ctx || !ctx->scratch) return NULL;
+  if (!ctx) return NULL;
 
   const GFXfont *f = NULL;
   const GFXglyph *g = gfx_lookup(ctx, letter, &f);
   if (!g || g->width == 0 || g->height == 0) return NULL;    /* glyph rong: khong ve gi */
   if (!f->bitmap) return NULL;
 
-  const uint16_t need = gfx_linear_bytes(g->width, g->height);
+  if (ctx->bpp == LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4) {
+    /* Header 4bpp da ghi san theo dung chuoi bit lien tuc ma LVGL doc -> tra THANG con tro
+     * (khong copy, khong repack). Bitmap nam trong .rodata/flash nen khong ton RAM. */
+    return &f->bitmap[g->bitmapOffset];
+  }
+
+  /* bpp 1: bitmap Adafruit canh hang -> phai repack sang dang lien tuc cua LVGL. */
+  if (!ctx->scratch) return NULL;
+  const uint16_t need = gfx_bitmap_bytes(g->width, g->height, 1U);
   if (need > ctx->scratch_cap) return NULL;                   /* khong du buffer */
 
   gfx_repack(&f->bitmap[g->bitmapOffset], g->width, g->height, ctx->scratch);
@@ -202,7 +226,7 @@ static const uint8_t *gfx_get_glyph_bitmap(const lv_font_t *font, uint32_t lette
  *  Khoi tao descriptor
  * -------------------------------------------------------------------------*/
 
-/* Do so byte bitmap LIEN TUC cua glyph to nhat (de cap phat buffer repack). */
+/* Do so byte bitmap cua glyph to nhat (de cap phat buffer repack; chi font bpp 1 can). */
 static uint16_t gfx_measure_max_glyph(const gfx_ctx_t *ctx)
 {
   uint16_t maxb = 0;
@@ -212,7 +236,7 @@ static uint16_t gfx_measure_max_glyph(const gfx_ctx_t *ctx)
     for (uint32_t cp = f->first; cp <= (uint32_t)f->last; cp++) {
       const GFXglyph *g = &f->glyph[cp - f->first];
       if (g->width == 0 || g->height == 0) continue;
-      const uint16_t b = gfx_linear_bytes(g->width, g->height);
+      const uint16_t b = gfx_bitmap_bytes(g->width, g->height, ctx->bpp);
       if (b > maxb) maxb = b;
     }
   }
@@ -241,14 +265,17 @@ static uint8_t gfx_measure_ascender(const gfx_ctx_t *ctx)
   return (uint8_t)top;
 }
 
-const lv_font_t *lv_font_gfxfont_get(const GFXfont *const *ranges, uint8_t n)
+const lv_font_t *lv_font_gfxfont_get_ex(const GFXfont *const *ranges, uint8_t n, uint8_t bpp)
 {
   if (!ranges || n == 0 || n > LV_FONT_GFXFONT_MAX_RANGES) return NULL;
   if (!ranges[0] || !ranges[0]->glyph) return NULL;
+  if (bpp != LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1 && bpp != LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4)
+    return NULL;
 
   /* Da tao roi (cung tham so) -> tra lai dung descriptor cu. */
   for (uint8_t i = 0; i < LV_FONT_GFXFONT_MAX_FONTS; i++) {
-    if (s_slots[i].ctx.in_use && s_slots[i].ctx.ranges == ranges && s_slots[i].ctx.n == n)
+    if (s_slots[i].ctx.in_use && s_slots[i].ctx.ranges == ranges &&
+        s_slots[i].ctx.n == n && s_slots[i].ctx.bpp == bpp)
       return &s_slots[i].font;
   }
 
@@ -260,23 +287,36 @@ const lv_font_t *lv_font_gfxfont_get(const GFXfont *const *ranges, uint8_t n)
   if (si == LV_FONT_GFXFONT_MAX_FONTS) si = 0;
 
   gfx_slot_t *s = &s_slots[si];
-  if (s->ctx.scratch && s->ctx.scratch != s->scratch_static) lv_mem_free(s->ctx.scratch);
 
   memset(&s->ctx, 0, sizeof(s->ctx));
   s->ctx.in_use  = 1;
   s->ctx.ranges  = ranges;
   s->ctx.n       = n;
+  s->ctx.bpp     = bpp;
   s->ctx.primary = ranges[0];
 
-  const uint16_t maxb = gfx_measure_max_glyph(&s->ctx);
-  s->ctx.max_glyph_bytes = maxb;
-  if (maxb <= LV_FONT_GFXFONT_SCRATCH) {
-    s->ctx.scratch     = s->scratch_static;
-    s->ctx.scratch_cap = LV_FONT_GFXFONT_SCRATCH;
+  s->ctx.max_glyph_bytes = gfx_measure_max_glyph(&s->ctx);
+  if (bpp == LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1) {
+    /* Chi font bpp 1 (bitmap canh hang) moi phai repack -> moi can buffer. */
+    if (s->ctx.max_glyph_bytes <= LV_FONT_GFXFONT_SCRATCH) {
+      s->ctx.scratch     = s_scratch;
+      s->ctx.scratch_cap = LV_FONT_GFXFONT_SCRATCH;
+    }
+    else if (s_scratch_heap == NULL || s_scratch_cap < s->ctx.max_glyph_bytes) {
+      if (s_scratch_heap) { lv_mem_free(s_scratch_heap); s_scratch_heap = NULL; }
+      s_scratch_heap = (uint8_t *)lv_mem_alloc(s->ctx.max_glyph_bytes);
+      s_scratch_cap  = s_scratch_heap ? s->ctx.max_glyph_bytes : 0;
+      s->ctx.scratch     = s_scratch_heap;
+      s->ctx.scratch_cap = s_scratch_cap;
+    }
+    else {
+      s->ctx.scratch     = s_scratch_heap;
+      s->ctx.scratch_cap = s_scratch_cap;
+    }
   }
   else {
-    s->ctx.scratch     = (uint8_t *)lv_mem_alloc(maxb);
-    s->ctx.scratch_cap = s->ctx.scratch ? maxb : 0;
+    s->ctx.scratch     = NULL;      /* bpp 4: tra con tro thang, khong ton RAM */
+    s->ctx.scratch_cap = 0;
   }
 
   /* line_height = yAdvance (moi dai cung font/cung co nen lay tu dai dau).
@@ -305,6 +345,12 @@ const lv_font_t *lv_font_gfxfont_get(const GFXfont *const *ranges, uint8_t n)
   return &s->font;
 }
 
+/* Tuong thich: ban cu chi ho tro font 1 bit/pixel dinh dang Adafruit GFXfont. */
+const lv_font_t *lv_font_gfxfont_get(const GFXfont *const *ranges, uint8_t n)
+{
+  return lv_font_gfxfont_get_ex(ranges, n, LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1);
+}
+
 /* ---------------------------------------------------------------------------
  *  Tu kiem tra (in ra Serial / COM7)
  * -------------------------------------------------------------------------*/
@@ -322,12 +368,15 @@ void lv_font_gfxfont_selftest(const lv_font_t *f)
   if (!f) { GFX_LOG("[GFXFONT] selftest: font NULL\n"); return; }
 
   const gfx_ctx_t *ctx = (const gfx_ctx_t *)f->dsc;
+  const uint8_t bpp = ctx ? ctx->bpp : 1U;
   GFX_LOG("[GFXFONT] selftest --------------------------------------------------\n");
-  GFX_LOG("[GFXFONT] line_height=%d base_line=%d (ascender thuc=%d) vi font 1bpp\n",
+  GFX_LOG("[GFXFONT] line_height=%d base_line=%d (ascender thuc=%d) | bpp=%u (%s)\n",
                 (int)f->line_height, (int)f->base_line,
-                (int)f->line_height - (int)f->base_line);
+                (int)f->line_height - (int)f->base_line, (unsigned)bpp,
+                bpp == 4U ? "16 muc xam, bitmap da kieu LVGL -> tra con tro THANG"
+                          : "1 bit, bitmap Adafruit canh hang -> REPACK");
   if (ctx) {
-    GFX_LOG("[GFXFONT] so dai=%u  do dai glyph to nhat=%u byte  buffer repack=%u byte\n",
+    GFX_LOG("[GFXFONT] so dai=%u  glyph to nhat=%u byte  buffer repack=%u byte\n",
                   (unsigned)ctx->n, (unsigned)ctx->max_glyph_bytes, (unsigned)ctx->scratch_cap);
     for (uint8_t i = 0; i < ctx->n; i++) {
       const GFXfont *r = ctx->ranges[i];
@@ -350,14 +399,14 @@ void lv_font_gfxfont_selftest(const lv_font_t *f)
       continue;
     }
     const uint8_t *bmp = lv_font_get_glyph_bitmap(f, probe[i]);
-    const uint16_t need = gfx_linear_bytes((uint8_t)d.box_w, (uint8_t)d.box_h);
+    const uint16_t need = gfx_bitmap_bytes((uint8_t)d.box_w, (uint8_t)d.box_h, d.bpp);
     if (!bmp) {
       GFX_LOG("[GFXFONT] %-7s -> dsc OK (%dx%d) nhung BITMAP NULL\n",
                     pname[i], (int)d.box_w, (int)d.box_h);
       continue;
     }
     const uint16_t n8 = need < 8U ? need : 8U;
-    GFX_LOG("[GFXFONT] %-7s -> OK  box=%dx%d adv_w=%d ofs=(%d,%d) bpp=%u linear=%u byte | "
+    GFX_LOG("[GFXFONT] %-7s -> OK  box=%dx%d adv_w=%d ofs=(%d,%d) bpp=%u bytes=%u | "
                   "checksum8=%lu first8=",
                   pname[i], (int)d.box_w, (int)d.box_h, (int)d.adv_w,
                   (int)d.ofs_x, (int)d.ofs_y, (unsigned)d.bpp, (unsigned)need,

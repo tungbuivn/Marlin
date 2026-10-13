@@ -104,32 +104,58 @@ LV_FONT_DECLARE(font_robotomono_vn_14); // Roboto Mono 14 - mono cua Google Font
 //       build_chrome() van dat font_consola_vn_14 o CAP MAN HINH cho che do 2 nua, nen che do 2
 //       thuc chat tron 2 cach gan. Giu nguyen hanh vi cu de tham chieu.)
 //   3 = (danh rieng cho mono theo o gia tri - chua lam)
-//   4 = font 1-BIT TU SINH dinh dang Adafruit GFXfont (xem tools/ttf2gfxfont.py +
-//       lv_font_gfxfont.c + gfx_font_robotomono.h). Gan TUNG nhan/nut y nhu che do 2, va
-//       KHONG dat font o cap man hinh. Ten man (s_title) giu Montserrat lam DOI CHUNG.
+//   4 = font MONO TU SINH (xem tools/ttf2gfxfont.py + lv_font_gfxfont.c). Gan TUNG nhan/nut y
+//       nhu che do 2, KHONG dat font o cap man hinh. Ten man (s_title) giu Montserrat DOI CHUNG.
+//       Chon do phan giai mau bang UI_MONO_GFX_BPP o duoi.
 #define UI_MONO_FONT 4
+
+// Do phan giai cua font mono che do 4 (xem lv_font_gfxfont.h):
+//   4 = 4 bit/pixel, 16 muc xam -> CO antialias (dang dung; chu dep hon han 1-bit).
+//       Header gfx4_font_robotomono.h KHONG phai Adafruit GFXfont: bitmap da ghi theo dung
+//       chuoi bit lien tuc cua LVGL nen driver tra con tro THANG (khong repack, khong ton RAM).
+//   1 = 1 bit/pixel, Adafruit GFXfont (gfx_font_robotomono.h) -> driver phai repack.
+//       Giu lai lam PHUONG AN DU PHONG (da nghiem thu tren may that, chu bi rang nhung chac chan chay).
+#define UI_MONO_GFX_BPP 4
 
 #if UI_MONO_FONT == 4
 // ---------------------------------------------------------------------------
-//  Che do 4: font 1-bit Adafruit GFXfont tu sinh.
+//  Che do 4: font mono tu sinh.
 //  - 5 dai roi rac (khong the la 1 bang 0x20..0x1EF9: ton ~55 KB vo ich).
-//  - Moi dai la mot GFXfont rieng; lv_font_gfxfont_get() tra tuan tu.
+//  - Moi dai la mot bang glyph rieng; lv_font_gfxfont_get_ex() tra tuan tu.
 //  - line_height/base_line lay tu du lieu glyph cua CA 5 dai (glyph tieng Viet cao hon ASCII).
+//  - Ca 2 ban font (1bpp va 4bpp) cung size 13 nen co CUNG so do: xAdvance 8, yAdvance 17,
+//    base_line 3 -> doi qua lai khong lam xo lech bo cuc UI. Chi 1 ban duoc LINK vao
+//    (ban khong dung bi linker GC khoi flash).
 // ---------------------------------------------------------------------------
-extern const GFXfont gfx_font_robotomono_ascii;   // U+0020..U+00FF
-extern const GFXfont gfx_font_robotomono_vn1;     // U+0102..U+0103  A(breve) a(breve)
-extern const GFXfont gfx_font_robotomono_vn2;     // U+0110..U+0111  D/ d/ gach ngang
-extern const GFXfont gfx_font_robotomono_vn3;     // U+01A0..U+01B1  O/ o/ U/ u/ moc
-extern const GFXfont gfx_font_robotomono_vn4;     // U+1EA0..U+1EF9  to hop dau tieng Viet
+#if UI_MONO_GFX_BPP == 4
+  #define UI_GFX_LAYOUT LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4
+  extern const GFXfont gfx4_font_robotomono_ascii;  // U+0020..U+00FF
+  extern const GFXfont gfx4_font_robotomono_vn1;    // U+0102..U+0103  A(breve) a(breve)
+  extern const GFXfont gfx4_font_robotomono_vn2;    // U+0110..U+0111  D/ d/ gach ngang
+  extern const GFXfont gfx4_font_robotomono_vn3;    // U+01A0..U+01B1  O/ o/ U/ u/ moc
+  extern const GFXfont gfx4_font_robotomono_vn4;    // U+1EA0..U+1EF9  to hop dau tieng Viet
+#elif UI_MONO_GFX_BPP == 1
+  #define UI_GFX_LAYOUT LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1
+  extern const GFXfont gfx_font_robotomono_ascii;
+  extern const GFXfont gfx_font_robotomono_vn1;
+  extern const GFXfont gfx_font_robotomono_vn2;
+  extern const GFXfont gfx_font_robotomono_vn3;
+  extern const GFXfont gfx_font_robotomono_vn4;
+#else
+  #error "UI_MONO_GFX_BPP chi nhan 1 hoac 4"
+#endif
 
 #define UI_GFX_RANGE_COUNT 5
-static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] = {
-  &gfx_font_robotomono_ascii,
-  &gfx_font_robotomono_vn1,
-  &gfx_font_robotomono_vn2,
-  &gfx_font_robotomono_vn3,
-  &gfx_font_robotomono_vn4
-};
+#define UI_GFX_RANGES(prefix) { \
+    &prefix##_ascii, &prefix##_vn1, &prefix##_vn2, &prefix##_vn3, &prefix##_vn4 }
+
+#if UI_MONO_GFX_BPP == 4
+static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] =
+  UI_GFX_RANGES(gfx4_font_robotomono);
+#else
+static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] =
+  UI_GFX_RANGES(gfx_font_robotomono);
+#endif
 
 // Dien trong ui_lvgl_begin() (sau lv_init). Neu NULL (font loi) thi UI_MONO_FACE lui ve
 // Montserrat: mat dau tieng Viet nhung KHONG mat het chu - duong lui an toan.
@@ -2350,14 +2376,83 @@ static void page_menu_update(void) {
 // ===========================================================================
 //  Thanh day: phan trang noi dung man dang mo (PREV / TRANG x/y / NEXT)
 // ===========================================================================
-// Cuon noi dung man dang mo them 1 "trang" (dung lai o 2 dau). dir > 0 = xuong, dir < 0 = len.
-// Dung chung cho MOI man con (khong rieng MENU): man nao co noi dung tran thi moi co thanh day.
+// CHIEU (da kiem chung bang ma nguon LVGL 8.4, khong phai doan):
+//   lv_obj_get_scroll_top(o) = -o->spec_attr->scroll.y            (lv_obj_scroll.c:128)
+//   lv_obj_scroll_to_y(o, y) dat scroll.y = -y  =>  scroll_top = y
+//   lv_obj_scroll_by(o, 0, dy) cong thang vao scroll.y (lv_obj_scroll.c:334 dat anim
+//       tu -sy den -sy+dy, anim ghi scroll.y = v)  =>  scroll_top_moi = scroll_top_cu - dy
+//   => muon di XUONG (scroll_top TANG) phai truyen dy = -vis. Code cu truyen +vis cho NEXT
+//      nen scroll_top GIAM: NEXT lai di VE DAU danh sach (dung nhu nguoi dung bao
+//      "next ... cuon nguoc"). Da sua: dung lv_obj_scroll_to_y() voi dich TINH TRUOC.
+//   PREV = ve phia TRUOC (dau danh sach, scroll_top giam) | NEXT = ve phia SAU (scroll_top tang).
+// Ngoai ra lv_obj_scroll_by() la ban KHONG kep bien (co the tran ra khoang trang o 2 dau);
+// lv_obj_scroll_to_y() di qua ban bounded nen tu dung lai o dau/cuoi.
+//
+// FOCUS: lv_btn (moi dong menu deu la lv_btn) co LV_OBJ_FLAG_SCROLL_ON_FOCUS (lv_btn.c:67) va
+// LVGL tu goi lv_obj_scroll_to_view_recursive() khi vat nhan duoc su kien FOCUSED
+// (lv_obj.c:800-803). Neu sau khi cuon ma con tro encoder VAN o dong cua trang CU thi
+// lan di chuyen focus ke tiep se keo ca trang VE cho thay dong do -> nhin nhu vua cuon nguoc.
+// Vi vay sau khi cuon phai chuyen focus sang vat focusable DAU TIEN nam trong vung nhin MOI.
+// Tim vat focusable DAU TIEN (theo thu tu cay) dang GIAO voi vung nhin MOI [band_lo, band_hi]
+// (toa do tuyet doi tren man).
+// "Focusable" = CO TRONG GROUP, chu KHONG phai co LV_OBJ_FLAG_CLICK_FOCUSABLE: lv_group_focus_obj()
+// chi doi hoi vat nam trong group (no duyet danh sach obj_ll cua group - lv_group.c:235), va co
+// vat duoc them vao group ma khong co co do (vd bang SETTINGS: `lv_group_add_obj(s_group, me_table)`).
+static lv_obj_t *find_focus_in_band(lv_obj_t *root, lv_coord_t band_lo, lv_coord_t band_hi)
+{
+  const uint32_t n = lv_obj_get_child_cnt(root);
+  for (uint32_t i = 0; i < n; i++) {
+    lv_obj_t *c = lv_obj_get_child(root, i);
+    if (!c || lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN)) continue;
+    if (s_group && lv_obj_get_group(c) == s_group) {
+      // lv_obj_get_coords() tra toa do TUYET DOI tren man (LVGL da cong scroll) - dung luon,
+      // khong can biet vat long bao nhieu cap. band_* cung la toa do tuyet doi.
+      lv_area_t a;
+      lv_obj_get_coords(c, &a);
+      if (a.y2 > band_lo && a.y1 < band_hi) return c;     // giao voi vung nhin MOI
+    }
+    lv_obj_t *r = find_focus_in_band(c, band_lo, band_hi);
+    if (r) return r;
+  }
+  return NULL;
+}
+
+// Cuon noi dung man dang mo them 1 "trang" (dung lai o 2 dau). dir > 0 = NEXT (xuong cuoi),
+// dir < 0 = PREV (ve dau). Dung chung cho MOI man con (khong rieng MENU).
 static void page_scroll(const int8_t dir) {
   lv_obj_t *p = s_page[s_page_act];
   if (!p || s_page_act == PG_STATUS) return;
   const lv_coord_t vis = lv_obj_get_height(p) - 2 * PAGE_PAD;
   if (vis <= 0) return;
-  lv_obj_scroll_by(p, 0, (dir > 0) ? vis : -vis, LV_ANIM_ON);
+
+  const lv_coord_t top = lv_obj_get_scroll_top(p);
+  const lv_coord_t all = top + lv_obj_get_scroll_bottom(p);   // tong doan cuon duoc (co dinh)
+  lv_coord_t want = top + ((dir > 0) ? vis : -vis);
+  if (want < 0)   want = 0;                                   // da o dau -> khong cuon them
+  if (want > all) want = all;                                 // da o cuoi -> khong cuon them
+  if (want == top) return;
+
+  lv_obj_scroll_to_y(p, want, LV_ANIM_ON);                    // scroll_top = want (chinh xac)
+
+  // Vat nao dang o trong vung nhin MOI? Tinh theo toa do NOI DUNG (khong doi theo scroll):
+  //   content_ofs = coords.y1 - p->coords.y1 + scroll_top_hien_tai
+  // Sau khi cuon, vat nam trong khung khi content_ofs thuoc [want, want + chieu cao trang].
+  // (Phai tinh tay vi scroll dang chay ANIMATION nen coords chua cap nhat.)
+  if (!s_group) return;
+  const lv_coord_t shift = top - want;                        // doi coords CU -> coords SAU khi cuon
+  lv_area_t pa;
+  lv_obj_get_coords(p, &pa);
+  const lv_coord_t band_lo = pa.y1 - shift;
+  const lv_coord_t band_hi = pa.y2 - shift;
+  lv_obj_t *nf = find_focus_in_band(p, band_lo, band_hi);
+  if (!nf || nf == lv_group_get_focused(s_group)) return;     // khong tim duoc -> giu nguyen focus
+
+  // lv_group_focus_obj() se ban FOCUSED -> LVGL goi lv_obj_scroll_to_view_recursive(nf) theo
+  // toa do CU cua nf, tuc la keo trang NGUOC LAI. Tam bo co roi bat lai de tranh.
+  const bool sof = lv_obj_has_flag(nf, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  if (sof) lv_obj_clear_flag(nf, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_group_focus_obj(nf);          // => on_focus_changed() cap nhat s_focus_prev + ve lai khung
+  if (sof) lv_obj_add_flag(nf, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 }
 
 // Bat/tat thanh day theo noi dung THUC TE cua man dang mo:
@@ -2723,13 +2818,14 @@ void ui_lvgl_begin(void) {
   lv_init();
 
 #if UI_MONO_FONT == 4
-  // Font 1-bit tu sinh (Adafruit GFXfont): tao descriptor + tu kiem tra, in ket qua ra Serial
-  // (COM7, 115200) MOT LAN. Nap xong chi can doc log la biet driver tra dung du lieu hay khong:
-  //   [GFXFONT] 'A' -> OK box=8x9 adv_w=128 ofs=(0,0) ... checksum8=... first8=...
+  // Font mono tu sinh: tao descriptor + tu kiem tra, in ket qua ra Serial (COM7, 115200) MOT LAN.
+  // Nap xong chi can doc log la biet driver tra dung du lieu hay khong:
+  //   [GFXFONT] line_height=17 base_line=3 ... | bpp=4 (16 muc xam, bitmap da kieu LVGL ...)
+  //   [GFXFONT] 'A' -> OK box=8x9 adv_w=8 ofs=(0,0) bpp=4 bytes=36 | checksum8=... first8=...
   // Neu dong nao ghi "KHONG TRA DUOC GLYPH" hoac "BITMAP NULL" thi driver co van de.
-  s_gfx_mono = lv_font_gfxfont_get(UI_FONT_RANGES, UI_GFX_RANGE_COUNT);
+  s_gfx_mono = lv_font_gfxfont_get_ex(UI_FONT_RANGES, UI_GFX_RANGE_COUNT, UI_GFX_LAYOUT);
   if (!s_gfx_mono) {
-    Serial.printf("[UI] UI_MONO_FONT 4: lv_font_gfxfont_get() tra NULL -> lui ve Montserrat "
+    Serial.printf("[UI] UI_MONO_FONT 4: lv_font_gfxfont_get_ex() tra NULL -> lui ve Montserrat "
                   "(mat dau tieng Viet, KHONG mat het chu)\n");
   }
   lv_font_gfxfont_selftest(s_gfx_mono);

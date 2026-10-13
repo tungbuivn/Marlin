@@ -3,13 +3,15 @@
  *
  *   font    : RobotoMono-Regular.ttf
  *   size    : 13 px (em size FreeType)   nguong 1-bit: 128
+ *   bpp     : 1
  *   xAdvance: 8 px (mono)   yAdvance: 17 px   base_line: 3 px
  *   do dai  : 5 dai, 336 o, 287 glyph co net, 2926 byte bitmap
  *
- * Dinh dang Adafruit GFXfont (xem mau that consola9pt7b.h):
- *   - bitmap 1 bit/pixel, MOI HANG CANH DAU BYTE (stride = ceil(width/8)), bit cao ve truoc
- *   - yOffset = tu BASELINE len mep tren bitmap (am = o TREN baseline)
- *   - yAdvance = chieu cao dong; baseline nam o (yAdvance - base_line) tu mep tren dong
+ * yOffset = tu BASELINE len mep tren bitmap (am = o TREN baseline).
+ * yAdvance = chieu cao dong; baseline nam o (yAdvance - base_line) tu mep tren dong.
+ *
+ * DINH DANG: Adafruit GFXfont (xem mau that consola9pt7b.h)
+ *   - bitmap 1 bit/pixel, MOI HANG CANH DAU BYTE (stride = ceil(width/8)), bit cao truoc
  *
  *  !! LVGL 8.4 KHONG doc duoc truc tiep dinh dang nay: no dao cac hang thanh MOT chuoi
  *     bit LIEN TUC, khong dem padding theo hang (lv_draw_sw_letter.c: `col_bit += 
@@ -702,5 +704,7 @@ const GFXfont *const gfx_font_robotomono_ranges[5] = {
   &gfx_font_robotomono_vn4
 };
 #define GFX_FONT_ROBOTOMONO_RANGE_COUNT 5
+
+#define GFX_FONT_ROBOTOMONO_BPP 1
 
 #endif /* GFX_FONT_ROBOTOMONO_H */
