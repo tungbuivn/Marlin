@@ -158,8 +158,9 @@
 // Enable the Bluetooth serial interface on AT90USB devices
 //#define BLUETOOTH
 
-// Name displayed in the LCD "Ready" message and Info menu
-//#define CUSTOM_MACHINE_NAME "3D Printer"
+// Name displayed in the LCD "Ready" message and Info menu (2026-10-13: ten may = TBT,
+// cung duoc gui sang panel CYD qua frame PANEL_F_HELLO nen header panel hien "TBT")
+#define CUSTOM_MACHINE_NAME "TBT"
 
 // Printer's unique ID, used by some programs to differentiate between machines.
 // Choose your own or use a service like https://www.uuidgenerator.net/version4

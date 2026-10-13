@@ -1902,12 +1902,15 @@ void ui_lvgl_task(void) {
   s_upd_ms = now;
 
   // Thanh tren = NOI DUY NHAT hien chi bao link cho moi man (tru trang STATUS co them dong
-  // trang thai + khung XYZ cung bao mat link). 3 muc: LINK OK / LINK ERR / NO LINK
+  // trang thai + khung XYZ cung bao mat link). 3 muc: TEN MAY / LINK ERR / NO LINK
   // (xem link_state_now() - "co byte toi" khac voi "doc duoc dong TRAM").
+  // 2026-10-13 (yeu cau): khi link TOT thi hien TEN MAY (tu HELLO cua Marlin, khong co thi
+  // PANEL_MACHINE_NAME) thay cho chu "LINK OK"; chi khi co loi moi hien LINK ERR / NO LINK.
   const uint8_t lst = link_state_now();
+  const char *const nm = panel.name[0] ? panel.name : PANEL_MACHINE_NAME;
+  set_text(s_link, lst == 1 ? nm : (lst == 2 ? "LINK ERR" : "NO LINK"));
   if (lst != s_link_state) {
     s_link_state = lst;
-    set_text(s_link, lst == 1 ? "LINK OK" : (lst == 2 ? "LINK ERR" : "NO LINK"));
     lv_obj_set_style_text_color(s_link, lst == 1 ? COL_OK : (lst == 2 ? COL_ACCENT : COL_ERR), 0);
   }
 

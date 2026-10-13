@@ -139,7 +139,12 @@ namespace {
       tx_u8(0);
     #endif
     tx_u8(FAN_COUNT > 4 ? 4 : FAN_COUNT);
-    tx_str((const char*)getFirmwareName_str());
+    // Ten hien tren panel: uu tien CUSTOM_MACHINE_NAME (ten MAY, vd "TBT"), khong co thi lay ten firmware.
+    #ifdef CUSTOM_MACHINE_NAME
+      tx_str(CUSTOM_MACHINE_NAME);
+    #else
+      tx_str((const char*)getFirmwareName_str());
+    #endif
     tx_send();
   }
 
