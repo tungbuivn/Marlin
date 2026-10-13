@@ -97,7 +97,17 @@ if (-not $dfu) {
     Write-Host "OK: dfu-util found" -ForegroundColor Green
 }
 
-$dfuExe = $dfu.Source
+# Get-Command -> ApplicationInfo (.Source), Get-Item -> FileInfo (.FullName).
+# Truoc day chi lay `.Source` nen khi dfu-util khong co trong PATH thi $dfuExe = $null,
+# lenh `& $dfuExe @dfuArgs` nem loi, $LASTEXITCODE giu gia tri cu (0 cua pio) => script
+# BAO "SUCCESS: DFU upload completed!" trong khi BOARD KHONG DUOC GHI GI.
+# Luon lay duong dan tuyet doi va kiem tra file that su ton tai.
+$dfuExe = if ($dfu.PSObject.Properties['Source']) { $dfu.Source } else { $dfu.FullName }
+
+if (-not $dfuExe -or -not (Test-Path $dfuExe)) {
+    Write-Host "Error: khong xac dinh duoc duong dan dfu-util (nhan duoc: '$dfuExe')" -ForegroundColor Red
+    exit 1
+}
 
 # Validate PlatformIO
 Write-Host "Checking PlatformIO..." -ForegroundColor Cyan
@@ -135,9 +145,9 @@ if (-not $BuildOnly) {
     $devices = & $dfuExe --list 2>&1
     $ErrorActionPreference = $prevEAP
 
-    if ($devices -match "STM32") {
+    if ($devices -match "Found DFU|0483:df11|STM32") {
         Write-Host "Found DFU device(s):" -ForegroundColor Green
-        $devices | Where-Object { $_ -match "STM32|Found" } | ForEach-Object {
+        $devices | Where-Object { $_ -match "Found DFU|STM32" } | ForEach-Object {
             Write-Host "  $_"
         }
     } else {
@@ -245,10 +255,11 @@ if ($DfuDevice) {
 $dfuArgs += "-D", $binPath
 
 # dfu-util canh bao "Invalid DFU suffix signature" ra stderr -> cung phai ha EAP
+$dfuExit = -1                                  # -1 = CHUA chay duoc dfu-util (khac han voi 0 = thanh cong)
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 & $dfuExe @dfuArgs
-$dfuExit = $LASTEXITCODE
+if ($null -ne $LASTEXITCODE) { $dfuExit = $LASTEXITCODE }
 $ErrorActionPreference = $prevEAP
 
 if ($dfuExit -eq 0) {
@@ -265,10 +276,14 @@ if ($dfuExit -eq 0) {
     Write-Host "  3. Verify firmware booted: send M115"
 } else {
     Write-Host ""
-    Write-Host "Error: DFU upload failed" -ForegroundColor Red
+    if ($dfuExit -eq -1) {
+        Write-Host "Error: KHONG chay duoc dfu-util ($dfuExe) => BOARD VAN DANG O DFU, CHUA DUOC GHI." -ForegroundColor Red
+    } else {
+        Write-Host "Error: DFU upload failed (exit=$dfuExit)" -ForegroundColor Red
+    }
     Write-Host ""
     Write-Host "Troubleshooting:" -ForegroundColor Yellow
-    Write-Host "  - Check board is in DFU mode"
+    Write-Host "  - Check board is in DFU mode (gui M997 truoc, hoac giu BOOT0 + RESET)"
     Write-Host "  - List devices: dfu-util --list"
     Write-Host "  - Try power cycling and re-entering DFU mode"
     Write-Host "  - Warning 'Invalid DFU suffix signature' la binh thuong (file .bin tho)"
