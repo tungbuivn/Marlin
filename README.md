@@ -13,16 +13,226 @@ vị trí nozzle) và **bàn 4 lò xo chỉnh vít**.
 
 ---
 
+## A. Phan cung cua may nay
+
+Tom tat **PHAN CUNG THAT dang chay**, doi chieu voi code ngay **2026-10-13**. Moi dong deu kem
+nguon `file:dong` de sau nay kiem lai duoc; cho nao repo **khong** co du lieu thi ghi ro la
+khong tim thay, khong suy dien.
+
+| Thanh phan | Chi tiet | Nguon trong repo |
+|---|---|---|
+| May in | **Voron 2.1 300** — CoreXY, ban 310×310, vung in 305×305 | `Marlin/Configuration.h:897` (`#define COREXY`); README §2 |
+| Ten may | **`TBT`** (hien o `M115` va man INFO cua panel) | `Marlin/Configuration.h:163`; `lcd_panel/src/panel_config.h:35` |
+| Board chinh | **MKS Monster8 V2** | `Marlin/Configuration.h:90` (`MOTHERBOARD BOARD_MKS_MONSTER8_V2`) |
+| MCU | build theo **STM32F407VGT6** — Cortex-M4 **168 MHz**, 128K RAM + 64K CCM, **1024K** flash | env `mks_monster8`: `ini/stm32f4.ini:551-553` (`board = marlin_STM32F407VGT6_CCM`) → `buildroot/share/PlatformIO/boards/marlin_STM32F407VGT6_CCM.json:6,17,39,42-43` |
+| Driver | **TMC2209 ×6, che do UART** — X, Y, Z, Z2, Z3, E0 (Driver0…Driver5) | `Marlin/Configuration.h:186-200` |
+| Microstep | **8** cho CA 6 driver + `INTERPOLATE` (TMC noi suy len 1/256) | `Marlin/Configuration.h:1208` (`TTL_MICROSTEP 8`); `Marlin/Configuration_adv.h:1302` (`MICROSTEP_MODES { 8, 8, 8, 8, 8, 8 }`) |
+| Dong driver | **600 mA RMS** ca 6 truc (75 % dinh muc 0,8 A cua ST4118L0804-A) | `Marlin/Configuration_adv.h:2763, 2787, 2807, 2817, 2827, 2907` |
+| So truc Z | **3** — Z / Z2 / Z3, vit me SFU1204 buoc 4 mm/vong | `Marlin/Configuration.h:188, 191, 192` (`Z2/Z3_DRIVER_TYPE TMC2209`) |
+| Probe | **Voron Tap** — dau do **chinh la nozzle** nen `M851 X0 Y0` | `Marlin/Configuration.h:1408` (`FIX_MOUNTED_PROBE`), `:1583` (`NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }`) |
+| Chan probe | **PB13** — dung **chung net voi `Z_MIN_PIN`**; **PA8** = enable mach cam bien | `Marlin/src/pins/stm32f4/pins_MKS_MONSTER8_common.h:70` (`Z_MIN_PIN PB13`), `:50` (`Z_PROBE_PIN PB13`), `:49` (`PROBE_ENABLE_PIN PA8`); bat bang `Configuration.h:1368, 1371, 1629` |
+| `M119` bao gi | **chi `z_min`** — **khong** co dong `PROBE` rieng, vi probe dung chung chan `Z_MIN` | `Marlin/src/module/endstops.cpp:605-606` (`ES_REPORT(Z_MIN)`); `USES_Z_MIN_PROBE_PIN` bi **tat** khi `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN` bat — `src/inc/Conditionals_LCD.h:1267-1269` |
+| Man hinh | **KHONG dung 12864 nua** — `MKS_MINI_12864_V3` dang **comment**; man chinh la **panel ESP32-CYD roi** qua ExtUI PUSH | `Marlin/Configuration.h:2944` (`//#define MKS_MINI_12864_V3`), `:3170` (`#define PANEL_SERIAL_UI`), `:3189` (`//#define PANEL_TRAM_LINK`) |
+| Board panel | **ESP32-2432S028R "CYD"** 2.8" — ST7789 240×320 + XPT2046; env `panel_esp32_cyd`, `board = esp32dev` | `lcd_panel/platformio.ini:123-125` |
+| UART panel ↔ Marlin | Marlin **USART1** (header **MKS WiFi**): **PA10 = RX**, **PA9 = TX** · panel **`Serial2`**: **GPIO22 = TX**, **GPIO35 = RX** · baud **250000** | `ini/features.ini:96-97` (`-DPANEL_SERIAL_PORT=1 -DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9`); `lcd_panel/src/panel_config.h:56, 59, 61, 64` |
+| Cach noi day | **cheo TX↔RX + chung GND**: CYD `IO22`(TX) → Monster8 `PA10`(RX) · Monster8 `PA9`(TX) → CYD `IO35`(RX). Header MKS WiFi con **3 chan KHONG dung**: `IO0`=PB14, `IO1`=PB15, `RESET`=PD14 | bang dau **§2.1** cua `lcd_panel/README.md`; `pins_MKS_MONSTER8_V2.h:56-60` |
+| Cong USB | **COM4** = USB CDC cua STM32 (**VID_0483&PID_5740**) · **COM7** = CH340 cua CYD | `send-gcode.ps1:7-9`; `serial-console.ps1:20`; `lcd_panel/README.md:154, 302` |
+| Nguon | PSU may in nuoi motor/logic; panel cap nguon **rieng** (USB hoac 5V) — **khong** lay 5V tu header vao chan 3V3 cua CYD | `lcd_panel/README.md` §2.1 |
+| EEPROM | chip I2C **roi 4K**, chan **PB8/PB9** (`FLASH_EEPROM_EMULATION` dang comment) ⇒ nap firmware **khong** cham toi duoc | `pins_MKS_MONSTER8_common.h:44-47` |
+
+> ⚠️ **MCU — repo KHONG thong nhat, va "khong tim thay trong repo" dong nao xac nhan chip gan that:**
+> `Marlin/src/core/boards.h:417` ghi `STM32F407VE`; comment ngay tren env lai ghi
+> `STM32F407VET6` (`ini/stm32f4.ini:549`) va ep `-DSTM32_FLASH_SIZE=512` (`:563`) — tuc **512K** flash;
+> trong khi board json ma env dung lai la `stm32f407vgt6` (**1024K** flash, `...VGT6_CCM.json:17,39,43`).
+> Ban build hien tai link theo **VGT6/1024K**. Muon chac phai **doc ky hieu chip in tren board**
+> (VET6 = 512K · VGT6 = 1M) — repo khong co du lieu nao khac.
+
+### A.1 Tinh nang firmware dang BAT / TAT
+
+| Tinh nang | Trang thai | Nguon | Ghi chu |
+|---|---|---|---|
+| `MPCTEMP` | **BAT** | `Configuration.h:676` | dieu khien nhiet dau in bang **MO HINH**, khong phai PID — **doc §6.1 truoc khi ham nong** |
+| `PIDTEMP` | **TAT** (comment) | `Configuration.h:675` | |
+| `PIDTEMPBED` | **BAT** | `Configuration.h:766` | ban in van PID |
+| `CLASSIC_JERK` | **BAT** | `Configuration.h:1309` | kem `S_CURVE_ACCELERATION` (`:1352`); khong dung Junction Deviation |
+| `LIN_ADVANCE` | **TAT** (comment) | `Configuration_adv.h:2151` | |
+| `BABYSTEPPING` | **TAT** (comment) | `Configuration_adv.h:2104` | ⇒ **khong co** babystep Z khi dang in |
+| `AUTO_BED_LEVELING_UBL` | **BAT** | `Configuration.h:2001` | luoi 7×7, `MESH_INSET 15` (`:2112`) |
+| `ASSISTED_TRAMMING` + `_WIZARD` | **BAT** | `Configuration_adv.h:1036, 1054` | `G35` + Tramming Wizard |
+| `PROBE_OFFSET_WIZARD` | **BAT** | `Configuration_adv.h:1414` | menu `Motion → Probe Offset Wizard` |
+| `ADVANCED_PAUSE_FEATURE` | **BAT** | `Configuration_adv.h:2679` | `M600`; script runout = `M600` (`Configuration.h:1945`) |
+| `FILAMENT_RUNOUT_SENSOR` | **BAT** (nhung mac dinh **TAT**: `M412 S0`) | `Configuration.h:1898` | chan PA13 |
+| `PINS_DEBUGGING` | **BAT** | `Configuration_adv.h:4275` | cho `M43`, `M43 E1`, menu *Endstop Pins* (~8 KB flash) |
+| `STM32_DFU_REBOOT` | **BAT** | `Configuration_adv.h:4287` | cho `M997` nhay vao ROM DFU — dung de nap firmware |
+| `PANEL_SERIAL_UI` | **BAT** | `Configuration.h:3170` | ExtUI PUSH ⇒ `MKS_MINI_12864_V3` **phai tat** |
+| `PANEL_TRAM_LINK` | **TAT** (comment) | `Configuration.h:3189` | kieu TRAM cu; **loai tru** voi `PANEL_SERIAL_UI` |
+
+Ba con so hay dung, lay dung tu code:
+
+| Thong so | Gia tri | Nguon |
+|---|---|---|
+| `DEFAULT_MAX_ACCELERATION` | `{ 300, 300, 50, 1000 }` | `Configuration.h:1282` |
+| `HOMING_FEEDRATE_MM_M` | `{ (50*60), (50*60), (8*60) }` = X/Y **3000** · Z **480** mm/min | `Configuration.h:2228` |
+| `PREHEAT_1/2/3` | **PLA 200/60** · **PETG 230/60** · **ABS 240/60** (chamber 35 moi muc) | `Configuration.h:2344-2358` |
+| `DEFAULT_AXIS_STEPS_PER_UNIT` | `{ 40, 40, 400, 207.5 }` (1/8 microstep) | `Configuration.h:1246-1250` |
+| `DEFAULT_MAX_FEEDRATE` | `{ 150, 150, 10, 25 }` mm/s | `Configuration.h:1260-1264` |
+
+> ℹ️ Man hinh panel co **preset vat lieu rieng** (khong lay tu `PREHEAT_*`): `PLA 210/60`,
+> `PETG 240/80`, `ABS 250/100` — hard-code trong UI (`lcd_panel/README.md` §5.3).
+> Muon 2 ben khop thi phai sua `PREHEAT_*` cho trung, hoac nguoc lai.
+
+---
+
+## B. Cai dat va nap firmware
+
+### B.1 Cai PlatformIO
+
+```powershell
+pip install -U platformio        # hoac: winget install PlatformIO.PlatformIO
+pio --version
+```
+
+Hoac cai extension **PlatformIO IDE** trong VS Code (mo thu muc `D:\Marlin` lam project).
+
+* Env mac dinh cua Marlin: `default_envs = mks_monster8`, `src_dir = Marlin` — `platformio.ini:12, 14`.
+* Env LVGL cua panel **can mang lan dau** (keo `espressif32`, `lvgl`, `TFT_eSPI`) —
+  `lcd_panel/platformio.ini:27-28, 144-145`.
+
+### B.2 Build Marlin
+
+```powershell
+pio run -e mks_monster8
+```
+
+File ra: `.pio\build\mks_monster8\mks_monster8.bin` (**khong phai** `firmware.bin`) —
+`board_build.rename` o `ini/stm32f4.ini:557`.
+
+### B.3 Nap Marlin qua DFU
+
+1. Cho board vao DFU: menu **Advanced Settings → Reboot to DFU** (`M997`, nho `STM32_DFU_REBOOT`)
+   — hoac giu **BOOT0** + nhan **RESET**.
+2. Chay script (UART/USB da cam truc tiep, **khong qua hub**):
+
+```powershell
+.\upload-dfu.ps1                 # build + nap (co hoi xac nhan)
+.\upload-dfu.ps1 -NoPrompt       # bo buoc xac nhan
+.\upload-dfu.ps1 -BuildOnly      # chi build
+```
+
+Tham so that cua `upload-dfu.ps1` (`upload-dfu.ps1:53-59`):
+
+| Tham so | Mac dinh | Y nghia |
+|---|---|---|
+| `-Environment` | `mks_monster8` | env PlatformIO |
+| `-DfuDevice` | (rong = tu do) | chon thiet bi DFU: `"0"` hoac `"vid:pid"` |
+| `-TransferSize` | `2048` | `-t` cua dfu-util — toi da ma ROM DFU STM32F407 cho phep (~34 s / 254 KB) |
+| `-BuildOnly` | (tat) | chi build, khong nap |
+| `-NoPrompt` | (tat) | bo buoc xac nhan |
+
+Dia chi ghi **luon la `0x0800C000`** (`upload-dfu.ps1:78`) — **TUYET DOI KHONG** ghi vao
+`0x08000000` (se xoa bootloader MKS).
+
+> 🔴 **Bay 35 — `upload-dfu.ps1` tung bao `SUCCESS` GIA.** Khi `dfu-util` khong co trong PATH,
+> script cu lay `$dfu.Source` cua mot `FileInfo` ⇒ `$null`; lenh `& $dfuExe @dfuArgs` nem loi
+> nhung `$LASTEXITCODE` **giu nguyen `0` cua `pio`** ⇒ in `SUCCESS: DFU upload completed!` + SHA256
+> trong khi **khong ghi mot byte nao**. Gap that 2026-10-13: gui `M997` xong tuong da flash, that ra
+> board **mac ket o DFU** (mat COM4). **Da sua**: lay `$dfu.FullName`, dat `$dfuExit = -1` truoc khi
+> goi, nhan dien thiet bi bang `Found DFU|0483:df11` (truoc do tim chuoi `STM32` nen luon bao sai).
+> **Kiem tra doc lap**: `dfu-util --list` phai thay `Found DFU: [0483:df11]`; sau khi nap **phai**
+> thay `File downloaded successfully` + `Transitioning to dfuMANIFEST state`. Chi tiet: **cam bay 35** o §11.7.
+
+### B.4 Build + nap panel CYD
+
+```powershell
+cd lcd_panel
+pio run -e panel_esp32_cyd -t upload --upload-port COM7
+```
+
+* Env CYD **khong khai `upload_port`** trong `lcd_panel/platformio.ini:123-149` ⇒ **phai** truyen
+  `--upload-port COM7`; `monitor_speed = 115200` (`:148`).
+* `default_envs = panel_f411cc` (`lcd_panel/platformio.ini:32`) ⇒ **phai chi ro `-e panel_esp32_cyd`**,
+  khong thi no build cho F411 (STM32), khong phai CYD.
+* Tu goc repo cung duoc: `pio run -d lcd_panel -e panel_esp32_cyd -t upload --upload-port COM7`.
+* Neu `-t upload` **khong vao duoc bootloader** (hoac khi upload loi `PermissionError` cua esptool)
+  ⇒ xem muc **"Cai dat / nap / kiem tra nhanh"** o `lcd_panel/README.md` (nap bang esptool truc tiep).
+
+### B.5 Doi che do man hinh (12864 ⇄ panel)
+
+```powershell
+pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on      # bat panel (PUSH), tat man cu
+pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode off     # tra ve man 12864 nhu cu
+pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode status  # xem dang bat gi
+
+pio run -e mks_monster8 -t upload                     # PHAI nap lai Marlin sau khi doi
+```
+
+`-Mode` chi nhan `on|off|status` (`set_panel_mode.ps1:14-17`). Script doi dung **5 dong**
+(`set_panel_mode.ps1:26-32`):
+
+| Dong | `-Mode on` (panel) | `-Mode off` (12864) | File |
+|---|---|---|---|
+| `PANEL_SERIAL_UI` | **BAT** | tat | `Marlin/Configuration.h` |
+| `MKS_MINI_12864_V3` | **tat** | BAT | `Marlin/Configuration.h` |
+| `NEOPIXEL_LED` | **tat** | BAT | `Marlin/Configuration.h` |
+| `CUSTOM_MENU_MAIN` | **tat** | BAT | `Marlin/Configuration_adv.h` |
+| `LED_CONTROL_MENU` | **tat** | BAT | `Marlin/Configuration_adv.h` |
+
+> 🔴 **Bay 38 — doi che do man hinh lam EEPROM tro ve MAC DINH cua `Configuration*.h`.**
+> Doi to hop tinh nang (ExtUI / 12864) lam `MarlinSettings` doi cau truc ⇒ lan boot sau Marlin coi
+> EEPROM **khong hop le** va nap **mac dinh trong `Configuration*.h`** (KHONG phai flash ghi de —
+> EEPROM la chip I2C roi, xem §A). Gap that 2026-10-13 khi chuyen sang PUSH: `M851 Z0.75` → **0.00**,
+> UBL `Storage slot -1` + **Leveling OFF** (du lieu mesh **van con**: `Mesh is valid`), trong khi
+> `M92/M201/M204/M205/M906` trung mac dinh nen trong nhu "khong sao".
+> Sau **MOI** lan doi to hop + nap: `M503` + `M420 V` + `M851`, roi khoi phuc theo thu tu:
+> `M851 Z0.75` → `M420 L0` (nap mesh slot 0) → `M420 S1 Z10` → `M500`.
+> Khong can probe lai mesh neu `M420 V` bao `Mesh is valid`. Chi tiet: **cam bay 38** o §11.7.
+
+### B.6 Phai dong Cura / terminal dang giu cong COM truoc khi nap
+
+* **Dong Cura** truoc khi ghi file cau hinh (Cura ghi de khi thoat — cam bay 9, §11.7).
+* **Dong moi serial terminal / `pio device monitor` / `serial-console.ps1`** dang mo **COM4** hoac
+  **COM7** — dang giu cong thi `dfu-util` hoac esptool khong mo duoc thiet bi.
+* Sau khi nap, kiem tra lai: `M115` (phien ban + timestamp) va `M503`; **doc lai `M503` sau khi mo lai
+  cong COM** vi `M503` doc tu **RAM** chu khong doc chip (cam bay 36). Checklist day du o §10.
+
+### B.7 Xoa build dir khi build loi `SrcWrapper\src`
+
+Neu gap:
+
+```
+*** [.pio\build\...\SrcWrapper\src] ... cannot find the path specified
+```
+
+⇒ xoa build dir roi build lai (**cam bay 15**):
+
+```powershell
+Remove-Item -Recurse -Force .pio\build\mks_monster8
+pio run -e mks_monster8
+```
+
+> ⚠️ Ly do sau hon: build **tang dan** sau khi sua `Configuration.h` / `Configuration_adv.h` co the
+> cho ra firmware **"nua cu nua moi"** du `pio run` bao `SUCCESS` va `M115` ra timestamp moi
+> (**cam bay 15b**). Vi vay **clean rebuild moi khi sua file cau hinh**, dung tin `SUCCESS`.
+> Kiem chung bang `M122` (xem `blank time` la 24 hay 36 va `msteps` la 8).
+
+---
+
 ## 1. Phần cứng
 
 | Thành phần | Chi tiết |
 |---|---|
 | Board | MKS Monster8 **V2**, STM32F407VGT6 @168MHz, 128KB RAM + 64KB CCM, 1MB flash |
-| Màn hình | MKS Mini 12864 V3 (LCD đồ hoạ DOGM/U8glib) + rotary encoder + khe SD |
+| Màn hình | **Panel ESP32-CYD rời (ESP32-2432S028R, LVGL)** — `MKS_MINI_12864_V3` đã **comment** (`Configuration.h:2944`), `PANEL_SERIAL_UI` đang **BẬT** (`Configuration.h:3170`). Chi tiết ở §A |
 | Driver | **TMC2209 ×6 — chế độ UART** (X, Y, Z, Z2, Z3, E) |
-| Dòng driver | **400 mA RMS** mỗi driver |
-| Microstep | **16** cho cả 6 driver, có nội suy (interpolation) + stealthChop. Xem §11.4b — đã thử 1/8 cho X/Y và **phải hoàn tác** |
+| Dòng driver | **600 mA RMS** mỗi driver, cả 6 trục (X/Y/Z/Z2/Z3/E0) — `Configuration_adv.h:2763, 2787, 2807, 2817, 2827, 2907` |
+| Microstep | **8** cho cả 6 driver (`Configuration.h:1208` `TTL_MICROSTEP 8`; `Configuration_adv.h:1302` `MICROSTEP_MODES { 8, 8, 8, 8, 8, 8 }`), có nội suy (interpolation) + stealthChop. Xem §11.4b |
 | Nguồn | PSU máy in nuôi motor/logic, USB chỉ để giao tiếp |
+
+> ✅ **Sửa 2026-10-13** (đối chiếu lại với code): bảng này trước đây ghi *màn hình MKS Mini 12864 V3*,
+> *400 mA* và *microstep 16* — **cả ba đều không còn đúng** với `Configuration.h`/`Configuration_adv.h`
+> hiện tại: 12864 đã **comment** (nay dùng panel CYD rời), dòng driver là **600 mA**, microstep là **8**
+> (2026-10-10 đổi 16 → 8 cho cả 6 trục). Các mục lịch sử ở §3.3 và §11.4b vẫn giữ nguyên vì chúng ghi
+> lại diễn biến đổi microstep — nhưng **trạng thái đang chạy** là bảng trên và §A.
 
 Chân driver theo socket:
 
@@ -409,7 +619,10 @@ Khác nhau giữa hai cách:
 >
 > Trên máy này **không có** mục *"Bed Tramming"* (`_lcd_level_bed_corners`) vì `LCD_BED_TRAMMING`
 > không được bật — bản đó là tram **bằng tay**, không dùng probe, phải tự quay encoder để hạ
-> nozzle. Cũng chưa bật `PROBE_OFFSET_WIZARD` (đang comment ở `Configuration_adv.h:1381`).
+> nozzle. ⚠️ **Sửa 2026-10-13:** câu *"cũng chưa bật `PROBE_OFFSET_WIZARD`"* là **sai với code hiện
+> tại** — `PROBE_OFFSET_WIZARD` **đang BẬT** ở `Configuration_adv.h:1414` (kèm `START_Z 0` `:1424` và
+> `XY_POS { X_CENTER, Y_CENTER }` `:1427`), nên menu **`Motion → Probe Offset Wizard`** có thật và
+> đang dùng để cân `M851 Z`; xem §4 và §8.
 
 > ⚠️ **Với Voron Tap, nozzle chính là đầu đo.** Nên: lau sạch nozzle trước khi tram (một cục
 > nhựa dính ở đầu nozzle làm sai chiều cao trigger), và tram **khi bàn đã đủ nhiệt in** —
@@ -882,7 +1095,7 @@ git diff up-2.1.2 HEAD --stat
 
 | Nhóm | Giá trị |
 |---|---|
-| Board / màn hình | `MOTHERBOARD BOARD_MKS_MONSTER8_V2`, `MKS_MINI_12864_V3`, `SERIAL_PORT -1` (USB CDC), `BAUDRATE 250000` |
+| Board / màn hình | `MOTHERBOARD BOARD_MKS_MONSTER8_V2`, `SERIAL_PORT -1` (USB CDC), `BAUDRATE 250000`, **`PANEL_SERIAL_UI`** — `MKS_MINI_12864_V3` **đã comment** (sửa 2026-10-13: màn chính nay là panel CYD rời, xem §A) |
 | Gốc & vùng in | `X_MIN_POS −6`, `Y_MIN_POS −22`, `X_MAX_POS 305`, `Y_MAX_POS 305`, `Z_MAX_POS 310`, `X_BED_SIZE 305`, `Y_BED_SIZE 305` |
 | Hướng trục | `INVERT_Z_DIR false` (motor dựng đứng ở đáy, trục quay hướng lên) |
 | Đầu dò | **Voron Tap** — `FIX_MOUNTED_PROBE`, `NOZZLE_TO_PROBE_OFFSET { 0, 0, 0 }`, `PROBING_MARGIN 15`, `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN`, `USE_PROBE_FOR_Z_HOMING`, `PROBE_ENABLE_DISABLE`, **`Z_AFTER_PROBING 10`** |
@@ -902,7 +1115,7 @@ git diff up-2.1.2 HEAD --stat
 | Trục Z | `INVERT_Z2_VS_Z_DIR` **tắt** (cả 3 vít me quay cùng chiều), `Z_STEPPER_ALIGN_XY { {280,285}, {25,285}, {X_CENTER,25} }`, `Z_STEPPER_ALIGN_AMP 1.0`, `Z_STEPPER_ALIGN_ITERATIONS 5`, `Z_STEPPER_ALIGN_ACC 0.02` |
 | Tram bàn | `ASSISTED_TRAMMING`, `ASSISTED_TRAMMING_WIZARD`, `REPORT_TRAMMING_MM`, `TRAMMING_SCREW_THREAD 40` (vít M4 ren phải, bước 0.7mm — **giữ 40**, xem ghi chú chiều vặn bên dưới), `TRAMMING_POINT_XY` 4 góc `{280,285} {25,285} {25,25} {280,25}`. **`ASSISTED_TRAMMING_WAIT_POSITION` đã TẮT** (2026-10-09): trước đây sau khi probe xong nozzle tự chạy ra giữa bàn ở Z30; nay G35/wizard **dừng ngay tại điểm probe cuối** (đầu in ~5mm trên điểm đó). Đổi lại: toolhead có thể vướng tay khi vặn vít ở góc đó. **Góc đang chỉnh (MAX/MIN) lưu trong EEPROM**, đổi bằng nút `MAX->MIN` trong wizard hoặc `Motion → WORST POINT = MAX` — xem §11.8c |
 | TMC2209 | `STEALTHCHOP_XY`, `STEALTHCHOP_Z` (không dùng sensorless homing — đã bỏ `USES_DIAG_JUMPERS`, xem 11.3) |
-| **Thêm mới** | `ENCODER_QUAD_ISR` — đọc encoder bằng **ngắt** + ring cố định 32 phần tử (không mất nấc khi UI bận) — xem §13/§14. `PANEL_SERIAL_UI` **đang TẮT** (màn 12864 vẫn là màn chính) — xem §12/§15 |
+| **Thêm mới** | `ENCODER_QUAD_ISR` — đọc encoder bằng **ngắt** + ring cố định 32 phần tử (không mất nấc khi UI bận) — xem §13/§14. `PANEL_SERIAL_UI` **đang BẬT** (sửa 2026-10-13 — trước đây dòng này ghi *đang TẮT*; từ khi chuyển sang panel CYD ở chế độ PUSH thì `PANEL_SERIAL_UI` **bật** và `MKS_MINI_12864_V3` **tắt**, xem §A/§B.5) — xem §12/§15 |
 | Debug | `PINS_DEBUGGING` (cho `M43`, `M43 E1`, menu *Endstop Pins*) |
 | **Thêm mới** | `STM32_DFU_REBOOT` — cho phép `M997` nhảy vào ROM DFU bootloader, không cần nhấn BOOT0/RESET |
 | **Thêm mới** | `PROBE_OFFSET_WIZARD` — menu cân `Z offset` (`START_Z 0`, probe giữa bàn tại `XY_CENTER`) |

@@ -96,7 +96,7 @@ LV_FONT_DECLARE(font_consola_vn_14);    // Consolas 14 - font MONO, moi ky tu ro
 //       line_height 17 (Montserrat 14 la 16) nen hang cao 16 px co the bi cat 1 px -> da kiem tra
 //       thuc te, neu thay cut thi chuyen ve 0 hoac chi gan mono cho rieng o GIA TRI.
 //   0 = Montserrat 14 mac dinh cua LVGL (ban cu), chu co dau van dung font_segoe_vn_14.
-#define UI_MONO_FONT 1
+#define UI_MONO_FONT 0
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
 static_assert(LV_COLOR_DEPTH == 16, "UI nay chi ho tro LV_COLOR_DEPTH 16");

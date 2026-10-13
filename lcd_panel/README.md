@@ -727,3 +727,138 @@ font trong `src/` khong ton them Flash (do lai: 484 061 B = 36.9%).
   Ly do phai 2 buoc: M502 tra thong so TRONG RAM ve mac dinh cua firmware; neu sau do bam
   `SAVE EEPROM` (M500) thi mac dinh bi ghi VINH VIEN len chip EEPROM.
 - Nho thu tu dung: `M502` (mac dinh) -> chinh lai -> `SAVE EEPROM` (M500).
+
+---
+
+## Cai dat / nap / kiem tra nhanh
+
+### Build + nap
+
+```powershell
+# tu thu muc goc repo
+pio run -d lcd_panel -e panel_esp32_cyd                               # build
+pio run -d lcd_panel -e panel_esp32_cyd -t upload --upload-port COM7   # nap
+
+# hoac dung trong lcd_panel:
+cd lcd_panel
+pio run -e panel_esp32_cyd -t upload --upload-port COM7
+```
+
+* **PHAI chi ro `-e panel_esp32_cyd`**: `default_envs = panel_f411cc` (`platformio.ini:32`) nen
+  `pio run -d lcd_panel` **khong co `-e`** se build cho **F411 (STM32)**, khong phai CYD.
+* Env CYD **khong khai `upload_port`** (`platformio.ini:123-149`) ⇒ phai truyen **`--upload-port COM7`**
+  tren dong lenh; `monitor_speed = 115200` (`platformio.ini:148`).
+* Env CYD **can mang lan dau** (keo `espressif32`, `lvgl`, `TFT_eSPI` — `platformio.ini:121, 144-145`).
+* `PANEL_PROTO_VERSION` hien la **2** (`src/panel_protocol.h:42`). Doi version thi **phai nap CA HAI
+  board** (Marlin + panel), khong thi panel bao `LINK ERR` du byte van chay (cam bay 41 o README goc).
+
+### Khi `-t upload` khong vao duoc bootloader → nap bang esptool truc tiep
+
+CYD dung USB-UART **CH340** (noi vao UART0 cua ESP32) — cung chinh la **COM7** — nen co the go thang
+bang esptool de kiem tra / nap:
+
+```powershell
+python "$env:USERPROFILE\.platformio\packages\tool-esptoolpy\esptool.py" `
+       --port COM7 --before default_reset --after hard_reset chip_id
+```
+
+* **Repo KHONG co thu muc `tool-esptoolpy`** — `esptool.py` nam trong **goi PlatformIO**, va duong dan
+  tren dung la duong dan ma `tools/fix_platformio_acl.ps1:152` kiem tra
+  (`%USERPROFILE%\.platformio\packages\tool-esptoolpy\esptool.py`). **Da kiem tren may nay: file ton tai.**
+* `chip_id` chi de **kiem tra noi duoc voi chip** (in ra loai chip + MAC — dung de biet **COM7 co
+  thuc su noi vao ESP32** khong). Muon nap tay thi thay bang `write_flash`; **file bin nam o
+  `lcd_panel\.pio\build\panel_esp32_cyd\firmware.bin`**
+  (da kiem: co that trong build dir; `bootloader.bin` + `partitions.bin` nam cung thu muc).
+* Neu esptool bao `PermissionError: [Errno 13] ... _contrib\intelhex\__init__.py` thi do **ACL hong**
+  trong `~/.platformio`, **khong phai** loi firmware ⇒ chay `tools/fix_platformio_acl.ps1` bang
+  PowerShell **Administrator** — xem **§8**.
+
+### Doc log chan doan 1 Hz tren COM7
+
+Log nam tren **Serial cua ESP32 (USB-UART = COM7 @ 115200)** va **chi in khi env co
+`-DPANEL_CYD_DEBUG=1`** — hien dang **BAT** (`platformio.ini:133`; **nho bo co khi dung that**):
+
+```
+[CYD] loop OK | link PUSH=<0/1> TRAM=<0/1> rx=<so frame> err=<so loi> heap=<byte>
+```
+
+(`src/main.cpp:56-58`, in **1 lan/giay**. Luc boot con in **reset reason** + free heap —
+`src/main.cpp:35-36, 41, 45`.)
+
+Doc bang:
+
+```powershell
+pio device monitor -p COM7 -b 115200
+```
+
+| Truong | Lay tu | Doc the nao |
+|---|---|---|
+| `link PUSH=` | `panel.linked` | **1** = da nhan duoc frame PUSH hop le (che do `PANEL_SERIAL_UI`) |
+| `link TRAM=` | `tram.linked` | **1** = dang nhan duoc dong `TRAM` (che do `PANEL_TRAM_LINK`) |
+| `rx=` | `panel.rx_frames` | so **frame PUSH hop le** da nhan — phai **tang deu** khi Marlin dang chay |
+| `err=` | `panel.rx_errors` | so frame **loi** — **khong duoc tang** (tang = sai baud / nhieu day) |
+| `heap=` | `ESP.getFreeHeap()` | RAM con lai — phai **on dinh**, khong tut dan qua thoi gian |
+
+> ⚠️ O **che do TRAM** thi `rx`/`err` (dem frame PUSH) **co the dung o 0** vi Marlin chi gui dong
+> ASCII `TRAM ...` chu khong gui frame PUSH. Luc do xem `link TRAM=1` va doc **man INFO** tren panel:
+> `LINK: OK (TRAM) ...` + `RX: <n> frame / <n> loi` (`src/ui_lvgl.cpp:2013-2018`).
+
+### Console gui lenh qua COM7 (giong het bam nut tren panel)
+
+```powershell
+pwsh -File D:\Marlin\serial-console.ps1 -Port COM7 -Baud 115200    # qua panel (mac dinh)
+pwsh -File D:\Marlin\serial-console.ps1 -Port COM4 -Baud 250000    # gui thang vao Marlin qua USB
+```
+
+`serial-console.ps1` luon gui **CRLF** va bat **DTR** (`serial-console.ps1:23, 42-43`); moi dong go
+vao duoc panel **chuyen tiep sang Marlin** bang dung duong ma cac nut tren UI dung
+(`src/main.cpp:62-68, 73-88`). Go `exit` + Enter de thoat.
+
+### Hieu chinh cam ung (chi board co touch — CYD)
+
+* **Vao:** STATUS → **SETTINGS** → **MENU** → dong **`Calibrate touch (giu 1.5s)`** — **PHAI GIU
+  TAY 1,5 giay roi NHAC** (`CAL_TOUCH_HOLD_MS 1500`, `src/ui_lvgl.cpp:2176`; trong luc giu cot phai
+  doi `dang giu` → `NHAC TAY` — `:2288-2289`).
+* **Duong thoat hiem:** **giu tay tren man hinh luc cap dien** — panel thay `T_IRQ` muc thap trong
+  `ui_port_input_init()` va vao thang che do hieu chuan (dung khi gia tri cu qua te, khong cham trung
+  duoc dong menu).
+* **Cach lam:** lan luot **TREN-TRAI → TREN-PHAI → DUOI-PHAI → DUOI-TRAI**; moi goc: cham → **ca man
+  hinh doi sang XANH** → **keo ngon tay sat goc roi NHAC TAY** (luc **mat cam ung** moi chot toa do,
+  lay cuc tri min/max). Chi tiet + cho luu (NVS namespace `cydtouch`) o **§5.5**.
+
+### Bang "kiem tra nhanh sau khi nap"
+
+| # | Kiem tra | Cach xem | Dat |
+|---|---|---|---|
+| 1 | Link PUSH | log 1 Hz tren COM7 | `link PUSH=1` |
+| 2 | Link TRAM (neu dung kieu TRAM) | log 1 Hz + man INFO | `link TRAM=1` / `LINK: OK (TRAM)` |
+| 3 | Nhan frame | `rx=` trong log | **tang deu**, khong dung yen |
+| 4 | Loi frame | `err=` trong log | **khong tang** (giu nguyen / 0) |
+| 5 | RAM | `heap=` trong log | **on dinh** qua nhieu phut, **khong tut dan** |
+| 6 | Chi bao tren man | thanh tieu de moi man (`link_state_now()`) | `LINK OK` (khong phai `LINK ERR` / `NO LINK`) |
+| 7 | Cam ung | cham thu vao 1 nut | dung vi tri, khong leo truc |
+| 8 | Lenh xuong Marlin | console COM7 → go `M115` | Marlin tra ve `Marlin 2.1.2 ...` |
+| 9 | Phien ban 2 phia | man INFO (`proto` / `MARLIN fw`) | `PANEL_PROTO_VERSION` khop (`2`) — lech la phai nap lai **ca hai** board |
+
+> ℹ️ Neu `LINK ERR` thay vi `NO LINK`: **co byte toi nhung khong thanh frame hop le** ⇒ nghi **sai
+> baud / sai khung / nhieu day**, khong phai dut day. `NO LINK` + `rx=0` moi la **khong co tin hieu**
+> (sai cong / chua chung GND / board tat) — xem bang xu ly su co o **§6** va bang chan doan o **§2.1**.
+
+## Buffer serial (so lieu that, do 2026-10-13)
+Baud **250000 8N1 = 25 000 B/s, 40 us/byte**. Frame PUSH toi da 198 B (`PANEL_MAX_PAYLOAD 192` + 6).
+- **Marlin** (core STM32duino): mac dinh chi `SERIAL_RX_BUFFER_SIZE 64` / `SERIAL_TX_BUFFER_SIZE 64`
+  (core chua `HardwareSerial.h:43-48`, tran an toan 256). Nay da ep len **256/256** bang build flag
+  trong `ini/features.ini` (key `PANEL_SERIAL_UI`). 64 B chi du 2,56 ms dem -> khong du cho burst.
+- **Panel ESP32**: core mac dinh RX 256 B (du ~10 ms). Nay dat **1024 B** bang `setRxBufferSize()`
+  TRUOC `begin()` (`src/panel_config.h`, `PANEL_RX_BUFFER`) -> du ~41 ms, an toan khi LVGL giu vong lap
+  vai chuc ms de ve man.
+- **Burst thuc te** (mot lan goi, khong nhip): `REQ_SETTINGS` = 33 frame x 12 B = 396 B;
+  `REQ_FULL` ~ 491 B; danh sach file 30 file ~ 1,9 kB; `REQ_MESH` 7 x 23 = 161 B.
+- **Vi sao phai co hang doi TX phia Marlin**: `tx_send()` cu BO frame khi `availableForWrite() < total`
+  (buffer 64 B, kha dung that 63 B) => 33 dong setting chi ~5 dong lot, frame ket thuc danh sach file
+  co the mat (panel hien "(dang nhan)" mai). Nay `panel_serial.cpp` co hang doi 8 slot + `tx_drain()`
+  ghi ra UART khi du cho (khong cho, khong delay) va cac nguon hang loat (SETTINGS/FILES/MESH) duoc
+  bom 1 frame moi lan `onIdle()` => khong mat frame nao, do tre ~20-25 ms cho 33 dong.
+- Tran RX thi **im lang** ca hai phia (khong co co tran o lop Arduino); phia Marlin `MarlinSerial.cpp`
+  bo byte khi ring day, phia ESP32 driver bo byte khi het buffer => bieu hien la thieu du lieu chu
+  khong bao loi. Vi vay moi nguong dem phai rong rai.

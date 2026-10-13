@@ -63,8 +63,15 @@
   #ifndef PANEL_UART_RX
     #define PANEL_UART_RX 35
   #endif
-  // ESP32: begin() can ca chan
-  #define PANEL_LINK_BEGIN(baud) PANEL_MARLIN_SERIAL.begin(baud, SERIAL_8N1, PANEL_UART_RX, PANEL_UART_TX)
+  // ESP32: begin() can ca chan.
+  // PHai goi setRxBufferSize TRUOC begin(). Mac dinh cua core Arduino-ESP32 la 256 byte, nhung
+  // Marlin co the day mot DOT nhieu frame lien tiep (danh sach file SD, 33 dong setting) va LVGL
+  // co the giu vong lap vai chuc ms khi ve man -> 256 byte chi du ~10 ms o 250000 baud
+  // (1 byte = 40 us). 1024 byte = ~41 ms do, du an toan. Xem them README muc "buffer serial".
+  #ifndef PANEL_RX_BUFFER
+    #define PANEL_RX_BUFFER 1024
+  #endif
+  #define PANEL_LINK_BEGIN(baud) (PANEL_MARLIN_SERIAL.setRxBufferSize(PANEL_RX_BUFFER), PANEL_MARLIN_SERIAL.begin(baud, SERIAL_8N1, PANEL_UART_RX, PANEL_UART_TX))
 #else
   #define PANEL_MARLIN_SERIAL Serial
   #define PANEL_LINK_BEGIN(baud) PANEL_MARLIN_SERIAL.begin(baud)

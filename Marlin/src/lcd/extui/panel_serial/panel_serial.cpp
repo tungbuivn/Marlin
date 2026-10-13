@@ -50,25 +50,64 @@ namespace {
   FORCE_INLINE void tx_i32(const int32_t v)  { panel_tx_i32(&tx, v); }
   FORCE_INLINE void tx_str(const char *s, const uint8_t maxlen = PANEL_STR_MAX) { panel_tx_str(&tx, s, maxlen); }
 
+  // ---- Hang doi TX (paced TX queue) ----
+  // VI SAO CAN: TX ring buffer cua core STM32 (HardwareSerial, MarlinSerial thua ke) chi co
+  // SERIAL_TX_BUFFER_SIZE = 64 byte (framework-arduinoststm32/cores/arduino/HardwareSerial.h
+  // dong 43-58; da nang len 256 bang build_flags trong ini/features.ini, key PANEL_SERIAL_UI)
+  // trong khi UART chay 250000 baud = 40 us/byte -> 64 byte can ~2.6 ms moi ra het duong truyen.
+  // Cac cho goi LIEN TIEP thi nhanh hon UART rat nhieu:
+  //   - push_settings(): 33 frame x 12 byte (6 overhead + 2 id + 4 i32) = 396 byte (~16 ms);
+  //   - push_files():    moi file 1 frame (~60 byte) + 1 frame ket thuc 0xFF;
+  //   - push_mesh():     7 hang luoi, moi hang 1 frame.
+  // Truoc day tx_send() ghi thang ra UART va BO frame ngay khi availableForWrite() < do dai
+  // frame => phan lon 33 dong setting bi mat (panel chi hien vai dong co gia tri) va co the mat
+  // luon frame KET THUC danh sach file (panel khong bao gio biet danh sach da xong).
+  // Tu day: tx_send() chi XEP HANG (khong ghi ra UART), tx_drain() o dau onIdle() day dan ra
+  // UART theo dung toc do that cua UART -> khong mat frame nao.
+  uint8_t txq_buf[PANEL_TXQ_SLOTS][PANEL_MAX_FRAME];  // moi slot giu NGUYEN 1 frame
+  uint8_t txq_len[PANEL_TXQ_SLOTS];                   // do dai that cua frame trong slot
+  uint8_t txq_off[PANEL_TXQ_SLOTS];                   // so byte da ghi ra (>0 chi khi buffer < frame)
+  uint8_t txq_head = 0, txq_tail = 0, txq_count = 0;
+
   void tx_send() {
     const uint8_t total = panel_tx_finish(&tx);
-    // Khong cho block ca vong lap: TX buffer day thi bo frame nay (panel nhan lai o frame sau).
-    if (PANEL_SERIAL.availableForWrite() < (int)total) { tx_dropped++; return; }
-    PANEL_SERIAL.write(tx.buf, total);
-    tx_sent++;
+    if (txq_count >= PANEL_TXQ_SLOTS) {
+      // Hang doi day = UART that su khong theo kip, luc do moi bo frame.
+      // (Loi cu: so availableForWrite() voi CA frame nen 25/33 dong setting bi bo ngay.)
+      tx_dropped++;
+      return;
+    }
+    for (uint8_t i = 0; i < total; i++) txq_buf[txq_tail][i] = tx.buf[i];
+    txq_len[txq_tail] = total;
+    txq_off[txq_tail] = 0;
+    txq_tail = (uint8_t)((txq_tail + 1) % PANEL_TXQ_SLOTS);
+    txq_count++;
   }
 
-  // Nhu tx_send nhung KHONG BAO GIO bo frame: ghi tung byte de write() tu cho den khi TX buffer
-  // con cho. Dung cho dong "TRAM ..." (~85..110 byte) vi TX ring buffer cua core STM32 chi co
-  // SERIAL_TX_BUFFER_SIZE = 64 byte -> tx_send() se bo frame VINH VIEN (xem panel_tram_link.cpp,
-  // loi da gap that 2026-10-13). Ca dong ~4 ms @250000 baud - qua ngan de anh huong vong lap.
-  #if ENABLED(ASSISTED_TRAMMING_WIZARD)
-    void tx_send_wait() {
-      const uint8_t total = panel_tx_finish(&tx);
-      for (uint8_t i = 0; i < total; i++) PANEL_SERIAL.write(tx.buf[i]);
-      tx_sent++;
+  // Day hang doi ra UART. TUYET DOI khong cho: HardwareSerial::write() cua core STM32 quay cho
+  // (while) khi TX buffer day, nen chi ghi khi buffer con du cho. Khong while-cho, khong delay,
+  // khong ghi blocking -> goi duoc tu onIdle() (main loop, KHONG phai trong ngat).
+  static void tx_drain() {
+    while (txq_count) {
+      const uint8_t left = (uint8_t)(txq_len[txq_head] - txq_off[txq_head]);
+      const int space = PANEL_SERIAL.availableForWrite();
+      if (space <= 0) break;                                          // TX buffer day -> de lan sau
+      if (space >= (int)left) {                                       // du cho CA frame
+        PANEL_SERIAL.write(txq_buf[txq_head] + txq_off[txq_head], left);
+        txq_off[txq_head] = 0;
+        txq_head = (uint8_t)((txq_head + 1) % PANEL_TXQ_SLOTS);
+        txq_count--;
+        tx_sent++;
+      }
+      else {
+        // Chi xay ra khi TX buffer nho hon 1 frame (khong xay ra voi SERIAL_TX_BUFFER_SIZE=256
+        // >= PANEL_MAX_FRAME=198): ghi phan vua cho, phan con lai ghi o lan onIdle sau => khong
+        // bao gio ket hang doi va khong bao gio block.
+        PANEL_SERIAL.write(txq_buf[txq_head] + txq_off[txq_head], (size_t)space);
+        txq_off[txq_head] = (uint8_t)(txq_off[txq_head] + (uint8_t)space);
+      }
     }
-  #endif
+  }
 
   FORCE_INLINE int32_t scaled(const float v, const float s) {
     return (int32_t)(v * s + (v < 0 ? -0.5f : 0.5f));
@@ -227,7 +266,10 @@ namespace {
       if (n <= 0) return;
       tx_begin(PANEL_F_TRAM);
       tx_str(tram_line, TRAM_REPORT_LINE_MAX);   // str: u8 len + n byte (co ca '\n' cuoi dong)
-      tx_send_wait();                            // dong dai > TX buffer -> khong duoc bo frame
+      // Dong TRAM ~70-75 byte -> di qua CHINH hang doi TX (tx_send) chu khong con ghi blocking
+      // nhu tx_send_wait() cu: hang doi giu nguyen ca frame, tx_drain() day ra theo toc do UART
+      // (250000 baud = 40 us/byte) nen dong dai bao nhieu cung khong bi cat va khong chan vong lap.
+      tx_send();
     }
   #endif
 
@@ -300,14 +342,30 @@ namespace {
     tx_send();
   }
 
+  // ---- Bang SETTING: gui DAN tung dong, khong bao gio burst ----
+  // 33 dong x 12 byte (6 overhead + 2 id + 4 i32) = 396 byte; o 250000 baud phai mat ~16 ms
+  // moi ra het duong truyen, trong khi vong lap sinh ra ca 33 dong chi mat vai chuc us.
+  // Vi vay: push_settings() chi BAT DAU (hoac bat dau LAI) viec liet ke, con settings_pump()
+  // (goi tu tx_pump moi lan onIdle) gui DUNG 1 dong. push_setting() dem buoc di qua danh sach
+  // va chi gui dong thu `settings_target` cua lan pump hien tai -> khong dong nao bi mat.
+  bool    settings_listing = false;
+  uint8_t settings_sent = 0, settings_step = 0, settings_target = 0;
+
   void push_setting(const panel_setting_t id, const int32_t v) {
+    if (settings_step++ != settings_target) return;   // chua toi luot -> chi dem buoc, khong gui
     tx_begin(PANEL_F_SETTING);
     tx_u16((uint16_t)id);
     tx_i32(v);
     tx_send();
+    settings_sent++;
   }
 
-  void push_settings() {
+  void push_settings() {                              // (ten cu) BAT DAU liet ke lai tu dau
+    settings_sent = settings_step = settings_target = 0;
+    settings_listing = true;
+  }
+
+  static void push_settings_body() {
     push_setting(PANEL_SET_Z_OFFSET, scaled(getZOffset_mm(), PANEL_VAL_SCALE));
     push_setting(PANEL_SET_FEEDRATE_PCT, scaled(getFeedrate_percent(), PANEL_PCT_SCALE));
     #if HAS_EXTRUDERS
@@ -382,18 +440,41 @@ namespace {
     #endif
   }
 
-  void push_mesh() {
+  // Gui DUNG 1 dong setting moi lan goi (xem tx_pump). Het danh sach thi tat co liet ke.
+  static void settings_pump() {
+    if (!settings_listing) return;
+    settings_step = 0;
+    settings_target = settings_sent;
+    push_settings_body();
+    if (settings_sent == settings_target) settings_listing = false;   // khong con dong nao
+  }
+
+  // ---- Luoi bed mesh: cung gui DAN tung hang (7 hang, moi hang 1 frame) ----
+  // Truoc day 7 hang duoc day vao TX buffer trong 1 vong lap -> khi hang doi dang co frame khac
+  // thi vai hang bi bo => panel ve thieu o luoi. Nay gui 1 hang moi lan onIdle.
+  #if BOTH(HAS_LEVELING, HAS_MESH)
+    bool    mesh_listing = false;
+    uint8_t mesh_row = 0;
+
+    static void mesh_pump() {
+      if (!mesh_listing) return;
+      bed_mesh_t &m = getMeshArray();                  // mang luoi song, doc tai thoi diem gui
+      const uint8_t r = mesh_row++;
+      tx_begin(PANEL_F_MESH);
+      tx_u8(GRID_MAX_POINTS_Y);
+      tx_u8(r);
+      tx_u8(GRID_MAX_POINTS_X);
+      for (uint8_t c = 0; c < GRID_MAX_POINTS_X; c++)
+        tx_i16((int16_t)scaled(m[c][r], PANEL_VAL_SCALE));
+      tx_send();
+      if (mesh_row >= GRID_MAX_POINTS_Y) mesh_listing = false;
+    }
+  #endif
+
+  void push_mesh() {                                 // (ten cu) BAT DAU gui lai toan bo luoi
     #if BOTH(HAS_LEVELING, HAS_MESH)
-      bed_mesh_t &m = getMeshArray();
-      for (uint8_t r = 0; r < GRID_MAX_POINTS_Y; r++) {
-        tx_begin(PANEL_F_MESH);
-        tx_u8(GRID_MAX_POINTS_Y);
-        tx_u8(r);
-        tx_u8(GRID_MAX_POINTS_X);
-        for (uint8_t c = 0; c < GRID_MAX_POINTS_X; c++)
-          tx_i16((int16_t)scaled(m[c][r], PANEL_VAL_SCALE));
-        tx_send();
-      }
+      mesh_row = 0;
+      mesh_listing = true;
     #endif
   }
 
@@ -425,24 +506,58 @@ namespace {
   #if ENABLED(SDSUPPORT)
     FileList panel_files;
 
-    void push_files() {
+    // ---- Liet ke file: 1 frame/lan, KHONG burst ----
+    // Moi file 1 frame (~60 byte voi PANEL_STR_MAX=48) + 1 frame ket thuc. Truoc day ca danh
+    // sach duoc day trong 1 vong lap: TX buffer 64 byte (~2.6 ms moi ra het) khong theo kip nen
+    // phan lon file bi bo va frame KET THUC (flags 0xFF) co the mat -> panel khong bao gio biet
+    // danh sach da xong. Nay push_files() chi BAT DAU; files_pump() gui 1 file moi lan onIdle va
+    // luon gui duoc frame ket thuc.
+    bool     files_listing = false;
+    uint16_t files_index = 0, files_total = 0;
+
+    void push_files() {                               // (ten cu) BAT DAU liet ke thu muc hien tai
       panel_files.refresh();
-      const uint16_t n = panel_files.count();
-      for (uint16_t i = 0; i < n; i++) {
-        if (!panel_files.seek(i)) continue;
+      files_total = panel_files.count();
+      files_index = 0;
+      files_listing = true;                           // yeu cau moi khi dang liet ke -> bat dau lai
+    }
+
+    // Gui 1 frame file; het danh sach thi gui frame ket thuc. Goi tu tx_pump (onIdle).
+    static void files_pump() {
+      if (!files_listing) return;
+      while (files_index < files_total) {
+        const uint16_t i = files_index++;
+        if (!panel_files.seek(i)) continue;           // file loi/thu muc vua doi -> bo qua
         tx_begin(PANEL_F_FILES);
         tx_u8(panel_files.isDir() ? 0x01 : 0x00);
         tx_i32(0);                                    // size: ExtUI khong cung cap -> 0
         tx_str(panel_files.longFilename());
         tx_send();
+        return;
       }
-      tx_begin(PANEL_F_FILES);                        // ket thuc danh sach
+      tx_begin(PANEL_F_FILES);                        // ket thuc danh sach (PHAI toi duoc panel)
       tx_u8(0xFF);
       tx_i32(0);
       tx_str("");
       tx_send();
+      files_listing = false;
     }
   #endif
+
+  // ------------------------------------------------- nap hang doi ----
+  // Moi lan onIdle chi nap TOI DA 1 frame tu cac "nguon liet ke" (danh sach file / luoi mesh /
+  // bang setting), va luon GIU TRONG 2 slot cho cac frame su kien / message / TRAM (di thang qua
+  // tx_send). Nho vay du lieu hang loat khong bao gio chiem het hang doi lam mat su kien.
+  static void tx_pump() {
+    if (txq_count + 2 > PANEL_TXQ_SLOTS) return;      // giu 2 slot trong cho su kien/TRAM
+    #if ENABLED(SDSUPPORT)
+      if (files_listing) { files_pump(); return; }    // nguoi dung dang doi danh sach file
+    #endif
+    #if BOTH(HAS_LEVELING, HAS_MESH)
+      if (mesh_listing) { mesh_pump(); return; }
+    #endif
+    settings_pump();
+  }
 
   // ------------------------------------------------------- RX / lenh ----
   panel_rx_t rx;
@@ -568,6 +683,10 @@ namespace ExtUI {
   }
 
   void onIdle() {
+    // Day hang doi TX ra UART TRUOC TIEN (khong cho doi - xem tx_drain): vua giai phong cho
+    // trong hang doi, vua tra cac frame dang ton dong ra duong truyen.
+    tx_drain();
+
     while (PANEL_SERIAL.available())
       if (panel_rx_byte(&rx, (uint8_t)PANEL_SERIAL.read())) handle_frame();
 
@@ -602,6 +721,10 @@ namespace ExtUI {
       mesh_dirty = false;
       push_mesh();
     }
+
+    // Cuoi cung moi nap them 1 frame liet ke (setting/file/mesh) neu hang doi con cho: cac
+    // frame su kien o tren luon duoc di truoc, con du lieu hang loat thi chay dan theo UART.
+    tx_pump();
   }
 
   void onStatusChanged(const char * const msg) { push_message(PANEL_SEV_INFO, msg); }

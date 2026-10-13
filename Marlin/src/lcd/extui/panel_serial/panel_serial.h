@@ -54,6 +54,12 @@
   #ifndef PANEL_STR_MAX
     #define PANEL_STR_MAX     48         // do dai toi da cua chuoi trong 1 frame
   #endif
+  // So frame toi da xep trong hang doi TX (moi slot giu NGUYEN 1 frame, toi da PANEL_MAX_FRAME
+  // byte). Hang doi de tx_send() khong phai bo frame khi TX buffer cua core (64..256 byte) chua
+  // kip ra: 33 dong setting x 12 byte = 396 byte, o 250000 baud phai mat ~16 ms. Xem panel_serial.cpp.
+  #ifndef PANEL_TXQ_SLOTS
+    #define PANEL_TXQ_SLOTS   8
+  #endif
 
   void panel_serial_init();              // goi tu ExtUI::onStartup()
   void panel_serial_task();              // goi tu ExtUI::onIdle()
