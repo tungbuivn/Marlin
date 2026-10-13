@@ -11,6 +11,9 @@ vị trí nozzle) và **bàn 4 lò xo chỉnh vít**.
 | Phiên bản Marlin | **2.1.2** (cố ý giữ nguyên — không lên 2.1.2.8) |
 | Firmware đang chạy | `M115` → `Marlin 2.1.2` |
 
+> 📋 **Khác biệt so với Marlin gốc (phần cứng + tính năng): xem [§11.0](#110-bảng-tổng-hợp-khác-biệt-phần-cứng-và-tính-năng-cập-nhật-2026-10-14)**
+> — bảng tổng hợp: phần cứng, tính năng thêm/bỏ, build/ini, đường lui. Chi tiết ở §11.1–§11.9.
+
 ---
 
 ## A. Phan cung cua may nay
@@ -1081,8 +1084,9 @@ trong nhánh `mks-monster8-Voron-2.1.x` là của dự án này.
 # Toàn bộ thay đổi so với mốc Marlin gốc
 git diff 6aa536c08f HEAD --stat
 
-# So với bản release 2.1.2 (tag shallow, chỉ để tham chiếu)
-git diff up-2.1.2 HEAD --stat
+# So với bản release 2.1.2 (tag/ref chỉ để tham chiếu)
+git diff 2.1.2 HEAD --stat
+git diff upstream/lts-2.1.2 HEAD --stat
 ```
 
 > ⚠️ **Đừng đọc con số `--stat` như danh sách thay đổi của mình.** Fork đi theo nhánh
@@ -1090,6 +1094,111 @@ git diff up-2.1.2 HEAD --stat
 > upstream: file thì **mới hơn** (ProUI, `mintemp_error`, `is_above_target`, `MSG_HOME_FIRST`
 > một tham số), file thì **cũ hơn**. Đó là drift, không phải thay đổi của dự án.
 > Bảng dưới đây chỉ liệt kê những gì **thực sự được sửa cho máy này**.
+
+### 11.0 Bảng tổng hợp khác biệt: **PHẦN CỨNG** và **TÍNH NĂNG** (cập nhật 2026-10-14)
+
+> Đây là bản tóm tắt để đọc nhanh. Chi tiết từng mục nằm ở 11.1 → 11.9 và ở `lcd_panel/README.md`.
+
+#### A. PHẦN CỨNG — khác Marlin gốc (mặc định)
+
+| Hạng mục | Marlin gốc (mặc định) | **Máy này** |
+|---|---|---|
+| Máy in | cấu hình generic | **Voron 2.1 300** — CoreXY, bàn 305×305 mm, Z 310 mm, **3 vít me Z** |
+| Board | `BOARD_RAMPS_14_EFB` | **`BOARD_MKS_MONSTER8_V2`** (STM32F407VGT6); host qua **USB CDC** (`SERIAL_PORT -1`), `BAUDRATE 250000` |
+| Khe driver 4/5/6 (trên `pins_MKS_MONSTER8_*`) | khai báo là `E1`/`E2`/`E3` (extruder) | **`Z2`/`Z3`/`Z4`** (motor Z thứ 2/3 + 1 dự phòng); `Z2/Z3_DRIVER_TYPE` có ⇒ Marlin tự suy ra **3 motor Z** |
+| Driver | `A4988` | **TMC2209 chế độ UART ×6**, `STEALTHCHOP_XY/Z`, **600 mA mỗi trục** (Z4 400 mA), **microstep 16 → 8** (cả 6 driver) |
+| Endstop X/Y | `X_STOP_PIN`/`Y_STOP_PIN` + `USES_DIAG_JUMPERS` | **`X_MIN_PIN PA14` / `Y_MIN_PIN PA15`**, `DIAG_JUMPERS_REMOVED` ⇒ **không dùng sensorless homing** |
+| Đầu dò Z | BLTouch (`SERVO0_PIN PA8`) | **Voron Tap**: `Z_PROBE_PIN PB13`, `PROBE_ENABLE_PIN PA8`, `FIX_MOUNTED_PROBE`, `NOZZLE_TO_PROBE_OFFSET {0,0,0}` |
+| Vùng in / gốc | 200×200×200 | `X_MIN_POS −6`, `Y_MIN_POS −22`, `X/Y_BED_SIZE 305`, `Z_MAX_POS 310` |
+| Quạt | chỉ quạt theo layer | **quạt controller `PA0`** (`USE_CONTROLLER_FAN` + `M710`), **auto-fan hotend `PA1`**, **cooler `PA2`** |
+| LED RGB | không | `NEOPIXEL_LED` **tắt** (giữ `NEOPIXEL2_PIN PC5` cho sau này) |
+| Nhiệt | sensor mặc định | hotend + bàn **100k (sensor 1/1)**, `BED_MAXTEMP 100`, **MPC cho hotend** (số đo thật: `MPC_BLOCK_HEAT_CAPACITY 7.13`, `MPC_SENSOR_RESPONSIVENESS 0.1284`) + **PID cho bàn** (Kp/Ki/Kd đo thật) |
+| **Màn hình** | `MKS_MINI_12864_V3` (12864 trên EXP1) | **panel rời `lcd_panel/`**: board **ESP32-2432S028R "CYD"** (ESP32 không PSRAM, TFT **ST7789 320×240** + cảm ứng **XPT2046**, đèn nền `IO21`) — **firmware riêng**, không dùng MarlinUI |
+| Link Marlin ↔ panel | — | UART nhị phân: Marlin **USART1 `PA9`(TX)/`PA10`(RX)** (header MKS WiFi) ↔ CYD **GPIO22 TX / GPIO35 RX**, **250 000 baud** |
+| **Thẻ SD** | khe microSD trên board (`SD_DETECT_PIN PC4`) | **thẻ nằm ở khe của PANEL**: `NO_SD_DETECT` + `PANEL_SD_OVER_UART` — Marlin **hỏi panel từng sector 512 B qua UART** (đọc + ghi), không còn SPI thẻ trên mainboard |
+| Chân điều khiển mới của panel | — | đèn nền do firmware panel giữ (`PANEL_BL_PIN`, `TFT_BL -1` trong TFT_eSPI); chân chọn MUX 4053 (`GPIO27`) chỉ dùng ở đường lui |
+| Nguồn panel | — | CYD cấp bằng **USB/5 V riêng** (không lấy 5 V từ EXP1), logic 3V3 |
+| **Đường lui (code còn, đang tắt)** | — | module **ESP3D-direct-sd** (AP `Voron2308`), **Bluetooth SPP** trên panel, **MUX SPI 74HC4053** (`PANEL_SD_SHARED`) |
+
+#### B. TÍNH NĂNG — khác Marlin gốc
+
+**B1. Giao thức & ExtUI mới (không có ở gốc)**
+
+| Tính năng | Mô tả |
+|---|---|
+| **`PANEL_SERIAL_UI`** (ExtUI `src/lcd/extui/panel_serial/`) | Marlin **đẩy** dữ liệu xuống panel bằng frame nhị phân (proto **3**): `HELLO/STATUS/TEMPS/POSITION/PROGRESS/FILES/MESH/SETTING/EVENT/MESSAGE/PROMPT/ENDSTOPS/TRAM/PONG` + nhận `GCODE/REQUEST/ANSWER/TRAM_CMD` và (mới) `SDREQ/SDDATA/SDACK` |
+| **TRAM** (`PANEL_TRAM_LINK`, `feature/panel_tram_link.*`, `tram_protocol.h`) | panel hiển thị & điều khiển **Tramming Wizard** qua chính UART đó (kể cả chế độ ASCII cũ). Hiện `PANEL_TRAM_LINK` **đang tắt** — wizard chạy qua kênh PUSH (frame `PANEL_F_TRAM`/`PANEL_F_TRAM_CMD`) |
+| **SD qua UART** (`src/sd/panel_sd_uart.*`) | **driver thẻ SD mới**: thay `DiskIODriver_SPI_SD` bằng `DiskIODriver_PanelUART`; đọc/ghi sector 512 B qua UART; `SdVolume/SdBaseFile/FAT/liệt kê thư mục/M23-M24/tiến độ/M28-M29-M30` giữ nguyên vì chỉ đi qua `readBlock()/writeBlock()` |
+
+**B2. Tính năng mới thêm vào Marlin**
+
+| Tính năng | File | Mô tả |
+|---|---|---|
+| `STM32_DFU_REBOOT` | `HAL/STM32/HAL.{cpp,h}`, menu Advanced, `PANEL_REQ_DFU` | `M997` / nút **REBOOT DFU** trên panel nhảy vào ROM DFU **không cần BOOT0+RESET** (theo AN2606) |
+| `ENCODER_QUAD_ISR` | `src/lcd/encoder_quad.*`, `ini/features.ini` | đọc encoder bằng **ngắt** + hàng đợi, không mất nấc khi UI bận |
+| `G34 Q<n>` | `src/gcode/calibrate/G34_M422.cpp`, `gcode.h` | lặp căn gantry tới khi đạt (`InfiniteG34()`); chạy tay khi bảo trì (đã bỏ khỏi Start G-code) |
+| Tramming Wizard mở rộng | `menu_tramming.cpp`, `G35.cpp`, `feature/tramming.*`, `tramming_run.*`, `tramming_report.*` | chốt mốc sau 4 góc đầu, nút `DONE` = chấp nhận góc, tự đi tiếp khi `DAT`, `MAX<->MIN` lưu EEPROM, in mm + chiều vặn; **nhiều nút bấm được từ panel** |
+| **Z ALIGN MANUAL** | `src/lcd/menu/menu_z_align.cpp` (mới) | dịch tay Z1/Z2/Z3 từng bước rồi probe lại từng điểm |
+| G-code macros | `Configuration_adv.h` (`GCODE_MACROS` 10 slot) + menu Custom | `M810..M819` cho 4 góc bàn, menu **Macro init** / **G34 Bed** / **Init SD card** |
+| `PROBE_OFFSET_WIZARD` | `Configuration*.h` | menu cân `Z offset` (probe giữa bàn) |
+| Kiểm tra chân (M43) | `marlinui.*`, `menu_advanced.cpp`, `PINS_DEBUGGING` | in **mức điện thô** của X/Y/Z min lên status line; menu **Endstop Pins**, **Reboot to DFU** |
+| Sửa bug microstep TMC2209 | `module/settings.cpp` | sau khi nạp EEPROM ép lại `mstep_reg_select(true)` + `microsteps()` (không có thì trục chạy **gấp đôi**) |
+| Hạ tầng panel | `MarlinCore.cpp`, `Conditionals_*`, `SanityCheck.h` | hook ExtUI, điều kiện biên dịch cho panel/TRAM/SD-UART, guard nhỏ |
+| Lệnh/tiện ích sửa thêm | `gcode/queue.cpp`, `M303`, `M106_M107`, `M605`, `M524`, `M1001`, `M75-M78`, `M115`, `menu_main/motion/advanced/bed_leveling`, `numtostr.*` | phục vụ panel + sửa lỗi nhỏ (xem 11.4) |
+
+**B3. Hành vi mặc định đã đổi (khác gốc)**
+
+| Mục | Gốc | Máy này |
+|---|---|---|
+| An toàn nhiệt | `THERMAL_PROTECTION_PERIOD 40`, `HYSTERESIS 4`, bed `20 s` | **60 s / 180 s bed, hysteresis 10 °C** (đã hiệu chỉnh theo máy thật), `WATCH_*` chỉnh lại |
+| Filament runout | bật khi khởi động | `FIL_RUNOUT_ENABLED_DEFAULT false` (bật bằng `M412 S1`) |
+| Khi in xong | `M84` | `SD_FINISHED_RELEASECOMMAND "M84XYE"` (giữ Z) |
+| Sleep stepper | 120 s | **1800 s**, `DISABLE_INACTIVE_Z false` |
+| Bước di chuyển tay nhỏ nhất | 0.025 mm | **0.01 mm** |
+| Cấp nguồn/host | không bật các cờ này | `ADVANCED_OK`, `HOST_ACTION_COMMANDS`, `LONG_FILENAME_HOST/WRITE_SUPPORT` (phục vụ panel + host) |
+| EEPROM | `EEPROM_SETTINGS` | thêm `EEPROM_AUTO_INIT`; trang SETTINGS của panel có `M500`/`M502` (bỏ `M501`), `M502` **xác nhận 2 bước** |
+| Input shaping | tắt | **vẫn tắt** (`INPUT_SHAPING_X/Y` comment) nhưng đã đặt sẵn `SHAPING_FREQ_X/Y 27 Hz` để bật khi cần |
+
+**B4. Tính năng nằm ở PANEL (`lcd_panel/`, firmware riêng — xem `lcd_panel/README.md`)**
+
+| Nhóm | Nội dung |
+|---|---|
+| UI LVGL | **13 trang** (STATUS / MENU / RATE / TEMP / JOG / FILES / SETTINGS / MESH / CUSTOM / TRAM / INFO / ENDSTOP / WIFI), font **4bpp tự sinh** + icon Material, bảng màu Material 3 (đạt WCAG), header có nhà/WiFi, **thanh đáy PREV/NEXT** tự ẩn khi hết trang |
+| **Upload G-code qua WiFi** | panel tự làm **web server** (`http://TBTPANEL.local/`, token `TBT-3D-up`): chọn file → ghi vào thẻ → tự `M22`/`M21`; `/status` JSON để theo dõi |
+| Trang WIFI | quét mạng, nhập mật khẩu bằng bàn phím ảo, lưu NVS, mDNS `TBTPANEL` |
+| Quản lý file | liệt kê + **XOA FILE** (xác nhận 2 bước) + init lại thẻ |
+| Panel là **chủ thẻ SD** | phục vụ sector cho Marlin (đọc + ghi), đồng bộ FATFS 2 chiều, nút `XOA FILE` xoá trực tiếp rồi bảo Marlin mount lại |
+| Đường lui | **Bluetooth SPP** nhận file (`panel_bt_upload.cpp`), **ESP3D push** (`net_esp3d.cpp`) — code còn, đang tắt |
+| Env | `panel_esp32_cyd` (CYD) + 4 env STM32 (`panel_f411cc`, `panel_f103c6`, `panel_f411cc_lvgl`, `panel_f407vgz_lvgl`) cho bản UI cũ |
+
+**B5. Tiện ích & dự án kèm theo repo**
+
+| Nhóm | Nội dung |
+|---|---|
+| Script nạp/đo | `upload-dfu.ps1`, `upload-firmware.ps1`, `install-cura-profile.ps1`, `send-gcode.ps1`, `serial-console.ps1`, `monitor-temp.ps1` |
+| Script panel | `lcd_panel/tools/`: `panel-upload.ps1` (upload WiFi, tự dò panel), `bt-upload.ps1` + `bt-upload-socket.ps1` (Bluetooth), `panel-log.ps1`, `esp3d-upload.ps1`, `in3d-sendto.cmd`, `set_panel_mode.ps1`, `ttf2gfxfont.py` (sinh font), `run_host_test.ps1` |
+| Cura | `cura_profile/voron21_300_mks_monster8.def.json` + `scripts/FirstLayerTwice.py` (post-processing) |
+| Kiểm thử | `tests/` (Python kiểm G-code: `verify_gcode.py`, `test_first_layer_twice.py`, `test_clamp_feeds.py`, fixtures) |
+| Tài liệu | `README.md` (50 cẩm bẫy + §11–§15) và `lcd_panel/README.md` (§1–§12: phần cứng, link, protocol, BT, WiFi, SD-UART) |
+
+#### C. BUILD / INI
+
+| File | Thay đổi |
+|---|---|
+| `platformio.ini` | `default_envs = mks_monster8`, `src_dir = Marlin` |
+| `ini/features.ini` | thêm env **`PANEL_SERIAL_UI`** (src_filter + build flags USART1 `PA9/PA10` + `SERIAL_RX_BUFFER_SIZE=1024`/`TX 256`), **`PANEL_TRAM_LINK`**, **`ENCODER_QUAD_ISR`**, **`PANEL_SD_OVER_UART`** |
+| `ini/stm32f4.ini` | `board_build.offset 0xC000`, `board_upload.offset_address 0x0800C000`, `board_build.rename mks_monster8.bin`, `HSE_VALUE 8000000`, env `stm32F401ccu6` |
+| `lcd_panel/platformio.ini` | **project PlatformIO thứ hai** (5 env), partitions `huge_app.csv`, `lv_conf_panel.h`, TFT_eSPI `User_Setup.h` |
+| Thư mục mới trong `Marlin/src` | `feature/tramming_run.*`, `feature/tramming_report.*`, `feature/panel_tram_link.*`, `feature/tram_protocol.h`, `lcd/encoder_quad.*`, `lcd/extui/panel_serial/*`, `lcd/menu/menu_z_align.cpp`, `sd/panel_sd_uart.*` |
+
+#### D. ĐÃ BỎ / KHÔNG DÙNG
+
+* **`MKS_MINI_12864_V3`** (màn 12864 + menu MarlinUI trên máy) — thay bằng panel rời.
+* **`NEOPIXEL_LED`** — tắt (chân `PC5` giữ nguyên tên `NEOPIXEL2_PIN` cho sau này).
+* **Module ESP3D** (AP `Voron2308`) — đường upload cũ, nay thay bằng **SD qua UART**.
+* **Bluetooth SPP** trên panel — tạm tắt (`PANEL_BT_UPLOAD 0`), code còn nguyên.
+* **MUX SPI 74HC4053** — đường lui (`PANEL_SD_SHARED`), code còn nhưng mặc định tắt.
+* **`M501`** trên trang SETTINGS của panel (chỉ đọc EEPROM → dễ gây hiểu nhầm) — bỏ.
 
 ### 11.1 `Marlin/Configuration.h` — cấu hình máy
 
