@@ -918,7 +918,7 @@ static_assert(Y_MAX_LENGTH >= Y_BED_SIZE, "Movement bounds (Y_MIN_POS, Y_MAX_POS
   #if NONE(SDSUPPORT, SET_PROGRESS_MANUALLY)
     #error "LCD_PROGRESS_BAR requires SDSUPPORT or SET_PROGRESS_MANUALLY."
   #elif NONE(HAS_MARLINUI_HD44780, IS_TFTGLCD_PANEL)
-    #error "LCD_PROGRESS_BAR only applies to HD44780 character LCD and TFTGLCD_PANEL_(SPI|I2C)."
+    #error "LCD_PROGRESS_BAR only applies to HD44780 character LCD and TFTGLCD_CYDLCD_(SPI|I2C)."
   #elif HAS_MARLINUI_U8GLIB || IS_DWIN_MARLINUI
     #error "LCD_PROGRESS_BAR does not apply to graphical displays."
   #elif ENABLED(FILAMENT_LCD_DISPLAY)
@@ -945,12 +945,12 @@ static_assert(Y_MAX_LENGTH >= Y_BED_SIZE, "Movement bounds (Y_MIN_POS, Y_MAX_POS
 #endif
 
 /**
- * Man hinh rieng "lcd_panel" (ExtUI panel_serial) chiem chu ky init_lcd()/update() cua MarlinUI
+ * Man hinh rieng "cydlcd" (ExtUI cydlcd_serial) chiem chu ky init_lcd()/update() cua MarlinUI
  * va KHONG dung he thong menu cua MarlinUI, nen khong the vua bat no vua de man hinh gan truc tiep
  * (MKS_MINI_12864_V3...): se "multiple definition of MarlinUI::init_lcd()" khi link.
  */
-#if ENABLED(PANEL_SERIAL_UI) && HAS_WIRED_LCD
-  #error "PANEL_SERIAL_UI dung ExtUI rieng: hay comment man hinh dang bat (MKS_MINI_12864_V3, NEOPIXEL_LED, CUSTOM_MENU_MAIN, LED_CONTROL_MENU) trong Configuration.h / Configuration_adv.h."
+#if ENABLED(CYDLCD_SERIAL_UI) && HAS_WIRED_LCD
+  #error "CYDLCD_SERIAL_UI dung ExtUI rieng: hay comment man hinh dang bat (MKS_MINI_12864_V3, NEOPIXEL_LED, CUSTOM_MENU_MAIN, LED_CONTROL_MENU) trong Configuration.h / Configuration_adv.h."
 #endif
 
 /**
@@ -3027,7 +3027,7 @@ static_assert(Y_MAX_LENGTH >= Y_BED_SIZE, "Movement bounds (Y_MIN_POS, Y_MAX_POS
   + COUNT_ENABLED(LCD_SAINSMART_I2C_1602, LCD_SAINSMART_I2C_2004) \
   + COUNT_ENABLED(MKS_12864OLED, MKS_12864OLED_SSD1306) \
   + COUNT_ENABLED(MKS_TS35_V2_0, MKS_ROBIN_TFT24, MKS_ROBIN_TFT28, MKS_ROBIN_TFT32, MKS_ROBIN_TFT35, MKS_ROBIN_TFT43, MKS_ROBIN_TFT_V1_1R, ANET_ET4_TFT28, ANET_ET5_TFT35, BIQU_BX_TFT70, BTT_TFT35_SPI_V1_0) \
-  + COUNT_ENABLED(TFTGLCD_PANEL_SPI, TFTGLCD_PANEL_I2C) \
+  + COUNT_ENABLED(TFTGLCD_CYDLCD_SPI, TFTGLCD_CYDLCD_I2C) \
   + COUNT_ENABLED(VIKI2, miniVIKI) \
   + ENABLED(WYH_L12864) \
   + COUNT_ENABLED(ZONESTAR_12864LCD, ZONESTAR_12864OLED, ZONESTAR_12864OLED_SSD1306) \
@@ -3050,9 +3050,9 @@ static_assert(Y_MAX_LENGTH >= Y_BED_SIZE, "Movement bounds (Y_MIN_POS, Y_MAX_POS
   + ENABLED(NEXTION_TFT) \
   + ENABLED(MKS_LCD12864A) \
   + ENABLED(MKS_LCD12864B) \
-  + ENABLED(OLED_PANEL_TINYBOY2) \
+  + ENABLED(OLED_CYDLCD_TINYBOY2) \
   + ENABLED(OVERLORD_OLED) \
-  + ENABLED(PANEL_ONE) \
+  + ENABLED(CYDLCD_ONE) \
   + ENABLED(RA_CONTROL_PANEL) \
   + ENABLED(RADDS_DISPLAY) \
   + ENABLED(REPRAPWORLD_GRAPHICAL_LCD) \

@@ -5,9 +5,9 @@
  *   Truoc 2026-10-13 toan bo thuat toan nam trong lcd/menu/menu_tramming.cpp, nen chi man 12864
  *   moi dung duoc. Nay thuat toan nam o day de CA HAI duong cung dung chung MOT trang thai:
  *     - MarlinUI (menu 12864): menu_tramming.cpp = lop UI mong (ve + nhan encoder);
- *     - Man hinh rieng lcd_panel: feature/panel_tram_link.cpp (link ASCII tren USART3).
- *   => KHONG dung ExtUI/PANEL_SERIAL_UI, nen menu 12864 (Tramming Wizard, Z ALIGN MANUAL...)
- *      van nguyen ven. Xem docs/issues/0001-panel-serial-ui-tat-custom-menu.md.
+ *     - Man hinh rieng cydlcd: feature/cydlcd_tram_link.cpp (link ASCII tren USART3).
+ *   => KHONG dung ExtUI/CYDLCD_SERIAL_UI, nen menu 12864 (Tramming Wizard, Z ALIGN MANUAL...)
+ *      van nguyen ven. Xem docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md.
  *
  * THUAT TOAN KHONG DOI so voi ban cu trong menu_tramming.cpp (moc Z-MIN/Z-MAX chot 1 lan,
  * nguong auto-DAT 0.01mm, tu di tiep khi DAT, DONE = goc nay xong, BACK = thoat, ca 4 DAT ->
@@ -62,7 +62,7 @@ namespace tramming_run {
   extern bool    all_dat;              // CA 4 GOC da dat -> chi con nut BACK
   extern bool    busy;                 // dang probe / di chuyen (blocking) -> khong nhan gi
   extern bool    active;               // wizard da bat (tu begin/restart toi exit)
-  extern bool    ui_attached;          // man 12864 dang mo wizard -> MENU la driver, khong phai panel
+  extern bool    ui_attached;          // man 12864 dang mo wizard -> MENU la driver, khong phai cydlcd
 
   inline uint8_t count() { return G35_PROBE_COUNT; }
 

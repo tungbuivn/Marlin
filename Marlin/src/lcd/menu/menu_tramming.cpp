@@ -24,7 +24,7 @@
 // Bed Tramming Wizard - LOP UI cua man 12864 (MarlinUI).
 //
 // 2026-10-13: THUAT TOAN DA DUOC TACH sang Marlin/src/feature/tramming_run.cpp/.h de
-//   man hinh rieng lcd_panel (feature/panel_tram_link.cpp, ASCII tren USART3) dung CHUNG
+//   man hinh rieng cydlcd (feature/cydlcd_tram_link.cpp, ASCII tren USART3) dung CHUNG
 //   mot trang thai. File nay chi con:
 //     - ve man hinh (4 so do lech + huong dan van vit + 3 nut);
 //     - doc encoder / nut bam;
@@ -46,7 +46,7 @@
 #include "menu_item.h"
 
 #include "../../feature/tramming.h"       // tramming_points, tramming_worst_max, tramming_turn_cw
-#include "../../feature/tramming_run.h"   // may trang thai dung chung voi man hinh rieng lcd_panel
+#include "../../feature/tramming_run.h"   // may trang thai dung chung voi man hinh rieng cydlcd
 
 #include "../../module/motion.h"          // base_home_pos(Z_AXIS)
 
@@ -259,8 +259,8 @@ static void _lcd_tramming() {
   }
   else {
     // TR_HOMING / TR_PROBE / TR_GOTO / TR_POINT / TR_AUTO: 1 buoc moi khung hinh.
-    // (Khi bat PANEL_TRAM_LINK ma man 12864 nay dang mo thi CHINH CHO NAY la nguon "tien buoc"
-    //  duy nhat; panel_tram_link::tick() chi tien khi ui_attached = false - xem tramming_run.cpp.)
+    // (Khi bat CYDLCD_TRAM_LINK ma man 12864 nay dang mo thi CHINH CHO NAY la nguon "tien buoc"
+    //  duy nhat; cydlcd_tram_link::tick() chi tien khi ui_attached = false - xem tramming_run.cpp.)
     tramming_run::step();
   }
 
@@ -278,7 +278,7 @@ void goto_tramming_wizard() {
   tramming_run::refresh_hook = tramming_on_refresh;
   tramming_run::exit_hook = tramming_on_exit;
   tramming_run::enter_idle_hook = tramming_on_enter_idle;
-  tramming_run::ui_attached = true;         // man 12864 la driver -> panel khong tu tien buoc
+  tramming_run::ui_attached = true;         // man 12864 la driver -> cydlcd khong tu tien buoc
 
   btn_sel = BTN_PROBE;
 

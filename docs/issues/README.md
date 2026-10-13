@@ -5,7 +5,7 @@ Các file ở đây là **bản nháp issue** để tạo trên GitHub (`tungbui
 
 | # | File | Nội dung |
 |---|---|---|
-| 1 | `0001-panel-serial-ui-tat-custom-menu.md` | Bật `PANEL_SERIAL_UI` (màn hình riêng) phải tắt `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU` → cần cơ chế đẩy danh sách menu tuỳ biến từ Marlin xuống panel để thêm lại |
+| 1 | `0001-cydlcd-serial-ui-tat-custom-menu.md` | Bật `CYDLCD_SERIAL_UI` (màn hình riêng) phải tắt `CUSTOM_MENU_MAIN` + `LED_CONTROL_MENU` → cần cơ chế đẩy danh sách menu tuỳ biến từ Marlin xuống man hinh CYD để thêm lại |
 
 Tạo issue từ nháp:
 

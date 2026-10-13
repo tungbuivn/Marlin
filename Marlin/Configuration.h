@@ -125,24 +125,24 @@
 //#define BAUDRATE_2 115200   // :[2400, 9600, 19200, 38400, 57600, 115200, 250000, 500000, 1000000] Enable to override BAUDRATE
 
 /**
- * MAN HINH RIENG "lcd_panel" (MCU cua man hinh tu render, Marlin chi gui du lieu bang frame)
+ * MAN HINH RIENG "cydlcd" (MCU cua man hinh tu render, Marlin chi gui du lieu bang frame)
  *
- * Firmware man hinh nam o thu muc lcd_panel/ (project PlatformIO RIENG, xem
- * lcd_panel/README.md). Ban moi (LVGL) KHONG hoi G-code de ve nua: Marlin chu dong day frame
- * nhi phan xuong qua 1 UART (ExtUI "panel_serial", bat bang #define PANEL_SERIAL_UI o duoi),
- * panel chi gui lenh G-code cho HANH DONG (G28 / M104 / M140 / M24 / M524...).
+ * Firmware man hinh nam o thu muc cydlcd/ (project PlatformIO RIENG, xem
+ * cydlcd/README.md). Ban moi (LVGL) KHONG hoi G-code de ve nua: Marlin chu dong day frame
+ * nhi phan xuong qua 1 UART (ExtUI "cydlcd_serial", bat bang #define CYDLCD_SERIAL_UI o duoi),
+ * man hinh CYD chi gui lenh G-code cho HANH DONG (G28 / M104 / M140 / M24 / M524...).
  *
  * Tren MKS Monster8 V2: dung USART3 vi chan nam ngay header EXP1 (header man 12864 cu).
  * Chieu chan lay tu variant MARLIN_F4x7Vx (variant.h dong 91-92): PD8 = USART3_TX, PD9 = USART3_RX
- *     EXP1 chan 5 = PD9 = USART3_RX  <-  TX cua panel
- *     EXP1 chan 6 = PD8 = USART3_TX  ->  RX cua panel   => day phai CHEO
- *     EXP1 chan 9 = GND (phai noi chung), chan 10 = 5V (neu board panel co regulator)
+ *     EXP1 chan 5 = PD9 = USART3_RX  <-  TX cua man hinh CYD
+ *     EXP1 chan 6 = PD8 = USART3_TX  ->  RX cua man hinh CYD   => day phai CHEO
+ *     EXP1 chan 9 = GND (phai noi chung), chan 10 = 5V (neu board man hinh CYD co regulator)
  * KHONG dung SERIAL_PORT_2: PA2/PA3 cua Monster8 da la FAN0/HEATER_2, va neu khai bao
  * SERIAL_PORT_2 thi Marlin coi do la cong host thu 2 -> se dien giai frame nhi phan nhu G-code.
  *
- * Cach bat (1 lenh): pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on
+ * Cach bat (1 lenh): pwsh cydlcd/tools/set_cydlcd_mode.ps1 -Mode on
  * (script tu tat MKS_MINI_12864_V3 + NEOPIXEL_LED + CUSTOM_MENU_MAIN + LED_CONTROL_MENU va
- *  bat PANEL_SERIAL_UI; xem docs/issues/0001-panel-serial-ui-tat-custom-menu.md).
+ *  bat CYDLCD_SERIAL_UI; xem docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md).
  * Build flag can co trong ini/stm32f4.ini (env mks_monster8) -- da co san:
  *     -DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8
  */
@@ -159,7 +159,7 @@
 //#define BLUETOOTH
 
 // Name displayed in the LCD "Ready" message and Info menu (2026-10-13: ten may = TBT,
-// cung duoc gui sang panel CYD qua frame PANEL_F_HELLO nen header panel hien "TBT")
+// cung duoc gui sang man hinh CYD qua frame CYDLCD_F_HELLO nen header man hinh CYD hien "TBT")
 #define CUSTOM_MACHINE_NAME "TBT"
 
 // Printer's unique ID, used by some programs to differentiate between machines.
@@ -2737,7 +2737,7 @@
 // PanelOne from T3P3 (via RAMPS 1.4 AUX2/AUX3)
 // https://reprap.org/wiki/PanelOne
 //
-//#define PANEL_ONE
+//#define CYDLCD_ONE
 
 //
 // GADGETS3D G3D LCD/SD Controller
@@ -2844,8 +2844,8 @@
 // Panel connected to main board by SPI or I2C interface.
 // See https://github.com/Serhiy-K/TFTGLCDAdapter
 //
-//#define TFTGLCD_PANEL_SPI
-//#define TFTGLCD_PANEL_I2C
+//#define TFTGLCD_CYDLCD_SPI
+//#define TFTGLCD_CYDLCD_I2C
 
 //=============================================================================
 //=======================   LCD / Controller Selection  =======================
@@ -3028,7 +3028,7 @@
 //
 // TinyBoy2 128x64 OLED / Encoder Panel
 //
-//#define OLED_PANEL_TINYBOY2
+//#define OLED_CYDLCD_TINYBOY2
 
 //
 // MKS OLED 1.3" 128×64 Full Graphics Controller
@@ -3144,12 +3144,12 @@
 //#define EXTENSIBLE_UI
 
 /**
- * MAN HINH RIENG "lcd_panel" -- Marlin DAY du lieu xuong MCU man hinh (khong dung G-code de ve)
+ * MAN HINH RIENG "cydlcd" -- Marlin DAY du lieu xuong MCU man hinh (khong dung G-code de ve)
  *
  * Man hinh (STM32F411/F103/F407 hoac ESP32-2432S028R "CYD") chay firmware rieng trong thu muc
- * lcd_panel/ va ve bang LVGL. Marlin chu dong gui frame nhi phan qua 1 UART (xem
- * src/lcd/extui/panel_serial/panel_protocol.h); panel chi gui lenh G-code cho HANH DONG
- * (G28 / M104 / M140 / M24 ...). Nho vay panel co DU du lieu de ve moi khoi ma G-code khong
+ * cydlcd/ va ve bang LVGL. Marlin chu dong gui frame nhi phan qua 1 UART (xem
+ * src/lcd/extui/cydlcd_serial/cydlcd_protocol.h); man hinh CYD chi gui lenh G-code cho HANH DONG
+ * (G28 / M104 / M140 / M24 ...). Nho vay man hinh CYD co DU du lieu de ve moi khoi ma G-code khong
  * the lay duoc: danh sach file SD, luoi bed mesh, PID / steps-mm / jerk, prompt nguoi dung...
  *
  * UART: USART3 = PD8 (TX) / PD9 (RX) -- nam ngay header EXP1 chan 6/5 tren MKS Monster8 V2.
@@ -3158,21 +3158,21 @@
  *
  * !!! KHI BAT: phai tat man hinh dang dung vi ExtUI chiem chu ky init_lcd()/update() cua
  *     MarlinUI (khong the vua co man 12864 vua co ExtUI), va ExtUI khong dung he thong menu
- *     cua MarlinUI nen cac menu tuy bien phai dua sang panel:
+ *     cua MarlinUI nen cac menu tuy bien phai dua sang man hinh CYD:
  *         Configuration.h:      comment MKS_MINI_12864_V3, NEOPIXEL_LED
  *         Configuration_adv.h:  comment CUSTOM_MENU_MAIN, LED_CONTROL_MENU
  *     (SanityCheck da bao loi ro rang neu con man hinh gan truc tiep.)
- *     Lam tu dong: pwsh lcd_panel/tools/set_panel_mode.ps1 -Mode on
+ *     Lam tu dong: pwsh cydlcd/tools/set_cydlcd_mode.ps1 -Mode on
  *
  * Khong muon nua: comment dong duoi day (hoac chay script tren voi -Mode off).
- * Ke hoach "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
+ * Ke hoach "them lai menu tuy bien": docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md
  */
-#define PANEL_SERIAL_UI
+#define CYDLCD_SERIAL_UI
 
 /**
- * PANEL_TRAM_LINK -- panel rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
+ * CYDLCD_TRAM_LINK -- man hinh CYD rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
  *
- * KHAC PANEL_SERIAL_UI: KHONG dung ExtUI -> MarlinUI (man 12864) van chay binh thuong va
+ * KHAC CYDLCD_SERIAL_UI: KHONG dung ExtUI -> MarlinUI (man 12864) van chay binh thuong va
  * wizard tren 12864 giu nguyen. Panel chi nhan 1 dong trang thai ASCII (~5Hz: 4 so 4 goc,
  * moc, goc dang dung, mode MAX/MIN, huong van vit) va gui lenh P/D/M/R/B/Q.
  *
@@ -3180,13 +3180,13 @@
  * Build flag (-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9) duoc them
  * tu dong qua ini/features.ini khi bat dong nay.
  *
- * Chi tiet + man hinh TRAMMING tren panel: lcd_panel/README.md §5.6 · README.md §15b.
+ * Chi tiet + man hinh TRAMMING tren man hinh CYD: cydlcd/README.md §5.6 · README.md §15b.
  *
- * 2026-10-13: TAT de chuyen sang PUSH/ExtUI (PANEL_SERIAL_UI) - hai che do LOAI TRU nhau
- * (cung 1 UART + panel_tram_link.h co #error chan). Man TRAMMING tren panel duoc port sang
- * kenh PUSH bang frame PANEL_F_TRAM / PANEL_F_TRAM_CMD (xem panel_serial.cpp).
+ * 2026-10-13: TAT de chuyen sang PUSH/ExtUI (CYDLCD_SERIAL_UI) - hai che do LOAI TRU nhau
+ * (cung 1 UART + cydlcd_tram_link.h co #error chan). Man TRAMMING tren man hinh CYD duoc port sang
+ * kenh PUSH bang frame CYDLCD_F_TRAM / CYDLCD_F_TRAM_CMD (xem cydlcd_serial.cpp).
  */
-//#define PANEL_TRAM_LINK
+//#define CYDLCD_TRAM_LINK
 
 #if ENABLED(EXTENSIBLE_UI)
   //#define EXTUI_LOCAL_BEEPER // Enables use of local Beeper pin with external display

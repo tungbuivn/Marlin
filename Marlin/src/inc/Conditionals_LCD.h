@@ -121,7 +121,7 @@
     #define ST7565_VOLTAGE_DIVIDER_VALUE 0x07
   #endif
 
-#elif ENABLED(OLED_PANEL_TINYBOY2)
+#elif ENABLED(OLED_CYDLCD_TINYBOY2)
 
   #define IS_U8GLIB_SSD1306
   #define IS_ULTIPANEL 1
@@ -197,7 +197,7 @@
   #define LCD_WIDTH 16
   #define LCD_HEIGHT 2
 
-#elif EITHER(TFTGLCD_PANEL_SPI, TFTGLCD_PANEL_I2C)
+#elif EITHER(TFTGLCD_CYDLCD_SPI, TFTGLCD_CYDLCD_I2C)
 
   #define IS_TFTGLCD_PANEL 1
   #define IS_ULTIPANEL 1                    // Note that IS_ULTIPANEL leads to HAS_WIRED_LCD
@@ -205,8 +205,8 @@
   #if ENABLED(SDSUPPORT) && DISABLED(LCD_PROGRESS_BAR)
     #define LCD_PROGRESS_BAR
   #endif
-  #if ENABLED(TFTGLCD_PANEL_I2C)
-    #define LCD_I2C_ADDRESS           0x33  // Must be 0x33 for STM32 main boards and equal to panel's I2C slave address
+  #if ENABLED(TFTGLCD_CYDLCD_I2C)
+    #define LCD_I2C_ADDRESS           0x33  // Must be 0x33 for STM32 main boards and equal to cydlcd's I2C slave address
   #endif
   #define LCD_USE_I2C_BUZZER                // Enable buzzer on LCD, used for both I2C and SPI buses (LiquidTWI2 not required)
   #define STD_ENCODER_PULSES_PER_STEP 2
@@ -218,7 +218,7 @@
   #define LCD_CONTRAST_DEFAULT        250
   #define CONVERT_TO_EXT_ASCII        // Use extended 128-255 symbols from ASCII table.
                                       // At this time present conversion only for cyrillic - bg, ru and uk languages.
-                                      // First 7 ASCII symbols in panel font must be replaced with Marlin's special symbols.
+                                      // First 7 ASCII symbols in man hinh CYD font must be replaced with Marlin's special symbols.
 
 #elif ENABLED(CR10_STOCKDISPLAY)
 
@@ -299,7 +299,7 @@
  */
 
 // Basic Ultipanel-like displays
-#if ANY(ULTIMAKERCONTROLLER, IS_RRD_SC, G3D_PANEL, RIGIDBOT_PANEL, PANEL_ONE, U8GLIB_SH1106)
+#if ANY(ULTIMAKERCONTROLLER, IS_RRD_SC, G3D_PANEL, RIGIDBOT_PANEL, CYDLCD_ONE, U8GLIB_SH1106)
   #define IS_ULTIPANEL 1
 #endif
 
@@ -358,7 +358,7 @@
  * I2C Panels
  */
 
-#if ANY(IS_RRD_SC, IS_DOGM_12864, OLED_PANEL_TINYBOY2, LCD_I2C_PANELOLU2)
+#if ANY(IS_RRD_SC, IS_DOGM_12864, OLED_CYDLCD_TINYBOY2, LCD_I2C_PANELOLU2)
 
   #define STD_ENCODER_PULSES_PER_STEP 4
   #define STD_ENCODER_STEPS_PER_MENU_ITEM 1
@@ -471,7 +471,7 @@
 #endif
 
 // Extensible UI serial touch screens. (See src/lcd/extui)
-#if ANY(HAS_DGUS_LCD, MALYAN_LCD, TOUCH_UI_FTDI_EVE, ANYCUBIC_LCD_I3MEGA, ANYCUBIC_LCD_CHIRON, NEXTION_TFT, PANEL_SERIAL_UI)
+#if ANY(HAS_DGUS_LCD, MALYAN_LCD, TOUCH_UI_FTDI_EVE, ANYCUBIC_LCD_I3MEGA, ANYCUBIC_LCD_CHIRON, NEXTION_TFT, CYDLCD_SERIAL_UI)
   #define IS_EXTUI 1
   #define EXTENSIBLE_UI
 #endif

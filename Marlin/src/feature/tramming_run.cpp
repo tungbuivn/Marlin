@@ -31,11 +31,11 @@
  *                    (vong moi, moc moi)
  *      Vi van vit lam Z-home doi nen vong lap cu lap lai cho toi khi ca 4 goc nam tren moc.
  *
- * 2026-10-13: tach khoi MarlinUI + them duong dieu khien tu man hinh rieng lcd_panel
- *   (feature/panel_tram_link.cpp, giao thuc ASCII tren USART3). Ca 2 duong dung CHUNG
+ * 2026-10-13: tach khoi MarlinUI + them duong dieu khien tu man hinh rieng cydlcd
+ *   (feature/cydlcd_tram_link.cpp, giao thuc ASCII tren USART3). Ca 2 duong dung CHUNG
  *   trang thai trong namespace nay; chi MOT nguon duoc "tien buoc" (step):
  *     - menu 12864 dang mo wizard  -> ui_attached = true  -> menu_tramming goi step()
- *     - panel la nguon duy nhat    -> panel_tram_link::tick() goi step()
+ *     - man hinh CYD la nguon duy nhat    -> cydlcd_tram_link::tick() goi step()
  *   => khong bao gio 2 nguon cung day trang thai.
  */
 
@@ -132,7 +132,7 @@ float ref() {
 
 // MOC dung de HIEN THI: khi CA 4 GOC DA DAT thi doi sang so voi TAM BAN (= diem home Z,
 // base_home_pos) de biet moi goc CAO HON hay THAP HON tam (so DUONG = goc cao hon tam).
-// (Man 12864 va panel dung cung ham nay -> 2 man hien ra so GIONG NHAU.)
+// (Man 12864 va man hinh CYD dung cung ham nay -> 2 man hien ra so GIONG NHAU.)
 float display_ref() { return all_dat ? base_home_pos(Z_AXIS) : ref(); }
 
 // Chot moc tu cac goc vua do (lay CA Z-MIN lan Z-MAX). Chi nhan khi du >= 3 goc (nguong cua G35).
@@ -277,7 +277,7 @@ void exit() {
   set_axis_never_homed(Z_AXIS);          // vit da bi van -> phai home lai Z truoc khi di chuyen/in
   active = false;
   ui_attached = false;
-  // Go hook UI: tu day wizard khong con thuoc man 12864 nua. Neu khong go, mot lan 'B' tu panel
+  // Go hook UI: tu day wizard khong con thuoc man 12864 nua. Neu khong go, mot lan 'B' tu man hinh CYD
   // sau nay se van goi ui.goto_previous_screen_no_defer() -> tu nhien doi man hinh 12864.
   void (*const on_exit)() = exit_hook;
   refresh_hook = nullptr;
@@ -286,7 +286,7 @@ void exit() {
   if (on_exit) on_exit();
 }
 
-// Vao wizard (tu menu 12864 hoac tu lenh 'R' cua panel khi wizard chua chay):
+// Vao wizard (tu menu 12864 hoac tu lenh 'R' cua man hinh CYD khi wizard chua chay):
 // home TAT CA truc; Z-home chinh la TAM BAN -> moc cho moi delta.
 void begin() {
   LOOP_L_N(i, G35_PROBE_COUNT) { z_ok[i] = false; z_accepted[i] = false; }

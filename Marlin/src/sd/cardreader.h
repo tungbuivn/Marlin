@@ -55,8 +55,8 @@ extern const char M23_STR[], M24_STR[];
 
 #if NEED_SD2CARD_SDIO
   #include "Sd2Card_sdio.h"
-#elif NEED_SD2CARD_PANEL_UART
-  #include "panel_sd_uart.h"        // the SD o khe man hinh, du lieu qua UART (PANEL_SD_OVER_UART)
+#elif NEED_SD2CARD_CYDLCD_UART
+  #include "cydlcd_sd_uart.h"        // the SD o khe man hinh, du lieu qua UART (CYDLCD_SD_OVER_UART)
 #elif NEED_SD2CARD_SPI
   #include "Sd2Card.h"
 #endif
@@ -255,8 +255,8 @@ public:
     static DiskIODriver_USBFlash media_driver_usbFlash;
   #endif
 
-  #if NEED_SD2CARD_SDIO || NEED_SD2CARD_SPI || NEED_SD2CARD_PANEL_UART
-    typedef TERN(NEED_SD2CARD_PANEL_UART, DiskIODriver_PanelUART,
+  #if NEED_SD2CARD_SDIO || NEED_SD2CARD_SPI || NEED_SD2CARD_CYDLCD_UART
+    typedef TERN(NEED_SD2CARD_CYDLCD_UART, DiskIODriver_CydlcdUART,
                  TERN(NEED_SD2CARD_SDIO, DiskIODriver_SDIO, DiskIODriver_SPI_SD)) sdcard_driver_t;
     static sdcard_driver_t media_driver_sdcard;
   #endif

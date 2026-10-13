@@ -40,8 +40,8 @@
 
 #if NEED_SD2CARD_SDIO
   #include "Sd2Card_sdio.h"
-#elif NEED_SD2CARD_PANEL_UART
-  #include "panel_sd_uart.h"        // the SD o khe man hinh, du lieu qua UART (PANEL_SD_OVER_UART)
+#elif NEED_SD2CARD_CYDLCD_UART
+  #include "cydlcd_sd_uart.h"        // the SD o khe man hinh, du lieu qua UART (CYDLCD_SD_OVER_UART)
 #elif NEED_SD2CARD_SPI
   #include "Sd2Card.h"
 #endif

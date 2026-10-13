@@ -1,23 +1,23 @@
 /**
- * tram_protocol.h -- Giao thuc ASCII cho link TRAMMING (man hinh rieng lcd_panel <-> Marlin).
+ * tram_protocol.h -- Giao thuc ASCII cho link TRAMMING (man hinh rieng cydlcd <-> Marlin).
  *
  * FILE DUNG CHUNG: ban y nguyen nam o
  *      Marlin/src/feature/tram_protocol.h      (Marlin)
- *      lcd_panel/src/tram_protocol.h           (panel)
+ *      cydlcd/src/tram_protocol.h           (MAN HINH CYD)
  *   Sua file nay thi phai COPY Y NGUYEN sang file kia. Header chi dung <stdint.h>/<stdio.h>/
  *   <string.h> (khong Arduino, khong Marlin) nen test duoc tren may tinh:
- *      pwsh lcd_panel/tools/run_host_test.ps1
+ *      pwsh cydlcd/tools/run_host_test.ps1
  *
- * VI SAO KHONG DUNG FRAME NHI PHAN (nhu panel_protocol.h)?
+ * VI SAO KHONG DUNG FRAME NHI PHAN (nhu cydlcd_protocol.h)?
  *   Link tramming chi can vai con so + vai lenh, nen:
  *     - doc duoc bang Serial Monitor -> go loi khong can thiet bi;
- *     - KHONG can ExtUI/PANEL_SERIAL_UI -> giu nguyen MarlinUI + menu 12864 (Tramming Wizard,
+ *     - KHONG can ExtUI/CYDLCD_SERIAL_UI -> giu nguyen MarlinUI + menu 12864 (Tramming Wizard,
  *       Z ALIGN MANUAL...) ma nguoi dung dang dung. Day la ly do chinh cua giao thuc nay.
- *   Xem docs/issues/0001-panel-serial-ui-tat-custom-menu.md.
+ *   Xem docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md.
  *
  * HUONG TRUYEN
  *
- *   panel -> Marlin: 1 ky tu lenh + '\n'
+ *   MAN HINH CYD -> Marlin: 1 ky tu lenh + '\n'
  *        'P' = PROBE   : probe LAI goc dang dung (khong home lai)
  *        'D' = DONE    : goc nay xong -> di goc can chinh ke tiep; het goc -> home + probe 4 goc
  *        'M' = MIN/MAX : doi chien luoc MAX <-> MIN (moc Z-MIN <-> Z-MAX) + luu EEPROM
@@ -26,18 +26,18 @@
  *        'Q' = QUERY   : hoi trang thai -> Marlin gui lai NGAY 1 dong TRAM
  *     (ky tu khac / dong rong: bo qua. Nhan ca chu thuong.)
  *
- *   Marlin -> panel: 1 dong trang thai, gui khi trang thai DOI + dinh ky ~5Hz:
+ *   Marlin -> MAN HINH CYD: 1 dong trang thai, gui khi trang thai DOI + dinh ky ~5Hz:
  *        TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active> <all_dat> <hint>
  *        phase   : 0 IDLE / 1 HOMING / 2 PROBING / 3 GOTO / 4 POINT / 5 AUTO
  *        mode    : 1 = MAX (moc = Z-MIN, van CCW de HA goc cao) / 0 = MIN (moc = Z-MAX, van CW)
- *        idx     : goc nozzle DANG DUNG (0..3) -> panel ve dau '*'
+ *        idx     : goc nozzle DANG DUNG (0..3) -> MAN HINH CYD ve dau '*'
  *        ref     : moc so sanh (mm, 3 so le)  <- DUNG BANG gia tri man 12864 dang hien
  *        d0..d3  : do lech tung goc so voi moc (mm, 3 so le); "---.---" = goc chua probe duoc
  *        A0..A3  : 1 = nguoi dung da bam DONE o goc do (coi nhu xong)
  *        active  : 1 = wizard dang chay
- *        all_dat : 1 = CA 4 GOC da dat -> man 12864 chi con nut BACK (panel cung vay)
+ *        all_dat : 1 = CA 4 GOC da dat -> man 12864 chi con nut BACK (MAN HINH CYD cung vay)
  *        hint    : viec can lam o goc dang dung, 1 token KHONG co khoang trang. Marlin tinh san
- *                  (bam theo dung tramming_turn_cw + TRAM_DONE_MM cua man 12864) de panel khong
+ *                  (bam theo dung tramming_turn_cw + TRAM_DONE_MM cua man 12864) de MAN HINH CYD khong
  *                  phai tu suy lai chieu van vit:
  *                    "DAT"       goc da dat (hoac ca 4 goc da dat)
  *                    "CW:0.150"  van CW 0.150 mm   (':' thay cho khoang trang)
@@ -64,7 +64,7 @@
 #define TRAM_PROTO_POINTS  4
 
 // ---------------------------------------------------------------------------
-// Lenh panel -> Marlin
+// Lenh MAN HINH CYD -> Marlin
 // ---------------------------------------------------------------------------
 #define TRAM_CMD_PROBE    'P'
 #define TRAM_CMD_DONE     'D'
@@ -112,7 +112,7 @@ typedef struct {
   uint8_t accepted[TRAM_PROTO_POINTS];      // 1 = da bam DONE
   char    hint[16];                         // viec can lam o goc dang dung (khong co khoang trang)
   // Nhiet do (2026-10-13): 4 token MO RONG o CUOI dong, don vi = do C * 100 (21050 = 210.50C).
-  // Che do TRAM khong co frame PUSH (ExtUI) nen phai gui kem o day, neu khong man panel khong co
+  // Che do TRAM khong co frame PUSH (ExtUI) nen phai gui kem o day, neu khong man MAN HINH CYD khong co
   // nhiet do nao. Phia doc cu (khong biet 4 token nay) van chay binh thuong vi parser bo qua token thua.
   int16_t t_e0, t_bed, t_e0_tgt, t_bed_tgt;
 } tram_status_t;
@@ -147,7 +147,7 @@ static inline int tram_fmt_mm(char *out, const float v) {
 }
 
 // ---------------------------------------------------------------------------
-// Marlin -> panel: tao 1 dong trang thai (co '\n' o cuoi)
+// Marlin -> MAN HINH CYD: tao 1 dong trang thai (co '\n' o cuoi)
 // Tra ve so byte da ghi (khong tinh '\0'). `buf` nen >= 128 byte.
 // ---------------------------------------------------------------------------
 static inline int tram_status_format(char *buf, const int len, const tram_status_t *st) {
@@ -187,7 +187,7 @@ static inline int tram_status_format(char *buf, const int len, const tram_status
 }
 
 // ---------------------------------------------------------------------------
-// Parser (panel dung de doc dong TRAM; host test cung dung)
+// Parser (MAN HINH CYD dung de doc dong TRAM; host test cung dung)
 // ---------------------------------------------------------------------------
 // Token ke tiep (bo qua khoang trang). Tra ve NULL khi het dong.
 static inline const char *tram_next_tok(const char **p, int *tlen) {
@@ -314,7 +314,7 @@ static inline bool tram_status_parse(const char *line, tram_status_t *st) {
   return true;
 }
 
-// Ky tu lenh panel -> Marlin (tra ve 0 neu khong phai lenh). Nhan ca chu thuong.
+// Ky tu lenh MAN HINH CYD -> Marlin (tra ve 0 neu khong phai lenh). Nhan ca chu thuong.
 static inline char tram_cmd_parse(const char *line) {
   if (!line) return 0;
   while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') line++;

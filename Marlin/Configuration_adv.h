@@ -1360,11 +1360,11 @@
 // @section lcd
 
 #if HAS_MANUAL_MOVE_MENU
-  #define MANUAL_FEEDRATE { 50*60, 50*60, 4*60, 2*60 } // (mm/min) Feedrates for manual moves along X, Y, Z, E from panel
+  #define MANUAL_FEEDRATE { 50*60, 50*60, 4*60, 2*60 } // (mm/min) Feedrates for manual moves along X, Y, Z, E from cydlcd
   #define FINE_MANUAL_MOVE 0.01    // (mm) Smallest manual move (< 0.1mm) applying to Z on most machines
   #if IS_ULTIPANEL
     #define MANUAL_E_MOVES_RELATIVE // Display extruder move distance rather than "position"
-    #define ULTIPANEL_FEEDMULTIPLY  // Encoder sets the feedrate multiplier on the Status Screen
+    #define ULTICYDLCD_FEEDMULTIPLY  // Encoder sets the feedrate multiplier on the Status Screen
   #endif
 #endif
 
@@ -1385,7 +1385,7 @@
  * roi luong chinh giai ma bang bang chuyen tiep y het cua Marlin -> cung don vi, cung chieu quay.
  *
  * Chi ap dung khi co encoder tren man hinh (HAS_ENCODER_WHEEL); neu dung man hinh rieng qua
- * PANEL_SERIAL_UI thi encoder nam o panel -> khoi nay tu dong khong duoc bien dich.
+ * CYDLCD_SERIAL_UI thi encoder nam o man hinh CYD -> khoi nay tu dong khong duoc bien dich.
  *
  * Muon quay lai cach cu: comment dong duoi day (khong can sua gi khac).
  * Code: src/lcd/encoder_quad.cpp/.h (them vao build bang ini/features.ini).
@@ -1494,8 +1494,8 @@
   /**
    * LED Control Menu
    * Add LED Control to the LCD menu
-   * !! CUNG phai comment khi bat PANEL_SERIAL_UI (xem
-   *    docs/issues/0001-panel-serial-ui-tat-custom-menu.md)
+   * !! CUNG phai comment khi bat CYDLCD_SERIAL_UI (xem
+   *    docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md)
    */
   //#define LED_CONTROL_MENU
   #if ENABLED(LED_CONTROL_MENU)
@@ -1783,37 +1783,37 @@
   // Enable if SD detect is rendered useless (e.g., by using an SD extender)
   //#define NO_SD_DETECT
   //
-  // >>> TBT-PANEL (2026-10-14): THE SD DUNG CHUNG qua MUX SPI 74HC4053 <<<
-  // (GIU LAI lam duong lui: neu sau nay quay lai dung MUX thi bo PANEL_SD_OVER_UART o duoi)
+  // >>> TBT-MAN HINH CYD (2026-10-14): THE SD DUNG CHUNG qua MUX SPI 74HC4053 <<<
+  // (GIU LAI lam duong lui: neu sau nay quay lai dung MUX thi bo CYDLCD_SD_OVER_UART o duoi)
   // The TF thuc te nam o khe cua MAN HINH (CYD); SPI cua Marlin (PC9/PC10/PC11/PC12) di qua MUX
   // toi khe do, con CONG TAC NHAN THE (SD_DETECT_PIN PC4) van o khe TRONG cua MKS Monster8
   // => Marlin se bao "khong co the" va KHONG mount. Vi vay phai TAT cong tac nhan the.
   // Khi tat: IS_SD_INSERTED() luon = true => Marlin mount 1 lan luc khoi dong roi giu nguyen
-  // (khong tu mount lai), dung y do muon (panel gianh bus khi nhan file, xong tra lai + M22/M21).
+  // (khong tu mount lai), dung y do muon (man hinh CYD gianh bus khi nhan file, xong tra lai + M22/M21).
   #define NO_SD_DETECT
 
   /**
-   * >>> TBT-PANEL (2026-10-14): THE SD NAM O KHE MAN HINH, MARLIN LAY SECTOR QUA UART <<<
+   * >>> TBT-MAN HINH CYD (2026-10-14): THE SD NAM O KHE MAN HINH, MARLIN LAY SECTOR QUA UART <<<
    *
-   * Marlin KHONG tu doc the SPI nua: moi sector 512 B duoc hoi panel qua chinh UART cua kenh PUSH
-   * (frame PANEL_F_SDREQ / PANEL_F_SDDATA, proto 3). Nho vay:
+   * Marlin KHONG tu doc the SPI nua: moi sector 512 B duoc hoi man hinh CYD qua chinh UART cua kenh PUSH
+   * (frame CYDLCD_F_SDREQ / CYDLCD_F_SDDATA, proto 3). Nho vay:
    *   - KHONG can MUX SPI (74HC4053), KHONG cat duong, KHONG tranh chap bus, khong can dien tro;
-   *   - panel nap lai firmware / reset luc nao cung duoc (Marlin chi thay the "ban" tam thoi);
+   *   - man hinh CYD nap lai firmware / reset luc nao cung duoc (Marlin chi thay the "ban" tam thoi);
    *   - Marlin van chay dung toan bo ngan xep SD cua no (FAT16/32, liet ke thu muc, M23/M24,
    *     M25/M524, tien do in, M32 subroutine...) vi tat ca chi di qua readBlock()/writeBlock().
    *
-   * GIAI DOAN 1 (P1): doc. GIAI DOAN 3 (P3, 2026-10-14): DA CO DUONG GHI - panel nhan 4 frame
-   * PANEL_F_SDDATA roi ghi xuong the bang SD.writeRAW(), tra PANEL_F_SDACK. Nho vay M28/M29 (ghi
+   * GIAI DOAN 1 (P1): doc. GIAI DOAN 3 (P3, 2026-10-14): DA CO DUONG GHI - man hinh CYD nhan 4 frame
+   * CYDLCD_F_SDDATA roi ghi xuong the bang SD.writeRAW(), tra CYDLCD_F_SDACK. Nho vay M28/M29 (ghi
    * log ra the), M30 (xoa file), POWER_LOSS_RECOVERY... chay duoc. Neu CHI muon doc cho an toan thi
-   * bo comment o PANEL_SD_READONLY duoi day.
-   * CANH BAO: moi thao tac the cua Marlin gio phu thuoc UART + panel con song.
-   * Xem them: src/sd/panel_sd_uart.*, src/lcd/extui/panel_serial/, lcd_panel/README.md muc 12.
+   * bo comment o CYDLCD_SD_READONLY duoi day.
+   * CANH BAO: moi thao tac the cua Marlin gio phu thuoc UART + man hinh CYD con song.
+   * Xem them: src/sd/cydlcd_sd_uart.*, src/lcd/extui/cydlcd_serial/, cydlcd/README.md muc 12.
    */
-  #define PANEL_SD_OVER_UART
+  #define CYDLCD_SD_OVER_UART
 
-  #if ENABLED(PANEL_SD_OVER_UART)
-    //#define PANEL_SD_READONLY        // bat len neu CHI muon doc (them SDCARD_READONLY, tiet kiem flash)
-    #if ENABLED(PANEL_SD_READONLY)
+  #if ENABLED(CYDLCD_SD_OVER_UART)
+    //#define CYDLCD_SD_READONLY        // bat len neu CHI muon doc (them SDCARD_READONLY, tiet kiem flash)
+    #if ENABLED(CYDLCD_SD_READONLY)
       #define SDCARD_READONLY
     #endif
   #endif
@@ -1970,8 +1970,8 @@
 // Additional options for AnyCubic Chiron TFT displays
 //
 #if ENABLED(ANYCUBIC_LCD_CHIRON)
-  // By default the type of panel is automatically detected.
-  // Enable one of these options if you know the panel type.
+  // By default the type of man hinh CYD is automatically detected.
+  // Enable one of these options if you know the man hinh CYD type.
   //#define CHIRON_TFT_STANDARD
   //#define CHIRON_TFT_NEW
 
@@ -1985,8 +1985,8 @@
    *
    * NOTES:
    * - Without this option it helps to enable SDCARD_SORT_ALPHA so files are sorted before/after folders.
-   * - When used with the "new" panel, folder names will also have '.gcode' appended to their names.
-   *   This hack is currently required to force the panel to show folders.
+   * - When used with the "new" man hinh CYD, folder names will also have '.gcode' appended to their names.
+   *   This hack is currently required to force the man hinh CYD to show folders.
    */
   #define AC_SD_FOLDER_VIEW
 #endif
@@ -3817,8 +3817,8 @@
 // @section custom main menu
 
 // Custom Menu: Main Menu
-// !! Neu bat PANEL_SERIAL_UI (man hinh rieng qua ExtUI) thi PHAI comment dong duoi day,
-//    va ghi nho viec "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
+// !! Neu bat CYDLCD_SERIAL_UI (man hinh rieng qua ExtUI) thi PHAI comment dong duoi day,
+//    va ghi nho viec "them lai menu tuy bien": docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md
 //#define CUSTOM_MENU_MAIN
 #if ENABLED(CUSTOM_MENU_MAIN)
   #define CUSTOM_MENU_MAIN_TITLE "Custom Commands"

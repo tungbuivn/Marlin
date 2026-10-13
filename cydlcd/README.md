@@ -1,0 +1,1713 @@
+# cydlcd — firmware màn hình riêng cho Marlin (Voron 300 / MKS Monster8 V2)
+
+Một MCU **riêng** lo toàn bộ việc vẽ màn hình; Marlin không phải render gì.
+Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (không phải sửa code):
+
+| | **Kiểu G-code** | **Kiểu PUSH** (mới, dùng cho màn LVGL) | **Kiểu TRAM** (mới — **không cần ExtUI**) |
+|---|---|---|---|
+| Env | `cydlcd_f411cc`, `cydlcd_f103c6` | `cydlcd_f407vgz_lvgl`, `cydlcd_f411cc_lvgl`, `cydlcd_esp32` | như kiểu PUSH |
+| Màn hình CYD lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`cydlcd_link.cpp`) | dòng ASCII `TRAM …` (`tram_link.cpp`) — **chỉ** dữ liệu Tramming Wizard |
+| Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) — **màn NGANG 320×240**, bố cục + **icon lấy từ màn TFT của Marlin** (§5) |
+| Marlin cần | chỉ bật 1 UART trống | bật `CYDLCD_SERIAL_UI` (ExtUI `cydlcd_serial`) + tắt màn 12864 | **chỉ thêm 1 dòng `#define CYDLCD_TRAM_LINK`** — **KHÔNG** tắt gì của MarlinUI ⇒ **màn 12864 + menu MarlinUI vẫn nguyên vẹn** |
+| Dữ liệu nặng (file SD, bed mesh, PID/steps/mm, prompt…) | **không có** | **có** (Marlin đẩy hết) | **không có** (chỉ Tramming Wizard — §5.6) |
+| Flash/RAM | 20,7 KB / 1,9 KB (F411) · 21,1 KB / 1,9 KB (F103C6) | cần ≥ 256 KB flash / 128 KB RAM (LVGL + font + ~17 KB icon) | như kiểu PUSH (+0,3 KB khi thêm màn TRAMMING — xem §1.1) |
+
+> 🗂️ **Đang đổi tên `lcd_panel/` → `cydlcd/`** (env `cydlcd_esp32`, file `cydlcd_*.h`, macro `CYDLCD_*`,
+> biến toàn cục `cydlcd`…) và **đã XOÁ HẲN 2 đường upload cũ** (module WiFi rời + Bluetooth, 2026-10-14).
+> Bảng đổi tên cũ → mới + lý do: **§9.23**; đường upload duy nhất còn lại: **§10**.
+
+> **Vì sao có kiểu PUSH?** Màn hình CYD ở MCU riêng *không* đọc được biến nội bộ của Marlin. Nếu chỉ
+> hỏi bằng G-code thì rất nhiều "khối" không thể vẽ: danh sách file SD, lưới bed mesh, thông số
+> PID / steps/mm / jerk, trạng thái probe/endstop, hộp thoại xác nhận, tên file đang in…
+> (MKS TFT cũng làm kiểu G-code và phải thêm hàng loạt M-code riêng —
+> tham khảo `makerbase-mks/MKS-TFT28-32-Firmware`.) Nên kiểu mới: Marlin **đẩy** dữ liệu xuống,
+> màn hình CYD chỉ gửi G-code cho **hành động** (G28 / M104 / M140 / M24 / M524…).
+
+> **Vì sao có thêm kiểu TRAM (2026-10-13)?** Kiểu PUSH bắt buộc bật `CYDLCD_SERIAL_UI` (ExtUI), mà
+> ExtUI **chiếm `MarlinUI::init_lcd()/update()`** nên phải **tắt màn 12864 + `CUSTOM_MENU_MAIN` +
+> `LED_CONTROL_MENU`** ⇒ **mất toàn bộ menu MarlinUI** (Tramming Wizard, `Z ALIGN MANUAL`…).
+> Kiểu TRAM chỉ thêm **một link ASCII rất nhỏ** (`Marlin/src/feature/cydlcd_tram_link.cpp`) để màn
+> riêng hiển thị + điều khiển **Bed Tramming Wizard**, **không dùng ExtUI** ⇒ chỉ cần thêm
+> `#define CYDLCD_TRAM_LINK` là xong, bản build 12864 không mất gì. Xem **§5.6** và
+> `docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md` §3c.
+
+---
+
+## 1. Chọn board / env
+
+| Env | Board | Màn hình | Giao tiếp |
+|---|---|---|---|
+| `cydlcd_f411cc` | STM32F411CCU6 ("Black Pill") | ILI9341 SPI 240×320 | G-code |
+| `cydlcd_f103c6` | STM32F103C6T6 ("Blue Pill") | ILI9341 SPI 240×320 | G-code |
+| `cydlcd_f411cc_lvgl` | STM32F411CCU6 | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
+| `cydlcd_f407vgz_lvgl` | STM32F407VGT6 (1 MB/128 KB) | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
+| `cydlcd_esp32` | **ESP32-2432S028R "CYD"** 2.8" | **ST7789** 240×320 (bản ILI9341 chỉ khác 1 dòng driver) + XPT2046 (gắn sẵn trên board) → **ngang 320×240** (`setRotation(1)`) | PUSH + LVGL |
+
+* Board F407 khác (F407ZGT6 144 chân…): sửa `board =` trong env (`black_f407zg`,
+  `vccgnd_f407zg_mini`, `genericSTM32F407IGT6`…) và giữ nguyên phần còn lại.
+* Env LVGL kéo thư viện từ mạng lần đầu: `lvgl@^8.3.11` (+ `TFT_eSPI` cho CYD).
+* **`TFT_ROTATION` (2026-10-13)**: `cydlcd_config.h` chỉ còn là **mặc định** (`TFT_ROTATION 0`, portrait
+  cho UI G-code `ui.cpp`); 2 env LVGL truyền `-DTFT_ROTATION=1` để UI LVGL chạy **ngang 320×240**.
+  Đổi chỗ này thì phải xem lại `UI_LCD_HOR_RES/VER_RES` trong `src/ui_lvgl.h`.
+* **Env CYD — 2 cờ BẮT BUỘC** (đã có sẵn trong `platformio.ini`):
+  `-DUSER_SETUP_LOADED=1 -include tools/tft_setup_cyd/User_Setup.h`. Thiếu 2 cờ này TFT_eSPI dùng
+  `User_Setup.h` mặc định trong thư viện (ILI9341, **không có `TFT_BL`**) → màn trắng/không đèn nền.
+  `ui_port_cyd_st7789.cpp` cũng có `#warning` nhắc nếu `CYDLCD_CYD_SETUP_LOADED` không được định nghĩa.
+
+```powershell
+# từ thư mục gốc repo
+pio run -d cydlcd -e cydlcd_f411cc                     # build (G-code UI)
+pio run -d cydlcd -e cydlcd_f407vgz_lvgl               # build (LVGL + PUSH)
+pio run -d cydlcd -e cydlcd_esp32 -t upload        # nạp qua USB (CYD)
+pio run -d cydlcd -e cydlcd_f407vgz_lvgl -t upload     # nạp qua ST-Link
+```
+
+`cydlcd` là **project PlatformIO riêng**: cờ/script/thư viện của Marlin không lọt vào và
+ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`: env G-code loại
+`cydlcd_link.cpp`/`ui_lvgl*.cpp`; env PUSH loại `marlin_link.cpp`/`ui.cpp`; riêng env CYD loại thêm
+`tft_ili9341.cpp`/`encoder.cpp` vì đó là driver/chân của STM32).
+
+### 1.1 Số liệu build thật (đã build kiểm trên máy này)
+
+| Env | Flash | RAM |
+|---|---|---|
+| `cydlcd_f411cc` (G-code UI) | 20.688 B / 262.144 (7,9 %) | 1.912 B / 131.072 (1,5 %) |
+| `cydlcd_f103c6` (G-code UI) | 21.096 B / 32.768 (**64,4 %**) | 1.880 B / 10.240 (18,4 %) |
+| `cydlcd_f411cc_lvgl` | 154.544 B / 262.144 (59,0 %) | 52.376 B / 131.072 (40,0 %) |
+| `cydlcd_f407vgz_lvgl` | 156.136 B / 1.048.576 (14,9 %) | 81.096 B / 131.072 (61,9 %) |
+| `cydlcd_esp32` | 460.005 B / 1.310.720 (35,1 %) | 101.812 B / 327.680 (31,1 %) |
+
+> **2026-10-13** (commit `1edfd7aa0b` — UI kiểu Marlin + icon thật): số LVGL **đã đo lại** sau khi
+> thêm bộ icon (`ui_lvgl_icons.h`, ~17 KB) và màn MENU/FEED-FLOW. Trước đó: F411 **134.012/46.180**,
+> F407 **135.928/74.900**, CYD **441.561/95.284**. Con số CYD ở trên **đang bật `-DCYDLCD_CYD_DEBUG=1`**
+> (cờ tạm để hiệu chuẩn touch) — tắt đi thì nhỏ hơn một chút.
+> Hai env G-code (`cydlcd_f411cc`, `cydlcd_f103c6`) **không đổi** (chúng loại `ui_lvgl*.cpp` khỏi build).
+
+> **2026-10-13** (màn **TRAMMING**, §5.6): đo lại sau khi thêm `tram_link.cpp` + màn TRAMMING:
+> `cydlcd_f411cc_lvgl` **157.152 B / 262.144 (59,9 %) · RAM 52.608 B / 131.072 (40,1 %)**;
+> `cydlcd_f407vgz_lvgl` **158.756 B (15,1 %) / 81.328 B (62,0 %)**;
+> `cydlcd_esp32` **463.101 B (35,3 %) / 102.044 B (31,1 %)** (vẫn bật `-DCYDLCD_CYD_DEBUG=1`).
+> Màn TRAMMING thêm **~2,6 KB flash** (F407: 156.136 → 158.756) — chủ yếu là code LVGL cho 4 nút +
+> 6 nhãn, phần link TRAM chỉ vài trăm byte.
+
+> 🆕 **2026-10-14 — ĐO LẠI sau refactor (bỏ ESP3D + Bluetooth, đổi tên `panel` → `cydlcd`)**:
+> `cydlcd_esp32` = **Flash 1.164.593 B / 3.145.728 (37,0 %)** · **RAM 94.324 B / 327.680 (28,8 %)**
+> (bảng phía trên đo bằng bảng phân vùng **`default.csv`** cũ 1,25 MB; từ 2026-10-14 env CYD dùng
+> **`huge_app.csv`** 3 MB — xem `platformio.ini` — nên **mẫu số khác**, đừng so trực tiếp).
+> So với lần đo 463.101 B: flash **giảm ~2 KB** vì đã xoá hẳn 2 đường upload cũ, và RAM **giảm ~7 KB**
+> (không còn đệm/Bluedroid). Vẫn bật `-DCYDLCD_CYD_DEBUG=1`. Env STM32 chưa đo lại sau refactor
+> (env `cydlcd_f103c6` build được; 2 env `*_lvgl` cho STM32 **lâu nay chưa từng link được** —
+> lỗi `_fstat`/`_isatty` của newlib, xem cạm bẫy 43 ở `README.md` gốc).
+> Build này **vẫn giữ nguyên** `-DCYDLCD_CYD_DEBUG=1` như trước (không phải số của bản dùng thật).
+
+> Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/lv_conf.h`
+> từ 20 KB lên 28–32 KB (F411 còn 128 KB RAM; **buffer vẽ giờ là 320×40×2 = 25,6 KB** vì màn ngang).
+
+> ⚠️ **Mọi số của env `cydlcd_esp32` ở trên đo TRƯỚC 2026-10-14** — tức là lúc firmware còn **cả WiFi lẫn
+> Bluetooth Classic**. Sau khi xoá hẳn đường Bluetooth (§9.23) thì flash/RAM của env này **nhỏ hơn** (bớt
+> cả stack Bluedroid); số mới **chưa đo lại** trong tài liệu này.
+
+---
+
+## 2. Nối dây
+
+### 2.1 UART màn hình CYD ↔ Marlin (MKS Monster8 V2)
+
+Marlin đang dùng `SERIAL_PORT -1` (USB CDC) để nói với PC → còn UART trống. **Chân nối phụ thuộc
+kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
+
+| Kiểu | UART (Marlin) | Chân Monster8 | Vì sao |
+|---|---|---|---|
+| **PUSH** (`CYDLCD_SERIAL_UI`) | **USART1 (mặc định hiện nay)** hoặc USART3 | **USART1: PA10 (RX) / PA9 (TX) = header MKS WiFi** ← *đang dùng* · USART3: PD9 (RX) / PD8 (TX) = EXP1 chân 5/6 | Chọn bằng `-DCYDLCD_SERIAL_PORT=1` (USART1, header WiFi — dây đang đi sẵn) hoặc `=3` (USART3/EXP1, chỉ khi đã tháo màn 12864 vì EXP1_06 = `NEOPIXEL_PIN`). Cờ build nằm ngay trong `ini/features.ini` (key `CYDLCD_SERIAL_UI`). ⚠️ **Trước 2026-10-13 PUSH chỉ chạy USART3** ⇒ màn hình CYD báo `NO LINK` dù dây đúng ở header WiFi (đã sửa) |
+| **TRAM** (`CYDLCD_TRAM_LINK`) | **USART1** | **PA10 (RX) / PA9 (TX) = header MKS WiFi** | USART3 **hết chân TX rảnh** (PD8 = `NEOPIXEL_PIN`, PB10 = `HEATER_BED`, PC10 = `SD_SCK`); PA9/PA10 **hoàn toàn rảnh** (`//#define WIFI_SERIAL 1 // USART1` đang comment trong `pins_MKS_MONSTER8_V2.h`) |
+
+**Kiểu TRAM (khuyến nghị cho Tramming Wizard) — KHÔNG đụng PD8/NeoPixel, KHÔNG đụng chân reset màn 12864:**
+
+| Monster8 (header **MKS WiFi**) | Chân MCU | Nối tới màn hình CYD |
+|---|---|---|
+| chân RX | **PA10 = USART1_RX** | ← **TX của màn hình CYD** (CYD: GPIO22) |
+| chân TX | **PA9 = USART1_TX** | → **RX của màn hình CYD** (CYD: GPIO35) |
+| GND | GND | GND (**bắt buộc nối chung**) |
+
+* Dây **chéo TX↔RX**; baud 250000 hai bên; màn hình CYD cấp nguồn riêng (USB/5V) — **không** lấy 5V từ
+  header vào chân 3V3 của CYD.
+* ⚠️ Header MKS WiFi còn **3 chân khác — KHÔNG dùng**: `IO0` = **PB14**, `IO1` = **PB15**
+  (`WIFI_IO0_PIN`/`WIFI_IO1_PIN`, còn gọi là UDISK), và `RESET` = **PD14** (`WIFI_RESET_PIN`). Ba chân
+  này **không phải UART** — PB14/PB15 là USB OTG_HS nên **không có AF USART**, và STM32F4 **không có
+  software-serial tổng quát** trong Marlin ⇒ nối vào cũng không chạy. Chỉ lấy đúng **TX / RX / GND**.
+* Build flag cho USART1 nằm trong **`ini/features.ini`** (key `CYDLCD_TRAM_LINK`):
+  `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9` ⇒ **chỉ** được thêm khi bật
+  `#define CYDLCD_TRAM_LINK`, nên bản build hiện tại không đổi gì.
+* ⚠️ Nếu định bật **cả** `WIFI_SERIAL` (USART1) thì phải chọn cổng khác — `cydlcd_tram_link.h` có
+  `#error` chặn sẵn.
+
+**Kiểu PUSH (`CYDLCD_SERIAL_UI`) — USART3, chỉ dùng khi chấp nhận tắt màn 12864:**
+
+| Monster8 EXP1 | Chân MCU | Nối tới màn hình CYD |
+|---|---|---|
+| chân 5 | PD9 = USART3 **RX** | ← TX của màn hình CYD |
+| chân 6 | PD8 = USART3 **TX** | → RX của màn hình CYD |
+| chân 9 | GND | GND (bắt buộc nối chung) |
+| chân 10 | 5V | 5V *nếu* board màn hình CYD có regulator 5V→3V3 |
+
+* Chiều chân lấy từ `buildroot/share/PlatformIO/variants/MARLIN_F4x7Vx/variant.h`:
+  **PD8 = USART3_TX, PD9 = USART3_RX** ⇒ dây phải **chéo** (TX↔RX), **chung GND**.
+* ⚠️ **USART2 (PA2/PA3) của Monster8 đã bị dùng** cho `HEATER_2` (PA3) và `FAN0` (PA2).
+* ⚠️ **PD8 còn là `NEOPIXEL_PIN` = `EXP1_06_PIN`** (đèn nền RGB của màn 12864 V3, `NEOPIXEL_LED`
+  đang bật trong `Configuration.h`) ⇒ phải tắt cả `MKS_MINI_12864_V3` **và** `NEOPIXEL_LED`
+  (xem §4).
+* **Màn hình CYD (ESP32)**: UART đến Marlin = `Serial2`, mặc định **GPIO22 = TX**, **GPIO35 = RX**
+  (chân khai trong `src/cydlcd_config.h`: `CYDLCD_UART_TX` / `CYDLCD_UART_RX`). Nối **chéo** với
+  USART3 (PD9/PD8) ở kiểu PUSH, hoặc với **USART1 (PA10/PA9)** ở kiểu TRAM — xem bảng đầu §2.1.
+  ESP32 là 3V3 nên **không** nối 5V từ EXP1 vào chân 3V3 của CYD; cấp nguồn cho CYD bằng USB hoặc
+  5V riêng. `GPIO35` chỉ **đọc** được nên đúng cho chiều RX.
+* ⚠️ **CYD có 3 connector 4 chân giống hệt nhau — cắm nhầm là im lặng hoàn toàn** (gặp thật
+  2026-10-13: `linked=0 rx=0 err=0`, tưởng hỏng dây/baud, thực ra đang cắm vào cổng serial):
+
+  | Connector | Chân (thứ tự trên board) | Dùng cho link? |
+  |---|---|---|
+  | **P3** | `GND` · **`IO35`** · **`IO22`** · `IO21` (**= TFT_BL, đèn nền — ĐỪNG nối**) | ✅ **đúng cổng** (có cả IO22 + IO35) |
+  | **CN1** | `GND` · `IO22` · `IO27` · `3.3V` | ⚠️ chỉ có IO22, **không** có IO35 |
+  | **P5** (một số bản in là **P1**, nằm cạnh USB-C) | `VIN` · `IO1/TX` · `IO3/RX` · `GND` | ❌ **KHÔNG** — đây là **UART0** nối với **CH340/USB**; firmware dùng `Serial2` nên **không bao giờ** thấy gì dù dây đúng chiều |
+
+  Thứ tự chân và tên connector theo tài liệu cộng đồng CYD
+  ([PINS.md](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display/blob/main/PINS.md)):
+  `IO35` (input-only) và `IO22` là 2 chân cạnh nhau trên **P3**, chân thứ 4 của P3 là **IO21 = đèn nền**
+  (cắm vào đó thì màn **tối/nháy** — dấu hiệu nhận biết ngay). Muốn dùng **CN1** thì phải build lại với
+  `-DCYDLCD_UART_RX=27` (firmware TRAM dùng `IO27` làm RX thay cho `IO35`).
+  Cách tìm chân ①(GND) khi board không in nhãn: đo **thông mạch với vỏ USB-C**; hai chân liền kề là
+  IO35 rồi IO22.
+* **Test riêng phía màn hình CYD (không cần board in)**: cắm jumper **IO22 ↔ IO35** trên P3 rồi xem log USB
+  (`monitor_speed 115200`): `cydlcd_link` tự nghe thấy chính nó ⇒ `rx` **tăng** = UART + 2 chân OK.
+  `rx=0` **và** `err=0` = **không có tín hiệu** ở chân RX (sai cổng/chưa chung GND); nếu sai baud thì
+  `err` sẽ tăng chứ không phải 0.
+
+### 2.2 Màn hình (khi đi dây với board STM32)
+
+| Chân màn hình CYD | Chức năng | Ghi chú |
+|---|---|---|
+| PA5 / PA7 / PA6 | SPI1 SCK / MOSI / MISO | ILI9341 |
+| PA4 / PB0 / PB1 | CS / DC(RS) / RST | |
+| PB10 | Backlight (BL) | `TFT_PIN_BL -1` nếu BL nối thẳng 3V3 |
+| **PA2 / PA3** | **USART2 TX / RX → mainboard** | đây là `Serial` trong `cydlcd_config.h` |
+| PB12 / PB13 / PB14 | Encoder A / B / SW (nút) | dùng `INPUT_PULLUP` (không cần cho CYD) |
+
+Với **CYD**: màn + cảm ứng đã nối sẵn trong board, cấu hình nằm ở
+`cydlcd/tools/tft_setup_cyd/User_Setup.h` — **bắt buộc** nạp file này bằng
+`-DUSER_SETUP_LOADED=1 -include tools/tft_setup_cyd/User_Setup.h` (đã có trong env).
+
+* **Driver (2026-10-13)**: board này dùng **ST7789** (`#define ST7789_DRIVER` + `TFT_INVERSION_ON`);
+  nếu là bản ILI9341 thì đổi đúng 1 dòng thành `ILI9341_2_DRIVER` (và bỏ `TFT_INVERSION_ON` nếu
+  trắng/đen bị ngược).
+* **Chân**: LCD MOSI 13 / MISO 12 / SCLK 14 / CS 15 / DC 2 / RST −1; **đèn nền `TFT_BL` = GPIO21**
+  (CYD/ST7789 bản phổ biến) **hoặc GPIO27** (nhiều bản ST7789 khác) — dò bằng `-DCYDLCD_CYD_DEBUG=1` + thử lần lượt.
+  Touch: T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36 (có thể đổi bằng macro
+  `CYDLCD_CYD_TOUCH_*` trong `cydlcd_config.h`).
+
+---
+
+## 3. Phía Marlin — 2 cách bật
+
+### 3.1 Kiểu TRAM (khuyến nghị — giữ nguyên màn 12864 + menu MarlinUI)
+
+```powershell
+# 1) thêm ĐÚNG 1 dòng vào Marlin/Configuration.h (bất kỳ chỗ nào, ví dụ ngay dưới khối BAUDRATE):
+#        #define CYDLCD_TRAM_LINK
+# 2) build + nạp Marlin như bình thường:
+pio run -e mks_monster8 -t upload
+```
+
+* **Mặc định TẮT** (`//#define CYDLCD_TRAM_LINK` trong `src/feature/cydlcd_tram_link.h`). Chưa thêm
+  dòng nào ⇒ **không** biên dịch module, **không** chiếm UART, **không** tốn flash, và
+  `Configuration.h`/`Configuration_adv.h` **giữ nguyên 100%** so với bản 12864.
+* Khi bật: `MKS_MINI_12864_V3` **vẫn bật**, `CUSTOM_MENU_MAIN` **vẫn bật**, `LED_CONTROL_MENU`
+  **vẫn bật**, `NEOPIXEL_LED` **vẫn bật** (link dùng **USART1/PA9-PA10**, xem §2.1) ⇒ **không mất
+  menu MarlinUI nào**.
+* Build flag USART1 được thêm tự động từ `ini/features.ini` (key `CYDLCD_TRAM_LINK`) — đúng như khi
+  bạn bật định nghĩa đó, không cần sửa `platformio.ini`/`stm32f4.ini`.
+* Số liệu build thật (`pio run -e mks_monster8`, đo 2026-10-13):
+
+| | Flash | RAM |
+|---|---|---|
+| `CYDLCD_TRAM_LINK` **tắt** (mặc định, 12864) | **267.576 B** (25,5 %) | **12.220 B** (9,3 %) |
+| `CYDLCD_TRAM_LINK` **bật** | **270.592 B** (25,8 %) | **12.828 B** (9,8 %) |
+
+⇒ tính năng thêm **~3,0 KB flash / ~0,6 KB RAM** khi bật; tắt thì **không có gì thay đổi**.
+
+### 3.2 Kiểu PUSH (`CYDLCD_SERIAL_UI`) — chỉ khi chấp nhận mất menu 12864
+
+```powershell
+pwsh cydlcd/tools/set_cydlcd_mode.ps1 -Mode on     # bat màn hình CYD:  CYDLCD_SERIAL_UI + tat man cu
+pwsh cydlcd/tools/set_cydlcd_mode.ps1 -Mode off    # tra ve man 12864 nhu cu
+pwsh cydlcd/tools/set_cydlcd_mode.ps1 -Mode status # xem dang bat gi
+pio run -e mks_monster8 -t upload                    # nap Marlin
+```
+
+Script đổi **5 dòng** trong `Marlin/Configuration.h` + `Marlin/Configuration_adv.h`:
+
+| Dòng | Chế độ màn hình CYD | Vì sao |
+|---|---|---|
+| `CYDLCD_SERIAL_UI` | **bật** | ExtUI `cydlcd_serial`: đẩy frame xuống màn hình CYD |
+| `MKS_MINI_12864_V3` | tắt | ExtUI chiếm `MarlinUI::init_lcd()/update()` → không thể vừa có màn gắn trực tiếp (lỗi `multiple definition of MarlinUI::init_lcd()`) |
+| `NEOPIXEL_LED` | tắt | PD8 (đèn nền RGB của màn V3) trùng USART3_TX |
+| `CUSTOM_MENU_MAIN` | tắt | ExtUI không dùng hệ thống menu của MarlinUI — menu tuỳ biến chuyển sang màn hình CYD (màn **CUSTOM** có đúng 2 nút cũ: `G34 Q99`, `M22`+`M21`) |
+| `LED_CONTROL_MENU` | tắt | menu đèn LED thuộc MarlinUI |
+
+Cần thêm trong `ini/stm32f4.ini` (env `mks_monster8`) — **đã có sẵn** trong repo:
+
+```ini
+-DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8
+```
+
+> 📌 **`CUSTOM_MENU_MAIN` bị tắt ở chế độ màn hình CYD** — đây là thoả hiệp tạm thời. 2 mục menu cũ đã
+> chuyển sang màn **CUSTOM** của màn hình CYD, nhưng muốn *thêm mục mới* thì hiện phải sửa code màn hình CYD.
+> Kế hoạch làm lại (Marlin đẩy danh sách menu xuống màn hình CYD): **`docs/issues/0001-cydlcd-serial-ui-tat-custom-menu.md`**.
+> 👉 **Từ 2026-10-13 không cần thoả hiệp này nữa nếu chỉ cần Tramming Wizard** — dùng **kiểu TRAM**
+> (§3.1 + §5.6): màn 12864 + toàn bộ menu MarlinUI giữ nguyên.
+
+Số liệu build thật của **kiểu PUSH** (`pio run -e mks_monster8`):
+
+| | Flash | RAM |
+|---|---|---|
+| Chế độ màn 12864 (mặc định) | 266.536 B (25,4 %) | 12.192 B (9,3 %) |
+| Chế độ màn hình CYD `CYDLCD_SERIAL_UI` | 196.444 B (18,7 %) | 11.672 B (8,9 %) |
+
+---
+
+## 4. Giao thức PUSH (frame nhị phân)
+
+Định nghĩa duy nhất ở **`src/cydlcd_protocol.h`** — file này **dùng chung y nguyên** với
+`Marlin/src/lcd/extui/cydlcd_serial/cydlcd_protocol.h` (sửa một bên thì copy sang bên kia).
+
+```
+[0]=0xA5 [1]=0x5A [2]=type [3]=seq [4]=len [5..]=payload [5+len]=CRC8(poly 0x07)
+```
+
+Marlin → màn hình CYD: `HELLO` `STATUS` `TEMPS` `POSITION` `PROGRESS` `MESSAGE` `FANS` `MESH` `FILES`
+`EVENT` `SETTING` `PROMPT` `PONG`.
+Màn hình CYD → Marlin: `GCODE` (hành động), `REQUEST` (xin file/mesh/settings/FULL), `PING`, `ANSWER`.
+
+Số nguyên little-endian; nhiệt độ = °C×100 (i16), vị trí = mm×1000 (i32), phần trăm = %×100.
+Marlin đẩy `STATUS`+`TEMPS`+`POSITION` mỗi 250 ms, `PROGRESS` mỗi 1 s khi đang in, và các sự kiện
+ngay khi xảy ra; màn hình CYD gửi `PING` 1 s/lần để hai bên biết còn sống (mất liên kết sau 3 s).
+
+### 4.1 Kiểm thử trên máy tính (không cần board)
+
+```powershell
+pwsh cydlcd/tools/run_host_test.ps1
+```
+
+Chương trình `tools/test_cydlcd_link.cpp` dùng **đúng** bộ tạo/giải frame trong
+`src/cydlcd_protocol.h` và nạp trực tiếp `src/cydlcd_link.cpp` với một UART giả → kiểm luôn
+đường nhận + phân tích frame. Hiện có **40 kiểm tra**: HELLO/STATUS/TEMPS/POSITION/PROGRESS/
+FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, và nhóm chịu lỗi (rác trước
+frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần chạy đầu đã bắt được **2 lỗi thật**
+(lệch offset 2 byte của `feed/flow %`, và điều kiện gửi PING sai) — nay **40/40 pass**.
+
+> **2026-10-13 — thêm nhóm test cho TRAM** (`src/tram_link.cpp` + `src/tram_protocol.h`): **+35 kiểm
+> tra** (tổng **~75**): định dạng số `tram_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse
+> round-trip** đầy đủ trường, đọc được **dòng tối thiểu** (thiếu 3 trường mở rộng) và **từ chối
+> dòng sai**, `tram_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
+> với frame PUSH** (byte `T`/`TRAM` trong payload **không** bị ăn mất), và việc **ngừng gửi PING**
+> khi đã vào chế độ TRAM.
+### Gửi lệnh G-code/M-code từ PC xuống Marlin (2026-10-13)
+
+Hai cách, dùng khi muốn thử lệnh **y như bấm nút trên LCD**:
+
+1. **`serial-console.ps1`** (gốc repo — công cụ khuyến nghị, luôn gửi **CRLF** và bật **DTR**):
+   ```powershell
+   pwsh -File D:\Marlin\serial-console.ps1                          # qua màn hình CYD (COM7 @115200)
+   pwsh -File D:\Marlin\serial-console.ps1 -Port COM4 -Baud 250000  # thẳng vào Marlin (USB)
+   ```
+   Gõ `G28`, `G35`, `M220 S100`, `G91` → `G1 X10 F600` → `G90`, … ; gõ `exit` để thoát.
+2. **Terminal ngoài**: PuTTY (COM7, 115200, 8N1, bật *Implicit CR in every LF*) hoặc PlatformIO
+   `pio device monitor -p COM7 -b 115200`. ⚠️ Nếu terminal chỉ gửi `\r` thì các lệnh gõ liên tiếp
+   sẽ **dồn thành 1 dòng** (xem README gốc, cạm bẫy 40) — firmware màn hình CYD nay đã chấp nhận **cả `\r`
+   và `\n`**, nhưng vẫn nên dùng CRLF.
+
+> ⚠️ **Máy này chưa chạy được `run_host_test.ps1`** (không có `g++`/MinGW trên PATH; script cần
+> `pwsh`). Đã kiểm bằng `arm-none-eabi-g++ -fsyntax-only -Wall -Wextra` → **0 lỗi, 0 cảnh báo**;
+> muốn chạy thật thì cần cài MinGW (`winget install BrechtSanders.WinLibs.POSIX.UCRT`) rồi chạy
+> `pwsh cydlcd/tools/run_host_test.ps1`.
+
+---
+
+## 5. Điều khiển trên màn hình CYD (UI LVGL — **kiểu Marlin**)
+
+> **2026-10-13** (commit `1edfd7aa0b`): UI LVGL làm lại **theo đúng màn TFT ILI9341 của Marlin**
+> (`Marlin/src/lcd/tft/ui_320x240.cpp` + `tft_color.h`) và chạy **màn NGANG 320×240**:
+> bỏ thanh 8 nút ở đáy, thêm **màn MENU dọc kiểu Marlin**, dùng **icon thật của Marlin**
+> (bitmap GREYSCALE4 → LVGL, §5.2) và thêm **hiệu chuẩn cảm ứng 4 góc** cho board có touch (§5.5).
+
+| Thao tác | Việc |
+|---|---|
+| Xoay encoder (hoặc chạm trên CYD) | di chuyển focus trong màn hình |
+| Bấm encoder (hoặc chạm nút) | chọn |
+| Nút **BACK** ở **góc phải dòng tiêu đề** | lùi 1 cấp: màn con → MENU → STATUS (màn STATUS — gốc — không có BACK) |
+
+* **Luồng màn hình**: `STATUS` —(nút **SETTINGS** góc phải) → `MENU` —(chọn dòng) → màn con
+  —(**BACK**)→ `MENU` —(**BACK**)→ `STATUS`. Trên STATUS các khối cũng là **nút**:
+  đầu in/bàn in/quạt → TEMP · hàng XYZ → JOG · SD → FILES · FR/FL → FEED/FLOW · SETTINGS → MENU.
+* **Mọi màn trừ STATUS** dùng chung **1 dòng tiêu đề** `[tên màn] …… [LINK / NO LINK] [BACK]`
+  (MENU cũng vậy — không còn BACK riêng, không còn tiêu đề trùng).
+* **Đã bỏ** thanh 8 nút ở đáy: BACK nằm ở dòng tiêu đề, và STATUS (màn gốc) dùng kín 320×240 như
+  màn Marlin. (Dòng *"bấm giữ (>0,7 s) → quay về STATUS"* trong tài liệu bản cũ **không đúng với UI
+  LVGL** — bản cũ cũng không có thao tác này; giữ ghi chú ở đây để khỏi đi tìm lại.)
+
+### 5.1 Màn STATUS — bố cục y nguyên màn TFT của Marlin
+
+Toạ độ lấy nguyên từ `Marlin/src/lcd/tft/ui_320x240.cpp` (cùng 320×240), màu theo `tft_color.h`
+(nền `#1E156E`, COLD/FAN aqua, HOTEND scarlet, HEATED_BED dark-orange, AXIS_HOMED trắng,
+AXIS_NOT_HOMED vàng, RATE_100 xanh lá, RATE_ALTERED vàng, PRINT_TIME aqua, PROGRESS_BAR xanh dương):
+
+| Khối | Vị trí / nội dung |
+|---|---|
+| 3 ô nhiệt + quạt (64×100) | x = **21 / 127 / 234**: **đầu in (E0)** · **bàn in (BED)** · **quạt (FAN)** — target ở y=8, **icon 64×64** ở y=18 (quạt y=10), nhiệt độ hiện tại ở y=72; đổi màu + đổi icon theo nhiệt độ/tốc độ |
+| Hàng **XYZ** | khung (4, 103, 312, 24); chưa home → hiện `?` màu vàng (`AXIS_NOT_HOMED`), khung đổi màu theo liên kết |
+| **FR / FL** | (70, 136) và (170, 136), **icon 32×32** + `%`; xanh lá khi đúng 100 %, vàng khi khác |
+| **SD / SETTINGS** | 2 nút **icon 64×64** ở (0, 130) và (256, 130) |
+| Thời gian in | (96, 176, 128, 20) — `đã in / còn lại` |
+| Thanh tiến độ | (4, 198, 312, 9) + `%` ở (226, 176) |
+| Dòng trạng thái | (0, 216, 320, 20) — `STATE  tên file` hoặc `NO LINK` |
+
+### 5.2 Icon thật của Marlin (`src/ui_lvgl_icons.h`)
+
+Icon **không còn** là hình vẽ lại bằng LVGL: `cydlcd/src/ui_lvgl_icons.h` chứa **10 icon
+64×64 / 32×32 chuyển nguyên từ bitmap GREYSCALE4 của Marlin** (`Marlin/src/lcd/tft/images/*.cpp`)
+sang `LV_IMG_CF_ALPHA_4BIT`, rồi **đổi màu lúc chạy** bằng `lv_obj_set_style_img_recolor()` +
+`recolor_opa = LV_OPA_COVER`.
+
+| Nguồn trong Marlin | Icon xuất ra | Dùng ở |
+|---|---|---|
+| `hotend_64x64x4.cpp` | `ui_icon_hotend` | ô đầu in (STATUS) |
+| `heated_bed_64x64x4.cpp` | `ui_icon_bed`, `ui_icon_bed_heated` | ô bàn in — tắt / đang nung (target > 0) |
+| `fan_64x64x4.cpp`, `fan_slow_64x64x4.cpp`, `fan_fast_64x64x4.cpp` | `ui_icon_fan`, `ui_icon_fan_slow`, `ui_icon_fan_fast` | ô quạt — theo tốc độ (0 / <50 % / ≥50 %) |
+| `sd_64x64x4.cpp` | `ui_icon_sd` | nút SD |
+| `settings_64x64x4.cpp` | `ui_icon_settings` | nút SETTINGS |
+| `feedrate_32x32x4.cpp`, `flowrate_32x32x4.cpp` | `ui_icon_feedrate`, `ui_icon_flowrate` | FR/FL trên STATUS + hàng FEED/FLOW |
+
+**Sinh lại icon** (chạy từ **thư mục gốc repo**):
+
+```powershell
+python cydlcd/tools/make_lvgl_icons.py
+# -> Da ghi D:\Marlin\cydlcd\src\ui_lvgl_icons.h (10 icon, 17408 byte du lieu)
+```
+
+* Cần **Python 3** — script chỉ dùng `re` / `sys` / `pathlib`, **không cần Pillow** (khác
+  `tools/make_font.py`), và cần **nguồn Marlin** có sẵn ở `Marlin/src/lcd/tft/images/`.
+* Kết quả ~**17,0 KB** dữ liệu icon, nằm trong flash của màn hình CYD.
+* **KHÔNG sửa tay** `ui_lvgl_icons.h` — chạy lại script là **ghi đè**. Muốn thêm/bớt/đổi icon thì
+  sửa bảng `ICONS` trong `tools/make_lvgl_icons.py` (tên file `.cpp`, tên biến mảng, tên symbol
+  xuất ra, rộng, cao) rồi chạy lại.
+* Đầu file sinh ra có sẵn dòng cảnh báo `FILE NAY DUOC SINH TU DONG -- dung sua tay`.
+* Bảng đổi mức xám: `level ≤ 8` (nền + lớp bóng của Marlin) → **trong suốt**; `9…15` → alpha
+  `(level−8)×15/7`, nên icon hiện **giống hệt bản Marlin** khi `recolor` = màu chính và nền =
+  `COLOR_BACKGROUND`.
+* Cần **`#define LV_USE_IMG 1`** trong `src/lv_conf.h` (đã bật ở commit này; trước đây là `0`).
+
+### 5.3 Các màn
+
+| Màn | Nội dung / lệnh gửi |
+|---|---|
+| **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · Settings · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, số file, cỡ mesh, `n/33`, LINK…) |
+| **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100` |
+| **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
+| **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
+| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): `PRINT`/bấm file → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524` |
+| **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS` |
+| **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
+| **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
+| **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
+
+> 🆕 **Cập nhật 2026-10-13 (UI LVGL sau khi chuyển sang PUSH):**
+> * **TEMP** có thêm **1 hàng preset PREHEAT** đúng như bản UI cũ (`ui.cpp`/`main.cpp`): **`PLA` · `PETG` ·
+>   `ABS`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`, thêm `M106 S<fan>` **chỉ khi** fan preset > 0)
+>   và **`COOLDOWN`** (`M104 S0` + `M140 S0`). 🆕 **Từ 2026-10-14 ba preset này SỬA ĐƯỢC** (lưu NVS, xem **§9.22**):
+>   mặc định `PLA 200/60/0` · `PETG 230/60/0` · `ABS 240/60/0`, nhãn trên nút hiện luôn số đang đặt.
+> * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
+>   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện lớp phủ có **4 nút bước
+>   `0.01` · `0.1` · `1` · `10`** (nút đang chọn được tô nổi) + `-` / `+` (giữ nút = nhảy nhanh) + `OK` /
+>   `HUY` → `OK` gửi M-code tương ứng (`M92` steps · `M203` max feed · `M201` max accel ·
+>   `M205` jerk · `M851` probe offset · `M220/M221` feed/flow · `M304` PID bàn · `M104/M140/M106`
+>   nhiệt & quạt) rồi tự xin lại thông số. Hàng nút ở đáy: **`UP` · `DOWN` · `SAVE EEPROM`** (SAVE = `M500`).
+>   ⚠️ **KHÔNG còn dòng `Z offset mm`** (nó trùng `Probe Z mm` vì cùng là `probe.offset.z`, và từng gửi
+>   nhầm `M206 Z` = home offset) — chỉ dùng **`Probe Z mm` → `M851 Z`**.
+> * **Chữ tiếng Việt có dấu**: chỉ có ở **chế độ font 4** (`UI_MONO_FONT 4` — mặc định): font mono
+>   **tự sinh** `gfx4_font_robotomono` (dải `0x1EA0-0x1EF9` + `Ă ă Đ đ Ơ ơ Ư ư`) qua driver
+>   `lv_font_gfxfont` — xem `tools/ttf2gfxfont.py`. Các font sinh bằng `lv_font_conv` **đã xoá khỏi
+>   repo**; ở chế độ 0 chỉ còn Montserrat của LVGL nên **không hiện được dấu**.
+> * **FEED/FLOW**: sau mỗi lần `+/-` (gửi `M220`/`M221`) màn hình CYD **tự xin lại thông số** nên con số trên màn
+>   cập nhật ngay (trước đây bị đứng ở 100%).
+> * **JOG**: X/Y nhích ở **`F3000` = 50 mm/s** (bằng tốc độ home), Z giữ **`F600` = 10 mm/s** (trần `M203 Z10`).
+| **INFO** | 11 dong thong tin that (FW/BOARD/UI/FONT/WIFI/PROTO/MARLIN/LINK/RX-ERR/SD+SYS); khong con nut REFRESH FULL |
+
+* **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`
+  → Marlin gọi `ExtUI::setUserConfirmed()`. Thông báo (`cydlcd.message`) tự đóng sau 6 s.
+* Chữ trên màn hình là **ASCII** (font `montserrat_14` không có dấu tiếng Việt) — đó là lý do
+  nhãn màn hình viết không dấu (`NHIET DO`, `THONG SO`…).
+
+### 5.4 Encoder đọc bằng ngắt (`src/encoder.cpp`)
+
+Màn hình CYD **không polling** encoder: hai chân A/B ngắt đổi trạng thái, ISR chỉ đẩy mẫu 2 bit vào một
+**ring cố định 32 phần tử** (không heap, không STL), rồi luồng chính giải mã bằng bảng chuyển tiếp:
+chuyển tiếp **1 bit** = cạnh thật → ±1 xung (đủ `ENC_PULSES_PER_DETENT` = 4 xung = 1 nấc);
+chuyển tiếp **2 bit** (dội phím / cạnh đến lúc ring đầy) → **không đếm**, chỉ đồng bộ lại;
+quay quá nhanh trong một lần đọc → **kẹp ở `ENC_MAX_DETENTS`** (3).
+
+Lý do: mỗi lần vẽ một khối lớn (ví dụ `fillScreen` 320×240 ≈ 150 KB qua SPI) mất hàng chục ms —
+trong khoảng đó polling **không đọc được chân** nên chắc chắn mất nấc.
+
+### 5.5 Hiệu chuẩn cảm ứng 4 góc (chỉ board có touch — CYD)
+
+Cảm ứng XPT2046 trên CYD do màn hình CYD **tự bit-bang SPI mềm** (TFT_eSPI chỉ đọc được XPT2046 khi nó
+chung bus SPI với LCD, mà CYD đi dây riêng), nên hiệu chuẩn nằm **trong firmware màn hình CYD**
+(`ui_port_touch_calibrate()` — `src/ui_port_cyd_st7789.cpp`).
+
+**Cách vào** (2 đường, không cần build lại):
+
+1. Trên STATUS bấm **SETTINGS** → **MENU** → dòng **`Calibrate touch (giu 1.5s)`** — **PHẢI GIỮ TAY
+   1,5 giây rồi NHẤC** mới vào; chạm ngắn (bấm nhầm) **không làm gì** (cột phải đổi `dang giu` →
+   `NHAC TAY` để biết đã đủ lâu). Lúc rảnh cột phải ghi `NVS` nếu đã có hiệu chuẩn lưu trong flash,
+   `mac dinh` nếu đang dùng giá trị trong `cydlcd_config.h`.
+   > **Vì sao phải giữ:** trước đây chỉ cần 1 lần chạm là vào, mà ở **mỗi góc cũng chỉ cần 1 lần chạm**
+   > là được nhận và **ghi ngay vào NVS** (`touch_cal_save()` trước khi hiện kết quả) ⇒ lỡ tay trong
+   > MENU là mất hiệu chuẩn, phải giữ tay lúc cấp điện mới vào lại được.
+2. **Giữ tay trên màn hình lúc cấp điện** — màn hình CYD phát hiện `T_IRQ` mức thấp trong
+   `ui_port_input_init()` và vào thẳng chế độ hiệu chuẩn. Đây là **"thoát hiểm"** khi giá trị cũ
+   quá tệ, không chạm trúng được dòng menu.
+
+> Dòng `Calibrate touch` **chỉ hiện trên board có touch** (`ui_port_touch_cal_available()`);
+> board STM32 (chỉ encoder) không có dòng này và hàm hiệu chuẩn là hàm rỗng.
+
+**Cách làm** (làm lần lượt **TRÊN-TRÁI → TRÊN-PHẢI → DƯỚI-PHẢI → DƯỚI-TRÁI**):
+
+1. Màn hình đen hiện **tên góc** cần hiệu chuẩn + `CHAM + KEO SAT GOC NAY / ROI NHAC TAY`.
+2. Chạm vào màn hình → **CẢ MÀN HÌNH ĐỔI SANG XANH** = đã nhận (màn xanh cũng là dấu "đang lấy mẫu").
+3. **Kéo ngón tay/bút sát vào đúng góc đó**, rồi **nhấc tay** — lúc **mất cảm ứng** chính là lúc
+   chốt toạ độ: firmware lấy **cực trị (min/max)** ghi được trong cả quá trình kéo (bỏ qua mẫu
+   nhảy > 500 khi nhấc tay). Cần ≥ 5 mẫu, không đủ thì màn đỏ `QUA NGAN / NHIEU` và làm lại (tối đa
+   3 lần/góc, chờ tối đa 60 s mỗi lần chạm).
+4. Từ **4 góc**, firmware **tự suy ra** `SWAP_XY`, `INVERT_X/Y` và `XMIN/XMAX`, `YMIN/YMAX` rồi hiện
+   màn `DA LUU` (kèm 4 cặp raw của 4 góc + `cham de tiep tuc`).
+
+**Lưu ở đâu**: **NVS (flash) của ESP32** qua `Preferences`, namespace **`cydtouch`**, khoá
+`xmin/xmax/ymin/ymax/swap/invx/invy` (`touch_cal_save()`); lúc khởi động `touch_cal_load()` nạp lại
+và in `[TOUCHCAL] nap tu NVS: …`. ⇒ **Reset/mất điện không mất hiệu chuẩn, không phải build lại**
+(`erase_flash` mới xoá). Khi chưa có NVS thì dùng **giá trị mặc định trong `src/cydlcd_config.h`**:
+`CYDLCD_CYD_TOUCH_SWAP_XY 0`, `INVERT_X/Y 0`, `X 184..3866`, `Y 185..3910` — đây là **kết quả
+hiệu chuẩn thật** đã chạy tốt trên board (dòng MENU hiện `NVS`/`mac dinh` để biết đang dùng bộ nào).
+
+**Khi nào cần làm lại**: đổi/thay tấm cảm ứng hoặc board, chạm lệch rõ ở **giữa** màn hình dù 4
+góc đúng, hoặc sau khi `erase_flash`. Không cần làm lại sau mỗi lần nạp firmware thường.
+
+**Đọc thêm khi hiệu chuẩn**: bật `-DCYDLCD_CYD_DEBUG=1` (env `cydlcd_esp32`, **đang bật tạm**) →
+Serial 115200 in `[TOUCH] raw=… -> px=…` (mỗi 150 ms khi chạm), `[CAL] 1:raw=…, …` (5 cụm chạm gần
+nhất, in 1 Hz — chạm 5 điểm theo thứ tự bất kỳ rồi đọc lại lúc nào cũng được),
+`[TOUCHCAL]` khi lưu/nạp. Ngoài ra cờ này còn in reset reason, dung lượng heap, chân đèn nền và
+heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
+
+> ⚠️ **Sửa lỗi cũ**: bản trước ghi `raw_x` là trục DỌC (comment trong code bị ngược 2 kênh) nên
+> chạm bị **leo trục**. Đúng ra **`raw_x` = trục NGANG** (trái 184 → phải 3866), **`raw_y` = trục
+> DỌC** (trên 185 → dưới 3910), **cả hai đều TĂNG** theo hướng phải/xuống ⇒ không đảo trục.
+> Cách "chấm 4 góc bằng mắt" trước đây chỉ ra `332..3645 / 453..3658` (hụt vào 150–250 đơn vị ở
+> mỗi mép → lệch ở giữa màn hình); cách **kéo tới lúc mất cảm ứng** mới lấy đúng mép vật lý.
+
+### 5.6 Màn TRAMMING — Bed Tramming Wizard (kiểu TRAM, **không cần ExtUI**)
+
+> **2026-10-13**: màn mới cho màn hình riêng, dùng **chung thuật toán** với wizard trên màn 12864
+> (`Marlin/src/feature/tramming_run.cpp`). Phía Marlin chỉ cần **1 dòng** `#define CYDLCD_TRAM_LINK`
+> — **KHÔNG** phải tắt `MKS_MINI_12864_V3` / `CUSTOM_MENU_MAIN` / `LED_CONTROL_MENU`.
+
+**Vào màn:** STATUS → **SETTINGS** → MENU → dòng **`Tramming wizard`** (cột phải ghi `chua bat` /
+`san sang` / `MAX PROBING` / `mat link`).
+
+| Hàng | Nội dung |
+|---|---|
+| 1 | `MAX  IDLE  goc 2` (mode · phase · góc nozzle đang đứng) + `LINK OK` / `NO LINK` bên phải |
+| 2–3 | **4 góc, 2 góc một dòng**: ` BR  -0.012   BL  +0.021` — `*` = góc đang đứng, mm so với **mốc**; `---` = góc chưa probe được |
+| 4 | **hướng dẫn vặn vít** do **Marlin** gửi: `CW 0.150` / `CCW nhe` / `DAT` / `PROBE` / `ERR` |
+| 5 | nút **`HOME + PROBE 4 GOC`** (rộng cả dòng) |
+| 6 | **4 nút**: `PROBE` · `MAX/MIN` · `BACK` · `DONE` |
+| 7 | chú thích `DONE = goc xong \| MAX/MIN = doi moc` |
+
+**Nút `HOME + PROBE 4 GOC` gửi `R`** = home + probe lại **cả 4 góc** và **là nút khởi động**: nếu
+wizard chưa chạy thì `R` gọi `tramming_run::begin()`, đang chạy thì `restart()`. Vì vậy màn
+TRAMMING trên màn hình CYD **dùng được độc lập**, không cần mở wizard trên màn 12864 trước. Dòng 1 hiện
+`READY (bam HOME + PROBE)` khi wizard chưa chạy.
+
+> 🔀 **2026-10-13 — CHUYỂN SANG PUSH (ExtUI `CYDLCD_SERIAL_UI`)**: để màn hình CYD có **đủ dữ liệu** (nhiệt độ,
+> X/Y/Z, tiến độ + tên file, quạt, lưới bed mesh, danh sách file SD, prompt) thay vì chỉ dòng `TRAM`,
+> dự án đã bật PUSH và **tắt** `MKS_MINI_12864_V3` + `NEOPIXEL_LED` + `CUSTOM_MENU_MAIN` +
+> `LED_CONTROL_MENU` (`cydlcd/tools/set_cydlcd_mode.ps1 -Mode on`), đồng thời **comment**
+> `CYDLCD_TRAM_LINK` (2 chế độ loại trừ nhau: cùng 1 UART).
+> **Màn TRAMMING trên màn hình CYD vẫn chạy**: trạng thái wizard được Marlin gửi trong frame
+> **`CYDLCD_F_TRAM` (0x0E)** — payload là **1 dòng ASCII đúng format `tram_protocol.h`** (tái dùng
+> nguyên bộ giải `tram_status_parse()`), và lệnh của màn hình CYD đi trong frame **`CYDLCD_F_TRAM_CMD` (0x44)**
+> (`u8` ký tự `P/D/M/R/B/Q`) → `tramming_report_cmd()` phía Marlin. Nhờ vậy **không mất** wizard khi
+> đổi giao thức. Code chế độ TRAM cũ **vẫn nằm trong repo** (bật lại bằng `set_cydlcd_mode.ps1 -Mode off`
+> + `#define CYDLCD_TRAM_LINK`), màn hình CYD tự nhận cả 2 đường (`cydlcd.linked` → gửi frame; ngược lại → ASCII thô).
+
+**Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
+| Chỗ hiển thị | Nội dung | Ghi chú |
+|---|---|---|
+| **Thanh trên cùng** (mọi màn) | `LINK OK` / `LINK ERR` / `NO LINK` | **NƠI DUY NHẤT** hiện chỉ báo link — `link_state_now()`: **1** = đọc được dòng `TRAM` hợp lệ (`cydlcd.linked \|\| tram.linked`), **2** = **có byte tới nhưng không thành dòng hợp lệ** (`tram.rx_active`, nghi sai baud/khung/nhiễu), **0** = **không có byte nào** (đứt dây/sai cổng/board tắt). Trước đây chỉ xét `cydlcd.linked` nên ở chế độ TRAM **luôn** `NO LINK` dù link tốt |
+| Trang **STATUS (home)** | dòng trạng thái + viền khung XYZ | vẫn báo mất link (viền đỏ + `NO LINK`) — theo yêu cầu, giữ riêng cho trang home |
+| Màn **TRAMMING** | mode/phase/góc + dòng hướng dẫn `CW/CCW…`/`DAT` | **đã BỎ nhãn `LINK OK/NO LINK`** ở đây (trước đây hiện trùng với header) |
+| MENU dòng `Tramming wizard` | `san sang` / `chua bat` / `mat link` / `<MODE> <phase>` | trạng thái **wizard**, không phải chỉ báo link (dùng `link_ok()` để quyết định `mat link`) |
+| MENU dòng `Info` | `TRAM` / `PUSH` / `-` | giao thức đang dùng (trước đây ghi `LINK`/`NO LINK` → trùng) |
+| Màn `INFO` | `LINK: OK (TRAM) state …` | trang chẩn đoán nên vẫn ghi rõ giao thức + trạng thái |
+
+Mọi chỗ hiển thị link đều đi qua **một hàm duy nhất** `link_ok()` trong `ui_lvgl.cpp` — sửa logic link chỉ cần sửa hàm này.
+
+**Tên máy in:** ở chế độ PUSH tên lấy từ gói `HELLO` của Marlin; ở chế độ **TRAM không có HELLO** nên màn INFO hiện `FW: <CYDLCD_MACHINE_NAME> (TRAM link)` — đổi tên bằng `CYDLCD_MACHINE_NAME` trong `src/cydlcd_config.h` hoặc `-DCYDLCD_MACHINE_NAME=\"...\"` trong `platformio.ini`.
+
+**Chẩn đoán không cần thiết bị gì thêm:** log USB của CYD (115200) in **mỗi giây** một dòng:
+
+```
+[CYD] loop OK | link PUSH=0 TRAM=1 state=0 rx=0 err=0 heap=... | TRAM dong=67 loi=0 byte=4221 cach-day=97ms
+```
+
+`byte` = **tổng số byte** nhận trên chân RX (đếm cả rác), `dong` = số dòng `TRAM` hợp lệ, `loi` = dòng sai khung, `cach-day` = ms từ dòng cuối. Link tốt ⇒ `dong` tăng ~**5/giây**, `loi=0`, `cach-day` < **2000 ms** (`TRAM_LINK_TIMEOUT_MS`).
+
+**4 nút còn lại gửi đúng 1 ký tự xuống Marlin** (`tram_protocol.h`): `P` = probe lại góc đang đứng ·
+`D` = góc này xong (đi góc cần chỉnh kế tiếp; hết góc → home Z + probe lại 4 góc) · `M` = đổi mốc
+`MAX`↔`MIN` · **`BACK`** gửi `B` (thoát wizard: stow probe + đánh dấu Z chưa home) rồi về MENU.
+Ngoài ra màn hình CYD gửi `Q` khi mới vào màn. Marlin trả lời bằng **1 dòng ASCII mỗi 200 ms**:
+
+```
+TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active> <all_dat> <hint>
+```
+
+* `phase` 0 IDLE / 1 HOMING / 2 PROBING / 3 GOTO / 4 POINT / 5 AUTO · `mode` 1 = MAX (mốc `Z-MIN`),
+  0 = MIN (mốc `Z-MAX`) · `idx` = góc nozzle đang đứng · `ref` = **mốc** đang so (mm, 3 số lẻ) ·
+  `d0..d3` = độ lệch từng góc (`---.---` = chưa đo) · `A0..A3` = đã bấm DONE ·
+  `hint` = `DAT` / `CW:0.150` / `CCW:nhe` / `PROBE` / `ERR` / `-`.
+* **`hint` do Marlin tính sẵn** (dùng đúng `tramming_turn_cw` + `TRAM_DONE_MM` như màn 12864) nên
+  màn hình CYD **không** tự suy lại chiều vặn vít ⇒ số và chiều ở 2 màn luôn giống nhau.
+* Định nghĩa **dùng chung y nguyên** ở 2 nơi: `Marlin/src/feature/tram_protocol.h` và
+  `cydlcd/src/tram_protocol.h` (sửa một bên thì **copy sang bên kia**).
+* Màn hình CYD đọc dòng `TRAM …` **ngay trong vòng đọc UART của `cydlcd_link.cpp`**; byte không thuộc dòng
+  TRAM được trả lại **nguyên vẹn** cho bộ giải frame PUSH (không mất byte nào), và khi đã vào chế độ
+  TRAM thì màn hình CYD **ngừng gửi PING** (tránh byte nhị phân lọt vào bộ giải lệnh ASCII của Marlin).
+* Ở chế độ này các màn khác (STATUS/TEMP/FILES…) vẫn mở được nhưng hiện `NO LINK` — chúng cần frame
+  PUSH của `CYDLCD_SERIAL_UI`, mà 2 chế độ **loại trừ nhau** (`cydlcd_tram_link.h` có `#error` chặn).
+
+**Nối dây:** USART1 = **PA9 (TX) / PA10 (RX)** — bảng đầu §2.1.
+
+---
+
+## 6. Xử lý sự cố
+
+| Hiện tượng | Kiểm gì |
+|---|---|
+| Màn trắng / không có gì | dây SPI (SCK/MOSI/CS/DC/RST), chân BL, `TFT_ROTATION`; thử `TFT_SPI_SPEED` thấp hơn (12 MHz) nếu dây dài |
+| Header hiện `NO LINK` | **kiểu PUSH**: dây TX/RX có **chéo** không, GND chung chưa, baud 2 bên có trùng `250000`, Marlin đã bật `CYDLCD_SERIAL_UI` chưa (và đã tắt màn 12864 chưa), cờ `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_*` có trong env chưa |
+| Màn **TRAMMING** hiện `NO LINK` | **kiểu TRAM**: Marlin đã thêm `#define CYDLCD_TRAM_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `CYDLCD_TRAM_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TRAM` nào. **Trước tiên hãy chắc chắn dây màn hình CYD đang ở `P3` (IO22+IO35) chứ KHÔNG phải `P5`/`P1` cạnh USB-C** — xem §2.1; và đọc log USB: `rx=0 err=0` = không có tín hiệu (sai cổng/chưa chung GND), `err>0` = sai baud |
+| **Thanh trên cùng ghi `NO LINK` nhưng dòng MENU ghi `san sang`** | **Bình thường ở chế độ TRAM** (trước 2026-10-13 là lỗi hiển thị, đã sửa): thanh trên từng chỉ xét `cydlcd.linked` (**giao thức PUSH**) nên ở chế độ TRAM luôn `NO LINK` dù link TRAM tốt. Nay thanh trên xét **cả hai** (`cydlcd.linked \|\| tram.linked`) ⇒ hiện `LINK OK`. Nếu vẫn `NO LINK` thật thì đọc log USB: `TRAM dong=` có tăng không, `cach-day` có < 2000 ms không |
+| Cần biết **màn hình CYD có nhận byte nào không** (không cần thiết bị gì thêm) | Log USB của CYD (`115200`) in mỗi giây: `link PUSH=<0/1> TRAM=<0/1> rx-active=<0/1> … \| TRAM dong=<số dòng hợp lệ> loi=<dòng lỗi> byte=<TỔNG byte nhận> cach-day=<ms>`. Đọc: `byte=0` + `rx-active=0` = **không có tín hiệu** ở chân RX (sai dây/cổng/chưa chung GND/board tắt) · `rx-active=1` mà `dong=0` = **có byte nhưng sai khung/baud** (tương ứng `LINK ERR`) · `dong` tăng ~**5/giây** = link tốt · `cach-day` khi rảnh phải **< 2000 ms**, khi wizard **đang bận** cho phép tới **20 s** (`TRAM_LINK_BUSY_TIMEOUT_MS`) |
+| **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TRAM` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TRAM_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TRAM_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TRAM_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
+| Màn **TRAMMING** hiện `PROBE`/`ERR` mãi | góc đó chưa probe được (đầu dò lỗi/ngoài tầm) → bấm `PROBE` lại; `ERR` = lần probe vừa rồi trả `NAN` |
+| Màn hình CYD không nhận nhiệt độ/vị trí | Marlin phải build ở **chế độ màn hình CYD** (`set_cydlcd_mode.ps1 -Mode status` để xem) — nếu còn `MKS_MINI_12864_V3` thì Marlin sẽ báo lỗi SanityCheck |
+| Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/cydlcd_config.h` |
+| Nhiệt độ nhảy loạn | đường serial nhiễu: giảm baud 2 bên (`CYDLCD_MARLIN_BAUD` + `BAUDRATE_2`) hoặc dùng cáp ngắn/xoắn |
+| ESP32 build lỗi `lv_conf.h` | phải có `src/lv_conf.h` và cờ `-DLV_CONF_INCLUDE_SIMPLE -Isrc` (đã có trong env). Nếu LVGL báo `Possible failure to include lv_conf.h` thì include path sai (đừng dùng `${PROJECT_DIR}` — nó bị expand sai trong project này) |
+| CYD: chạm không ăn / lệch | TFT_eSPI giả định XPT2046 **chung bus SPI với LCD** (chỉ khác CS) nên `tft.getTouch()` **không** đọc được XPT2046 trên CYD; `ui_port_cyd_st7789.cpp` đã bit-bang SPI mềm cho touch (T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36). **Đừng sửa macro bằng tay nữa — chạy hiệu chuẩn 4 góc** (menu `Calibrate touch`, hoặc giữ tay lúc cấp điện) rồi xem **§5.5**; kết quả lưu vào NVS nên không cần build lại. Muốn thử lại đường TFT_eSPI thì `#define CYDLCD_CYD_TOUCH_USE_TFTESPI` (khi đó **không** hiệu chuẩn được) |
+| CYD: màu bị đảo | `tools/tft_setup_cyd/User_Setup.h` **đang** bật `TFT_INVERSION_ON` (ST7789 thường cần): trắng↔đen ngược thì **comment dòng đó**; xanh↔đỏ thì `TFT_RGB_ORDER TFT_BGR` |
+| CYD: không đèn nền / màn tối | `TFT_BL` mặc định **GPIO21**; nhiều bản ST7789 dùng **GPIO27** — bật `-DCYDLCD_CYD_DEBUG=1` + thử lần lượt, và thử `fillScreen(TFT_RED)` để tách lỗi đèn nền khỏi lỗi driver/SPI |
+| TFT_eSPI không thấy file setup | **bắt buộc** có `-DUSER_SETUP_LOADED=1 -include tools/tft_setup_cyd/User_Setup.h` trong `build_flags` — env CYD **đã có sẵn**; thiếu thì TFT_eSPI dùng setup mặc định (ILI9341, không có `TFT_BL`) và `ui_port_cyd_st7789.cpp` in `#warning` |
+| ESP32 build lỗi `PermissionError: [Errno 13] … _contrib\intelhex\__init__.py` | ACL của `%USERPROFILE%\.platformio` bị hỏng (esptool không chạy được) → chạy **`tools/fix_platformio_acl.ps1`** bằng PowerShell **Administrator** — xem §8 |
+| Muốn xem màn hình CYD nhận/gửi gì | bật `-DUSBD_USE_CDC -DHAL_PCD_MODULE_ENABLED` trong env F411 **và** `#define CYDLCD_DEBUG` trong `cydlcd_config.h` → log ra SerialUSB |
+
+---
+
+## 7. Về font chữ (chỉ dùng cho kiểu G-code)
+
+`src/font8x8.h` là **file sinh tự động** (Lucida Console 11px → ô 8×8) bằng
+`tools/make_font.py` (cần Pillow). Muốn đổi font/cỡ:
+
+```powershell
+python cydlcd/tools/make_font.py     # in ra bản ASCII-art để kiểm nét
+```
+
+Muốn chữ to hơn thì không cần sinh lại: driver đã hỗ trợ `print(..., size)` với `size = 2`.
+Kiểu LVGL dùng font có sẵn của LVGL (`LV_FONT_MONTSERRAT_14`, bật trong `src/lv_conf.h`).
+Còn **icon** của kiểu LVGL là file sinh tự động khác — xem **§5.2**.
+
+---
+
+## 8. `tools/fix_platformio_acl.ps1` — sửa ACL hỏng của PlatformIO (Windows)
+
+**Vấn đề nó giải quyết**: trên máy này một số thư mục trong
+`%USERPROFILE%\.platformio\packages\tool-esptoolpy\_contrib\` (`intelhex`, `ecdsa`) bị **DENY ACE** →
+**không đọc được file**, kể cả `Get-Acl`/`icacls` cũng bị từ chối. Hậu quả: `esptool.py` không chạy
+được ⇒ **PlatformIO KHÔNG build/nạp được env ESP32 (`cydlcd_esp32`)** với lỗi:
+
+```
+PermissionError: [Errno 13] Permission denied: '...\_contrib\intelhex\__init__.py'
+```
+
+Env **STM32 không dùng esptool** nên **không bị ảnh hưởng**.
+
+**Chạy khi nào**: chỉ khi build ESP32/CYD gặp đúng lỗi `PermissionError` ở trên.
+**Không bắt buộc** cho việc build bình thường — máy sạch (ACL đúng) thì không cần chạy.
+
+```powershell
+# PowerShell với quyền Administrator (bắt buộc)
+powershell -ExecutionPolicy Bypass -File D:\Marlin\cydlcd\tools\fix_platformio_acl.ps1
+```
+
+Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
+
+1. quét `~/.platformio` (`packages`, `platforms`, file ở gốc) → liệt kê mục **không đọc được**;
+2. với từng mục hỏng: `takeown` (không đệ quy) → `icacls /reset` → grant Full cho
+   **Administrators** + user hiện tại, rồi làm lại **có đệ quy**;
+3. quét lại cả cây (`takeown /R` + `icacls /reset /T` + grant) cho chắc;
+4. kiểm tra lại các file quan trọng của esptool và in `esptool.py version`.
+
+* **Không** grant cho `Everyone` — chỉ `BUILTIN\Administrators` (S-1-5-32-544) và tài khoản đang đăng nhập.
+* Tham số: `-Root <thư mục>` (mặc định `%USERPROFILE%\.platformio`) và `-SkipFullTree`
+  (bỏ bước 3, nhanh hơn — chỉ sửa các mục tìm thấy).
+* Bước 3 có thể mất 10–60 giây; script thoát với mã lỗi = số mục còn hỏng (`0` = xong).
+* Sau khi xong, build/nạp bình thường:
+  `pio run -d D:\Marlin\cydlcd -e cydlcd_esp32 -t upload --upload-port COM3`.
+
+---
+
+## 9. Màn hình CYD (ESP32): khởi động, thẻ TF, WiFi, nhận file qua web server
+
+> Đây là **ghi chép kỹ thuật của firmware màn hình CYD** (những gì đã sửa + số đo thật), không phải
+> hướng dẫn từng bước. Muốn upload file: **§10**; thẻ SD đang đi đường nào: **§12**.
+>
+> ⚠️ **2026-10-14 — đã XOÁ HẲN hai đường upload cũ**: (a) POST file lên **module WiFi rời** và
+> (b) upload qua **Bluetooth SPP**. Lý do + bảng đổi tên: xem **§9.23**. Đường duy nhất còn lại là
+> **web server WiFi trên màn hình CYD** (§9.21 + §10) ghi thẳng vào thẻ ở khe màn hình (§12).
+
+### 9.17 HOÃN INIT RA SAU KHI MÀN HÌNH ĐÃ HIỆN (boot nhanh) — đã sửa
+
+Vấn đề gốc: `setup()` làm hết ngay (**leo thang mount thẻ 20→10→4 MHz + khởi động module nhận file
+~1–1,5 s**) ⇒ màn hình chưa hiện đã chờ 2–3 s.
+
+**Cách làm:** phần nặng được đẩy ra khỏi `setup()`; `setup()` chỉ còn `cydlcd_link_begin()` +
+`ui_lvgl_begin()` (vẽ frame đầu), rồi `net_wifi_begin()` (đọc NVS, **không chặn**) và
+`net_upload_http_begin()` → `cyd_sd_begin()` (mount thẻ + dọn file tạm) + đăng ký route + `server.begin()`
++ mDNS. Nhờ vậy **loop đầu chạy ở ~0,7–0,9 s** thay vì ~2,5–3 s.
+
+* **Không còn lớp phủ “DANG KHOI TAO…”**: phần init còn lại đủ nhẹ nên không cần khoá UI lúc boot (trước
+  đây phải có vì còn cả bước khởi động module nhận file). Lớp phủ + `ui_lock()` nay **chỉ** dùng lúc
+  **ghi file vào thẻ** — xem §9.18.
+* Đo thời gian boot: đọc `t=<ms>` ở dòng `[CYD] loop OK | t=… ms | …` **đầu tiên** (log 1 Hz) ⇒ so được
+  **trước/sau**. Lúc mount thẻ, `cyd_sd_begin()`/`clean_dir()` in `[UP] …` (tốc độ, cardType, dung lượng).
+* Thẻ chưa cắm: init vẫn xong bình thường, `cyd_sd_task()` tự mount lại mỗi 2,5 s (§9.12).
+
+### 9.18 BA GIAI ĐOẠN HIỂN THỊ — INIT (không khoá) / NHẬN FILE (không khoá) / GHI VÀO THẺ (khoá UI) — đã sửa
+
+Người dùng chốt: **chỉ khoá UI khi thật cần**, và **không hiện tên file** ở bất kỳ đâu (tốn diện tích).
+
+| Giai đoạn | Lớp phủ | Khoá UI | Hiển thị |
+|---|---|---|---|
+| **INIT** (`setup()`: thẻ TF + WiFi + web server) | **KHÔNG** | **KHÔNG** | màn STATUS vẽ bình thường; COM7 in `[UP] …` / `[HTTP] web server bat …` |
+| **NHẬN FILE** (`POST /upload`, state `receiving`) | **KHÔNG có lớp phủ** | **KHÔNG** | tiến độ do **trình duyệt** vẽ (`xhr.upload.onprogress` + poll `/status`); COM7 in 1 Hz `[UP] … rx=… written=…` |
+| **GHI VÀO THẺ** (state `writing`) | toàn màn hình, nền mờ | **CÓ** | `DANG GHI VAO THE SD...` + dòng `%  KB đã ghi/tổng KB  KB/s` + thanh tiến độ |
+| Kết quả | vẫn là lớp phủ trên | không | `DA GHI VAO THE SD` hoặc lý do lỗi (`ov_set()`), rồi tự gỡ |
+
+* Chỉ lúc **ghi vào thẻ** mới `ov_create_full()` + `ui_lock(true)` (trong `cyd_sd_finish_upload()`): để
+  người dùng không bấm IN / mở trang FILES trong lúc màn hình đang ghi thẻ ⇒ **đó mới là lúc cần khoá UI**.
+* **Hợp đồng API cho nhánh UI** — `src/net_upload_http.h`:
+
+```c
+// true = ĐANG có phiên nhận/ghi file (từ lúc bắt đầu nhận tới lúc ghi xong vào thẻ).
+// Chỉ đọc biến trạng thái đã cache -> không chặn, không cấp phát.
+// UI dùng cờ này (sd_host_busy() trong ui_lvgl.cpp) để CHẶN các lệnh làm Marlin đọc thẻ
+// (M23/M24/M30, M21, mở trang FILES) trong lúc màn hình đang bận với thẻ.
+bool net_upload_active(void);
+```
+
+* Nhánh UI **không** đọc số byte trực tiếp: tiến độ chi tiết nằm ở `/status` (`state`, `rx_bytes`,
+  `total_bytes`, `written_bytes`) — xem **§9.21**; màn hình chỉ cần biết *có phiên đang chạy* hay không.
+* Khi tắt web server (`CYDLCD_WIFI_UPLOAD 0`) hoặc board khác: **stub trong `net_upload_http.cpp`** luôn
+  trả `false`; `ui_lvgl.cpp` khai báo `weak`/`extern "C"` nên mọi env vẫn build + link được.
+* Lớp phủ lúc ghi thẻ dùng thêm font **`lv_font_montserrat_20`** cho dòng trạng thái (chữ to) — font được
+  bật trong `src/lv_conf_cydlcd.h` (chỉ env CYD): tốn **flash** (~22 KB), **không tốn DRAM** vì font là `const`.
+* Vòng đời lớp phủ: tạo ở `cyd_sd_finish_upload()`, gỡ ở cuối hàm; lúc **nhận file** không tạo object LVGL
+  nào (không tốn LVGL heap).
+
+
+### 9.20 WiFi là MODULE RIÊNG (`net_wifi.cpp`, cờ `CYDLCD_WIFI_MGMT`) — đã sửa
+
+Trước đây (trước 2026-10-14) phần WiFi nằm **trong module upload qua Bluetooth**, nên khi tắt đường đó thì
+`net_wifi_state()` biến mất ⇒ icon WiFi ở header thành **xám** và không bấm vào đâu được. Nay WiFi là module
+**độc lập**: chỉ **một nơi duy nhất** (`net_wifi.cpp`) được gọi `WiFi.begin/mode/disconnect`.
+
+**Cách tách cờ** (`cydlcd_config.h`):
+* `CYDLCD_WIFI_MGMT` — mặc định **1 với board CYD**, 0 với board khác; `net_wifi.cpp` compile theo cờ này.
+* `CYDLCD_WIFI_UPLOAD 1` (mặc định với CYD) ⇒ **ép** `CYDLCD_WIFI_MGMT 1` vì web server cần `net_wifi`.
+* `CYDLCD_WIFI_MGMT 0` ⇒ `net_wifi.cpp` chỉ còn **stub** (mọi hàm trả 0/`""`/false) nên nhánh UI vẫn build.
+* `CYDLCD_WIFI_AUTOSTART` — mặc định **1**: màn hình tự vào mạng nhà ngay lúc boot (không phải chờ một phiên
+  upload nào), nên icon WiFi ở header **đúng ngay từ đầu**.
+
+**API cho nhánh UI** (`net_wifi.h`, tất cả **`extern "C"`** ⇒ symbol **không mạng hoá**; đã kiểm bằng `nm`:
+`T net_wifi_state`, `T net_wifi_scan`, … khớp khai báo `extern "C"` + weak trong `ui_lvgl.cpp`):
+
+```c
+uint8_t     net_wifi_state(void);          // 0 tat/loi, 1 dang ket noi, 2 da ket noi (cache, khong chan)
+const char *net_wifi_ssid(void);           // SSID dang ket noi ("" neu chua bat)
+const char *net_wifi_ip(void);             // "192.168.0.42" ("" neu chua ket noi)
+int8_t      net_wifi_rssi(void);           // dBm, 0 = khong biet
+int         net_wifi_scan(void);           // !!! CHAN 8-12 s (scanNetworks dong bo) - UI KHONG dung nua
+const char *net_wifi_scan_ssid(int i);     // NULL neu i ngoai khoang
+int8_t      net_wifi_scan_rssi(int i);     // 0 neu i ngoai khoang
+bool        net_wifi_connect(const char *ssid, const char *pass, bool save);  // khong chan (save=true -> NVS)
+void        net_wifi_disconnect(bool forget);                                 // khong chan
+// QUET KHONG CHAN (ui_lvgl.cpp dung bo nay, lap vao nhip 400 ms):
+int         net_wifi_scan_begin(void);     // 0 = da bat dau | -1 = dang quet roi
+int         net_wifi_scan_poll(void);      // -1 dang quet | -2 loi/qua han | >=0 XONG (so mang)
+void        net_wifi_scan_cancel(void);    // huy phien (goi khi roi trang WIFI)
+bool        net_wifi_scanning(void);
+// them (khong bat buoc): net_wifi_configured/saved_ssid/scan_max/scan_ms + net_wifi_join_temp/leave_temp
+```
+
+* **NVS**: `Preferences`, namespace `"wifi"`, khoá `ssid`/`pass`. Chưa có NVS ⇒ dùng giá trị **gợi ý mặc định**
+  `CYDLCD_WIFI_SSID_DEF`/`CYDLCD_WIFI_PASS_DEF` (= `TP-Link_31A0` / `89278062`); đổi từ trang settings ⇒ ghi NVS.
+* **Tự kết nối lại**: mất mạng thì thử lại mỗi `CYDLCD_WIFI_RETRY_MS` (8 s); cache cập nhật ở `net_wifi_task()`.
+  **Chống dội (2026-10-14)**: chỉ ép `WiFi.begin()` khi đã mất kết nối **liên tục ≥ 3 s**
+  (`CYDLCD_WIFI_DOWN_CONFIRM_MS`) và **KHÔNG bao giờ** ép trong lúc đang quét hoặc trong 20 s sau khi quét
+  (`CYDLCD_WIFI_SCAN_GRACE_MS`) — để core tự auto-reconnect, tránh WiFi chập chờn (đã gặp: màn hình CYD tự reboot).
+* **Console COM7** (test không cần UI): `WIFI?`, `WIFI SCAN` (quét **không chặn**, vẫn bơm link),
+  `WIFI ASYNC 0|1|2` (chẩn đoán), `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS), `WIFI OFF`, `WIFI FORGET`,
+  và `PRE?` / `PRE <i 0..2> <nozzle> <bed> [fan]` (preset preheat, **§9.22**).
+* **RAM tĩnh** thêm ~0,9 KB (SSID 33 + pass 65 + NVS + 16 mạng quét). Sau khi xoá Bluetooth (2026-10-14)
+  **không còn phải cân RAM giữa hai stack radio** nữa ⇒ WiFi bật thường trực, không cần bật/tắt theo phiên.
+
+#### ⚠️ Quét mạng: 3 cái bẫy đã gặp thật (2026-10-14)
+
+1. **Quét ĐỒNG BỘ chặn vòng lặp 8-12 s** (đo thật: **11,6 s** với 39 mạng; `max_ms_per_chan 150` cho 8,2 s).
+   Trong lúc đó màn hình CYD **không trả lời sector thẻ SD cho Marlin** (đang in mà quét = **hỏng bản in**) và
+   không phục vụ web server; frame PUSH còn bị mất (`err=1`). ⇒ UI **đã chuyển sang quét KHÔNG CHẶN**
+   (`net_wifi_scan_begin`/`poll`, kết quả lấy ở `page_wifi_update()`), và **từ chối quét khi Marlin đang in**.
+2. **Bẫy của core Arduino** (`libraries/WiFi/src/WiFiScan.cpp:63,144`): timeout của quét **async** =
+   `max_ms_per_chan × 20`. Với `150` ⇒ timeout **3 s** < thời gian quét thật ⇒ `scanComplete()` luôn trả
+   `WIFI_SCAN_FAILED (-2)` dù quét vẫn chạy. ⇒ đặt `CYDLCD_WIFI_SCAN_MS_PER_CHAN 600` (timeout 12 s).
+   Triệu chứng nếu quên: log `[WIFI] quet LOI` sau ~2 s, roller không có mạng nào.
+3. **`net_wifi_poll()` gọi `WiFi.begin()` giữa lúc đang quét sẽ HUỶ phiên quét** (và làm WiFi chập chờn:
+   mỗi lần `begin()` lại là một lần rớt/ nối, trong khi mDNS + web server đang mở). ⇒ `net_wifi_poll()`
+   **return ngay khi `s_scanning`**, và sau khi quét còn 20 s "ân hạn" không ép `begin()`.
+
+**Rời trang WIFI KHÔNG đụng tới WiFi**: `wifi_page_leave()` (gọi từ `show_page()` khi `p != PG_WIFI`) chỉ
+đóng bàn phím mật khẩu, ẩn lớp phủ quét, **huỷ phiên quét đang chạy** và mở khoá input. Chỉ 4 nút
+`QUET` / `KET NOI` / `NGAT` / `XOA` mới thay đổi WiFi — đúng như mong đợi "không sửa thông tin thì đừng
+reset WiFi".
+
+### 9.21 UPLOAD QUA WiFi: WEB SERVER TRÊN MÀN HÌNH CYD (`net_upload_http.cpp`, cờ `CYDLCD_WIFI_UPLOAD`)
+
+Luồng: **PC/điện thoại → WiFi → màn hình CYD ghi `/cydlcd_tmp/<tên>.tmp` trên thẻ TF → đổi tên vào **GỐC**
+thẻ → `M22`+`M21` cho Marlin mount lại + xin lại danh sách file → xoá file tạm.** Đây là **đường duy nhất**
+còn lại: đường POST sang module WiFi rời và đường upload qua Bluetooth **đã xoá 2026-10-14** (xem **§9.23**).
+
+* **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
+  (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
+  `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,
+  `CYDLCD_UPLOAD_TMP_DIR` = `/cydlcd_tmp` (Marlin chỉ liệt kê **gốc** thẻ nên không thấy thư mục này).
+* **Hợp đồng HTTP** (đã chốt với nhánh script):
+
+  | Endpoint | Trả về |
+  |---|---|
+  | `GET /` | HTML (chứa chuỗi `TBT-CYDLCD`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
+  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes`, `total_bytes`, `written_bytes`, `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `POST /upload?token=…` | `multipart/form-data`: field text `name="name"` (tên đích, **đặt TRƯỚC** phần file) + phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF) |
+
+* **Token**: query `?token=` **hoặc** header `X-CYDLCD-Token` (`CYDLCD_HTTP_TOKEN ""` = tắt kiểm, không khuyến nghị).
+* **Trả lời ngay** sau khi nhận đủ file; bước **ghi vào thẻ** (`cyd_sd_finish_upload()`) chạy ở nhịp sau của
+  `net_upload_http_task()` (có lớp phủ + khoá UI — §9.18) ⇒ trình duyệt không bị treo; client theo dõi qua
+  `/status` (`receiving` → `writing` → `done`/`error`).
+* **Không cần WiFi để “chốt” phiên**: thẻ nằm ở khe màn hình nên ghi thẻ chạy ngay khi file tạm nhận xong —
+  WiFi chỉ là đường **nhận file từ trình duyệt**. Màn hình chỉ cần ở **cùng mạng nhà** (STA) với PC/điện thoại.
+* ⚠️ **`Content-Disposition`**: phía màn hình CYD parse tên file bằng `unquote()` — nhận **có/không có** dấu
+  `"` bao quanh, KHÔNG dùng cách cắt chuỗi `substring(idx+2, len-1)` (bài học đầy đủ ở **§10.3**).
+* **Test nhanh**: xem COM7 (`[UP] wifi=2 ssid="…" ip=192.168.x.y …`) hoặc gõ `WIFI?` / `WIFI SCAN` → trên PC mở
+  `http://TBTCYDLCD.local/?token=TBT-3D-up` (hoặc `http://<ip>/`) → chọn file `.gco` → Gửi → theo dõi
+  `state`/`written_bytes`; kiểm Marlin thấy file mới (M22/M21 đã gửi) và `/cydlcd_tmp` sạch file tạm.
+### 9.22 PRESET PREHEAT SỬA ĐƯỢC (NVS `ph`) — 2026-10-14
+
+**Vấn đề**: 3 nút `PLA`/`PETG`/`ABS` ở trang TEMP trước đây **cứng trong code** (`210/60`, `240/80`, `250/100`),
+muốn đổi phải sửa `ui_lvgl.cpp` rồi nạp lại cả firmware màn hình CYD.
+
+**Cách làm bây giờ** — preset là **dữ liệu của màn hình CYD**, không phải của Marlin:
+
+| Việc | Ở đâu |
+|---|---|
+| Kho giá trị | NVS `Preferences`, namespace **`"ph"`**, khoá `h0..h2` / `b0..b2` / `f0..f2` (nozzle / bed / fan) |
+| Mặc định khi NVS trống | `PRE_H_DEF` = 200/230/240 °C · `PRE_B_DEF` = 60/60/60 °C · `PRE_F_DEF` = 0 |
+| Trần (chặn giá trị rác) | `PRE_H_MAX 300` · `PRE_B_MAX 120` · `PRE_F_MAX 255` |
+| Sửa trên màn hình | **SETTINGS** → 9 dòng mới (`PLA nozzle` · `PLA bed` · `PLA fan` ×3 profile), id **`0x4001..0x4009`** |
+| Nhãn nút TEMP | `tp_pre_sync()` → nút hiện `PLA 215/65`, `PETG 300/0`… (đổi ngay sau khi sửa, không cần khởi động lại) |
+| Console COM7 | `PRE?` · `PRE <i 0..2> <nozzle> <bed> [fan]` |
+
+* **Cơ chế "id riêng"**: Marlin **không bao giờ** gửi id `0x40xx` này. Màn hình CYD tự **bơm** 9 giá trị vào bảng
+  `cydlcd.settings[]` bằng `cydlcd_setting_set()` (`preheat_inject()`) trước khi dựng bảng, nên trang SETTINGS
+  **vẽ và sửa được như mọi dòng khác**. Khi bấm `OK`, `se_send_mcode()` thấy id `0x4001..0x4009` ⇒ **không gửi
+  M-code nào**, chỉ kẹp trần → lưu NVS → bơm lại (Marlin không hề biết tới các dòng này).
+* **Vì sao KHÔNG đẩy sang Marlin/EEPROM**: build này **`HAS_PREHEAT = 0`** (không có `HAS_MARLINUI_MENU`) ⇒
+  `M145` không được biên dịch và preset không nằm trong `settings_t`; bật lên sẽ **đổi kích thước `settings_t`
+  ⇒ đổi version/CRC EEPROM ⇒ Marlin nạp lại mặc định**, mất `M851`/PID/`M92`/`M201`/`M203`/`M205`/`M906` + lưới UBL.
+  Giữ preset ở màn hình CYD là **rẻ nhất và không rủi ro**.
+* **Nút TEMP gửi gì**: `M104 S<nozzle>` + `M140 S<bed>`, và `M106 S<fan>` **chỉ khi** fan preset > 0
+  (fan = 0 nghĩa là "không đụng tới quạt", tránh `M106 S0` tắt quạt ngoài ý muốn).
+* **Đã kiểm trên máy thật (COM7, 2026-10-14)**:
+  ```
+  >>> PRE?
+  [PRE] 0) PLA  nozzle=200 C  bed=60 C  fan=0        <- mặc định khi NVS trống
+  >>> PRE 0 215 65 30
+  [PRE] da luu 3 preset preheat vao NVS (ph)
+  [PRE] dat preset 0 (PLA): nozzle=215 bed=65 fan=30 -> OK
+  >>> PRE 1 999 0 0
+  [PRE] dat PETG: nozzle=300 bed=0 fan=0              <- 999 bi kep ve tran 300
+  ```
+  Nạp lại firmware (KHÔNG xoá NVS) → log khởi động:
+  `[PRE] preset: PLA 215/65/30 | PETG 300/0/0 | ABS 250/100/40` ⇒ **giá trị sống qua reset**;
+  `[CYD] reset reason = 1 (poweron)`, `link PUSH=1 TRAM=1 rx=1 err=0` ⇒ khởi động sạch.
+  ⚠️ `PRE <i>` chỉ **đổi preset**, KHÔNG gia nhiệt, KHÔNG chuyển động (an toàn để test khi máy nguội).
+* 🐞 **Bẫy đã gặp**: lệnh `PRE` lúc đầu đặt **lồng bên trong nhánh `WIFI`** của console nên `PRE?` không khớp,
+  bị **chuyển tiếp sang Marlin** (im lặng, coi như G-code lạ). Đã tách thành nhánh **ngang cấp** với
+  `WIFI`/`PRE` (`main.cpp`) — bài học: nhánh con phải so `s_fwd` chứ không phải `arg` đã trừ tiền tố.
+
+
+### 9.10 🔴 PANIC THẬT 2026-10-14 (`StoreProhibited EXCVADDR=0x00000000`) — nguyên nhân & cách chặn
+
+> **Ghi chú lịch sử (đọc kèm §9.23)** — panic này xảy ra lúc màn hình còn **hai stack radio**
+> (WiFi + Bluetooth Classic/Bluedroid). Đường Bluetooth **đã xoá 2026-10-14** nên **nguyên nhân trực tiếp
+> không còn tồn tại**, nhưng **thứ tự khởi động** rút ra từ đây thì vẫn đang áp dụng.
+
+**Hiện tượng (log COM7 máy thật):** sau khi WiFi bắt đầu kết nối + mount thẻ thất bại, màn hình CYD
+**reboot loop**:
+
+```
+Guru Meditation Error: Core 0 panic'ed (StoreProhibited). EXCVADDR: 0x00000000
+Backtrace: 0x40091e09(memset) <- bta_sys_init (bta_sys_main.c:171)
+           <- btu_task_start_up (btu_task.c:276) <- osi_thread_run (osi/thread.c:165)
+```
+Backtrace trỏ vào **Bluedroid** ⇒ chết ngay trong lúc stack Bluetooth khởi động, không phải lỗi UI.
+
+**Nguyên nhân (chứng minh bằng mã + disassembly thư viện đã cài):**
+
+| Bằng chứng | Ý nghĩa |
+|---|---|
+| `bta_sys_int.h`: `extern tBTA_SYS_CB *bta_sys_cb_ptr;` + `#define bta_sys_cb (*bta_sys_cb_ptr)` | `bta_sys_cb` là **con trỏ cấp phát động** (khi `BTA_DYNAMIC_MEMORY != FALSE`) |
+| `nm libbt.a` → `bta_sys_main.c.obj: 00000004 C bta_sys_cb_ptr` | Là **COMMON/BSS** ⇒ bằng **0** lúc boot, phải được gán bằng `osi_malloc` |
+| Disassembly `bta_sys_init` (libbt.a): `movi a12,0x130` (size), `movi a11,0` (giá trị), `l32i a10,a2,0` (**a10 = *bta_sys_cb_ptr**), `callx8 memset` | `memset(*bta_sys_cb_ptr, 0, 0x130)`: con trỏ còn **NULL** ⇒ **ghi vào địa chỉ 0** = đúng `StoreProhibited EXCVADDR=0x00000000` |
+| Điểm cấp phát: `bte_init.c.obj` (`BTE_InitStack`) có literal trỏ tới `bta_sys_cb_ptr` cùng loạt `bta_dm_cb_ptr`, `avdt_cb_ptr`… | Bluedroid cấp phát cả loạt CB động **không kiểm tra NULL** ⇒ thiếu RAM/phân mảnh là **PANIC**, không phải lỗi trả về |
+| `firmware.elf` trong `.pio/build` có `.flash.text` kết thúc `0x401178A3`, **không có** symbol `bta_sys_init`, còn backtrace trỏ `0x4015b630` | **ELF đó KHÔNG khớp firmware đã nạp** ⇒ muốn tra backtrace phải build sạch và giữ đúng ELF |
+
+**Thủ phạm thực tế (thứ tự khởi tạo):** code cũ gọi `WiFi.mode()+WiFi.begin()` ở **boot**, sau đó
+`SD.begin()` thất bại, rồi mới bật stack Bluetooth ⇒ **hai stack radio khởi tạo cùng lúc**
+(log `E (3457) wifi:Set status to INIT` ngay trước panic) và WiFi đã ăn ~40-50 KB heap **trước khi**
+Bluedroid cấp phát CB của nó.
+
+**Quy tắc rút ra — vẫn đang áp dụng trong `net_wifi_begin()` / `net_upload_http_begin()` / `cyd_sd_begin()`:**
+
+1. **Khởi động tuần tự, không chờ mạng**: `net_wifi_begin()` chỉ đọc NVS + gọi `WiFi.begin()` (**không chặn**),
+   rồi `net_upload_http_begin()` mới mount thẻ (`cyd_sd_begin()`) + mở WebServer + mDNS. Không bước nào chờ
+   mạng xong ⇒ boot **không phụ thuộc router**.
+2. **Thẻ SD trước mọi việc cần thẻ**: `cyd_sd_begin()` mount thẻ; không mount được thì **không chặn boot** —
+   chỉ log `[UP] CANH BAO: chua mount duoc the TF (cam the FAT32 - se tu thu lai moi 2,5 s)` và để
+   `cyd_sd_task()` thử lại (§9.12).
+3. **`sd_mount()` leo thang tốc độ 20 → 10 → 4 MHz**, log từng bước + `cardType()/totalBytes()` khi thành
+   công; thất bại thì in gợi ý: cắm thẻ / **thẻ phải FAT32** / khe TF-bus VSPI 18/19/23/5.
+4. **Không bao giờ để hai stack radio khởi tạo cùng lúc** — đây chính là điều đã dẫn tới việc **xoá hẳn
+   đường Bluetooth** (2026-10-14, §9.23). Nay WiFi là stack radio **duy nhất**, do một mình `net_wifi.cpp`
+   quản lý (§9.20).
+5. Mọi `File` (`SD.open`/`openNextFile`) đều được kiểm tra trước khi dùng; `clean_dir()`/`cyd_sd_temp_open()`
+   thoát ngay nếu `!s_sd_ready`.
+
+**Đánh đổi (nay đã hết phần lớn):** trước đây icon WiFi **xám (0)** gần như suốt thời gian và mỗi phiên phải
+chờ WiFi nối lại ~2-4 s. Nay WiFi bật từ boot nên icon ở header phản ánh **đúng** trạng thái ngay từ đầu —
+chấp nhận đánh đổi này để màn hình CYD **không thể chết vì khởi tạo radio**.
+
+**Bus SPI của thẻ không xung đột với LCD (đã kiểm lại):** `User_Setup.h:57` `#define USE_HSPI_PORT`
+⇒ TFT_eSPI chạy **HSPI**; nhánh CYD của `ui_port_cyd_st7789.cpp` chỉ dùng `s_lcd` (TFT_eSPI) + cảm ứng
+bit-bang 25/32/39/33/36, còn `SPI.beginTransaction` nằm trong nhánh **STM32**
+(`ui_port_stm32_ili9341.cpp`, `#endif // CYDLCD_USE_LVGL && !CYDLCD_BOARD_CYD`) ⇒ thẻ TF trên
+VSPI 18/19/23/5 là bus riêng.
+
+### 9.12 THE TF NÓNG: rút ra / cắm vào không cần reset
+
+| Việc | Chi tiết |
+|---|---|
+| Kiểm thẻ còn đó | mỗi **1 s** (`CYDLCD_SD_CHECK_MS`), **chỉ khi rảnh** — **không** kiểm giữa lúc đang nhận/đang ghi thẻ để không tranh SPI với chính phiên upload |
+| Phép kiểm | `SD.exists("/")` = **1 lần `f_stat` thư mục gốc** (~0,3–1 ms SPI, ~0,1 % CPU ở nhịp 1 s). **Không** dùng `SD.cardType()` vì nó trả giá trị cache |
+| Rút thẻ | `[UP] MAT THE TF: <lý do>` + `SD.end()` (ép unmount — nếu không, `SD.begin()` lần sau trả `true` ngay mà không mount lại) + nếu đang có phiên thì `cyd_sd_temp_write()` fail ⇒ phiên bị huỷ + xoá file tạm |
+| Cắm lại | tự thử mount lại mỗi **2,5 s** (`CYDLCD_SD_RETRY_MS`), log khi thành công; thất bại thì **im lặng** (chỉ log lần đầu + mỗi lần đổi trạng thái, không spam) |
+| Khi bắt đầu phiên upload | `cyd_sd_temp_open()` mount **ngay** + đòi `cydlcd.linked`; không được ⇒ lý do nằm ở `s_err` (`chua lien lac duoc Marlin` / `the TF cydlcd loi` / `Marlin dang in - khong dung the` …) và `/status` trả trong `message` |
+| Cho UI | `cyd_sd_ready()` (cache, không SPI) và `cyd_sd_retry()` (chỉ bật cờ, mount thật chạy ở vòng lặp sau — không chặn UI) |
+| Log 1 Hz | có thêm cờ `sd=1/0` |
+
+Các phiên upload vẫn luôn kiểm: Marlin **không đang in**, còn **liên lạc** được với Marlin (`cydlcd.linked`),
+mount được thẻ, và còn chỗ (**chừa 256 KB** so với kích thước khai trong `Content-Length`).
+
+> 🚀 **Cách upload duy nhất: xem §10** — PC/điện thoại gửi file cho **web server của màn hình CYD**
+> (`cydlcd-upload.ps1` / hàm `in3d`) trong mạng nhà; màn hình ghi vào thẻ ở khe màn hình rồi **tự gửi
+> `M22`/`M21`** cho Marlin. Tự dò thiết bị (cache/mDNS), theo dõi tiến độ qua `GET /status`.
+
+
+### 9.23 BẢNG ĐỔI TÊN `panel_*` → `cydlcd_*` + ĐÃ XOÁ 2 đường upload cũ (2026-10-14)
+
+**Ngày 2026-10-14 đã XOÁ HẲN hai đường upload** — code bị xoá, không còn nhánh `#if`/`#else` nào bật lại được:
+
+| Đã xoá | Gồm những gì |
+|---|---|
+| **Upload qua module WiFi ESP3D** | `net_esp3d.{cpp,h}` (phần POST multipart `/files` + probe `[ESP800]`), `tools/esp3d-upload.ps1`, khối macro `PANEL_ESP3D_*`, target `-Target esp3d`; AP `Voron2308` / IP `192.168.0.1` không còn dùng |
+| **Upload qua Bluetooth SPP** | `panel_bt_upload.{cpp,h}`, `tools/bt-upload.ps1`, `tools/bt-upload-socket.ps1`, khối macro `PANEL_BT_*`, tên thiết bị / PIN / token của đường Bluetooth |
+
+**Lý do**: (1) WiFi nhanh hơn **hàng trăm lần** (BT bị trần ~6 KB/s vì queue 512 B của Bluedroid);
+(2) tiết kiệm **~100 KB heap** (Bluedroid Classic) + **~600 KB flash**; (3) bớt **2 đường bảo trì**
+(mỗi đường có giao thức, script và cách chẩn đoán riêng) — và chính việc chạy hai stack radio cùng lúc là
+**nguyên nhân panic** ở §9.10.
+
+⚠️ **Tool CŨ không còn tồn tại**: `panel-upload.ps1`, `bt-upload.ps1`, `bt-upload-socket.ps1`,
+`esp3d-upload.ps1` — dùng **`cydlcd/tools/cydlcd-upload.ps1`** (chỉ còn `-Target cydlcd`).
+
+**Bảng đổi tên (cũ → mới)** — dùng khi đọc log / tài liệu / ghi chú cũ:
+
+| Cũ | Mới |
+|---|---|
+| thư mục `lcd_panel/` | `cydlcd/` |
+| env `panel_esp32_cyd` · `panel_f411cc` · `panel_f103c6` · `panel_f411cc_lvgl` · `panel_f407vgz_lvgl` | `cydlcd_esp32` · `cydlcd_f411cc` · `cydlcd_f103c6` · `cydlcd_f411cc_lvgl` · `cydlcd_f407vgz_lvgl` |
+| `panel_config.h` · `panel_link.{cpp,h}` · `panel_protocol.h` · `panel_port.h` · `lv_conf_panel.h` | `cydlcd_config.h` · `cydlcd_link.{cpp,h}` · `cydlcd_protocol.h` · `cydlcd_port.h` · `lv_conf_cydlcd.h` |
+| macro `PANEL_*` · hàm/biến `panel_*` · biến toàn cục `panel` | `CYDLCD_*` · `cydlcd_*` · `cydlcd` |
+| `net_esp3d.{cpp,h}` = tầng thẻ SD (mount, sector thô, file tạm, bộ đếm + log 1 Hz) | **`cyd_sd.{cpp,h}`** |
+| Đổi tên hàm/biến (trong 2 file trên): `begin/task/log` · `ready/mount_now/retry` · `temp_open/write/close/abort/path/bytes` · `push` · `raw_read/raw_write/delete` · `net_printer_busy` | `cyd_sd_begin/task/log` · `cyd_sd_ready/mount_now/retry` · `cyd_sd_temp_open/write/close/abort/path/bytes` · **`cyd_sd_finish_upload`** · `cyd_sd_raw_read/raw_write/delete` · `cyd_sd_printer_busy` (thêm `cyd_sd_last_result/last_written`) |
+| `ui_lvgl_port.cpp` (1 file cho mọi board) | **tách 2 file**: `ui_port_cyd_st7789.cpp` (CYD: TFT_eSPI + **ST7789** + cảm ứng XPT2046 bit-bang + hiệu chuẩn) và `ui_port_stm32_ili9341.cpp` (STM32 F411/F407: driver tự viết + encoder) |
+| `tft_ili9341.{cpp,h}` | **giữ nguyên tên** — nó ĐÚNG là ILI9341 và **chỉ** dùng cho 4 env STM32; CYD dùng **ST7789** |
+| `tools/panel-upload.ps1` · `panel-log.ps1` · `set_panel_mode.ps1` · `test_panel_link.cpp` | `tools/cydlcd-upload.ps1` · `cydlcd-log.ps1` · `set_cydlcd_mode.ps1` · `test_cydlcd_link.cpp` |
+| `tools/tft_setup/` (tên file `User_Setup.h` giữ nguyên — TFT_eSPI include đúng tên đó) | `tools/tft_setup_cyd/` |
+| mDNS `TBTPANEL` (`http://TBTPANEL.local/`) · chuỗi nhận dạng trong trang HTML `TBT-PANEL` | **`TBTCYDLCD`** (`http://TBTCYDLCD.local/`) · **`TBT-CYDLCD`** |
+| `/status` JSON `{"panel":"TBT",…}` · trường `posted_bytes` · giá trị `state` `posting` | `{"cydlcd":"TBT","device":"TBT-CYDLCD",…}` · `written_bytes` · `writing` (bộ giá trị: `idle\|receiving\|writing\|done\|error`) |
+| token HTTP `TBT-3D-up` | **giữ nguyên** `TBT-3D-up` (client gửi qua `?token=` hoặc header `X-CYDLCD-Token`) |
+| cache IP của tool: `%LOCALAPPDATA%\esp3d-upload` | `%LOCALAPPDATA%\cydlcd-upload\last-target.txt` (khoá `cydlcd=<ip>`; tool tự di trú cache cũ) |
+| file tạm trên thẻ `/btup/<ten>.tmp` | `/cydlcd_tmp/<ten>.tmp` (`CYDLCD_UPLOAD_TMP_DIR`) |
+
+> Phía **Marlin** (không đổi trong lần này): ExtUI `cydlcd_serial` (`Marlin/src/lcd/extui/cydlcd_serial/`),
+> `Marlin/src/sd/cydlcd_sd_uart.{cpp,h}`, `Marlin/src/feature/cydlcd_tram_link.{cpp,h}`; cờ
+> `CYDLCD_SERIAL_UI`, `CYDLCD_TRAM_LINK`, `CYDLCD_SD_OVER_UART`.
+
+---
+
+## 10. Upload G-code qua **WiFi** — PC → **web server của màn hình CYD** → **thẻ SD**
+
+> **Chỉ còn MỘT đường**: PC/điện thoại → WiFi → web server trên màn hình CYD → màn hình ghi vào thẻ ở khe
+> màn hình → màn hình gửi `M22`+`M21` để Marlin mount lại. Hai đường cũ (module WiFi rời và Bluetooth)
+> **đã xoá hẳn 2026-10-14** — xem **§9.23**. Đường này nhanh hơn hàng trăm lần và **tự tìm máy in**.
+
+Một script duy nhất:
+
+| Script | Việc |
+|---|---|
+| `cydlcd/tools/cydlcd-upload.ps1` | Gửi file lên **web server của màn hình CYD**. `-Target` chỉ nhận `cydlcd` (mặc định); mọi target khác **báo lỗi rõ ràng** ngay khi bind tham số (đường cũ đã xoá 2026-10-14 — §9.23) |
+
+### 10.1 Chọn đường nào
+
+Chỉ còn **một** đường: `cydlcd-upload.ps1 -File <file>` (mặc định `-Target cydlcd`).
+
+| | **PC → web server màn hình CYD → thẻ SD** |
+|---|---|
+| Đường đi | PC → **HTTP server của màn hình CYD** (`POST /upload`) → màn hình ghi `/cydlcd_tmp/<tên>.tmp` → đổi tên vào **gốc thẻ** → **Marlin đọc thẻ qua UART** (§12) |
+| PC phải ở mạng nào | **Cùng mạng WiFi với màn hình CYD** (mạng nhà `TP-Link_31A0`) — **không phải đổi mạng** |
+| `M22` + `M21` | **Màn hình tự gửi** sau khi ghi xong ⇒ **không cần `-InitSd`** |
+| Theo dõi tiến độ | **Có**: `GET /status` (`receiving` → `writing` → `done`/`error`, `rx_bytes`/`written_bytes`) |
+| Nhận dạng thiết bị | `GET /status` ⇒ JSON `{"cydlcd":"TBT"}` / `{"device":"TBT-CYDLCD"}` (hoặc `GET /` chứa chuỗi `TBT-CYDLCD`) |
+
+### 10.2 Hợp đồng HTTP của MÀN HÌNH CYD (client phải khớp firmware)
+
+| Endpoint | Nội dung |
+|---|---|
+| `GET /status` | `200 application/json`. **Phải trả JSON cả khi rảnh** (đang init / không có phiên ⇒ `state:"idle"`), vì client dùng chính nó để **nhận dạng màn hình CYD**. Trường nhận dạng: **`"cydlcd":"TBT"`** và **`"device":"TBT-CYDLCD"`** (hoặc chuỗi `TBT-CYDLCD` trong body). Trường tiến độ: `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes`, `total_bytes`, `written_bytes`, `file`, `result`/`message` — kèm `sd`, `wifi`, `ip`, `heap` |
+| `GET /` | Trang HTML cho điện thoại/PC gửi file (không cần app), **có chứa chuỗi `TBT-CYDLCD`** (dự phòng nhận dạng) |
+| `POST /upload?token=<token>` | `multipart/form-data`; field text **`name="name"`** = tên file đích (**đứng TRƯỚC**), phần file **`name="file"` + `filename="<tên>"`** ⇒ `200 {"status":"Ok"}` hoặc `{"status":"Error","message":"..."}` (mã lỗi: `401` sai token · `409` Marlin đang in · `400/500` lỗi thẻ/ghi) |
+| Header | Client gửi kèm **`X-CYDLCD-Token: <token>`** (firmware nhận **cả** `?token=` lẫn header) |
+| Token | `TBT-3D-up` (= `CYDLCD_HTTP_TOKEN` trong `cydlcd_config.h`); đổi được lúc chạy: `-Token <khác>` |
+
+### 10.3 ⚠️⚠️ BÀI HỌC QUAN TRỌNG: mọi giá trị trong `Content-Disposition` **PHẢI có dấu `"`**
+
+`Parsing.cpp` của **ESP32 core 2.0.17** (thư viện mà màn hình CYD dùng) cắt chuỗi theo dấu `=` **ĐẦU TIÊN**,
+**luôn bỏ 1 ký tự ngay sau `=`**, rồi bỏ **ký tự cuối**:
+
+```
+argName     = line.substring(line.indexOf('=') + 2);            // bỏ luôn 1 ký tự sau '='
+argFilename = argName.substring(idx + 2, argName.length() - 1); // bỏ luôn ký tự cuối
+```
+
+| `Content-Disposition` gửi đi | `upload.filename` nhận được | Kết quả |
+|---|---|---|
+| `name="file"; filename="benchy.gcode"` | `benchy.gcode` | ✅ đúng |
+| `name=file; filename=benchy.gcode` | `enchy.gcod` | ❌ **mất ký tự đầu + cuối** (file lên thẻ SD sai tên) |
+
+⇒ **Windows PowerShell 5.1 / .NET Framework sinh `Content-Disposition` KHÔNG có dấu `"`** cho các
+giá trị dạng token (`name`, `file`, `benchy.gcode`) ⇒ **KHÔNG dùng `Invoke-WebRequest -Form` /
+`MultipartFormDataContent`** (kể cả `-Form` cũng chỉ có từ PowerShell 6.1). `cydlcd-upload.ps1` vì
+vậy **tự dựng body multipart bằng byte** (ASCII) và gửi bằng `TcpClient` thô: `Content-Length` tự
+tính, **không** chunked, **không** `Expect: 100-continue`, và in được tiến độ %/KB/s.
+
+Kiểm chứng (đã chạy, xem §10.7): một parser chép đúng logic trên chạy trong Node cho ra
+`{"argName":"file","argFilename":"enchy.gcod"}` với body **thiếu dấu `"`**.
+
+### 10.4 Cách dò thiết bị (`cydlcd-upload.ps1`)
+
+Thứ tự (bỏ qua khi có `-NoDiscover`), mỗi ứng viên timeout **1–1,5 s**, bước quét có trần
+`-ScanBudgetSec` (mặc định 25 s). Nguồn tìm được in ra ở dòng `[cydlcd] thay <IP> (nguon: ...)`:
+
+1. `-Host` (nếu có) — **vẫn xác nhận** chữ ký;
+2. **CACHE** — IP của lần tìm **thành công gần nhất** (thêm 2026-10-14): bình thường chỉ mất
+   **~0,2–0,5 s** là xong, **không** phải mDNS / quét LAN (17–27 s). IP cũ hoặc máy đổi IP thì tự
+   rơi xuống các bước dưới rồi **ghi đè cache**. Tắt bằng `-NoCache`;
+3. **mDNS**: `TBTCYDLCD.local`, `tbtcydlcd.local`; thêm **tên CŨ** `TBTPANEL.local` / `tbtpanel.local`
+   (firmware trước 2026-10-14) để tương thích ngược;
+4. **gateway** của card mạng đang dùng (một số mạng đặt màn hình làm gateway nội bộ);
+5. **quét LAN** `/24` của card đang hoạt động, **song song** `-ScanThreads` luồng (mặc định 40):
+   lọc “port 80 mở” trước, rồi mới **xác nhận chữ ký** ⇒ nguồn `quet`;
+6. **danh sách cố định** (giữ từ thời module WiFi rời, chỉ còn là phương án cuối):
+   `192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50`.
+
+**Cache IP** ở `%LOCALAPPDATA%\cydlcd-upload\last-target.txt`, **mỗi đích 1 dòng**:
+
+```
+cydlcd=192.168.0.146
+```
+
+* Khoá `cydlcd=` được đọc cho `-Target cydlcd` (hiện là target duy nhất). Khoá **cũ** `panel=` — và cả
+  thư mục cache cũ (tên trước 2026-10-14, xem bảng **§9.23**) — **vẫn đọc được** ⇒ tool **tự di trú** sang
+  thư mục mới; các khoá khác của đường đã xoá bị bỏ qua.
+* Định dạng **cũ** (file chỉ có 1 dòng IP trần) vẫn đọc được (coi như của `cydlcd`).
+* Đo thật (2026-10-14): cache đúng → dò **0,2 s** (tổng cả phiên gửi 63 KB: **6,5 s**);
+  cache sai IP (`192.168.0.99`) → mất 1,5 s thử rồi tự dò lại **18,4 s** và ghi đè lại IP đúng;
+  `-NoCache` → vào thẳng bước mDNS như trước.
+Tối ưu: nếu `/status` **thất bại ngay ở tầng TCP** thì **không** thử tiếp `GET /` cho IP đó
+(ứng viên “chết” chỉ tốn **1** lần timeout).
+
+### 10.5 Lệnh mẫu
+
+```powershell
+cd D:\Marlin
+# 1) MẶC ĐỊNH (khuyến nghị): tự tìm màn hình CYD trong mạng nhà rồi gửi
+.\cydlcd\tools\cydlcd-upload.ps1 -File .\benchy.gcode
+.\cydlcd\tools\cydlcd-upload.ps1 -File d:\0in\V300_Part3_proj.gcode -Name PART3.GCO
+
+# 2) Ép IP màn hình CYD / đổi token / gửi thêm M22/M21 cho chắc (màn hình vốn đã tự gửi)
+.\cydlcd\tools\cydlcd-upload.ps1 -File big.gcode -Host 192.168.0.174 -Token TBT-3D-up
+.\cydlcd\tools\cydlcd-upload.ps1 -File part.gcode -InitSd -MarlinPort COM4
+
+# 3) Hàm in3d (đã cập nhật trong cả 2 profile PowerShell)
+in3d                                   # liệt kê .gcode trong D:\0in (hành vi cũ giữ nguyên)
+in3d V300_Part3_proj.gcode             # -> web server của màn hình CYD qua WiFi
+```
+
+Chuột phải `.gcode`/`.bin` (**GuiLenIn3D**) và Send-to (`cydlcd/tools/in3d-sendto.cmd`) nay đều
+gọi `cydlcd-upload.ps1 -File "%1" -Token "TBT-3D-up"` (đường duy nhất: web server của màn hình CYD).
+
+Tham số: `-File` (**bắt buộc**), `-Target cydlcd` (**target duy nhất** — target cũ đã xoá 2026-10-14 sẽ
+**báo lỗi ngay** khi bind tham số, xem §9.23), `-Host`, `-Port` (80), `-Name`, `-Token`
+(`TBT-3D-up`), `-CydlcdMarker`, `-InitSd`, `-MarlinPort` (COM4 @250000, `DtrEnable` bắt buộc),
+`-TimeoutSec` (300), `-NoDiscover`, `-NoCache`, `-ScanThreads` (40), `-ScanTimeoutMs` (1000),
+`-ScanBudgetSec` (25), `-ProbeTimeoutMs` (1500), `-StatusIntervalMs` (1000), `-StatusTimeoutSec`
+(900), `-NoStatus`.
+**Mã thoát**: `0` gửi OK · `2` lỗi phía server · `3` không tìm thấy thiết bị · `4` lỗi file/tham số.
+
+### 10.6 Mạng + `M22`/`M21`
+
+* **Màn hình CYD** vào WiFi **STA** của mạng nhà (`TP-Link_31A0`, 2.4 GHz) ⇒ PC đang ở mạng nhà là gửi
+  được ngay. Nếu màn hình CYD chưa nối được WiFi thì nó **chưa có IP** ⇒ không dò ra (xem trang STATUS /
+  `cydlcd-log.ps1`).
+* **Không cần đổi mạng, không cần AP riêng**: đường duy nhất đi qua mạng nhà. (Trước 2026-10-14, đường
+  gửi thẳng lên module WiFi rời bắt PC nối AP `Voron2308` — đã xoá cùng module, xem §9.23.)
+* **Vì sao cần `M22`+`M21`**: Marlin **không tự biết** thẻ vừa có file mới (nó còn giữ trạng thái FAT cũ) ⇒
+  màn hình gửi `M22` (nhả media) + `M21` (mount lại) + xin lại danh sách file **sau khi ghi xong** — việc
+  này nằm trong `cyd_sd_finish_upload()`, client **không phải** gửi. Vì sao Marlin đọc thẻ qua UART: **§12**.
+* ⚠️ Mở cổng COM4 (USB CDC STM32) làm **board reset** ~2,5 s rồi mới gửi `M22`/`M21` (giống
+  `send-gcode.ps1`) — đừng chạy `-InitSd` khi đang in.
+
+### 10.7 Đã thử thật những gì (2026-10, máy này)
+
+| Phép thử | Kết quả |
+|---|---|
+| Dò đầy đủ (cache → mDNS → gateway → quét 253 IP → danh sách cố định), không có màn hình CYD | **23 s** rồi **thoát mã 3**; riêng **quét 253 IP = 7,2 s** (40 luồng) — chỉ 1 IP mở port 80 (router) |
+| **Gửi lên mock HTTP server** (Node, chép đúng parser ESP32 core 2.0.17) | **exit 0**; mock xác nhận: `Content-Length` khớp, có `name="name"` **trước** phần file, `argFilename="benchy.gcode"`, `X-CYDLCD-Token` có mặt, body kết thúc `--boundary--`, **0 vấn đề**; theo dõi `/status`: `receiving` → `writing` → `done` |
+| Toàn vẹn dữ liệu (file 1.348.648 B = 1,29 MB) | **SHA256 trùng khớp** (`received/cydlcd-benchy.gcode`) |
+| Parser với body **thiếu dấu `"`** | trả về `enchy.gcod` ⇒ chứng minh §10.3 |
+| `-InitSd -MarlinPort COM99` (không có cổng) | cảnh báo rõ, **không** làm hỏng kết quả upload (exit 0) |
+| `in3d` trong cả 2 profile | parse OK; `in3d` (không tham số) **vẫn liệt kê** `D:\0in`; `in3d <file>` → web server của màn hình CYD |
+| File lớn 9.860.011 B (9,4 MB) | **exit 0**, SHA256 khớp (đo qua loopback nên tốc độ không có ý nghĩa; điểm cần kiểm là **không mất byte** ở cỡ 10 MB) |
+| `-Target` khác `cydlcd` | **báo lỗi rõ ràng ngay** khi bind tham số (`ValidateSet('cydlcd')`) — target cũ đã xoá 2026-10-14, **không gửi gì cả** |
+| `/status` báo `state=error` | thoát mã **2** (không báo thành công giả) |
+| `/status` giữ **kết quả phiên trước** (done + tên file khác) | **bỏ qua** trạng thái cũ, chờ phiên của mình; quá 30 s vẫn mơ hồ ⇒ báo “chưa xác nhận được”, thoát mã **0** (file đã lên màn hình CYD) |
+| ✅ **Đã nạp lên màn hình CYD thật** (2026-10-14) | upload qua WiFi 63.472 B → `/status` = `done` → **Marlin thấy file mới qua UART** (xem §12.2). Các phép thử còn lại ở trên chạy trên **mock cục bộ** (`%TEMP%\…\mock-target.js`, chép đúng parser của ESP32) |
+
+Chạy thật: `cydlcd-upload.ps1 -File <file>` (hoặc `in3d <file>`) → in ra
+`[cydlcd] thay <IP> (nguon: cache|mdns|gateway|quet|danh sach)` rồi tiến độ `receiving → writing → done`
+và `=> File DA DUOC GUI THANH CONG.`
+
+### 10.8 Đối chiếu với firmware màn hình CYD **đã có** trong repo (`src/net_upload_http.cpp`)
+
+Đã đọc `src/net_upload_http.cpp` + `cydlcd_config.h` và **khớp hợp đồng §10.2** (xem thêm §9.21):
+
+| Mục | Firmware | Client |
+|---|---|---|
+| `GET /status` | `{"cydlcd":"TBT","device":"TBT-CYDLCD","state":"idle\|receiving\|writing\|done\|error",…}` — **trả cả khi rảnh** (`handle_status`) | nhận dạng bằng `cydlcd`/`device`; đọc `state/rx_bytes/total_bytes/written_bytes/file/result` ✅ |
+| `GET /` | HTML PROGMEM **có chuỗi `TBT-CYDLCD`** (`handle_root`) | có, dùng làm nhận dạng dự phòng ✅ |
+| `POST /upload` | `server.on("/upload", HTTP_POST, handle_upload_done, handle_upload_stream)` | `POST /upload?token=...` + header `X-CYDLCD-Token` ✅ |
+| Token | `server.arg("token")` **hoặc** `server.header("X-CYDLCD-Token")` (`token_ok()`); `CYDLCD_HTTP_TOKEN "TBT-3D-up"` (`cydlcd_config.h`) | gửi **cả hai**, cùng giá trị ✅ |
+| Cổng / mDNS | `CYDLCD_HTTP_PORT 80`; `CYDLCD_HTTP_MDNS_NAME "TBTCYDLCD"` ⇒ `TBTCYDLCD.local` (`cydlcd_config.h`) | `-Port 80`; mDNS thử `TBTCYDLCD.local` **đầu tiên** ✅ |
+| Tên file đích | ưu tiên field text `server.arg("name")`, không có thì `up.filename`; `unquote()` bỏ dấu `"` | gửi `name="name"` **trước** + `filename="<tên>"` ✅ |
+| Mã lỗi | `401` sai token · `409` Marlin đang in (`CYDLCD_HTTP_ALLOW_WHILE_PRINTING 0`) · `500` lỗi thẻ/ghi · `400` không có dữ liệu | in gợi ý riêng cho 401/409/403, thoát mã **2** ✅ |
+| Bật/tắt | `CYDLCD_WIFI_UPLOAD 1` với CYD (`cydlcd_config.h`) | không thấy màn hình CYD thì kiểm cờ này có đang = 0 không |
+
+⚠️ **Ba việc phía firmware đã sửa** (2026-10-14) — giữ lại đây làm hồ sơ:
+
+1. **`total_bytes` luôn = 0.** `net_upload_http.cpp` đọc `s_total = up.totalSize` ở `UPLOAD_FILE_START`,
+   nhưng **ESP32 core 2.0.17 đặt `totalSize = 0`** ở trạng thái đó (`Parsing.cpp`:
+   `_currentUpload->totalSize = 0;` — nó chỉ **cộng dồn dần trong lúc ghi**) ⇒ `/status` luôn trả
+   `total_bytes: 0` (trang HTML của màn hình cũng vì thế mà thanh tiến độ chỉ chạy nhờ
+   `xhr.upload.onprogress`). **Đã sửa**: lấy tổng thật ở nhánh `UPLOAD_FILE_END` / từ `Content-Length`.
+   *Client tự chịu được*: khi `total_bytes <= 0` thì lấy **kích thước file của chính nó** làm mốc và in
+   `rx=…/<size>*` (dấu `*` = số ước lượng từ phía client).
+2. **Chú thích lệch code**: `cydlcd_config.h` ghi token nhận qua header `X-Token`, nhưng code kiểm
+   `X-CYDLCD-Token`. Client gửi theo **code** (`X-CYDLCD-Token`); chú thích đã sửa cho khỏi nhầm.
+3. **Tên file bị thêm đuôi sai** (chỉ đọc log máy thật mới thấy): `V300_Part3_proj.gcode` →
+   `...gcode.gco` — hàm `sanitize_name()` chỉ so 4 ký tự cuối với `.gco`; nay **chỉ** thêm `.gco` khi tên
+   **chưa có đuôi nào**.
+
+> Việc thứ 4 của bản cũ (đổi AP sang module WiFi rời để POST, join thất bại thì mất WiFi vĩnh viễn)
+> **không còn nghĩa**: cả macro lẫn đường đổi AP đã bị xoá 2026-10-14 (xem §9.23).
+
+
+## 11. [ĐƯỜNG LUI] THẺ SD DÙNG CHUNG với Marlin qua MUX SPI (74HC4053) — mặc định TẮT (2026-10-14)
+
+> ⚠️ Mục này **không còn dùng** (đang dùng **mục 12**: thẻ ở khe màn hình, Marlin lấy sector qua UART).
+> Giữ lại làm **đường lui duy nhất còn code** + tài liệu đấu dây nếu sau này quay lại.
+
+Quyết định của người dùng: *"dùng 4053 chia SPI để màn hình CYD ghi thẳng vào thẻ SD dùng chung với
+Marlin"*. Cờ `CYDLCD_SD_SHARED` **mặc định TẮT (`0`)**; bật bằng `-DCYDLCD_SD_SHARED=1` thì `CYDLCD_SD_UART`
+**tự tắt** (2 chế độ loại trừ nhau). Ở chế độ MUX, Marlin **vẫn tự đọc thẻ bằng SPI**; màn hình chỉ giành
+bus lúc nhận/ghi file rồi trả lại kèm `M22`/`M21`.
+
+### 11.1 Luồng mới (đã chạy thật)
+
+```
+PC/điện thoại ──WiFi──▶ màn hình CYD (WebServer, /cydlcd_tmp/<tên>.tmp) ──đổi tên──▶ /<tên>  (CÙNG thẻ SD)
+                                                    │
+                                                    └─ SD.end() + MUX ▶ Marlin + M22/M21 + xin lại danh sách file
+```
+
+Nhật ký thật (COM7, file 63.472 B):
+
+```
+[HTTP] nhan file "V300_Part3_proj.gcode" tu 192.168.0.174 (kich thuoc chua biet)
+[UP] the TF OK @ 20000000 Hz: cardType=3, tong 15257584 KB, da dung 40 KB
+[UP] don /cydlcd_tmp (truoc phien moi): xoa 0 file .tmp (0 KB)
+[UP] ghi vao /cydlcd_tmp/V300_Part3_proj.gcode.tmp (ten dich: V300_Part3_proj.gcode)
+[HTTP] nhan xong 63472 B (totalSize=63472) -> /cydlcd_tmp/V300_Part3_proj.gcode.tmp
+[UP] UI KHOA
+[UP] da doi ten /cydlcd_tmp/V300_Part3_proj.gcode.tmp -> /V300_Part3_proj.gcode (63472 B)
+[UP] UI MO KHOA
+[UP] tra bus SPI the cho MARLIN + M22/M21
+[HTTP] DONE: 63472 B -> the SD (M22/M21 da gui)
+```
+
+`GET /status` ⇒ `state=done`, `rx_bytes=63472`, `written_bytes=63472`, `result=DONE 63472` (2 s).
+Heap khi rảnh **194 KB** (trước đây 166 KB vì không còn giữ mount + poll thẻ).
+
+### 11.2 Vì sao KHÔNG dùng 74HC4052 (2×4:1) mà dùng 74HC4053 (3×2:1)
+
+| | 74HC4052 | 74HC4053 |
+|---|---|---|
+| Số cực | **2** (X, Y) — mỗi cực 4 kênh | **3** (X, Y, Z) — mỗi cực 2 kênh |
+| Đủ cho SPI 2 master? | ❌ chỉ chuyển được **2** trong 3 tín hiệu | ✅ chuyển **SCK + MOSI + CS** |
+| Dùng cho việc này | phải dùng 2 con (thừa 1 nửa) hoặc chấp nhận rủi ro | đúng 1 con |
+
+- **MISO không cần chuyển**: chỉ có **một** driver MISO (chính thẻ SD), cả hai master đều là input →
+  nối thẳng vào cả hai.
+- **CS phải chuyển**: nếu để chung, chân CS của master không được chọn (ví dụ Marlin lúc boot) có thể
+  kéo thấp → thẻ bị chọn trong khi master kia đang clock ⇒ tranh chấp.
+- **Điện áp**: 4053 chạy 3,3 V (`VCC=3V3`, `VEE=GND`, `VSS=GND`), tín hiệu 3,3 V ⇒ mức logic hợp lệ.
+- **Tần số**: giữ SPI ≤ 10 MHz cho đường dây dài (màn hình CYD đang để 20 MHz cho đường NGẮN trong board —
+  sau khi đi dây ra ngoài nên hạ `CYDLCD_SD_HZ` xuống 10 MHz nếu thấy lỗi mount).
+- **Trạng thái mặc định phải về MARLIN**: chân chọn (A/B/C nối chung) kéo xuống GND bằng **điện trở
+  10 kΩ** ⇒ khi màn hình CYD reset / mất điện / chân GPIO còn treo thì thẻ vẫn thuộc Marlin.
+
+### 11.3 Sơ đồ chân (2 cách — chọn 1)
+
+**Cách A (khuyến nghị): thẻ vẫn nằm ở khe của Marlin (MKS Monster8)**
+
+| Tín hiệu | Phía MARLIN (MKS Monster8, SD onboard = SPI3) | Phía màn hình CYD (board CYD) | Qua 4053 |
+|---|---|---|---|
+| SCK  | `PC10` (chân CLK của khe TF) | `GPIO18` | cực X |
+| MOSI | `PC12` (CMD) | `GPIO23` | cực Y |
+| CS   | `PC9` (SDSS) | `GPIO5` | cực Z |
+| MISO | `PC11` (DAT0) | `GPIO19` | **nối thẳng cả hai** |
+| Chọn | — | `GPIO27` → A/B/C (nối chung) + 10 kΩ xuống GND | INH → GND |
+| GND/3V3 | GND chung | 3V3 cấp cho 4053 | — |
+
+Ưu điểm: **Marlin không phải sửa gì** — công tắc nhận thẻ (`SD_DETECT_PIN PC4`) vẫn hoạt động, cờ
+`CYDLCD_SF_MEDIA` trong frame PUSH vẫn đúng, `isMediaInserted()` vẫn thật.
+
+#### ⚠️ Chân chọn MUX và chân ĐÈN NỀN (`IO21`) — đọc trước khi hàn
+
+Trên CYD, **`IO21` (chân thứ 4 của `P3`) = đèn nền (`TFT_BL`)**; `IO27` (chân 3 của `CN1`) **trống**.
+Hai chân này **loại trừ nhau**:
+
+* Mức chọn MUX phải là **LOW khi màn hình CYD nhường bus cho Marlin** (mặc định / 10 kΩ kéo xuống GND).
+  Nếu chân đó vẫn nối vào đèn nền thì **mỗi lần trả bus, màn hình tắt/nháy**, và lúc rảnh thì tối luôn.
+* Vì vậy: **hoặc** dùng `IO27` cho MUX (giữ nguyên đèn nền — khuyến nghị), **hoặc** dùng `IO21` cho
+  MUX thì **bắt buộc đấu đèn nền thẳng vào 3V3** (màn luôn sáng hết cỡ, không tắt được nữa).
+* Firmware đã **chặn lúc biên dịch**: nếu `CYDLCD_SD_MUX_PIN == CYDLCD_BL_PIN` thì build **báo lỗi**
+  kèm hướng dẫn. Muốn dùng `IO21` cho MUX:
+  `-DCYDLCD_SD_MUX_PIN=21 -DCYDLCD_BL_PIN=-1` (thêm vào `build_flags` của env `cydlcd_esp32`)
+  **và** đấu đèn nền vào 3V3.
+* Từ 2026-10-14 đèn nền do **firmware** điều khiển (`CYDLCD_BL_PIN`, mặc định 21): `User_Setup.h` đã
+  đặt `TFT_BL -1` để TFT_eSPI không giữ chân đó ở mức HIGH vĩnh viễn. Board ST7789 nào dùng `IO27`
+  làm đèn nền thì build với `-DCYDLCD_BL_PIN=27`.
+
+**Cách B (theo đúng câu chữ của người dùng): thẻ nằm ở khe của CYD**
+
+Giống bảng trên nhưng đảo đầu dây: SCK/MOSI/CS của Marlin (`PC10/PC12/PC9`) đi vào các cực, SCK/MOSI/CS
+của CYD đi vào cực còn lại, và chân thẻ (khe CYD) là đầu chung. **Bắt buộc sửa Marlin**:
+`SD_DETECT_PIN` phải thành `-1` (khe Marlin không còn thẻ ⇒ công tắc nhận thẻ báo "không có thẻ" ⇒
+Marlin không mount), tức thêm vào `Configuration_adv.h`:
+
+```cpp
+#define NO_SD_DETECT        // hoặc #define SD_DETECT_PIN -1  (khe Marlin khong dung nua)
+```
+
+### 11.4 Firmware màn hình CYD đã làm gì (cờ `CYDLCD_SD_SHARED`, **mặc định TẮT** với CYD)
+
+| Việc | Ở đâu |
+|---|---|
+| Chân chọn MUX (`CYDLCD_SD_MUX_PIN 27`, mức `HIGH`=màn hình CYD, `LOW`=Marlin, `CYDLCD_SD_MUX_SETTLE_MS 3`) | `cydlcd_config.h` (khối `CYDLCD_SD_SHARED`) |
+| Chặn lúc biên dịch nếu chân chọn MUX trùng chân đèn nền (`CYDLCD_BL_PIN`) | `cydlcd_config.h` (`#error` ngay dưới khối trên) |
+| Đèn nền do firmware điều khiển (`CYDLCD_BL_PIN`, `CYDLCD_BL_ON_LEVEL`, `-1` = đấu thẳng 3V3); `TFT_BL -1` | `cydlcd_config.h`, `tools/tft_setup_cyd/User_Setup.h`, `ui_port_cyd_st7789.cpp` (`ui_port_display_init`) |
+| Giành bus **chỉ khi** mount/ghi thẻ; trả bus + `M22`+`M21` + xin lại danh sách file sau khi ghi xong | `cyd_sd.{h,cpp}` (`sd_mux_cydlcd`, `sd_release_to_marlin`) |
+| KHÔNG mount thẻ lúc boot, KHÔNG kiểm tra thẻ 1 Hz khi rảnh (bus thuộc Marlin) | `cyd_sd_begin()`, `cyd_sd_task()` |
+| Đổi tên `/cydlcd_tmp/<tên>.tmp` → `/<tên>` (ghi đè: xoá bản cũ trước vì FATFS rename không ghi đè) | `cyd_sd_finish_upload()` |
+| Trạng thái thẻ lấy từ **Marlin** (`CYDLCD_SF_MEDIA`) → icon STATUS + `/status` | `cyd_sd_ready()`, `sd_state_now()` trong `ui_lvgl.cpp` |
+| **Chặn** các lệnh làm Marlin đọc thẻ khi màn hình CYD đang giữ bus: `M23/M24` (in), `M30` (xoá), `M22/M21`/REFRESH, mở trang FILES | `ui_lvgl.cpp` (`sd_host_busy()` + `net_upload_active()`) |
+| Từ chối nhận file nếu **chưa liên lạc được Marlin** (`!cydlcd.linked`) hoặc Marlin đang in/tạm dừng | `cyd_sd_temp_open()`, `cyd_sd_printer_busy()` |
+| Đợi Marlin liệt kê xong danh sách file (≤400 ms) trước khi giành bus | `cyd_sd_temp_open()` |
+
+Đường **MUX** nằm sau `#if CYDLCD_SD_SHARED`; mặc định (`0`) firmware chạy chế độ **thẻ ở khe màn hình +
+Marlin hỏi sector qua UART** (`CYDLCD_SD_UART 1` — **§12**). Muốn quay lại MUX: bật `-DCYDLCD_SD_SHARED=1`
+ở env `cydlcd_esp32` **và** bỏ `CYDLCD_SD_OVER_UART` ở Marlin.
+
+### 11.5 Việc phải làm khi lắp phần cứng
+
+1. **Rút/ngắt module WiFi rời cũ** (nếu còn gắn) khỏi bus SPI thẻ SD — module đó ghi thẳng vào thẻ qua
+   SPI dùng chung, còn nối thì nó tranh bus với cả Marlin và màn hình CYD.
+2. Hàn 4053 + **điện trở 10 kΩ kéo chân chọn xuống GND** (mặc định = Marlin).
+3. **Cách B (đã chọn — thẻ ở khe CYD): `NO_SD_DETECT` ĐÃ BẬT** trong
+   `Marlin/Configuration_adv.h` (mục "Enable if SD detect is rendered useless") và **đã nạp Marlin
+   ngày 2026-10-14**. Kiểm chứng trên máy: `M20` liệt kê được file trên thẻ
+   (`V300_B~1.GCO 1693754`, `V300_P~1.GCO 63472`) ⇒ mount thẻ vẫn tốt dù công tắc nhận thẻ bị bỏ.
+   *Lưu ý:* bật `NO_SD_DETECT` khi thẻ **vẫn còn ở khe Marlin** thì vô hại (Marlin mount thẳng).
+4. Cân nhắc hạ tốc độ SPI thẻ của Marlin cho đường dây dài: `Configuration_adv.h` →
+   `#define SD_SPI_SPEED SPI_HALF_SPEED` (dòng ~1568). Màn hình CYD: hạ `CYDLCD_SD_HZ` (hiện 20 MHz) xuống
+   10 MHz nếu thấy lỗi mount sau khi đi dây.
+5. Nạp lại màn hình CYD, mở `http://TBTCYDLCD.local/` gửi 1 file → `/status` phải `done`, rồi mở trang FILES
+   trên màn hình CYD (hoặc bấm REFRESH) để thấy file mới.
+
+### 11.6 Nạp Marlin từ máy này (đường đi chắc chắn) — 2026-10-14
+
+```powershell
+cd D:\Marlin
+pio run -e mks_monster8                                   # ~30 s
+# 1) vao DFU: mo COM4 (USB CDC cua STM32), DTR = TRUE, gui "M997", cho ~2 s
+$p = New-Object System.IO.Ports.SerialPort COM4,250000,None,8,one
+$p.DtrEnable = $true; $p.RtsEnable = $false; $p.Open(); $p.WriteLine("M997"); $p.Close()
+Start-Sleep 3
+# 2) kiem tra phai thay [0483:df11]
+& "$env:USERPROFILE\.platformio\packages\tool-dfuutil\bin\dfu-util.exe" --list
+# 3) nap (~35 s cho 197 KB)
+& "$env:USERPROFILE\.platformio\packages\tool-dfuutil\bin\dfu-util.exe" -a 0 -s "0x0800C000:leave" `
+    -t 2048 -D ".pio\build\mks_monster8\mks_monster8.bin"
+```
+
+⚠️ **Đừng đọc log màn hình CYD bằng COM7 mà không tắt RTS**: chân DTR/RTS của CH340 nối vào EN/IO0 của
+ESP32, để mặc định có thể **giữ màn hình CYD ở trạng thái RESET** (im lặng hoàn toàn, không WiFi) — trông y
+như màn hình CYD chết. Luôn đặt `$p.DtrEnable=$false; $p.RtsEnable=$false` ngay sau `Open()` (xem README
+gốc, "Cẩm bẫy 47"). Muốn reset màn hình CYD: kéo `RtsEnable` true→false một nhịp.
+
+
+Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).
+Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
+- `CYDLCD_F_ENDSTOPS (0x0F)` + `CYDLCD_REQ_ENDSTOPS`: trang ENDSTOP moi (6 o
+  PROBE/X min/Y min/Z min/X max/Y max, xanh=mo do=CHAM, nut REFRESH gui M119).
+- `CYDLCD_REQ_DFU`: nut `REBOOT DFU` trong CUSTOM, xac nhan 2 buoc; Marlin tu choi
+  neu dang ban (`printer_busy()`) va tra WARN.
+- Setting id 34..41: `M204 P/R/T` (accel print/retract/travel),
+  `M906 X/Y/Z/E` (mA - gui RAW, KHONG nhan he so `cydlcd_val()`), `M412` (runout).
+- HELLO mang them `SHORT_BUILD_VERSION` -> `cydlcd.marlin_ver`.
+- Trang TEMP: dong dau `Profile: PLA/PETG/ABS` hoac `Profile: ---` (khong con dialog).
+- Trang MESH: `G29 P1 | G29 P3T0 | G29 P4RT` + `G29 A | G29 D | G29 S0`.
+- JOG: 5 muc buoc 0.01/0.05/0.1/1/10 mm, X/Y F3000 (50 mm/s), Z F600.
+- SETTINGS: hang 2 `M501 LOAD | M502 RESET` (co xac nhan), bang 124 px.
+- CUSTOM: `M600 B0`, toggle `M412`, `REBOOT DFU`.
+- Thanh tieu de: 2 nut nho `II` (pause) / `[]` (stop) chi hien khi
+  `cydlcd.flags & CYDLCD_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.
+- Font: chi 3 nhan co dau (`Gia tri`, `Buoc`, `Huy`) duoc gan font mono GFX (chi co o che do 4);
+  KHONG gan font do cho ca cay (xem cam bay 43 o README goc). O che do 0, 3 nhan nay ra o vuong.
+
+## 12. **ĐANG DÙNG** — THẺ SD Ở KHE MÀN HÌNH, MARLIN LẤY SECTOR QUA UART (2026-10-14)
+
+Quyết định của người dùng: *"hoặc có thể thêm lệnh khi marlin đọc từng line sdcard thì gọi sang lcd
+để lấy data thì sao? … hay implement kiểu sdcard mới mà lấy data usart"* → **P1 đã xong và chạy thật**.
+
+**Ý tưởng**: không MUX, không chia bus, không ai tranh ai. **Màn hình CYD là người DUY NHẤT giữ thẻ**; Marlin
+không tự đọc SPI nữa mà **hỏi màn hình CYD từng sector 512 B** qua chính UART của kênh PUSH. Toàn bộ ngăn xếp
+SD của Marlin (SdVolume / SdBaseFile / FAT16-32 / liệt kê thư mục / `M23`-`M24` / tiến độ / `M32`) vẫn
+chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock()` / `writeBlock()`.
+
+```
+   Màn hình CYD (ESP32) ── WiFi ── PC/điện thoại          Marlin (STM32)
+   ┌──────────────┐                                ┌───────────────────────────────┐
+   │ giữ thẻ TF   │  ◀── CYDLCD_F_SDREQ{sector} ───  │ DiskIODriver_CydlcdUART        │
+   │ SD.readRAW() │  ──▶ CYDLCD_F_SDDATA ×4 (128 B)  │  (SdVolume gọi readBlock)     │
+   └──────────────┘                                └───────────────────────────────┘
+```
+
+### 12.1 Vì sao đi hướng này (và vì sao KHÔNG hook "từng line")
+
+| | Hook từng dòng G-code | **Sector qua UART (đang dùng)** | MUX 4053 (mục 11) |
+|---|---|---|---|
+| Phải viết lại gì ở Marlin | `M20/M23/M24/M25/M524/M27/M30/M32/M98`, seek, PLR… (**rất nhiều**) | **1 class driver ~150 dòng** (`src/sd/cydlcd_sd_uart.*`) | không |
+| Phần cứng | không | **không** | 4053 + 3 dây + 10 kΩ |
+| Tranh chấp bus | không | **không** | không (phần cứng cách ly) |
+| Màn hình CYD reset/nạp firmware | — | Marlin mất thẻ **tạm thời**, tự có lại khi màn hình CYD lên | Marlin không hề hấn |
+| Băng thông | thấp nhất | ~21–25 ms/sector ⇒ trần ~20 KB/s | — |
+
+### 12.2 Số liệu (đo trên máy thật)
+
+| Đại lượng | Giá trị |
+|---|---|
+| Link | 250 000 baud = 25 000 B/s; 1 sector = 4 frame × 134 B ≈ 22 ms ⇒ trần **~23 KB/s** |
+| In thực tế cần | 1–4 KB/s G-code ⇒ dùng **~5–20 %** băng thông |
+| Đệm chịu trễ của Marlin | queue + planner ⇒ chịu được màn hình CYD trả lời trễ vài chục ms |
+| Đã kiểm | `M20` liệt kê đúng thẻ **của màn hình CYD**; upload WiFi 63.472 B → `/status` done → **Marlin thấy file mới qua UART**; màn hình CYD **nạp lại firmware xong Marlin tự đọc lại được** |
+| RAM | Marlin 13,5 % (17 720 B, +~3 KB), màn hình CYD 28,6 % |
+
+### 12.3 Cấu hình (đã bật sẵn)
+
+| Nơi | Nội dung |
+|---|---|
+| `Marlin/Configuration_adv.h` | `#define CYDLCD_SD_OVER_UART` + `#define SDCARD_READONLY` (P1 chỉ đọc) + `NO_SD_DETECT` |
+| `Marlin/src/inc/Conditionals_post.h` | `NEED_SD2CARD_CYDLCD_UART` (thay cho `NEED_SD2CARD_SPI`) |
+| `Marlin/src/sd/cardreader.h`, `SdVolume.h` | chọn `DiskIODriver_CydlcdUART` |
+| `Marlin/ini/features.ini` | env `CYDLCD_SD_OVER_UART` (thêm file driver) + `SERIAL_RX_BUFFER_SIZE=1024` (frame 141 B) |
+| `cydlcd/src/cydlcd_config.h` | `CYDLCD_SD_UART 1` (CYD) — tự tắt `CYDLCD_SD_SHARED` |
+| `cydlcd/src/cydlcd_link.cpp` | trả lời `CYDLCD_F_SDREQ` → `cyd_sd_raw_read()` → 4 frame `CYDLCD_F_SDDATA` |
+| `cydlcd/src/cyd_sd.cpp` | `cyd_sd_raw_read/raw_write/delete`; mount thẻ lúc boot và **giữ luôn** |
+
+### 12.4 Giao thức (proto **3** — PHẢI nạp cả 2 board)
+
+| Frame | Chiều | Payload |
+|---|---|---|
+| `CYDLCD_F_SDREQ` (0x10) | Marlin → màn hình CYD | `u8 op` (0=đọc, 1=ghi), `u32 sector` |
+| `CYDLCD_F_SDDATA` (0x45) | **2 chiều** | `u8 status`, `u32 sector`, `u8 idx` (0..3), `u8 n`, `n` byte — màn hình CYD→Marlin khi ĐỌC, Marlin→màn hình CYD khi GHI |
+| `CYDLCD_F_SDACK` (0x46) | màn hình CYD → Marlin | `u8 status`, `u32 sector` (trả lời lệnh GHI sau khi đã ghi xuống thẻ) |
+
+* 1 sector 512 B = **4 frame × 128 B** vì trường `len` của khung chỉ có **1 byte** (tối đa 255 B) —
+  nhờ vậy **không phải đổi định dạng khung**, `CYDLCD_MAX_PAYLOAD` vẫn 192, không tăng RAM.
+* `status != OK` ⇒ màn hình CYD chỉ gửi **1 frame** (`n = 0`) để Marlin báo lỗi ngay.
+* Marlin chờ tối đa `CYDLCD_SD_TIMEOUT_MS` (1 s) + **nuôi watchdog** trong lúc chờ; hết hạn ⇒
+  `readBlock()` trả `false` ⇒ Marlin báo "SD read error" và **dừng sạch**, không treo máy.
+* Frame mang **lệnh** từ màn hình CYD (G-code/REQUEST/ANSWER/TRAM_CMD) rơi vào lúc đang chờ sector sẽ được
+  **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
+
+### 12.5 Đã làm tới đâu (P1 + P2 + P3 — **đủ dùng**)
+
+| Giai đoạn | Nội dung | Trạng thái |
+|---|---|---|
+| **P1** | Đọc: `readBlock()` → `CYDLCD_F_SDREQ{READ}` → 4 frame `CYDLCD_F_SDDATA` | ✅ đã nạp, chạy thật |
+| **P2** | Đo băng thông khi đọc liên tục | ✅ đo được **~11–13 KB/s** (xem 12.5b) |
+| **P3** | Ghi: `writeBlock()` → `SDREQ{WRITE}` + 4 frame dữ liệu → màn hình CYD `SD.writeRAW()` → `CYDLCD_F_SDACK` | ✅ đã nạp, chạy thật |
+
+**P3 cho phép gì**: `M28`/`M29` (ghi log ra thẻ), `M30` (xoá file), và `POWER_LOSS_RECOVERY` nếu bạn bật
+lại trong `Configuration_adv.h`. `SDCARD_READONLY` **đã bỏ**; nếu chỉ muốn đọc cho an toàn thì bật
+`#define CYDLCD_SD_READONLY` trong `Configuration_adv.h` (nó tự thêm `SDCARD_READONLY`).
+
+**Đã kiểm trên máy thật (P3)**:
+`M115` → `Cap:SD_WRITE:1`; `M28 TESTLOG.GCO` → “Now fresh file / Writing to file”; ghi 1 dòng log →
+`M20` thấy `TESTLOG.GCO 57`; `M23 TESTLOG.GCO` → “File opened: Size: 57” (đọc lại đúng dữ liệu vừa ghi);
+`M30 TESTLOG.GCO` → “File deleted” và `M20` không còn file ⇒ **ghi/đọc/xoá đều đi qua màn hình CYD**.
+
+**Đồng bộ FATFS ↔ ghi thô** (2 chiều, đã cài trong `cyd_sd.cpp`):
+* `cyd_sd_raw_write()`: nếu màn hình CYD đang mở file upload → `s_file.flush()`; nếu màn hình CYD vừa ghi qua FATFS
+  (`s_fatfs_written`) → `fatfs_sync()` (unmount + mount lại) để đẩy hết cache xuống thẻ trước khi
+  Marlin ghi đè. Sau khi Marlin ghi thô → đặt `s_fatfs_stale`.
+* Trước mọi thao tác FATFS của màn hình CYD (`temp_open`, `delete`) mà `s_fatfs_stale` → `fatfs_sync()` để đọc
+  lại FAT/dir mới. Nếu không làm bước này, cache cũ của FATFS sẽ ghi đè lên thay đổi của Marlin.
+* **Đừng vừa upload WiFi vừa để Marlin ghi thẻ** (2 người ghi 1 FAT) — màn hình CYD có flush nhưng vẫn nên tránh;
+  upload đã tự bị chặn khi Marlin đang in.
+
+**P2 — số đo thật**: file 1.172.890 B toàn dòng chú thích (Marlin đọc hết tốc lực, không chạy lệnh nào)
+được đọc xong trong **~90–105 s ⇒ ~11–13 KB/s** (trần lý thuyết của link 250 000 baud là ~23 KB/s; phần
+hao là độ trễ vòng lặp của màn hình CYD + ghi UART blocking). In thật chỉ cần **1–4 KB/s** ⇒ dư **3–12 lần**.
+Ghi thì chậm hơn (mỗi sector = 5 lượt đi–về ≈ 30–40 ms) nhưng chỉ dùng cho log/xoá nên không quan trọng.
+*Lưu ý khi đo*: file toàn chú thích làm hàng đợi G-code không bao giờ đầy ⇒ Marlin ở trong vòng đọc thẻ
+liên tục nên **không trả lời lệnh qua USB** cho tới khi đọc xong (đó là hành vi của Marlin, không phải lỗi
+của đường SD). File có lệnh thật (`G4`…) thì `M27` trả lời bình thường.
+
+**Còn lại / tuỳ chọn**:
+* Bật `POWER_LOSS_RECOVERY` nếu muốn Marlin tự ghi file phục hồi khi mất điện (đường ghi đã sẵn sàng).
+* Muốn nhanh hơn: nâng baud 2 đầu (`CYDLCD_BAUD` + `CYDLCD_MARLIN_BAUD`) lên 460800/921600.
+* ⚠️ **Mọi thao tác thẻ của Marlin giờ phụ thuộc UART + màn hình CYD còn sống.** Màn hình CYD chết/bận ⇒ Marlin
+  không đọc được file ⇒ **bản in dừng**. Đây là đánh đổi lớn nhất so với MUX 4053 (mục 11 vẫn giữ
+  nguyên code để quay lại: chỉ cần bỏ `CYDLCD_SD_OVER_UART` ở Marlin và bật `CYDLCD_SD_SHARED` ở màn hình CYD).
+
+### 12.6 Bài test xác nhận driver SD qua UART — **chỉ lệnh get-info, KHÔNG gia nhiệt, KHÔNG chuyển động**
+
+Mục đích: khẳng định `DiskIODriver_CydlcdUART` (Marlin) + card server (màn hình CYD) chạy chắc, **không cần
+bật hotend/bàn, không di chuyển trục nào**. Dùng được cho cả khi máy đang nguội.
+
+**Bằng chứng định lượng**: màn hình CYD in bộ đếm sector ở dòng log 1 Hz (COM7):
+
+```
+[MRL] st=0 fl=0x22 prog=0% file="" | SD r=274/0 w=5/0
+                                       ^^^^^^^  ^^^^^^^
+                                       đọc: 274 lần, 0 lỗi | ghi: 5 lần, 0 lỗi
+```
+
+**Trình tự test** (COM4 = Marlin; `cydlcd-upload.ps1` để đưa file lên thẻ):
+
+| Bước | Lệnh | Kỳ vọng |
+|---|---|---|
+| 0 | `M105` | nhiệt độ hiện tại + **target `0.00`** (mốc "không gia nhiệt") |
+| 1 | `M115` | `Cap:SDCARD:1`, `Cap:SD_WRITE:1` |
+| 2 | `M22` / `M21` ×4 | `echo:SD card released` rồi `echo:SD card ok` — mỗi lần mount = đọc sector 0 + FAT qua UART |
+| 3 | `M20` ×6 | **6/6** lần thấy file (liệt kê = đọc FAT + sector thư mục) |
+| 4 | `M20 L` | liệt kê **tên dài** (đọc entry DIR) |
+| 5 | `M33 INFO.GCO` | trả `/INFO.GCO` (tra tên dài) — ⚠️ Marlin này **không có `M36`** (báo "Unknown command") |
+| 6 | `M23 <file>` | `File opened: <tên> Size: <n>` rồi `File selected`; **phải `M21` trước nếu vừa `M22`** |
+| 7 | tạo `INFO.GCO` = 1.200 dòng `M105`/`M114`/`M27` (+ padding `;`) ≈ 93 KB, upload qua WiFi | `/status` → `done` |
+| 8 | `M23 INFO.GCO` + `M24` | đọc **toàn bộ** file; `M27` báo `SD printing byte 93200/93200` rồi `Not SD printing` |
+| 9 | `M105` lại | target vẫn `0.00` ⇒ **không hề gia nhiệt** |
+| 10 | `M30 INFO.GCO` | `File deleted:...` (đường **GHI** chạy) + `M20` không còn file ⇒ dọn thẻ luôn |
+
+**Kết quả đo thật (2026-10-14, máy này)**:
+
+* Bộ đếm màn hình CYD: **`SD r=274/0 w=5/0`** — 274 sector đọc + 5 ghi, **không lỗi nào**; không có dòng
+  `doc RAW sector ... THAT BAI` trong log.
+* File get-info 93.200 B: `M27` báo **100 % ở t = 13,8 s** (≥ **6,8 KB/s**, chậm hơn trần vì mỗi dòng
+  `M105/M114/M27` còn in ra USB), `Not SD printing` ở t = 18,4 s.
+* Nhiệt độ trước/sau: `T:30.76 /0.00 B:28.76 /0.00` → `T:30.71 /0.00 B:28.83 /0.00` ⇒ **target không đổi**.
+* `M22`/`M21` ×4 đều báo OK; `M20` **6/6**; `M20 L` ra `INFO.GCO 93200 INFO.GCO`; `M33` ra `/INFO.GCO`.
+* `M23` lặp lại **ngay sau `M22`** không in gì (thẻ đã bị nhả) — nhớ `M21` trước.
+
+
+
+
+
+## Thanh day (status bar) + phan trang noi dung
+Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky giong header:
+`[PREV]  TRANG x/y  [NEXT]`.
+- `bot_sync(true)` chay o CUOI `show_page()`: do noi dung THUC TE cua man vua mo.
+  - Noi dung gon trong 206 px => **khong hien** thanh day, bo cuc giu nguyen nhu cu
+    (TEMP/MESH/JOG/RATE/FILES/CUSTOM/ENDSTOP/TRAM/INFO khong doi gi).
+  - Noi dung tran => thu trang con `CONT_H - BOT_H = 192` (vung nhin 184 px) + hien thanh day.
+- Moi man con gio la flex COLUMN **cuon doc duoc** (an thanh cuon) => keo bang ngon tay cung cuon duoc.
+- `page_scroll(±1)` = `lv_obj_scroll_by(±(height - 2*PAGE_PAD), LV_ANIM_ON)`, dung chung cho MOI man,
+  khong rieng MENU. Nut nao het duong cuon thi bi lam mo (`bg_opa 40`).
+- `bot_sync(false)` chay o nhip cham 400 ms: chi cap nhat nhan + do mo nut, KHONG do lai chieu cao
+  (xem cam bay 44 o README goc).
+- MENU: `MENU_ROWS` 9 -> 10 (them `Endstops (M119)` -> `PG_ENDSTOP`). MENU co 10 muc + dong
+  "Calibrate touch" = 11 hang x 20 px = 220 px > 206 => thanh day luon xuat hien o MENU va phan
+  trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
+- STATUS khong co thanh day (giong header).
+
+## Font chu (cap nhat: chi con font TU SINH)
+UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co the ep tu ngoai:
+`-DUI_MONO_FONT=0` de thu che do 0 ma khong phai sua file):
+- **`UI_MONO_FONT 4` (MAC DINH)**: font **mono TU SINH** `gfx4_font_robotomono` (4 bpp, xAdvance 8,
+  yAdvance 17, 5 dai roi rac) qua driver `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man
+  (`s_title`) giu Montserrat. **CO DU DAU tieng Viet** (U+1EA0..U+1EF9 + Ă ă Đ đ Ơ ơ Ư ư).
+  Sinh lai font bang `tools/ttf2gfxfont.py` (KHONG dung `lv_font_conv`).
+- **`UI_MONO_FONT 0`**: chi Montserrat 14 mac dinh cua LVGL (du phong). **KHONG HIEN DUOC DAU tieng
+  Viet** -> `vn_font()`/`vn_font_btn()` thanh no-op, 3 nhan co dau o lop phu SUA ("Gia tri" / "Buoc" /
+  "Huy") se ra **O VUONG**. Muon co dau thi PHAI dung che do 4.
+- Font ICON (WiFi / the nho) dung rieng `gfx4_font_icons` (ban nho 14 px cho header) va
+  `gfx4_font_icons_big` (ban to 30 px cho man STATUS), cung sinh bang `tools/ttf2gfxfont.py`.
+- Cac font sinh bang `lv_font_conv` **DA XOA khoi repo** (che do 1 va 2 gan o cap man hinh / tung
+  vat deu da thu tren may that va **MAT HET CHU**; che do 3 chua lam) — dung lai la vo ich.
+- `line_height` cua font mono la 17 (Montserrat 14 la 16): chieu cao moi man da duoc tinh theo 17 px
+  (JOG 197 / FILES 167 / INFO 197 / MESH 203 / SETTINGS 206 - deu <= 206 nen khong tran).
+
+## EEPROM tren trang SETTINGS (doi 2026-10-13)
+- **Da BO nut `M501 LOAD`** theo yeu cau: M501 chi DOC LAI toan bo thong so tu chip EEPROM I2C
+  vao RAM (tuc la HOAN TAC cac thay doi chua luu ke tu lan SAVE gan nhat) - no khong "load" tu
+  file nao ca, nen nhan "LOAD" gay hieu nham. Neu can lai chuc nang hoan tac thi them 1 nut voi
+  nhan ro nghia, vi du `HOAN TAC (M501)`.
+- `M502 RESET (ve mac dinh)` chiem ca hang, **XAC NHAN 2 BUOC** (giong REBOOT DFU): bam OK lan 1
+  doi text thanh "Chac chan? Bam OK lan nua", bam OK lan 2 moi gui `M502` + xin lai bang thong so.
+  Ly do phai 2 buoc: M502 tra thong so TRONG RAM ve mac dinh cua firmware; neu sau do bam
+  `SAVE EEPROM` (M500) thi mac dinh bi ghi VINH VIEN len chip EEPROM.
+- Nho thu tu dung: `M502` (mac dinh) -> chinh lai -> `SAVE EEPROM` (M500).
+
+---
+
+## Cai dat / nap / kiem tra nhanh
+
+### Build + nap
+
+```powershell
+# tu thu muc goc repo
+pio run -d cydlcd -e cydlcd_esp32                               # build
+pio run -d cydlcd -e cydlcd_esp32 -t upload --upload-port COM7   # nap
+
+# hoac dung trong cydlcd:
+cd cydlcd
+pio run -e cydlcd_esp32 -t upload --upload-port COM7
+```
+
+* **PHAI chi ro `-e cydlcd_esp32`**: `default_envs = cydlcd_f411cc` (`platformio.ini:32`) nen
+  `pio run -d cydlcd` **khong co `-e`** se build cho **F411 (STM32)**, khong phai CYD.
+* Env CYD **khong khai `upload_port`** (`platformio.ini:123-149`) ⇒ phai truyen **`--upload-port COM7`**
+  tren dong lenh; `monitor_speed = 115200` (`platformio.ini:148`).
+* Env CYD **can mang lan dau** (keo `espressif32`, `lvgl`, `TFT_eSPI` — `platformio.ini:121, 144-145`).
+* `CYDLCD_PROTO_VERSION` hien la **2** (`src/cydlcd_protocol.h:42`). Doi version thi **phai nap CA HAI
+  board** (Marlin + màn hình CYD), khong thi màn hình CYD bao `LINK ERR` du byte van chay (cam bay 41 o README goc).
+
+### Khi `-t upload` khong vao duoc bootloader → nap bang esptool truc tiep
+
+CYD dung USB-UART **CH340** (noi vao UART0 cua ESP32) — cung chinh la **COM7** — nen co the go thang
+bang esptool de kiem tra / nap:
+
+```powershell
+python "$env:USERPROFILE\.platformio\packages\tool-esptoolpy\esptool.py" `
+       --port COM7 --before default_reset --after hard_reset chip_id
+```
+
+* **Repo KHONG co thu muc `tool-esptoolpy`** — `esptool.py` nam trong **goi PlatformIO**, va duong dan
+  tren dung la duong dan ma `tools/fix_platformio_acl.ps1:152` kiem tra
+  (`%USERPROFILE%\.platformio\packages\tool-esptoolpy\esptool.py`). **Da kiem tren may nay: file ton tai.**
+* `chip_id` chi de **kiem tra noi duoc voi chip** (in ra loai chip + MAC — dung de biet **COM7 co
+  thuc su noi vao ESP32** khong). Muon nap tay thi thay bang `write_flash`; **file bin nam o
+  `cydlcd\.pio\build\cydlcd_esp32\firmware.bin`**
+  (da kiem: co that trong build dir; `bootloader.bin` + `partitions.bin` nam cung thu muc).
+* Neu esptool bao `PermissionError: [Errno 13] ... _contrib\intelhex\__init__.py` thi do **ACL hong**
+  trong `~/.platformio`, **khong phai** loi firmware ⇒ chay `tools/fix_platformio_acl.ps1` bang
+  PowerShell **Administrator** — xem **§8**.
+
+### Doc log chan doan 1 Hz tren COM7
+
+Log nam tren **Serial cua ESP32 (USB-UART = COM7 @ 115200)** va **chi in khi env co
+`-DCYDLCD_CYD_DEBUG=1`** — hien dang **BAT** (`platformio.ini:133`; **nho bo co khi dung that**):
+
+```
+[CYD] loop OK | link PUSH=<0/1> TRAM=<0/1> rx=<so frame> err=<so loi> heap=<byte>
+```
+
+(`src/main.cpp:56-58`, in **1 lan/giay**. Luc boot con in **reset reason** + free heap —
+`src/main.cpp:35-36, 41, 45`.)
+
+Doc bang:
+
+```powershell
+pio device monitor -p COM7 -b 115200
+```
+
+| Truong | Lay tu | Doc the nao |
+|---|---|---|
+| `link PUSH=` | `cydlcd.linked` | **1** = da nhan duoc frame PUSH hop le (che do `CYDLCD_SERIAL_UI`) |
+| `link TRAM=` | `tram.linked` | **1** = dang nhan duoc dong `TRAM` (che do `CYDLCD_TRAM_LINK`) |
+| `rx=` | `cydlcd.rx_frames` | so **frame PUSH hop le** da nhan — phai **tang deu** khi Marlin dang chay |
+| `err=` | `cydlcd.rx_errors` | so frame **loi** — **khong duoc tang** (tang = sai baud / nhieu day) |
+| `heap=` | `ESP.getFreeHeap()` | RAM con lai — phai **on dinh**, khong tut dan qua thoi gian |
+
+> ⚠️ O **che do TRAM** thi `rx`/`err` (dem frame PUSH) **co the dung o 0** vi Marlin chi gui dong
+> ASCII `TRAM ...` chu khong gui frame PUSH. Luc do xem `link TRAM=1` va doc **man INFO** tren màn hình CYD:
+> `LINK: OK (TRAM) ...` + `RX: <n> frame / <n> loi` (`src/ui_lvgl.cpp:2013-2018`).
+
+### Console gui lenh qua COM7 (giong het bam nut tren màn hình CYD)
+
+```powershell
+pwsh -File D:\Marlin\serial-console.ps1 -Port COM7 -Baud 115200    # qua màn hình CYD (mac dinh)
+pwsh -File D:\Marlin\serial-console.ps1 -Port COM4 -Baud 250000    # gui thang vao Marlin qua USB
+```
+
+`serial-console.ps1` luon gui **CRLF** va bat **DTR** (`serial-console.ps1:23, 42-43`); moi dong go
+vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut tren UI dung
+(`src/main.cpp:62-68, 73-88`). Go `exit` + Enter de thoat.
+
+**Vai lenh RIENG cua màn hình CYD** (KHONG gui sang Marlin — màn hình CYD tu xu ly va tra loi ngay tren COM7):
+
+| Lenh | Y nghia |
+|---|---|
+| `WIFI?` | in trang thai WiFi + IP + RSSI + ssid da luu + heap |
+| `WIFI SCAN` / `WIFI ASYNC 0\|1\|2` | quet mang (khong chan, van bom link) / che do chan doan |
+| `WIFI CONNECT <ssid> <pass> [S]` · `WIFI OFF` · `WIFI FORGET` | ket noi (S = luu NVS) · tat · xoa cau hinh |
+| 🆕 `PRE?` | in 3 preset preheat (nozzle/bed/fan) — xem **§9.22** |
+| 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
+
+⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang
+Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen tiep nen khong bi lan.
+
+### Hieu chinh cam ung (chi board co touch — CYD)
+
+* **Vao:** STATUS → **SETTINGS** → **MENU** → dong **`Calibrate touch (giu 1.5s)`** — **PHAI GIU
+  TAY 1,5 giay roi NHAC** (`CAL_TOUCH_HOLD_MS 1500`, `src/ui_lvgl.cpp:2176`; trong luc giu cot phai
+  doi `dang giu` → `NHAC TAY` — `:2288-2289`).
+* **Duong thoat hiem:** **giu tay tren man hinh luc cap dien** — màn hình CYD thay `T_IRQ` muc thap trong
+  `ui_port_input_init()` va vao thang che do hieu chuan (dung khi gia tri cu qua te, khong cham trung
+  duoc dong menu).
+* **Cach lam:** lan luot **TREN-TRAI → TREN-PHAI → DUOI-PHAI → DUOI-TRAI**; moi goc: cham → **ca man
+  hinh doi sang XANH** → **keo ngon tay sat goc roi NHAC TAY** (luc **mat cam ung** moi chot toa do,
+  lay cuc tri min/max). Chi tiet + cho luu (NVS namespace `cydtouch`) o **§5.5**.
+
+### Bang "kiem tra nhanh sau khi nap"
+
+| # | Kiem tra | Cach xem | Dat |
+|---|---|---|---|
+| 1 | Link PUSH | log 1 Hz tren COM7 | `link PUSH=1` |
+| 2 | Link TRAM (neu dung kieu TRAM) | log 1 Hz + man INFO | `link TRAM=1` / `LINK: OK (TRAM)` |
+| 3 | Nhan frame | `rx=` trong log | **tang deu**, khong dung yen |
+| 4 | Loi frame | `err=` trong log | **khong tang** (giu nguyen / 0) |
+| 5 | RAM | `heap=` trong log | **on dinh** qua nhieu phut, **khong tut dan** |
+| 6 | Chi bao tren man | thanh tieu de moi man (`link_state_now()`) | `LINK OK` (khong phai `LINK ERR` / `NO LINK`) |
+| 7 | Cam ung | cham thu vao 1 nut | dung vi tri, khong leo truc |
+| 8 | Lenh xuong Marlin | console COM7 → go `M115` | Marlin tra ve `Marlin 2.1.2 ...` |
+| 9 | Phien ban 2 phia | man INFO (`proto` / `MARLIN fw`) | `CYDLCD_PROTO_VERSION` khop (`2`) — lech la phai nap lai **ca hai** board |
+
+> ℹ️ Neu `LINK ERR` thay vi `NO LINK`: **co byte toi nhung khong thanh frame hop le** ⇒ nghi **sai
+> baud / sai khung / nhieu day**, khong phai dut day. `NO LINK` + `rx=0` moi la **khong co tin hieu**
+> (sai cong / chua chung GND / board tat) — xem bang xu ly su co o **§6** va bang chan doan o **§2.1**.
+
+## Buffer serial (so lieu that, do 2026-10-13)
+Baud **250000 8N1 = 25 000 B/s, 40 us/byte**. Frame PUSH toi da 198 B (`CYDLCD_MAX_PAYLOAD 192` + 6).
+- **Marlin** (core STM32duino): mac dinh chi `SERIAL_RX_BUFFER_SIZE 64` / `SERIAL_TX_BUFFER_SIZE 64`
+  (core chua `HardwareSerial.h:43-48`, tran an toan 256). Nay da ep len **256/256** bang build flag
+  trong `ini/features.ini` (key `CYDLCD_SERIAL_UI`). 64 B chi du 2,56 ms dem -> khong du cho burst.
+- **Màn hình CYD ESP32**: core mac dinh RX 256 B (du ~10 ms). Nay dat **1024 B** bang `setRxBufferSize()`
+  TRUOC `begin()` (`src/cydlcd_config.h`, `CYDLCD_RX_BUFFER`) -> du ~41 ms, an toan khi LVGL giu vong lap
+  vai chuc ms de ve man.
+- **Burst thuc te** (mot lan goi, khong nhip): `REQ_SETTINGS` = 33 frame x 12 B = 396 B;
+  `REQ_FULL` ~ 491 B; danh sach file 30 file ~ 1,9 kB; `REQ_MESH` 7 x 23 = 161 B.
+- **Vi sao phai co hang doi TX phia Marlin**: `tx_send()` cu BO frame khi `availableForWrite() < total`
+  (buffer 64 B, kha dung that 63 B) => 33 dong setting chi ~5 dong lot, frame ket thuc danh sach file
+  co the mat (màn hình CYD hien "(dang nhan)" mai). Nay `cydlcd_serial.cpp` co hang doi 8 slot + `tx_drain()`
+  ghi ra UART khi du cho (khong cho, khong delay) va cac nguon hang loat (SETTINGS/FILES/MESH) duoc
+  bom 1 frame moi lan `onIdle()` => khong mat frame nao, do tre ~20-25 ms cho 33 dong.
+- Tran RX thi **im lang** ca hai phia (khong co co tran o lop Arduino); phia Marlin `MarlinSerial.cpp`
+  bo byte khi ring day, phia ESP32 driver bo byte khi het buffer => bieu hien la thieu du lieu chu
+  khong bao loi. Vi vay moi nguong dem phai rong rai.
+
+## Font 1-bit tu sinh (Adafruit GFXfont) - thay cho lv_font_conv
+Vi sao: font sinh bang `lv_font_conv` (Consolas/Roboto Mono) **lam mat het chu** tren màn hình CYD that
+(xem cam bay 45 o README goc: dinh dang bitmap + don vi `adv_w`). Nay dung font 1-bit tu sinh:
+- `tools/ttf2gfxfont.py` - TTF -> header C dung dinh dang Adafruit GFXfont, nhieu dai lien tuc
+  (`--font --size --extra-ranges --name -o`, co `--yadvance`/`--threshold`/`--dump`).
+- `src/gfx_font_robotomono.h/.c` - Roboto Mono **size 13 px**: `xAdvance 8`, `yAdvance 17`, `base_line 3`,
+  5 dai (0x20-0xFF, 0x0102-0x0103, 0x0110-0x0111, 0x01A0-0x01B1, 0x1EA0-0x1EF9), 287 glyph co net,
+  **2926 byte bitmap**, tong 5714 byte flash (nam o DROM). Du 100% dau tieng Viet.
+- `src/lv_font_gfxfont.c/.h` - driver `lv_font_t` doc GFXfont (repack sang dang lien tuc cua LVGL) +
+  `lv_font_gfxfont_selftest()` in ra COM7: box/adv/ofs/checksum cua 'A' '0' 'a' U+1EC7 U+0110.
+- Cong tac `UI_MONO_FONT` trong `ui_lvgl.cpp`: **0 = chi Montserrat (khong dau tieng Viet, du phong)**,
+  **4 = mono GFX gan tung nhan (MAC DINH, dang dung, co du dau)**. Che do 1/2/3 (font sinh bang
+  `lv_font_conv`) da **XOA** khoi repo vi da thu tren may that deu mat chu.
+- Doi font mono: sua DUY NHAT `UI_MONO_FACE` trong `ui_lvgl.cpp`.
+- Kiem tra tren may: reset board roi doc COM7 -> khoi `[GFXFONT]` phai khop gia tri trong
+  `tools/test_gfxfont_layout.py` (tool nay con so TUNG PIXEL voi FreeType: 0 lech cho ca tieng Viet).
