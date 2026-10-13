@@ -21,7 +21,12 @@
 #include <stdint.h>
 #include "tram_protocol.h"
 
-#define TRAM_LINK_TIMEOUT_MS  2000    // khong nhan duoc dong TRAM nao trong bao lau -> coi nhu mat link
+#define TRAM_LINK_TIMEOUT_MS       2000    // wizard IDLE: Marlin day 5 Hz -> 2 s khong thay dong = mat link
+#define TRAM_LINK_BUSY_TIMEOUT_MS 20000    // wizard dang HOMING/PROBING/GOTO/AUTO: Marlin BLOCK vai giay
+                                           // (probe/di chuyen khong goi idle()) -> dung timeout DAI hon,
+                                           // neu khong se bao "NO LINK" SAI trong luc may dang lam viec
+#define TRAM_LINK_QUERY_MS         1000    // im lang >= 1 s -> chu dong hoi lai bang 'Q' (Marlin tra loi
+                                           // ngay o tick ke tiep; chieu panel -> Marlin khong phu thuoc timeout)
 #define TRAM_LINK_LINE_MAX    128     // du cho 1 dong "TRAM ..." (~85 byte)
 
 typedef struct {

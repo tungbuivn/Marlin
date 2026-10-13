@@ -38,9 +38,26 @@ void tram_link_begin(void) {
 
 bool tram_link_active(void) { return tram.ever; }
 
+// Man Marlin co nhung luc BLOCK vai giay (probe/di chuyen giua cac goc/home Z) - trong luc do cac dong
+// "TRAM" co the ngung du LINK VAN TOT. Vi vay:
+//   1) neu trang thai CUOI cho thay wizard dang BAN (active + phase != IDLE) thi dung timeout DAI hon
+//      -> khong bao "NO LINK" sai khi may dang probe/di chuyen (yeu cau nguoi dung 2026-10-13);
+//   2) chu dong hoi lai bang 'Q' khi im lang >= 1 s: chieu panel -> Marlin khong phu thuoc timeout va
+//      Marlin se gui lai trang thai ngay o tick ke tiep (panel_tram_link: TRAM_CMD_QUERY -> s_force).
 void tram_link_task(void) {
   if (!tram.ever) { tram.linked = false; return; }
-  tram.linked = (panel_millis() - tram.last_rx_ms) <= TRAM_LINK_TIMEOUT_MS;
+
+  const uint32_t now = panel_millis();
+  const uint32_t age = now - tram.last_rx_ms;
+  const bool busy_phase = tram.st.active && tram.st.phase != TRAM_PH_IDLE;
+  tram.linked = age <= (busy_phase ? TRAM_LINK_BUSY_TIMEOUT_MS : TRAM_LINK_TIMEOUT_MS);
+
+  // Hoi lai khi im lang - CO GIOI HAN 1 lan / TRAM_LINK_QUERY_MS (neu khong se gui 'Q' moi vong loop)
+  static uint32_t s_query_ms = 0;
+  if (age >= TRAM_LINK_QUERY_MS && (now - s_query_ms) >= TRAM_LINK_QUERY_MS) {
+    s_query_ms = now;
+    tram_link_send(TRAM_CMD_QUERY);
+  }
 }
 
 void tram_link_send(char cmd) {
