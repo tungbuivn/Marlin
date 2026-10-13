@@ -300,9 +300,12 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// UPLOAD QUA WiFi: PANEL TU LAM WEB SERVER (net_upload_http.cpp) -- xem README 9.21
+// UPLOAD QUA WiFi: PANEL TU LAM WEB SERVER (net_upload_http.cpp) -- xem README 9.21 + muc 11
 //   PC/dien thoai -> WiFi -> http://<panel>/ -> POST /upload -> panel ghi /btup/<ten>.tmp
-//   -> panel TU DAY sang ESP3D (dung lai dung pha 2 cua duong BT) -> M22/M21 -> xoa file tam.
+//   Sau do panel lam 1 trong 2 viec (tuy co PANEL_SD_SHARED, xem khoi ngay duoi):
+//     - PANEL_SD_SHARED 1 (MAC DINH, 2026-10-14): doi ten file tam -> /<ten> tren THE SD DUNG CHUNG
+//       voi Marlin (mux 74HC4053) -> tra bus + M22/M21. KHONG can ESP3D, KHONG can mang ESP3D.
+//     - PANEL_SD_SHARED 0 (kieu cu): panel TU DAY sang module ESP3D -> M22/M21 -> xoa file tam.
 //   MAC DINH: 1 voi CYD, nhung TU DONG = 0 khi PANEL_BT_UPLOAD=1 (BT va WiFi KHONG the cung luc:
 //   Bluedroid ~100 KB + WiFi ~45 KB khong du cho trong heap). Muon dung WiFi -> tat BT.
 // ---------------------------------------------------------------------------
@@ -320,6 +323,46 @@
 #if PANEL_WIFI_UPLOAD && !PANEL_WIFI_MGMT
   #undef  PANEL_WIFI_MGMT
   #define PANEL_WIFI_MGMT 1      // web server can net_wifi (quan ly WiFi)
+#endif
+
+// ---------------------------------------------------------------------------
+// THE SD DUNG CHUNG voi Marlin qua MUX SPI (74HC4053) -- THAY CHO DUONG ESP3D
+//   (quyet dinh cua nguoi dung, 2026-10-14: "bo ESP3D, dung 4053 chia SPI de panel ghi thang
+//    vao the SD dung chung voi Marlin")
+//
+//   SO DO: the TF nam o khe CYD. Hai master (ESP32 cua panel + STM32 cua Marlin) noi vao
+//   MUX; chan chon (A/B/C cua 4053 noi chung) do PANEL dieu khien bang PANEL_SD_MUX_PIN, va
+//   DUOC KEO XUONG GND bang dien tro 10k => muc MAC DINH (panel reset / mat dien / chan chon
+//   bo troi) = MARLIN. Nho vay Marlin khong bao gio bi panel chiem bus ngoai y muon.
+//   - 4053 co 3 cong tac: SCK, MOSI, CS. MISO dung CHUNG truc tiep (chi the lai driver MISO).
+//   - Panel CHI gianh bus khi: Marlin KHONG in, va chi trong luc nhan file ghi vao the.
+//   - Sau khi tra bus: panel gui M22 + M21 de Marlin mount lai the roi xin lai danh sach file.
+//
+//   PANEL_SD_SHARED 0 = quay lai kieu cu (panel ghi /btup/<ten>.tmp roi POST sang ESP3D).
+//   PANEL_SD_MUX_PIN: chan GPIO dieu khien chan chon cua 4053 (A/B/C noi chung).
+//     CYD: GPIO27 (chan con trong o header CN1). Cac chan da dung: 21 = den nen, 22/35 = UART
+//     Marlin, 18/19/23/5 = SPI the TF, 12/13/14/15/2 = LCD, 25/32/33/36/39 = cam ung,
+//     4/16/17 = LED RGB, 34 = cam bien anh sang, 26 = loa.
+// ---------------------------------------------------------------------------
+#if defined(PANEL_BOARD_CYD) && !defined(PANEL_SD_SHARED)
+  #define PANEL_SD_SHARED 1
+#endif
+#if PANEL_SD_SHARED
+  #ifndef PANEL_SD_MUX_PIN
+    #define PANEL_SD_MUX_PIN 27
+  #endif
+  // Muc logic cua chan chon: HIGH = the thuoc PANEL (ESP32), LOW = the thuoc MARLIN.
+  #ifndef PANEL_SD_MUX_PANEL_LEVEL
+    #define PANEL_SD_MUX_PANEL_LEVEL HIGH
+  #endif
+  #ifndef PANEL_SD_MUX_MARLIN_LEVEL
+    #define PANEL_SD_MUX_MARLIN_LEVEL LOW
+  #endif
+  // Thoi gian cho MUX + the on dinh sau khi doi master (4053 tron trong vai chuc ns; 3 ms la
+  // qua du cho ca truong hop the dang o trang thai ngu).
+  #ifndef PANEL_SD_MUX_SETTLE_MS
+    #define PANEL_SD_MUX_SETTLE_MS 3u
+  #endif
 #endif
 
 #if PANEL_WIFI_UPLOAD

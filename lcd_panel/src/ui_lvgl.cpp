@@ -127,9 +127,25 @@ bool panel_bt_upload_sd_ready(void) __attribute__((weak));
 //   SD_ST_OK   = the dang dung duoc                             -> icon XANH
 enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 static uint8_t sd_state_now(void) {
+#if PANEL_SD_SHARED
+  // THE DUNG CHUNG (mux SPI, xem panel_config.h): the nam trong khe CYD nhung do MARLIN mount
+  // (panel chi gianh bus khi nhan file). Vi vay trang thai that su lay tu co PANEL_SF_MEDIA
+  // trong frame PUSH cua Marlin - KHONG tu mount the de kiem (se gianh bus cua Marlin).
+  return (panel.flags & PANEL_SF_MEDIA) ? SD_ST_OK : SD_ST_NO;
+#else
   if (!panel_bt_upload_sd_ready) return SD_ST_NONE;
   return panel_bt_upload_sd_ready() ? SD_ST_OK : SD_ST_NO;
+#endif
 }
+
+// HOP DONG voi net_upload_http.cpp (duong upload qua WiFi): true = panel DANG nhan/ghi file va
+// dang GIU bus SPI cua the SD DUNG CHUNG voi Marlin. Trong luc do MOI lenh lam MARLIN doc the
+// (M23/M24 = in file, M30 = xoa, M22/M21 = init lai the, xin danh sach file) PHAI bi chan: neu
+// Marlin clock SPI cung luc panel dang noi vao the thi du lieu doc ra se hong.
+// PHAI `extern "C"` (xem canh bao o tren): khai bao khong co extern "C" thi ten bi mang hoa ->
+// khong bao gio bind (ham luon NULL => khong chan duoc gi - sai am tham).
+extern "C" bool net_upload_active(void) __attribute__((weak));
+static bool sd_host_busy(void) { return net_upload_active && net_upload_active(); }
 
 // HOP DONG voi nhanh BT/WiFi (panel_bt_upload.cpp): TIEN DO NHAN FILE qua Bluetooth.
 //   true  = dang nhan qua BT; *got = so byte da nhan; *total = tong byte (0 = khong biet truoc).
@@ -1603,6 +1619,9 @@ static const panel_file_t *files_selected(void) {
 }
 
 static void files_do(const bool force_dir) {
+  // The SD DUNG CHUNG: dang nhan file qua WiFi thi panel dang giu bus SPI -> khong duoc gui lenh
+  // lam Marlin doc the (M23/M24). Xem sd_host_busy().
+  if (sd_host_busy()) { files_note("Dang nhan file qua WiFi - cho xong", true); return; }
   const panel_file_t *f = files_selected();
   if (!f || !f->name[0]) return;
   if (force_dir || (f->flags & 0x01U)) {
@@ -1635,6 +1654,12 @@ static bool files_sd_busy(void) {
 }
 
 static void files_init_sd(void) {
+  // The SD DUNG CHUNG: dang nhan file qua WiFi thi TUYET DOI khong xin danh sach / M22-M21
+  // (Marlin se doc the trong luc panel dang clock SPI -> hong du lieu). Cho phien upload xong.
+  if (sd_host_busy()) {
+    files_note("Dang nhan file qua WiFi - cho xong", true);
+    return;
+  }
   if (files_sd_busy()) {
     files_note("Dang in - khong init lai the", true);
     panel.files_done = false;
@@ -1677,6 +1702,8 @@ static void files_del_lock(const bool on) {
 static void files_delete_now(void) {
   if (s_fl_job == FLJOB_DELETE) return;                 // dang xoa -> chong bam lap
   if (!s_del_name[0]) return;
+  // The SD dung chung: M30 cung lam Marlin doc/ghi the -> phai doi phien upload WiFi xong.
+  if (sd_host_busy()) { files_note("Dang nhan file qua WiFi - cho xong", true); return; }
   // Kiem lai co "thu muc" o day nua: hop xac nhan khong khoa duoc vung phia duoi (cham van lot),
   // nen lua chon co the da doi trong luc hop dang mo.
   if (s_del_flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }

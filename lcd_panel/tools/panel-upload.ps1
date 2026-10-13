@@ -117,7 +117,7 @@
 
 .EXAMPLE
     .\panel-upload.ps1 -File .\benchy.gcode
-    # tu tim PANEL (mDNS -> gateway -> quet LAN -> danh sach) roi gui; panel tu day sang ESP3D + M22/M21
+    # tu tim PANEL (mDNS -> gateway -> quet LAN -> danh sach) roi gui; panel tu GHI VAO THE SD + M22/M21
 
 .EXAMPLE
     .\panel-upload.ps1 -File big.gcode -Host 192.168.0.174
@@ -129,7 +129,7 @@
 
 .EXAMPLE
     .\panel-upload.ps1 -File part.gcode -Name PART3.GCO -StatusTimeoutSec 1800
-    # doi ten tren the SD + cho panel day sang ESP3D lau hon
+    # doi ten tren the SD + cho panel ghi the lau hon
 
 .NOTES
     MA THOAT: 0 = gui OK (va M21 OK neu co -InitSd)
@@ -882,7 +882,7 @@ $markers = if ($PanelMarker) { @($PanelMarker) } else { $PANEL_MARKERS_DEFAULT }
 $isPanel = ($Target -eq 'panel')
 $size = [int64]$fi.Length
 
-Write-Head "=== Tai file len may in qua WiFi $(if ($isPanel) { '(PANEL -> ESP3D -> the SD Marlin)' } else { '(THANG len ESP3D -> the SD Marlin)' }) ==="
+Write-Head "=== Tai file len may in qua WiFi $(if ($isPanel) { '(PANEL -> the SD dung chung voi Marlin)' } else { '(THANG len ESP3D -> the SD Marlin)' }) ==="
 Write-Host ("File       : {0}" -f $fi.FullName)
 Write-Host ("Kich thuoc : {0:N0} byte = {1:N2} MB" -f $fi.Length, ($fi.Length / 1MB))
 Write-Host ("Ten tren SD: {0}" -f $sendName)
@@ -1221,7 +1221,7 @@ $statusFinal = $null
 if ($isPanel) {
     if (-not $NoStatus) {
         Write-Host ""
-        Write-Head "--- Theo doi GET /status (panel dang day sang ESP3D) ---"
+        Write-Head "--- Theo doi GET /status (panel dang ghi vao the SD) ---"
         $w = Watch-PanelStatus -Ip $foundIp -Port $Port -IntervalMs $StatusIntervalMs -TimeoutSec $StatusTimeoutSec `
                                -SendName $sendName -PreWasTerminal $preWasTerminal -PreState $preState -PreFile $preFile `
                                -ExpectedBytes $size
@@ -1284,18 +1284,18 @@ if ($isPanel) {
     if ($statusFinal) {
         if ($statusFinal.State -eq 'timeout') { $pushTxt = 'chua xac nhan (het thoi gian theo doi)' }
         elseif ($statusFinal.State -eq 'stale') { $pushTxt = 'chua xac nhan (/status giu ket qua phien truoc)' }
-        elseif ($statusFinal.Final -and $statusFinal.Ok) { $pushTxt = 'panel da day sang ESP3D: OK' }
+        elseif ($statusFinal.Final -and $statusFinal.Ok) { $pushTxt = 'panel da GHI VAO THE SD: OK' }
         elseif ($statusFinal.Final -and -not $statusFinal.Ok) { $pushTxt = "panel bao loi: $($statusFinal.State)" }
         elseif ($statusFinal.Ok) { $pushTxt = 'panel bao Ok (khong co phien dang chay)' }
     }
-    Write-Host ("  Panel -> ESP3D   : {0}" -f $pushTxt)
+    Write-Host ("  Panel -> the SD : {0}" -f $pushTxt)
 }
 Write-Host ("  Tong thoi gian   : {0:N1} s" -f $swAll.Elapsed.TotalSeconds)
 
 $panelError = ($isPanel -and $statusFinal -and $statusFinal.Final -and -not $statusFinal.Ok)
 $unconfirmed = ($isPanel -and -not $NoStatus -and $statusFinal -and ($statusFinal.State -eq 'timeout' -or $statusFinal.State -eq 'stale'))
 if ($panelError) {
-    Write-Err "  => PANEL BAO LOI khi day sang ESP3D - xem chi tiet o phan theo doi /status."
+    Write-Err "  => PANEL BAO LOI khi ghi vao the SD - xem chi tiet o phan theo doi /status."
     exit 2
 }
 if (-not $isPanel -and -not $confirmed) {
@@ -1303,7 +1303,7 @@ if (-not $isPanel -and -not $confirmed) {
     exit 2
 }
 if ($unconfirmed) {
-    Write-Warn "  => Da gui xong cho panel nhung CHUA XAC NHAN duoc ket qua day sang ESP3D."
+    Write-Warn "  => Da gui xong cho panel nhung CHUA XAC NHAN duoc ket qua ghi vao the SD."
     Write-Warn "     Kiem tra trang STATUS tren panel (hoac log COM7: tools\panel-log.ps1) truoc khi in."
     exit 0
 }

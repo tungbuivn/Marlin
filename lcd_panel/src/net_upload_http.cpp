@@ -272,16 +272,29 @@ void handle_upload_done(void) {
     net_esp3d_temp_abort();              // file tam 0 byte / con mo -> don ngay (khong de lai rac)
     return;
   }
-  // Tra loi NGAY (khong de trinh duyet cho vai chuc giay): viec day sang ESP3D chay o task()
+  // Tra loi NGAY (khong de trinh duyet cho vai chuc giay): viec ghi vao the / day sang ESP3D
+  // chay o task()
+#if PANEL_SD_SHARED
+  snprintf(js, sizeof(js),
+           "{\"status\":\"Ok\",\"file\":\"%s\",\"rx_bytes\":%lu,\"total_bytes\":%lu,"
+           "\"message\":\"da nhan, panel dang ghi vao the SD\"}",
+           s_file, (unsigned long)s_rx, (unsigned long)s_total);
+  HLOG("[HTTP] da nhan du %lu B (%s) -> se ghi vao the SD\n", (unsigned long)s_rx, s_file);
+#else
   snprintf(js, sizeof(js),
            "{\"status\":\"Ok\",\"file\":\"%s\",\"rx_bytes\":%lu,\"total_bytes\":%lu,"
            "\"message\":\"da nhan, panel dang day len ESP3D\"}",
            s_file, (unsigned long)s_rx, (unsigned long)s_total);
   HLOG("[HTTP] da nhan du %lu B (%s) -> se day len ESP3D\n", (unsigned long)s_rx, s_file);
+#endif
   send_json(200, js);
   s_push_pending = true;
   s_http_state = HS_POST;
+#if PANEL_SD_SHARED
+  snprintf(s_msg, sizeof(s_msg), "dang ghi vao the SD");
+#else
   snprintf(s_msg, sizeof(s_msg), "dang day len ESP3D");
+#endif
 }
 
 void handle_not_found(void) {
@@ -326,7 +339,10 @@ void net_upload_http_task(void) {
   net_esp3d_task();                    // theo doi the TF nong
   server.handleClient();               // nhan request (khong chan lau)
 
-  if (s_push_pending && net_wifi_state() == 2) {
+  // Che do THE DUNG CHUNG (PANEL_SD_SHARED): khong can WiFi de "day file" - buoc ghi the chay
+  // ngay khi file tam da nhan xong. Che do ESP3D cu: phai cho WiFi ket noi truoc khi POST.
+  const bool can_push = PANEL_SD_SHARED ? true : (net_wifi_state() == 2);
+  if (s_push_pending && can_push) {
     s_push_pending = false;
     uint32_t posted = 0;
     char err[64] = "";
@@ -334,11 +350,16 @@ void net_upload_http_task(void) {
     const bool ok = net_esp3d_push(s_file, got, &posted, err, sizeof(err));
     if (ok) {
       s_http_state = HS_DONE;
+#if PANEL_SD_SHARED
+      snprintf(s_msg, sizeof(s_msg), "da ghi vao the SD va gui M22/M21");
+      HLOG("[HTTP] DONE: %lu B -> the SD (M22/M21 da gui)\n", (unsigned long)posted);
+#else
       snprintf(s_msg, sizeof(s_msg), "da day xong len ESP3D va gui M22/M21");
       HLOG("[HTTP] DONE: %lu B -> ESP3D, da gui M22/M21\n", (unsigned long)posted);
+#endif
     } else {
       s_http_state = HS_ERR;
-      snprintf(s_msg, sizeof(s_msg), "%s", err[0] ? err : "day len ESP3D that bai");
+      snprintf(s_msg, sizeof(s_msg), "%s", err[0] ? err : "ghi vao the SD that bai");
       HLOG("[HTTP] ERR: %s\n", s_msg);
     }
   } else if (s_push_pending) {
@@ -353,11 +374,15 @@ void net_upload_http_log(void) {
 
 bool net_upload_http_active(void) { return s_started; }
 
+// true = dang co phien nhan/ghi file (UI dung de chan cac lenh lam Marlin doc the SD)
+bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state == HS_POST; }
+
 #else   // ---- PANEL_WIFI_UPLOAD = 0: stub (moi env van link duoc) ----
 
 void net_upload_http_begin(void) {}
 void net_upload_http_task(void) {}
 void net_upload_http_log(void) {}
 bool net_upload_http_active(void) { return false; }
+bool net_upload_active(void) { return false; }
 
 #endif  // PANEL_WIFI_UPLOAD

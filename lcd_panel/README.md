@@ -1714,7 +1714,7 @@ posting → done` và `=> File DA DUOC GUI THANH CONG.`
 | Mã lỗi | `401` sai token · `409` Marlin đang in (`PANEL_HTTP_ALLOW_WHILE_PRINTING 0`) · `500` lỗi thẻ/ghi · `400` không có dữ liệu | in gợi ý riêng cho 401/409/403, thoát mã **2** ✅ |
 | Bật/tắt | `PANEL_WIFI_UPLOAD 1` với CYD, nhưng **tự = 0 khi `PANEL_BT_UPLOAD=1`** (`panel_config.h:306-319`) | — (không tìm thấy panel thì kiểm tra `PANEL_BT_UPLOAD` có đang = 1 không) |
 
-⚠️ **Hai việc phía firmware nên sửa** (client đã chịu được, nhưng sửa thì đúng hợp đồng hơn):
+⚠️ **Hai việc phía firmware nên sửa** — **ĐÃ SỬA XONG (2026-10-14)**, giữ lại đây làm hồ sơ:
 
 1. **`total_bytes` luôn = 0.** `net_upload_http.cpp:176` đọc `s_total = up.totalSize` ở
    `UPLOAD_FILE_START`, nhưng **ESP32 core 2.0.17 đặt `totalSize = 0`** ở trạng thái đó
@@ -1728,8 +1728,118 @@ posting → done` và `=> File DA DUOC GUI THANH CONG.`
    (`net_upload_http.cpp:128`) kiểm `X-Panel-Token`. Client gửi `X-Panel-Token` (theo **code**);
    nên sửa chú thích cho khỏi nhầm.
 
+⇒ Cả hai đã sửa trong `net_upload_http.cpp` / `panel_config.h` (xem §11). Thêm 2 lỗi do đọc log máy
+thật mới thấy: (3) tên file bị thêm đuôi sai `V300_Part3_proj.gcode` → `...gcode.gco` (hàm
+`sanitize_name()` chỉ so 4 ký tự cuối với `.gco`) — nay chỉ thêm `.gco` khi tên **chưa có đuôi nào**;
+(4) `PANEL_ESP3D_VIA_AP=1` mà join mạng thất bại thì panel **mất WiFi vĩnh viễn** (thiếu
+`wifi_leave_esp3d()` ở nhánh lỗi) — đã sửa.
 
-## Cap nhat 2026-10-13 (protocol v2 + UI mo rong)
+
+## 11. THẺ SD DÙNG CHUNG với Marlin qua MUX SPI (74HC4053) — **bỏ ESP3D** (2026-10-14)
+
+Quyết định của người dùng: *"bỏ ESP3D, dùng 4053 chia SPI để panel ghi thẳng vào thẻ SD dùng chung
+với Marlin"*. Từ đây **đường upload không cần mạng của ESP3D nữa**: file được panel ghi thẳng vào
+thẻ SD mà Marlin đang in.
+
+### 11.1 Luồng mới (đã chạy thật)
+
+```
+PC/điện thoại ──WiFi──▶ panel (WebServer, /btup/<tên>.tmp) ──đổi tên──▶ /<tên>  (CÙNG thẻ SD)
+                                                    │
+                                                    └─ SD.end() + MUX ▶ Marlin + M22/M21 + xin lại danh sách file
+```
+
+Nhật ký thật (COM7, file 63.472 B):
+
+```
+[HTTP] nhan file "V300_Part3_proj.gcode" tu 192.168.0.174 (kich thuoc chua biet)
+[UP] the TF OK @ 20000000 Hz: cardType=3, tong 15257584 KB, da dung 40 KB
+[UP] don /btup (truoc phien moi): xoa 0 file .tmp (0 KB)
+[UP] ghi vao /btup/V300_Part3_proj.gcode.tmp (ten dich: V300_Part3_proj.gcode)
+[HTTP] nhan xong 63472 B (totalSize=63472) -> /btup/V300_Part3_proj.gcode.tmp
+[UP] UI KHOA
+[UP] da doi ten /btup/V300_Part3_proj.gcode.tmp -> /V300_Part3_proj.gcode (63472 B)
+[UP] UI MO KHOA
+[UP] tra bus SPI the cho MARLIN + M22/M21
+[HTTP] DONE: 63472 B -> the SD (M22/M21 da gui)
+```
+
+`GET /status` ⇒ `state=done`, `rx_bytes=63472`, `posted_bytes=63472`, `result=DONE 63472` (2 s).
+Heap khi rảnh **194 KB** (trước đây 166 KB vì không còn giữ mount + poll thẻ).
+
+### 11.2 Vì sao KHÔNG dùng 74HC4052 (2×4:1) mà dùng 74HC4053 (3×2:1)
+
+| | 74HC4052 | 74HC4053 |
+|---|---|---|
+| Số cực | **2** (X, Y) — mỗi cực 4 kênh | **3** (X, Y, Z) — mỗi cực 2 kênh |
+| Đủ cho SPI 2 master? | ❌ chỉ chuyển được **2** trong 3 tín hiệu | ✅ chuyển **SCK + MOSI + CS** |
+| Dùng cho việc này | phải dùng 2 con (thừa 1 nửa) hoặc chấp nhận rủi ro | đúng 1 con |
+
+- **MISO không cần chuyển**: chỉ có **một** driver MISO (chính thẻ SD), cả hai master đều là input →
+  nối thẳng vào cả hai.
+- **CS phải chuyển**: nếu để chung, chân CS của master không được chọn (ví dụ Marlin lúc boot) có thể
+  kéo thấp → thẻ bị chọn trong khi master kia đang clock ⇒ tranh chấp.
+- **Điện áp**: 4053 chạy 3,3 V (`VCC=3V3`, `VEE=GND`, `VSS=GND`), tín hiệu 3,3 V ⇒ mức logic hợp lệ.
+- **Tần số**: giữ SPI ≤ 10 MHz cho đường dây dài (panel đang để 20 MHz cho đường NGẮN trong board —
+  sau khi đi dây ra ngoài nên hạ `PANEL_SD_HZ` xuống 10 MHz nếu thấy lỗi mount).
+- **Trạng thái mặc định phải về MARLIN**: chân chọn (A/B/C nối chung) kéo xuống GND bằng **điện trở
+  10 kΩ** ⇒ khi panel reset / mất điện / chân GPIO còn treo thì thẻ vẫn thuộc Marlin.
+
+### 11.3 Sơ đồ chân (2 cách — chọn 1)
+
+**Cách A (khuyến nghị): thẻ vẫn nằm ở khe của Marlin (MKS Monster8)**
+
+| Tín hiệu | Phía MARLIN (MKS Monster8, SD onboard = SPI3) | Phía PANEL (CYD) | Qua 4053 |
+|---|---|---|---|
+| SCK  | `PC10` (chân CLK của khe TF) | `GPIO18` | cực X |
+| MOSI | `PC12` (CMD) | `GPIO23` | cực Y |
+| CS   | `PC9` (SDSS) | `GPIO5` | cực Z |
+| MISO | `PC11` (DAT0) | `GPIO19` | **nối thẳng cả hai** |
+| Chọn | — | `GPIO27` → A/B/C (nối chung) + 10 kΩ xuống GND | INH → GND |
+| GND/3V3 | GND chung | 3V3 cấp cho 4053 | — |
+
+Ưu điểm: **Marlin không phải sửa gì** — công tắc nhận thẻ (`SD_DETECT_PIN PC4`) vẫn hoạt động, cờ
+`PANEL_SF_MEDIA` trong frame PUSH vẫn đúng, `isMediaInserted()` vẫn thật.
+
+**Cách B (theo đúng câu chữ của người dùng): thẻ nằm ở khe của CYD**
+
+Giống bảng trên nhưng đảo đầu dây: SCK/MOSI/CS của Marlin (`PC10/PC12/PC9`) đi vào các cực, SCK/MOSI/CS
+của CYD đi vào cực còn lại, và chân thẻ (khe CYD) là đầu chung. **Bắt buộc sửa Marlin**:
+`SD_DETECT_PIN` phải thành `-1` (khe Marlin không còn thẻ ⇒ công tắc nhận thẻ báo "không có thẻ" ⇒
+Marlin không mount), tức thêm vào `Configuration_adv.h`:
+
+```cpp
+#define NO_SD_DETECT        // hoặc #define SD_DETECT_PIN -1  (khe Marlin khong dung nua)
+```
+
+### 11.4 Firmware panel đã làm gì (cờ `PANEL_SD_SHARED`, mặc định 1 với CYD)
+
+| Việc | Ở đâu |
+|---|---|
+| Chân chọn MUX (`PANEL_SD_MUX_PIN 27`, mức `HIGH`=panel, `LOW`=Marlin, `PANEL_SD_MUX_SETTLE_MS 3`) | `panel_config.h` (khối `PANEL_SD_SHARED`) |
+| Giành bus **chỉ khi** mount/ghi thẻ; trả bus + `M22`+`M21` + xin lại danh sách file sau khi ghi xong | `net_esp3d.{h,cpp}` (`sd_mux_panel`, `sd_release_to_marlin`) |
+| KHÔNG mount thẻ lúc boot, KHÔNG kiểm tra thẻ 1 Hz khi rảnh (bus thuộc Marlin) | `net_esp3d_begin()`, `net_esp3d_task()` |
+| Đổi tên `/btup/<tên>.tmp` → `/<tên>` (ghi đè: xoá bản cũ trước vì FATFS rename không ghi đè) | `net_esp3d_push()` |
+| Trạng thái thẻ lấy từ **Marlin** (`PANEL_SF_MEDIA`) → icon STATUS + `/status` | `net_esp3d_sd_ready()`, `sd_state_now()` trong `ui_lvgl.cpp` |
+| **Chặn** các lệnh làm Marlin đọc thẻ khi panel đang giữ bus: `M23/M24` (in), `M30` (xoá), `M22/M21`/REFRESH, mở trang FILES | `ui_lvgl.cpp` (`sd_host_busy()` + `net_upload_active()`) |
+| Từ chối nhận file nếu **chưa liên lạc được Marlin** (`!panel.linked`) hoặc Marlin đang in/tạm dừng | `net_esp3d_temp_open()`, `net_printer_busy()` |
+| Đợi Marlin liệt kê xong danh sách file (≤400 ms) trước khi giành bus | `net_esp3d_temp_open()` |
+
+Đường ESP3D cũ **vẫn còn nguyên trong code** nhưng nằm sau `#else` của `PANEL_SD_SHARED` (đặt
+`-DPANEL_SD_SHARED=0` để quay lại).
+
+### 11.5 Việc phải làm khi lắp phần cứng
+
+1. **Rút/ngắt module ESP3D khỏi bus SPI thẻ SD** (hoặc bỏ hẳn module): firmware `ESP3D-direct-sd`
+   chiếm trực tiếp bus này, nếu còn nối nó sẽ tranh bus với cả Marlin và panel.
+2. Hàn 4053 + **điện trở 10 kΩ kéo chân chọn xuống GND** (mặc định = Marlin).
+3. Nếu chọn **cách B**: thêm `#define NO_SD_DETECT` vào `Configuration_adv.h` rồi nạp lại Marlin.
+4. Cân nhắc hạ tốc độ SPI thẻ của Marlin cho đường dây dài: `Configuration_adv.h` →
+   `#define SD_SPI_SPEED SPI_HALF_SPEED` (dòng ~1568).
+5. Nạp lại panel, mở `http://TBTPANEL.local/` gửi 1 file → `/status` phải `done`, rồi mở trang FILES
+   trên panel (hoặc bấm REFRESH) để thấy file mới.
+
+
 Da nap va xac nhan tren may that (`link PUSH=1 TRAM=1 err=0`).
 Protocol: `PANEL_PROTO_VERSION 2` - **phai nap ca Marlin va panel**.
 - `PANEL_F_ENDSTOPS (0x0F)` + `PANEL_REQ_ENDSTOPS`: trang ENDSTOP moi (6 o

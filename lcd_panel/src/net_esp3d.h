@@ -1,6 +1,11 @@
 /**
- * net_esp3d.h -- LOI DUNG cho duong upload qua WiFi: the TF + day file len ESP3D + M22/M21.
- *                (net_upload_http.cpp dung file nay; xem README 9.21.)
+ * net_esp3d.h -- LOI DUNG cho duong upload qua WiFi: the TF + hoan tat file + M22/M21.
+ *
+ * HAI CHE DO (co PANEL_SD_SHARED trong panel_config.h, xem README muc 11):
+ *   PANEL_SD_SHARED 1 (MAC DINH tu 2026-10-14): THE SD DUNG CHUNG voi Marlin qua MUX SPI
+ *     (74HC4053). Panel chi GIANH bus khi nhan file (khong in), ghi /btup/<ten>.tmp roi DOI TEN
+ *     thanh /<ten>, tra bus cho Marlin + M22/M21. KHONG dung mang, KHONG can ESP3D.
+ *   PANEL_SD_SHARED 0 (kieu cu): POST file len module ESP3D roi M22/M21 (xem net_upload_http.cpp).
  *
  * VI SAO KHONG TAI DUNG panel_bt_upload.cpp: khi `PANEL_BT_UPLOAD 0` thi file do chi con stub
  * (Bluedroid bi loai khoi build de tiet kiem ~100 KB heap + ~600 KB flash). Vi vay duong WiFi co

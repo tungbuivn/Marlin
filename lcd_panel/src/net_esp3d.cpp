@@ -249,16 +249,25 @@ void ov_note(const char *state, const bool ok) {
 // ===========================================================================
 // The TF (VSPI rieng: CS 5 / MOSI 23 / MISO 19 / SCLK 18)
 // ===========================================================================
+#if PANEL_SD_SHARED
+// Khai bao truoc (dinh nghia day du o duoi, sau sd_lost) - sd_mount() can sd_mux_panel().
+void sd_mux_panel(void);
+void sd_mux_marlin(void);
+void sd_release_to_marlin(bool reinit_marlin);
+#endif
 bool sd_mount(const bool verbose) {
   if (s_sd_ready) return true;
+#if PANEL_SD_SHARED
+  sd_mux_panel();                       // gianh bus SPI the ve phia ESP32 TRUOC khi mount
+#endif
   SPI.begin(PANEL_SD_SCK, PANEL_SD_MISO, PANEL_SD_MOSI, PANEL_SD_CS);
   const uint32_t hz_try[3] = { PANEL_SD_HZ, PANEL_SD_HZ / 2u, 4000000u };
   for (uint8_t i = 0; i < 3u; i++) {
     if (verbose) ELOG("[UP] thu mount the TF @ %u Hz ...\n", (unsigned)hz_try[i]);
     if (SD.begin(PANEL_SD_CS, SPI, hz_try[i], "/sd", 4)) {
       s_sd_ready = true;
-      ELOG("[UP] %s the TF @ %u Hz: cardType=%d, tong %lu KB, da dung %lu KB\n",
-           s_sd_was ? "da mount LAI" : "the TF OK", (unsigned)hz_try[i], (int)SD.cardType(),
+      ELOG("[UP] %s @ %u Hz: cardType=%d, tong %lu KB, da dung %lu KB\n",
+           s_sd_was ? "da mount LAI the TF" : "the TF OK", (unsigned)hz_try[i], (int)SD.cardType(),
            (unsigned long)(SD.totalBytes() / 1024ull), (unsigned long)(SD.usedBytes() / 1024ull));
       s_sd_was = true;
       return true;
@@ -284,6 +293,51 @@ void sd_lost(const char *why) {
   ELOG("[UP] MAT THE TF: %s\n", why);
   s_sd_retry_ms = millis();
 }
+
+#if PANEL_SD_SHARED
+// ===========================================================================
+// MUX SPI (74HC4053): the SD nam o khe CYD, HAI master thay nhau (panel <-> Marlin)
+//   Xem panel_config.h (khoi PANEL_SD_SHARED) de biet so do chan. Nguyen tac BAT BUOC:
+//   - Muc MAC DINH khi panel khong dung = MARLIN (co dien tro 10k keo chan chon xuong GND).
+//   - Panel chi doi sang minh NGAY TRUOC khi mount va tra lai NGAY sau khi ghi xong.
+//   - KHONG BAO GIO gianh bus khi Marlin dang in / dang tam dung (xem printer_busy()).
+// ===========================================================================
+void sd_mux_panel(void) {
+  digitalWrite(PANEL_SD_MUX_PIN, PANEL_SD_MUX_PANEL_LEVEL);
+  delay(PANEL_SD_MUX_SETTLE_MS);          // cho 4053 + the on dinh truoc khi clock
+}
+
+void sd_mux_marlin(void) {
+  digitalWrite(PANEL_SD_MUX_PIN, PANEL_SD_MUX_MARLIN_LEVEL);
+}
+
+// Tra bus SPI ve Marlin. `reinit_marlin` = gui M22+M21 de Marlin mount lai the (bat buoc sau khi
+// panel VUA GHI vao the: FAT cua Marlin dang cache trang thai cu) roi xin lai danh sach file.
+void sd_release_to_marlin(const bool reinit_marlin) {
+  if (s_file) s_file.close();
+  if (s_sd_ready) {
+    SD.end();                             // flush FATFS + tra chan SPI ve trang thai input
+    s_sd_ready = false;
+    s_sd_was = false;
+  }
+  sd_mux_marlin();
+  if (!reinit_marlin) {
+    ELOG("[UP] tra bus SPI the cho MARLIN (khong doi FAT)\n");
+    return;
+  }
+  ELOG("[UP] tra bus SPI the cho MARLIN + M22/M21\n");
+  panel_link_send_gcode2("M22", "M21");
+  const uint32_t t0 = millis();
+  while (millis() - t0 < PANEL_HTTP_SDWAIT_MS) {
+    lv_timer_handler();
+    panel_link_task();
+    delay(10);
+  }
+  panel.files_done = false;
+  panel.n_files = 0;
+  panel_link_request((uint8_t)PANEL_REQ_FILES);
+}
+#endif  // PANEL_SD_SHARED
 
 // Xoa moi file *.tmp trong /btup (don file mo coi sau reset / mat dien / loi)
 uint16_t clean_dir(const char *why, const bool verbose) {
@@ -563,7 +617,15 @@ bool http_post_file(const IPAddress &ip, const uint32_t size) {
 // ===========================================================================
 // API: the TF + ket qua phien
 // ===========================================================================
-bool net_esp3d_sd_ready(void) { return s_sd_ready; }
+bool net_esp3d_sd_ready(void) {
+#if PANEL_SD_SHARED
+  // THE DUNG CHUNG: panel khong mount the khi ranh (bus thuoc Marlin) -> "the co san" nghia la
+  // MARLIN bao co the (co PANEL_SF_MEDIA trong frame PUSH). Dung cho ca icon STATUS lan /status.
+  return (panel.flags & PANEL_SF_MEDIA) != 0;
+#else
+  return s_sd_ready;
+#endif
+}
 
 void net_esp3d_sd_retry(void) {
   s_sd_retry_req = true;
@@ -585,7 +647,33 @@ uint32_t    net_esp3d_temp_bytes(void) { return s_got; }
 bool net_esp3d_temp_open(const char *name, uint32_t size_hint) {
   s_err[0] = '\0';
   s_result[0] = '\0';
+  // Chua in moi duoc ghi the (the dung chung voi Marlin) - lop chan thu 2 sau net_upload_http.
+  if (printer_busy()) {
+    snprintf(s_err, sizeof(s_err), "Marlin dang in - khong dung the");
+    return false;
+  }
+#if PANEL_SD_SHARED
+  // CHUA BIET trang thai Marlin (mat lien lac UART) => KHONG duoc gianh the: co the Marlin dang in
+  // ma panel khong biet, gianh bus SPI the giua luc in se lam hong ban in.
+  if (!panel.linked) {
+    snprintf(s_err, sizeof(s_err), "chua lien lac duoc Marlin - khong gianh the");
+    ELOG("[UP] TU CHOI: %s\n", s_err);
+    return false;
+  }
+  // Neu Marlin dang liet ke danh sach file (do nguoi dung vua bam REFRESH) thi doi xong da (~<400 ms)
+  // roi moi gianh bus, tranh cat ngang luc Marlin dang doc the.
+  const uint32_t tw = millis();
+  while (!panel.files_done && (millis() - tw) < 400u) {
+    lv_timer_handler();
+    panel_link_task();
+    delay(5);
+  }
+#endif
   if (!sd_mount(true)) { snprintf(s_err, sizeof(s_err), "the TF panel loi"); return false; }
+#if PANEL_SD_SHARED
+  // Don file mo coi ngay khi VUA gianh duoc bus (khong lam luc ranh: bus thuoc Marlin).
+  if (!s_file) clean_dir("truoc phien moi", true);
+#endif
   // Don file mo coi TRUOC khi mo file moi (chi 1 lan/lan mo - re)
   if (s_file) s_file.close();
   const uint64_t total = SD.totalBytes(), used = SD.usedBytes();
@@ -642,6 +730,10 @@ void net_esp3d_temp_abort(void) {
   }
   s_tmp[0] = '\0';
   s_got = 0;
+#if PANEL_SD_SHARED
+  // Phien bi bo -> PHAI tra bus SPI the cho Marlin (khong thi Marlin mat the vinh vien).
+  sd_release_to_marlin(false);
+#endif
 }
 
 // ===========================================================================
@@ -656,6 +748,47 @@ bool net_esp3d_push(const char *name, uint32_t size, uint32_t *posted, char *err
   if (name && name[0]) snprintf(s_name, sizeof(s_name), "%s", name);
   if (s_tmp[0] == '\0') snprintf(s_tmp, sizeof(s_tmp), "%s/%s.tmp", PANEL_BTUP_DIR, s_name);
 
+#if PANEL_SD_SHARED
+  // -------------------------------------------------------------------------
+  // CHE DO THE DUNG CHUNG (mux 74HC4053) -- KHONG mang, KHONG ESP3D.
+  // File tam /btup/<ten>.tmp da duoc ghi vao the trong luc nhan HTTP (temp_open/temp_write da
+  // giu bus SPI). O day chi con:
+  //   1) DOI TEN file tam -> /<ten> (goc the, cho Marlin nhin thay)   [dang giu bus]
+  //   2) TRA BUS cho Marlin + M22/M21 de Marlin mount lai the
+  //   3) Xin lai danh sach file (panel FILES)
+  // -------------------------------------------------------------------------
+  ov_create_full();                       // lop phu + khoa UI trong luc ghi the (ngan nguoi dung
+  ui_lock(true);                          //   bam IN / mo FILES -> Marlin doc the khi panel dang giu bus)
+  ov_set("DANG GHI VAO THE SD...", s_name, true);
+  bool ok = false;
+  if (s_tmp[0] == '\0' || !s_sd_ready) {
+    snprintf(s_err, sizeof(s_err), "khong co file tam tren the");
+  } else {
+    char dst[72];
+    snprintf(dst, sizeof(dst), "/%s", s_name);
+    if (SD.exists(dst)) SD.remove(dst);   // FATFS rename KHONG ghi de -> xoa ban cu truoc
+    ok = SD.rename(s_tmp, dst);
+    if (ok) {
+      ELOG("[UP] da doi ten %s -> %s (%lu B)\n", s_tmp, dst, (unsigned long)s_got);
+      s_tmp[0] = '\0';
+      s_posted = s_got;
+      snprintf(s_result, sizeof(s_result), "DONE %lu", (unsigned long)s_got);
+      ov_set("DA GHI VAO THE SD", s_name, true);
+    } else {
+      snprintf(s_err, sizeof(s_err), "khong doi ten duoc file tren the");
+      if (SD.exists(s_tmp)) SD.remove(s_tmp);   // don file tam ngay (con dang giu bus)
+      s_tmp[0] = '\0';
+    }
+  }
+  ui_lock(false);
+  sd_release_to_marlin(ok);               // tra bus (+ M22/M21 + xin lai danh sach neu OK)
+  if (!ok) {
+    snprintf(s_result, sizeof(s_result), "ERR %s", s_err);
+    ov_set(s_err[0] ? s_err : "ghi the loi", "", false);
+  }
+  if (posted) *posted = s_posted;
+  if (err && errn) snprintf(err, errn, "%s", s_err[0] ? s_err : "");
+#else
   // 1) WiFi: mang nha (STA) hoac tam sang AP cua ESP3D (che do PANEL_ESP3D_VIA_AP)
   if (!wifi_enter_esp3d()) {
     snprintf(s_err, sizeof(s_err), "WiFi khong ket noi");
@@ -716,13 +849,20 @@ bool net_esp3d_push(const char *name, uint32_t size, uint32_t *posted, char *err
       if (err && errn) snprintf(err, errn, "%s", s_err[0] ? s_err : "post loi");
     }
   }
+#endif  // PANEL_SD_SHARED
   if (!s_result[0]) {
     snprintf(s_result, sizeof(s_result), "ERR %s", s_err[0] ? s_err : "loi khong ro");
     if (err && errn) snprintf(err, errn, "%s", s_err[0] ? s_err : "loi khong ro");
   }
-  // Go lop phu sau 3 s de nguoi dung kip doc ket qua (khong chan vong lap: chi hen gio)
+  // Go lop phu sau 3 s (che do the dung chung: chi 1,5 s vi buoc ghi the gan nhu tuc thi) de
+  // nguoi dung kip doc ket qua (khong chan vong lap: chi hen gio)
   const uint32_t t_note = millis();
-  while (millis() - t_note < 3000u) {
+#if PANEL_SD_SHARED
+  const uint32_t note_ms = 1500u;
+#else
+  const uint32_t note_ms = 3000u;
+#endif
+  while (millis() - t_note < note_ms) {
     lv_timer_handler();
     panel_link_task();
     delay(10);
@@ -736,11 +876,25 @@ bool net_esp3d_push(const char *name, uint32_t size, uint32_t *posted, char *err
 // Vong doi + log
 // ===========================================================================
 void net_esp3d_begin(void) {
+#if PANEL_SD_SHARED
+  // THE DUNG CHUNG: luc khoi dong the thuoc MARLIN -> panel KHONG mount, chi dat chan chon MUX ve
+  // phia Marlin. Panel chi gianh bus khi co phien upload (xem sd_mount/sd_release_to_marlin).
+  pinMode(PANEL_SD_MUX_PIN, OUTPUT);
+  digitalWrite(PANEL_SD_MUX_PIN, PANEL_SD_MUX_MARLIN_LEVEL);
+  ELOG("[UP] the SD DUNG CHUNG voi Marlin qua MUX (chan chon = GPIO%d, muc mac dinh = MARLIN). "
+       "Panel chi gianh bus khi nhan file va khong in.\n", (int)PANEL_SD_MUX_PIN);
+#else
   if (sd_mount(true)) clean_dir("luc khoi dong", true);
   else ELOG("[UP] CANH BAO: chua mount duoc the TF (cam the FAT32 - se tu thu lai moi 2,5 s)\n");
+#endif
 }
 
 void net_esp3d_task(void) {
+#if PANEL_SD_SHARED
+  // The dung chung: khi panel ranh thi bus thuoc Marlin => TUYET DOI khong cham vao the (khong
+  // kiem tra 1 Hz, khong mount lai). Trang thai the lay tu Marlin (co PANEL_SF_MEDIA trong PUSH).
+  return;
+#else
   const uint32_t now = millis();
   if (s_sd_ready) {
     if (now - s_sd_check_ms < PANEL_SD_CHECK_MS) return;
@@ -752,6 +906,7 @@ void net_esp3d_task(void) {
   else if (now - s_sd_retry_ms < PANEL_SD_RETRY_MS) return;
   s_sd_retry_ms = now;
   if (sd_mount(false)) clean_dir("mount lai", false);
+#endif
 }
 
 void net_esp3d_log(void) {
@@ -759,13 +914,21 @@ void net_esp3d_log(void) {
   if (heap < s_heap_min) s_heap_min = heap;
   // Ten file tam dang co (chi ten, khong ca duong dan - dong log gon)
   const char *t = s_tmp[0] ? strrchr(s_tmp, '/') : nullptr;
+#if PANEL_SD_SHARED
+  // The dung chung: KHONG goi SD.totalBytes() khi chua mount (vua ton SPI vua vo nghia vi bus
+  // dang thuoc Marlin). Trang thai the that su nam o co PANEL_SF_MEDIA cua Marlin.
+  const uint32_t free_kb = 0;
+  const int sd_state = (int)net_esp3d_sd_ready();
+#else
+  const uint32_t free_kb = (SD.totalBytes() > SD.usedBytes())
+                               ? (uint32_t)((SD.totalBytes() - SD.usedBytes()) / 1024ull) : 0u;
+  const int sd_state = (int)s_sd_ready;
+#endif
   Serial.printf("[UP] wifi=%u ssid=\"%s\" ip=%s rssi=%d sd=%d busy=%d rx=%lu posted=%lu "
                 "heap=%lu heapmin=%lu free=%luKB | file=%s | %s\n",
                 (unsigned)net_wifi_state(), net_wifi_ssid(), net_wifi_ip(), (int)net_wifi_rssi(),
-                (int)s_sd_ready, (int)s_busy, (unsigned long)s_got, (unsigned long)s_posted,
-                (unsigned long)heap, (unsigned long)s_heap_min,
-                (unsigned long)((SD.totalBytes() > SD.usedBytes())
-                                    ? ((SD.totalBytes() - SD.usedBytes()) / 1024ull) : 0ull),
+                sd_state, (int)s_busy, (unsigned long)s_got, (unsigned long)s_posted,
+                (unsigned long)heap, (unsigned long)s_heap_min, (unsigned long)free_kb,
                 t ? t + 1 : "-", s_result[0] ? s_result : "-");
 }
 

@@ -10,8 +10,10 @@
  *                                   -> {"status":"Ok"|"Error", ...}
  *   Token: query ?token=  HOAC header X-Panel-Token  (PANEL_HTTP_TOKEN; "" = khong kiem)
  *
- * LUONG: nhan file -> ghi /btup/<ten>.tmp tren the TF -> tra loi NGAY -> panel TU DAY sang ESP3D
- * (net_esp3d_push: dung lai luong pha 2 cua duong BT: POST multipart + M22/M21 + xoa file tam) ->
+ * LUONG: nhan file -> ghi /btup/<ten>.tmp tren the TF -> tra loi NGAY -> panel TU HOAN TAT:
+ *   - PANEL_SD_SHARED 1 (mac dinh, xem panel_config.h muc "THE SD DUNG CHUNG"): doi ten file tam
+ *     thanh /<ten> tren THE SD DUNG CHUNG voi Marlin (mux 74HC4053) + tra bus + M22/M21.
+ *   - PANEL_SD_SHARED 0: POST multipart sang module ESP3D (nhu duong BT) + M22/M21 + xoa file tam.
  * /status phan anh tien do (state=posting -> done/error).
  */
 #pragma once
@@ -27,6 +29,11 @@ void net_upload_http_begin(void);   // bat WiFi (net_wifi) + the TF + WebServer 
 void net_upload_http_task(void);    // goi MOI vong lap: server.handleClient() + day file khi can
 void net_upload_http_log(void);     // 1 dong log 1 Hz (de doc tren COM7)
 bool net_upload_http_active(void);  // true = WebServer dang chay (de main.cpp khong goi log 2 lan)
+
+// true = DANG co phien nhan/ghi file (ke tu luc bat dau nhan den luc ghi xong vao the).
+// UI dung co nay de CHAN cac lenh lam Marlin doc the SD (M23/M24/M30/M21/xin danh sach file)
+// trong luc panel dang giu bus SPI cua the dung chung (xem ui_lvgl.cpp: sd_host_busy).
+bool net_upload_active(void);
 
 #ifdef __cplusplus
 }
