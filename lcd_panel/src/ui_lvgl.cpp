@@ -293,6 +293,9 @@ static lv_obj_t  *s_title, *s_link;
 // cua man dang mo BI TRAN theo chieu doc (xem bot_sync()); man nao gon thi giu nguyen bo cuc 206 px.
 static lv_obj_t  *s_bot, *s_bot_prev, *s_bot_next, *s_bot_info;
 static bool       s_bot_shown = false;      // trang thai hien tai cua s_bot (tranh goi an/hien vo ich)
+// Trang thai hien/an cua 2 nut PREV/NEXT: bit0 = PREV, bit1 = NEXT. 0xFF = chua set lan nao.
+// Nut nao KHONG the di theo huong do thi AN HAN (khong lam mo), va chi doi CO khi trang thai doi.
+static uint8_t    s_bot_nav = 0xFF;
 static lv_obj_t  *s_btn_pause, *s_btn_stop; // P9: 2 nut nho chi hien khi dang in tu the SD
 static lv_group_t *s_group;
 static lv_obj_t  *s_focus_prev;            // doi tuong dang focus (de ve khung)
@@ -476,10 +479,19 @@ static lv_obj_t *mk_spacer(lv_obj_t *parent, lv_coord_t w, lv_coord_t h, uint8_t
 
 static void focus_mark(lv_obj_t *o, const bool on) {
   if (!o) return;
+  // Vat co LV_OBJ_FLAG_USER_1 = vat TU QUAN LY NEN (xem jg_axis[] o man JOG): nen cua no dang
+  // dung de danh dau "DANG CHON" (COL_ACCENT). Focus cua nhung vat nay CHI duoc ve VIEN.
+  // LY DO (loi nguoi dung bao): focus va "dang chon" la 2 trang thai KHAC NHAU, KHONG duoc ghi
+  // de nhau. Truoc day focus_mark() doi CA NEN (COL_ACCENT <-> COL_BTN); khi focus roi khoi nut
+  // truc dang chon (sang nut buoc / nut di chuyen) no tra nen nut truc ve COL_BTN -> mat dau
+  // "truc dang chon" du s_axis van dung. Nay: "chon" = NEN, "focus" = VIEN.
+  const bool own_bg = lv_obj_has_flag(o, LV_OBJ_FLAG_USER_1);
   lv_obj_set_style_border_width(o, on ? 2 : 0, 0);
-  lv_obj_set_style_border_color(o, COL_ACCENT, 0);
+  // Nut truc khi focus co the dang to nen COL_ACCENT -> vien COL_ACCENT se chim vao nen,
+  // nen dung mau sang (MR_FRAME) de van nhin thay focus.
+  lv_obj_set_style_border_color(o, own_bg ? MR_FRAME : COL_ACCENT, 0);
   // Vat co nen dac (nut, dong menu, bang) -> doi sang COLOR_SELECTION_BG nhu dong dang chon cua Marlin
-  if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER)
+  if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER && !own_bg)
     lv_obj_set_style_bg_color(o, on ? MR_SELBG : COL_BTN, 0);
 }
 
@@ -654,6 +666,8 @@ enum {
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
   A_MPC_TUNE, A_PID_BED,
+  // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
+  A_FILES_DELETE,
   // Thanh day: phan trang noi dung man dang mo (xem page_scroll/bot_sync)
   A_PAGE_PREV, A_PAGE_NEXT
 };
@@ -666,6 +680,7 @@ static void create_page(uint8_t p);          // forward
 static void page_scroll(const int8_t dir);   // forward (phan trang noi dung, dinh nghia duoi MENU)
 static void bot_sync(const bool remeasure);   // forward (dong bo thanh day, dinh nghia duoi MENU)
 static void files_rebuild(void);             // forward
+static void files_delete_now(void);          // forward (nut XOA FILE, dinh nghia o man FILES)
 static void refocus_page(void);              // forward (dinh nghia o cuoi file)
 static void do_action(const int a);          // forward
 static void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);  // forward
@@ -746,6 +761,9 @@ static void do_confirmed(const uint8_t act) {
       break;
     case A_REBOOT_DFU:
       panel_link_request((uint8_t)PANEL_REQ_DFU);     // Marlin: STM32_DFU_REBOOT
+      break;
+    case A_FILES_DELETE:
+      files_delete_now();                             // xoa file SD dang chon (M30) - man FILE
       break;
     default:
       do_action((int)act);                            // cac lenh khac (vd M524)
@@ -1164,12 +1182,27 @@ static const char *const JOG_STEP[5] = {"0.01", "0.05", "0.1", "1", "10"};   // 
 #define JG_FINE_H  28
 #define JG_BTN_H   28
 
+// Danh dau TRUC DANG CHON bang NEN COL_ACCENT - DOC LAP HOAN TOAN voi focus.
+//  - "dang chon" (s_axis)  = NEN nut: COL_ACCENT
+//  - "focus"    (encoder/cham) = VIEN 2 px (xem focus_mark + LV_OBJ_FLAG_USER_1)
+// Nho tach 2 kenh nay nen focus chuyen sang nut buoc / nut di chuyen KHONG con ghi de nen
+// cua nut truc -> dau "truc dang chon" khong bao gio mat (loi nguoi dung bao truoc day).
+static void jog_axis_mark(void) {
+  for (uint8_t i = 0; i < 3; i++) {
+    if (!jg_axis[i]) continue;
+    const lv_color_t want = (i == s_axis) ? COL_ACCENT : COL_BTN;
+    // Chi set khi mau THAT SU doi: lv_obj_set_style_bg_color() luon invalidate vat, goi vo
+    // dieu kien moi 150 ms se lam man JOG nhap nhay va ton bang thong SPI.
+    if (lv_obj_get_style_bg_color(jg_axis[i], 0).full != want.full)
+      lv_obj_set_style_bg_color(jg_axis[i], want, 0);
+  }
+}
+
 static void cb_jog_axis(lv_event_t *e) {
   const uint8_t a = (uint8_t)(intptr_t)lv_event_get_user_data(e);
   if (a > 2) return;
   s_axis = a;
-  for (uint8_t i = 0; i < 3; i++)
-    if (jg_axis[i]) lv_obj_set_style_bg_color(jg_axis[i], (i == a) ? COL_ACCENT : COL_BTN, 0);
+  jog_axis_mark();
 }
 
 // user_data: (chi so buoc << 8) | (1 = am)
@@ -1199,7 +1232,10 @@ static void page_jog_create(lv_obj_t *p) {
   jg_axis[0] = mk_btn_grow(ra, "X", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)0);
   jg_axis[1] = mk_btn_grow(ra, "Y", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)1);
   jg_axis[2] = mk_btn_grow(ra, "Z", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)2);
-  lv_obj_set_style_bg_color(jg_axis[0], COL_ACCENT, 0);
+  // 3 nut truc TU QUAN LY NEN (LV_OBJ_FLAG_USER_1): focus_mark() chi ve VIEN cho chung, KHONG doi
+  // nen -> nen COL_ACCENT cua truc dang chon khong bi ghi de khi focus sang nut buoc/di chuyen.
+  for (uint8_t i = 0; i < 3; i++) lv_obj_add_flag(jg_axis[i], LV_OBJ_FLAG_USER_1);
+  jog_axis_mark();                                // to nhat truc dang chon (s_axis = 0 luc tao man)
 
   mk_label_w(p, "DI CHUYEN (mm)", COL_DIM, PAGE_INN_W);
 
@@ -1232,19 +1268,56 @@ static void page_jog_create(lv_obj_t *p) {
 }
 
 static void page_jog_update(void) {
-  // khong co gi doi (chi hien thi truc dang chon qua mau nut)
+  // Ve LAI dau truc dang chon o MOI chu ky cap nhat (khong chi luc bam): neu co ai do doi style
+  // (hoac doi man roi quay lai) thi nen COL_ACCENT van duoc khoi phuc ngay trong ~150 ms.
+  jog_axis_mark();
 }
 
 // ===========================================================================
-//  FILES  (16 + 64 + 26 + 26 + 3*GAP = 138 <= 142)
+//  FILES  (PAGE_INN_H = 206)
+//    info 17 (font mono mode 4: line_height = 17) + roller 64
+//    + hang1 26 + hang2 26 + hang3 (XOA FILE) 26 + 4*GAP 8 = 167 <= 206
+//    (truoc khi them nut XOA FILE: 17 + 64 + 26 + 26 + 3*GAP = 139)
+//  (167 + 2*PAGE_PAD = 175 < 206 nen man nay KHONG tran -> khong hien thanh day PREV/NEXT)
 // ===========================================================================
 #define FILES_BTN_H   26
 #define FILES_ROLLER_H (4 * ROW_H)      // 64: 4 dong nhin thay (< 104)
 
 static lv_obj_t *fl_roller, *fl_info;
+static lv_obj_t *fl_del;                        // nut XOA FILE (tam khoa trong luc dang xoa)
 static char      s_roller_buf[PANEL_MAX_FILES * PANEL_FILE_NAME_LEN + 1];
 static uint32_t  s_files_sig = 0;
 static uint8_t   s_files_n   = 0;
+
+// ---------------------------------------------------------------------------
+//  Viec CHAM cua man FILE (init the SD + xoa file): chay o nhip 400 ms trong ui_lvgl_task(),
+//  KHONG phu thuoc man dang mo (nguoi dung roi man van phai xong viec roi moi xin danh sach).
+//
+//  VI SAO PHAI CO DO TRE: lenh G-code (M22/M21, M30) di qua HANG DOI cua Marlin
+//  (panel_serial.cpp: queue.enqueue_one_now()), con frame REQUEST lai duoc Marlin xu ly NGAY
+//  trong ham nhan frame (do_request()). Xin danh sach ngay sau khi gui lenh se nhan duoc danh
+//  sach CU (file chua kip xoa / the chua kip init lai).
+// ---------------------------------------------------------------------------
+enum { FLJOB_NONE = 0, FLJOB_INIT, FLJOB_DELETE };
+#define FILES_JOB_DELAY_MS 800U          // 500..1000 ms: du cho 2 lenh M22+M21 hoac 1 lenh M30
+#define FILES_NOTE_MS     2500U          // ghi chu ngan (vd "Khong xoa thu muc") tu tat sau 2.5 s
+
+static uint8_t     s_fl_job    = FLJOB_NONE;
+static uint32_t    s_fl_job_ms = 0;
+static const char *s_fl_note   = NULL;    // ghi chu tam thoi thay cho dong "SD: n file"
+static uint32_t    s_fl_note_ms = 0;      // moc bat dau ghi chu TAM (0 = ghi chu cua viec cham)
+
+// Ghi chu o dong info. temp = true -> tu tat sau FILES_NOTE_MS (bao loi),
+// temp = false -> hien cho toi khi viec cham xong (trang thai dang lam).
+static void files_note(const char *txt, const bool temp) {
+  s_fl_note    = txt;
+  s_fl_note_ms = temp ? lv_tick_get() : 0;
+}
+
+static void files_job_start(const uint8_t job) {
+  s_fl_job    = job;
+  s_fl_job_ms = lv_tick_get();
+}
 
 // FNV-1a don gian tren ten+co cua danh sach file -> biet khi nao phai tao lai roller
 static uint32_t files_signature(void) {
@@ -1308,6 +1381,119 @@ static void files_do(const bool force_dir) {
 static void cb_files_print(lv_event_t *e) { (void)e; files_do(false); }
 static void cb_files_dir(lv_event_t *e)   { (void)e; files_do(true); }
 
+// ---------------------------------------------------------------------------
+//  INIT LAI THE SD (M22 = nha media, M21 = init media) - TAI SU DUNG A_INITSD co san.
+//  VI SAO: board co module WiFi (ESP3D-direct-sd) ghi THANG len the SD cua MKS Monster8 qua
+//  bus SPI dung chung. Sau khi module do ghi file, Marlin PHAI duoc init lai the moi doc/in
+//  duoc; truoc day nguoi dung phai tu bam nut "Init SD" (man CUSTOM) truoc khi in.
+//  Dung cho CA 2 duong: tu dong khi MO man FILE (xem show_page) va nut REFRESH.
+//
+//  AN TOAN KHI DANG IN: KHONG gui M22/M21 neu dang in/dang tam dung tu the SD. Marlin chi chan
+//  M22 bang IS_SD_PRINTING(), con M21 = card.mount() thi KHONG chan: no dong `root` + init lai
+//  driver SD -> file dang in bi mat. Truong hop nay chi XIN LAI DANH SACH (nhu REFRESH cu).
+// ---------------------------------------------------------------------------
+static bool files_sd_busy(void) {
+  return (panel.flags & (PANEL_SF_SD_PRINTING | PANEL_SF_PAUSED)) != 0;
+}
+
+static void files_init_sd(void) {
+  if (files_sd_busy()) {
+    files_note("Dang in - khong init lai the", true);
+    panel.files_done = false;
+    panel.n_files    = 0;
+    do_action((int)A_REQ_FILES);
+    return;
+  }
+  files_note("DANG KHOI TAO THE...", false);
+  files_job_start(FLJOB_INIT);
+  do_action((int)A_INITSD);              // = panel_link_send_gcode2("M22", "M21")
+}
+
+// Nut REFRESH: lam LUON ca M22/M21 roi moi xin danh sach (khong chi xin danh sach).
+// Ly do: nguoi dung vua upload file bang module WiFi xong va muon thay file moi NGAY - Marlin
+// chi thay file moi sau khi the SD duoc init lai.
+static void cb_files_refresh(lv_event_t *e) { (void)e; files_init_sd(); }
+
+// ---------------------------------------------------------------------------
+//  XOA FILE dang chon trong roller (M30)
+// ---------------------------------------------------------------------------
+static char    s_del_name[PANEL_FILE_NAME_LEN];   // ten file nguoi dung da xac nhan xoa
+static uint8_t s_del_flags = 0;                   // flags tai luc hoi (bit0 = thu muc)
+
+// Khoa/mo nut XOA FILE. Chi doi khi trang thai THAT SU doi (tranh invalidate moi 400 ms).
+// Dung LV_STATE_DISABLED: lv_group bo qua vat disabled (lv_group.c) -> khoa ca duong encoder.
+static void files_del_lock(const bool on) {
+  if (!fl_del || lv_obj_has_state(fl_del, LV_STATE_DISABLED) == on) return;
+  lv_obj_t *l = lv_obj_get_child(fl_del, 0);
+  if (on) {
+    lv_obj_add_state(fl_del, LV_STATE_DISABLED);
+    if (l) { set_text(l, "DANG XOA..."); lv_obj_set_style_text_color(l, COL_DIM, 0); }
+  }
+  else {
+    lv_obj_clear_state(fl_del, LV_STATE_DISABLED);
+    if (l) { set_text(l, "XOA FILE"); lv_obj_set_style_text_color(l, COL_TXT, 0); }
+  }
+}
+
+// Chay lenh xoa THAT SU - chi duoc goi tu do_confirmed() sau khi nguoi dung bam OK du 2 buoc.
+static void files_delete_now(void) {
+  if (s_fl_job == FLJOB_DELETE) return;                 // dang xoa -> chong bam lap
+  if (!s_del_name[0]) return;
+  // Kiem lai co "thu muc" o day nua: hop xac nhan khong khoa duoc vung phia duoi (cham van lot),
+  // nen lua chon co the da doi trong luc hop dang mo.
+  if (s_del_flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }
+
+  char cmd[PANEL_FILE_NAME_LEN + 6];
+  snprintf(cmd, sizeof(cmd), "M30 %s", s_del_name);
+  panel_link_send_gcode(cmd);
+  files_note("dang xoa...", false);
+  files_job_start(FLJOB_DELETE);
+  files_del_lock(true);                                 // tam khoa nut toi khi danh sach duoc refresh
+}
+
+// Nut XOA FILE: KHONG xoa ngay ma hoi xac nhan 2 buoc (xoa file KHONG hoan tac duoc -> giong
+// REBOOT DFU). Ten file (ke ca ten khong co phan mo rong - van cho phep) duoc ghi ro trong hop.
+static void cb_files_delete(lv_event_t *e) {
+  (void)e;
+  if (s_fl_job == FLJOB_DELETE) return;                 // dang xoa -> khong mo lai hop xac nhan
+  // KHONG xoa khi dang in/tam dung tu the SD: Marlin M30 goi card.closefile() TRUOC khi xoa
+  // (Marlin/src/gcode/sd/M30.cpp) -> se dong luon file dang in, ban in hong ngay.
+  if (files_sd_busy()) { files_note("Dang in - khong xoa file", true); return; }
+  const panel_file_t *f = files_selected();
+  if (!f || !f->name[0]) return;
+  // flags bit 0 = isDir (Marlin panel_serial.cpp: tx_u8(panel_files.isDir() ? 1 : 0)).
+  if (f->flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }
+
+  // Chot TEN FILE ngay tai day: danh sach co the duoc Marlin day lai trong luc hop dang mo, giu
+  // ten da hoi de nguoi dung xac nhan dung file nao thi xoa dung file do.
+  strncpy(s_del_name, f->name, sizeof(s_del_name) - 1);
+  s_del_name[sizeof(s_del_name) - 1] = '\0';
+  s_del_flags = f->flags;
+
+  char txt[80];
+  snprintf(txt, sizeof(txt), "Xoa file?\n%s\nKhong the hoan tac!", s_del_name);
+  ui_confirm("XOA FILE", txt, (uint8_t)A_FILES_DELETE, 2);
+}
+
+// Viec cham chay o nhip 400 ms (xem ui_lvgl_task): het do tre thi xin lai danh sach.
+static void files_job_task(void) {
+  if (s_fl_job == FLJOB_NONE) return;
+  if (lv_tick_elaps(s_fl_job_ms) < FILES_JOB_DELAY_MS) return;
+
+  s_fl_job    = FLJOB_NONE;
+  s_fl_note   = NULL;                    // tra dong info ve "SD: n file"
+  s_fl_note_ms = 0;
+  // Mo khoa nut XOA khi MOI viec cham xong - ke ca khi viec cham la INIT: nguoi dung co the vua
+  // xac nhan xoa vua bam REFRESH (job sau thay job truoc), khong duoc de nut ket o trang thai khoa.
+  files_del_lock(false);
+
+  // Xoa dem TRUOC khi xin: neu thu muc chi con 0 file thi Marlin chi gui frame KET THUC (0xFF)
+  // -> handle_frame() khong tu reset n_files, roller se van hien file vua xoa.
+  panel.files_done = false;
+  panel.n_files    = 0;
+  do_action((int)A_REQ_FILES);           // xin lai danh sach -> page_files_update() ve lai roller
+}
+
 static void page_files_create(lv_obj_t *p) {
   fl_info = mk_label_w(p, "SD: -", COL_TXT, PAGE_INN_W);
 
@@ -1328,23 +1514,35 @@ static void page_files_create(lv_obj_t *p) {
   // Voi encoder: bam lan 1 = vao che do edit (xoay chon file), bam lan 2 = in file dang chon
   lv_obj_add_event_cb(fl_roller, cb_files_print, LV_EVENT_CLICKED, NULL);
 
-  // 2 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut duoi (PAUSE/RESUME/STOP)
+  // 3 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut duoi (PAUSE/RESUME/STOP)
+  // + 1 hang rieng cho XOA FILE (viec khong hoan tac duoc -> de rieng, de bam nham)
   lv_obj_t *r1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
   mk_btn_grow(r1, "PRINT",   FILES_BTN_H, cb_files_print, NULL);
   mk_btn_grow(r1, "DIR",     FILES_BTN_H, cb_files_dir, NULL);
   mk_btn_grow(r1, "UP",      FILES_BTN_H, cb_action, (void *)(intptr_t)A_REQ_UP);
-  mk_btn_grow(r1, "REFRESH", FILES_BTN_H, cb_action, (void *)(intptr_t)A_REQ_FILES);
+  // REFRESH = init lai the SD (M22/M21) ROI MOI xin danh sach - xem cb_files_refresh()
+  mk_btn_grow(r1, "REFRESH", FILES_BTN_H, cb_files_refresh, NULL);
 
   lv_obj_t *r2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
   mk_btn_grow(r2, "PAUSE",  FILES_BTN_H, cb_action, (void *)(intptr_t)A_PAUSE);
   mk_btn_grow(r2, "RESUME", FILES_BTN_H, cb_action, (void *)(intptr_t)A_RESUME);
   mk_btn_grow(r2, "STOP (M524)", FILES_BTN_H, cb_action, (void *)(intptr_t)A_STOP);
+
+  // Hang 3: XOA FILE dang chon trong roller (M30). Phai xac nhan 2 buoc (xem cb_files_delete).
+  lv_obj_t *r3 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
+  fl_del = mk_btn_grow(r3, "XOA FILE", FILES_BTN_H, cb_files_delete, NULL);
 }
 
 static void page_files_update(void) {
   char b[40];
-  snprintf(b, sizeof(b), "SD: %u file%s", (unsigned)panel.n_files, panel.files_done ? "" : " (dang nhan)");
-  set_text(fl_info, b);
+  // Dong info: uu tien trang thai viec cham (init the / dang xoa) va ghi chu ngan, roi moi den so file.
+  const bool live = (s_fl_note && s_fl_job != FLJOB_NONE);
+  const bool temp = (s_fl_note && s_fl_note_ms && lv_tick_elaps(s_fl_note_ms) < FILES_NOTE_MS);
+  if (live || temp) set_text(fl_info, s_fl_note);
+  else {
+    snprintf(b, sizeof(b), "SD: %u file%s", (unsigned)panel.n_files, panel.files_done ? "" : " (dang nhan)");
+    set_text(fl_info, b);
+  }
 
   const uint32_t sig = files_signature();
   if (sig != s_files_sig || panel.n_files != s_files_n) {
@@ -2500,18 +2698,29 @@ static void bot_sync(const bool remeasure) {
   const bool need = s_bot_shown;
   if (!need) return;
 
-  // nhan "TRANG x/y" + lam mo nut nao khong con gi de cuon.
+  // nhan "TRANG x/y" + AN HAN nut nao khong con gi de cuon (truoc day chi lam mo bang OPA_40 ->
+  // nguoi dung van tuong la bam duoc). Thanh day la flex ROW [PREV][nhan grow=1][NEXT]: LVGL bo
+  // qua vat HIDDEN khi xep flex nen nhan tu gian ra, con lai van nam sat bien (trai/phai).
   // `top + bot` = TONG doan cuon duoc (khong doi theo vi tri dang dung) nen so trang dem theo
-  // moc nhay tung trang, khop voi trang thai mo/sang cua 2 nut (o dau: top=0, o day: bot=0).
+  // moc nhay tung trang, khop voi trang thai hien/an cua 2 nut (o dau: top=0, o day: bot=0).
   const lv_coord_t vis = lv_obj_get_height(pg) - 2 * PAGE_PAD;
   const lv_coord_t top = lv_obj_get_scroll_top(pg), bot = lv_obj_get_scroll_bottom(pg);
   const int npg = (vis > 0) ? (1 + (int)((top + bot + vis - 1) / vis)) : 1;
   const int cur = (vis > 0) ? (1 + (int)((top       + vis - 1) / vis)) : 1;
   char b[24]; snprintf(b, sizeof(b), "TRANG %d/%d", cur, npg);
   set_text(s_bot_info, b);
-  // mo nut khi khong the cuon them (dung mau COL_* co san cho trang thai mo)
-  lv_obj_set_style_bg_opa(s_bot_prev, (top > 0) ? LV_OPA_COVER : LV_OPA_40, 0);
-  lv_obj_set_style_bg_opa(s_bot_next, (bot > 0) ? LV_OPA_COVER : LV_OPA_40, 0);
+
+  // Chi doi CO khi trang thai doi (bit0 = PREV hien, bit1 = NEXT hien) -> khong relayout moi 400 ms.
+  // nav == 0 (ca 2 cung khong the di) khong the toi day: thanh day chi hien khi noi dung TRAN
+  // (ovf > PAGE_PAD), ma khi do thi top > 0 hoac bot > 0. Van chan them cho chac.
+  const uint8_t nav = (uint8_t)((top > 0 ? 1U : 0U) | (bot > 0 ? 2U : 0U));
+  if (nav && nav != s_bot_nav) {
+    s_bot_nav = nav;
+    if (nav & 1U) lv_obj_clear_flag(s_bot_prev, LV_OBJ_FLAG_HIDDEN);
+    else          lv_obj_add_flag(s_bot_prev, LV_OBJ_FLAG_HIDDEN);
+    if (nav & 2U) lv_obj_clear_flag(s_bot_next, LV_OBJ_FLAG_HIDDEN);
+    else          lv_obj_add_flag(s_bot_next, LV_OBJ_FLAG_HIDDEN);
+  }
 }
 
 // ===========================================================================
@@ -2558,6 +2767,13 @@ static void show_page(uint8_t p) {
 
   // Lop phu SUA thong so chi thuoc man SETTINGS -> doi man thi dong luon
   if (p != PG_SETTINGS) ov_hide();
+
+  // MO man FILE -> tu nha + init lai the SD (M22/M21) ROI MOI xin danh sach (xem files_init_sd
+  // va FILES_JOB_DELAY_MS). VI SAO dat o day: show_page() chi chay 1 lan moi lan VAO man, nen
+  // KHONG the gui lap moi 400 ms (se nghen UART va giat man hinh). Truong hop dung: module WiFi
+  // (ESP3D-direct-sd) ghi thang len the SD qua SPI dung chung -> Marlin phai duoc init lai the
+  // moi doc/in duoc, truoc day nguoi dung phai tu bam "Init SD" truoc khi in.
+  if (p == PG_FILES) files_init_sd();
 
   set_text(s_title, PG_TITLE[p]);
   s_page_act = p;
@@ -2944,6 +3160,10 @@ void ui_lvgl_task(void) {
     // Chi chay o nhip CHAM (400 ms) va KHONG do lai chieu cao trang (xem bot_sync): do lai se lam
     // LVGL kep `scroll_y` -> vua bam NEXT da bi nhay ve dau. Muon do lai thi phai roi man roi vao lai.
     bot_sync(false);
+
+    // Viec cham cua man FILE (init the SD / xoa file): chay CA KHI da roi man FILE, de lenh da
+    // gui van duoc hoan tat (xin lai danh sach + mo khoa nut XOA). Xem FILES_JOB_DELAY_MS.
+    files_job_task();
   }
 
   boxes_update();
