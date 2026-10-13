@@ -65,10 +65,25 @@ const char *net_wifi_saved_ssid(void);
 // ===========================================================================
 
 // Quet va LUU toi da PANEL_WIFI_SCAN_MAX mang (RSSI manh nhat truoc).
-// !!! BLOCKING ~2-4 s (WiFi.scanNetworks dong bo) - goi tu task UI, hien "DANG QUET..." truoc.
+// !!! BLOCKING ~2-8 s (WiFi.scanNetworks dong bo) - goi tu task UI, hien "DANG QUET..." truoc.
+// DO THAT 2026-10-14: khu vuc 30 mang -> **8,2 giay** (tran 150 ms/kenh). Trong suot thoi gian do
+// panel KHONG tra loi sector the SD cho Marlin => TUYET DOI khong goi khi Marlin dang in.
+// UI nen dung bo ham ASYNC (net_wifi_scan_begin/poll) ben duoi de khong chan vong lap.
 // Tra ve: so mang LUU DUOC (0..PANEL_WIFI_SCAN_MAX). Mang yeu hon suc chua se bi bo qua, nen
 // danh sach co the ngan hon so mang thuc te trong khu vuc.
 int net_wifi_scan(void);
+
+// ---------------------------------------------------------------------------
+// QUET KHONG CHAN (dung cho UI - lap vao nhip 400 ms, KHONG bao gio chan vong lap)
+//   net_wifi_scan_begin(): 0 = da bat dau quet; -1 = dang quet roi (bo qua)
+//   net_wifi_scan_poll() : -1 = dang quet | -2 = loi/qua han | >= 0 = XONG (so mang luu duoc)
+//   net_wifi_scan_cancel(): huy phien dang quet (goi khi roi trang WIFI)
+// Trong luc quet, vong lap van chay binh thuong (tra loi Marlin + web server).
+// ---------------------------------------------------------------------------
+int  net_wifi_scan_begin(void);
+int  net_wifi_scan_poll(void);
+void net_wifi_scan_cancel(void);
+bool net_wifi_scanning(void);
 
 // So o toi da cua danh sach (de UI ve vong lap cho an toan).
 int net_wifi_scan_max(void);

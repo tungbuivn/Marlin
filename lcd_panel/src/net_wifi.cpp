@@ -58,6 +58,30 @@ char     s_ip[16] = "";                 // IP dang co ("" = chua ket noi)
 int8_t   s_rssi = 0;                    // dBm (0 = khong biet)
 uint32_t s_retry_ms = 0;                // lan thu ket noi lai gan nhat
 bool     s_up_logged = false;           // da log "DA ket noi" cho phien ket noi nay
+uint32_t s_down_since = 0;              // millis luc BAT DAU thay mat ket noi (0 = dang ket noi)
+
+// Sau khi QUET MANG, WiFi hay bao "mat ket noi" trong vai giay (radio phai roi kenh de quet) roi tu
+// ket noi lai. Neu ta "chot ha" bang WiFi.begin() ngay luc do thi:
+//   - huy qua trinh auto-reconnect cua core -> WiFi chap chon lien tuc;
+//   - goi WiFi.begin() lap lai khi dang co mDNS + web server => de panic (da gap: panel tu reboot).
+// Vi vay: (1) khong ep begin trong PANEL_WIFI_SCAN_GRACE_MS sau khi quet;
+//         (2) chi ep begin khi da mat ket noi LIEN TUC >= PANEL_WIFI_DOWN_CONFIRM_MS.
+#ifndef PANEL_WIFI_SCAN_GRACE_MS
+  #define PANEL_WIFI_SCAN_GRACE_MS      20000u
+#endif
+#ifndef PANEL_WIFI_DOWN_CONFIRM_MS
+  #define PANEL_WIFI_DOWN_CONFIRM_MS     3000u
+#endif
+
+// Thoi gian dwell toi da moi kenh khi QUET MANG.
+//
+// ⚠️⚠️ BAY CUA CORE (doc WiFiScan.cpp:63,144): timeout cua quet ASYNC = `max_ms_per_chan * 20`.
+//    Voi 150 ms -> timeout chi 3 s, trong khi DO THAT tren may nay (khu vuc 30 mang) mot lan quet mat
+//    **8,2 giay** => scanComplete() luon tra WIFI_SCAN_FAILED (-2) du quet van chay.
+//    Chon 600 ms => timeout 12 s (du cho ~8 s) va van la "tran" dwell moi kenh (min = 100 ms).
+#ifndef PANEL_WIFI_SCAN_MS_PER_CHAN
+  #define PANEL_WIFI_SCAN_MS_PER_CHAN 600
+#endif
 
 // ---- ket qua quet mang (RSSI manh nhat truoc) ----
 struct ScanEnt { char ssid[PANEL_WIFI_SSID_MAX + 1]; int8_t rssi; };
@@ -178,12 +202,9 @@ const char *net_wifi_saved_ssid(void) { return s_saved_ssid; }
 // ===========================================================================
 // Quet mang  (CHAN ~2-4 s - xem net_wifi.h)
 // ===========================================================================
-int net_wifi_scan(void) {
-  s_scan_n = 0;
-  // scanNetworks(false=chan cho xong, false=khong liet ke mang an): Arduino core ngu toi khi
-  // driver bao xong (~2-4 s tuy so kenh). Phai goi tu task UI/main loop, KHONG duoc tu ISR.
-  WiFi.scanDelete();
-  const int n = WiFi.scanNetworks(false, false);
+// Luu ket qua quet (da co san trong WiFi.SSID(i)/RSSI(i)) vao bang sap xep theo RSSI giam dan.
+// Dung CHUNG cho ca duong dong bo (console) va duong async (UI).
+static void scan_store(const int n) {
   if (n > 0) {
     for (int i = 0; i < n; i++) {
       const String ss = WiFi.SSID(i);
@@ -209,10 +230,73 @@ int net_wifi_scan(void) {
       }
     }
   }
+}
+
+int net_wifi_scan(void) {
+  s_scan_n = 0;
+  // scanNetworks(false=chan cho xong, false=khong liet ke mang an, false=active, max_ms_per_chan):
+  // Arduino core ngu toi khi driver bao xong. PHai goi tu task UI/main loop, KHONG duoc tu ISR.
+  //
+  // ⚠️ max_ms_per_chan: mac dinh cua core la 300 ms/kenh => 13 kenh = ~4 s (co the HON 5 s khi
+  // dong kenh) - trong suot thoi gian do panel KHONG chay duoc gi khac: khong tra loi sector the SD
+  // cho Marlin (=> dang in ma quet = hong ban in) va khong phuc vu web server. Dat 150 ms/kenh de
+  // rut ngan cua so chan lai. Xem canh bao trong ui_lvgl.cpp: cb_wifi_scan() chan quet khi
+  // Marlin dang in.
+  const uint32_t t0 = millis();
+  WiFi.scanDelete();
+  const int n = WiFi.scanNetworks(false, false, false, PANEL_WIFI_SCAN_MS_PER_CHAN);
+  const uint32_t dt = millis() - t0;
+  scan_store(n);
   WiFi.scanDelete();
   s_scan_ms = millis();
-  WLOG("[WIFI] quet xong: thay %d mang, luu %d (toi da %d)\n", n, s_scan_n, PANEL_WIFI_SCAN_MAX);
+  WLOG("[WIFI] quet xong: thay %d mang, luu %d (toi da %d) trong %lu ms (tran %u ms/kenh)\n",
+       n, s_scan_n, PANEL_WIFI_SCAN_MAX, (unsigned long)dt, (unsigned)PANEL_WIFI_SCAN_MS_PER_CHAN);
   return s_scan_n;
+}
+
+// ===========================================================================
+// QUET KHONG CHAN (UI): bat dau -> nhip 400 ms goi poll() -> xong thi doc ket qua.
+// Vong lap chinh VAN CHAY trong luc quet => van tra loi Marlin (sector the SD) + web server.
+// ===========================================================================
+bool s_scanning = false;
+uint32_t s_scan_start_ms = 0;
+
+int net_wifi_scan_begin(void) {
+  if (s_scanning) return -1;
+  s_scan_n = 0;
+  WiFi.scanDelete();
+  const int16_t r = WiFi.scanNetworks(true /*async*/, false, false, PANEL_WIFI_SCAN_MS_PER_CHAN);
+  if (r == WIFI_SCAN_FAILED) { WLOG("[WIFI] khong bat dau duoc quet (scanNetworks tra FAILED)\n"); return -1; }
+  s_scanning = true;
+  s_scan_start_ms = millis();
+  s_scan_ms = s_scan_start_ms;      // danh dau NGAY tu luc bat dau: khoa cua an toan + grace period
+  WLOG("[WIFI] bat dau quet KHONG CHAN (tran %u ms/kenh)\n", (unsigned)PANEL_WIFI_SCAN_MS_PER_CHAN);
+  return 0;
+}
+
+bool net_wifi_scanning(void) { return s_scanning; }
+
+int net_wifi_scan_poll(void) {
+  if (!s_scanning) return -1;
+  const int16_t n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_RUNNING) {
+    return (millis() - s_scan_start_ms > 30000u) ? -2 : -1;   // cua an toan 30 s
+  }
+  if (n == WIFI_SCAN_FAILED) { s_scanning = false; WiFi.scanDelete(); WLOG("[WIFI] quet LOI\n"); return -2; }
+  scan_store((int)n);
+  WiFi.scanDelete();
+  s_scanning = false;
+  s_scan_ms = millis();
+  WLOG("[WIFI] quet KHONG CHAN xong sau %lu ms: thay %d mang, luu %d\n",
+       (unsigned long)(millis() - s_scan_start_ms), (int)n, s_scan_n);
+  return s_scan_n;
+}
+
+void net_wifi_scan_cancel(void) {
+  if (!s_scanning) return;
+  WiFi.scanDelete();
+  s_scanning = false;
+  WLOG("[WIFI] HUY phien quet (roi trang WIFI)\n");
 }
 
 int net_wifi_scan_max(void) { return PANEL_WIFI_SCAN_MAX; }
@@ -332,14 +416,36 @@ void net_wifi_down(void) {
 void net_wifi_poll(void) {
   if (!s_started) { s_state = WS_OFF; return; }
   refresh();
-  if (s_state == WS_UP) return;
-  if (!s_want) return;
   const uint32_t now = millis();
+  if (s_state == WS_UP) { s_down_since = 0; return; }     // dang ket noi -> khong dung tới gi
+  if (!s_want) return;
+
+  // ⚠️ DANG QUET MANG (async): TUYET DOI khong goi WiFi.begin()/mode() luc nay - no se HUY phien
+  // quet (do that: scanComplete() tra WIFI_SCAN_FAILED sau ~2 s) va lam WiFi chap chon.
+  if (s_scanning) return;
+
+  // Moi mat ket noi -> bat dau dem; chi ep ket noi lai khi da mat LIEN TUC du lau (tranh dut
+  // auto-reconnect cua core chi vi 1 nhip doc trang thai bi sai).
+  if (!s_down_since) s_down_since = now;
+  if ((now - s_down_since) < PANEL_WIFI_DOWN_CONFIRM_MS) return;
+
+  // Vua QUET MANG xong -> de core tu ket noi lai, KHONG ep begin (xem ghi chu o khai bao bien).
+  if (s_scan_ms && (now - s_scan_ms) < PANEL_WIFI_SCAN_GRACE_MS) {
+    static uint32_t s_last_grace_log = 0;
+    if (now - s_last_grace_log > 5000u) {
+      s_last_grace_log = now;
+      WLOG("[WIFI] mat ket noi ngay sau khi quet -> cho auto-reconnect (con %lu ms), khong ep begin\n",
+           (unsigned long)(PANEL_WIFI_SCAN_GRACE_MS - (now - s_scan_ms)));
+    }
+    return;
+  }
+
   if (now - s_retry_ms < PANEL_WIFI_RETRY_MS) return;
   s_retry_ms = now;
   if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA);
   WiFi.begin(s_ssid, s_pass);       // autoReconnect lo phan lon; day la chot ha
-  WLOG("[WIFI] mat ket noi -> thu lai \"%s\"\n", s_ssid);
+  WLOG("[WIFI] mat ket noi > %lu ms -> thu lai \"%s\"\n",
+       (unsigned long)PANEL_WIFI_DOWN_CONFIRM_MS, s_ssid);
 }
 
 bool net_wifi_connected(void) { return s_started && (WiFi.status() == WL_CONNECTED); }
@@ -400,6 +506,10 @@ bool        net_wifi_connect(const char *ssid, const char *pass, bool save) {
   (void)ssid; (void)pass; (void)save; return false;
 }
 void        net_wifi_disconnect(bool forget) { (void)forget; }
+int  net_wifi_scan_begin(void) { return -1; }
+int  net_wifi_scan_poll(void) { return -2; }
+void net_wifi_scan_cancel(void) {}
+bool net_wifi_scanning(void) { return false; }
 void        net_wifi_begin(void) {}
 void        net_wifi_task(void) {}
 bool        net_wifi_up(void) { return false; }

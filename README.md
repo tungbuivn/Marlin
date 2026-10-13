@@ -2904,4 +2904,23 @@ Do that 2026-10-14 (mat ~15 phut tuong panel chet):
   M20 x6, M20 L, M33, M23, roi chay 1 file toan M105/M114/M27) cho ket qua **`SD r=274/0 w=5/0`** -
   khong mot loi sector nao. Trinh tu day du o `lcd_panel/README.md` muc 12.6.
 
+## Cam bay 51 - Panel CYD: quet WiFi va 3 cai bay da gap (2026-10-14)
+1. **Quet DONG BO (`WiFi.scanNetworks(false,...)`) chan vong lap 8-12 s** (do that: **11,6 s / 39 mang**;
+   rieng khu vuc nha do duoc 8,2 s). Trong luc do panel khong tra loi sector the SD cho Marlin
+   (**dang in ma quet = hong ban in**), khong phuc vu web server, va mat frame PUSH (`err=1`).
+   => UI dung bo ham **KHONG CHAN** (`net_wifi_scan_begin/poll`, ket qua lay o `page_wifi_update()`),
+   va **TU CHOI quet khi Marlin dang in**.
+2. **Bay cua core Arduino** (`libraries/WiFi/src/WiFiScan.cpp:63,144`): timeout cua quet **async** =
+   `max_ms_per_chan * 20`. De 150 ms => timeout **3 s** < thoi gian quet that => `scanComplete()` luon tra
+   `WIFI_SCAN_FAILED (-2)` du quet van chay (trieu chung: `[WIFI] quet LOI` sau ~2 s, roller rong).
+   Da dat `PANEL_WIFI_SCAN_MS_PER_CHAN 600` => timeout 12 s.
+3. **`net_wifi_poll()` goi `WiFi.begin()` giua luc dang quet se HUY phien quet** va lam WiFi chap chon
+   (moi lan begin la mot lan rot/noi, trong khi mDNS + web server dang mo => de panic/reboot).
+   Nay `net_wifi_poll()` return ngay khi `s_scanning`, va sau khi quet con 20 s "an han" khong ep begin
+   (chi ep khi da mat ket noi LIEN TUC >= 3 s).
+4. **Roi trang WIFI KHONG dung tới WiFi**: `wifi_page_leave()` chi dong ban phim mat khau, an lop phu quet,
+   huy phien quet dang chay va mo khoa input. Chi 4 nut QUET / KET NOI / NGAT / XOA moi doi WiFi.
+5. Chan doan: lenh console `WIFI ASYNC 0|1|2` (0 = chi poll, 1 = + panel_link, 2 = + web server) de biet
+   tac vu nao pha phien quet; log `[WIFI] ...` in thoi gian quet that + so mang.
+
 

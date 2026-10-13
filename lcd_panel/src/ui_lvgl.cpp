@@ -2801,15 +2801,52 @@ static void wifi_fill_roller(const int n) {
   lv_roller_set_selected(wf_roller, 0, LV_ANIM_OFF);
 }
 
-// QUET MANG: blocking ~2-4 s -> lop phu + KHOA input, xong moi mo lai.
+// QUET MANG: uu tien duong KHONG CHAN (net_wifi_scan_begin/poll). Duong cu (dong bo) chi con la
+// duong lui khi firmware khong co API async.
+//
+// ⚠️⚠️ CANH BAO (2026-10-14): quet dong bo CHAN vong lap 2-8 s (DO THAT: 8,2 s voi 30 mang) ->
+// trong luc do panel KHONG tra loi sector the SD cho Marlin (Marlin bao "SD read error" va DUNG BAN
+// IN) va khong phuc vu web server. Vi vay: (1) TU CHOI quet khi Marlin dang in; (2) UI dung duong
+// ASYNC de vong lap van chay.
+// Ngoai ra: roi trang WIFI KHONG dung tới WiFi (xem wifi_page_leave) - chi QUET/NGAT/XOA moi doi WiFi.
+extern "C" bool net_esp3d_printer_busy(void) __attribute__((weak));
+extern "C" int  net_wifi_scan_begin(void) __attribute__((weak));
+extern "C" int  net_wifi_scan_poll(void) __attribute__((weak));
+extern "C" void net_wifi_scan_cancel(void) __attribute__((weak));
+extern "C" bool net_wifi_scanning(void) __attribute__((weak));
+static bool net_wifi_scanning_weak(void) { return net_wifi_scanning && net_wifi_scanning(); }
+
+// Log chan doan cua trang WIFI (chi tren board that)
+#if defined(PANEL_BOARD_CYD)
+  #define WIFILOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
+#else
+  #define WIFILOG(...)   do { } while (0)
+#endif
+
 static void cb_wifi_scan(lv_event_t *e) {
   (void)e;
   if (s_wifi_busy || !wifi_api_ok()) return;
+  if (net_esp3d_printer_busy && net_esp3d_printer_busy()) {
+    // Quet lam WiFi roi kenh (va truoc day con CHAN vong lap) -> Marlin mat the giua ban in.
+    lv_roller_set_options(wf_roller, "(Marlin dang in - khong quet mang)", LV_ROLLER_MODE_NORMAL);
+    WIFILOG("[WIFI] TU CHOI quet: Marlin dang in\n");
+    return;
+  }
+  if (net_wifi_scan_begin && net_wifi_scan_poll) {
+    // DUONG MOI: quet KHONG CHAN - vong lap van chay (tra loi Marlin + web server + ve man hinh).
+    if (net_wifi_scan_begin() != 0) return;         // dang quet roi -> bo qua
+    s_wifi_busy = true;
+    wifi_ov_show(true, "DANG QUET MANG...");
+    return;                                          // ket qua lay o page_wifi_update()
+  }
+  // Duong lui (firmware khong co API async): quet dong bo 2-8 s + khoa input
   s_wifi_busy = true;
   wifi_ov_show(true, "DANG QUET MANG...");
   if (s_indev) lv_indev_enable(s_indev, false);        // KHOA cam ung + encoder
   for (uint8_t k = 0; k < 3; k++) lv_timer_handler();  // ve lop phu TRUOC khi goi ham blocking
-  const int n = net_wifi_scan();                       // BLOCKING ~2-4 s
+  const uint32_t t0 = millis();
+  const int n = net_wifi_scan();                       // BLOCKING 2-8 s (duong lui)
+  WIFILOG("[WIFI] QUET dong bo xong sau %lu ms\n", (unsigned long)(millis() - t0));
   wifi_fill_roller(n);
   wifi_ov_show(false, NULL);
   if (s_indev) lv_indev_enable(s_indev, true);         // MO KHOA
@@ -2844,6 +2881,28 @@ static void cb_wifi_forget(lv_event_t *e) {
              (uint8_t)A_WIFI_FORGET, 2);
 }
 
+// Dong moi thu CUA TRANG WIFI khi roi trang: ban phim nhap mat khau + lop phu "DANG QUET...".
+// (Ca 2 vat deu la con cua lv_scr_act() chu KHONG phai con cua trang, nen neu khong don thi chung
+//  van nam tren man hinh o trang khac.) KHONG dung tới WiFi: roi trang khong ngat/ket noi lai gi ca.
+static void wifi_page_leave(void) {
+#if LV_USE_KEYBOARD && LV_USE_TEXTAREA
+  if (s_kb_bd) {
+    // Ngoai event cua chinh no -> dung lv_obj_del (khong can _async). LVGL tu go vat khoi group.
+    lv_obj_del(s_kb_bd);
+    s_kb_bd = NULL; s_kb_ta = NULL; s_kb_kb = NULL;
+    WIFILOG("[WIFI] roi trang: da dong ban phim mat khau\n");
+  }
+#endif
+  if (s_wf_ov) lv_obj_add_flag(s_wf_ov, LV_OBJ_FLAG_HIDDEN);
+  // Dang quet KHONG CHAN ma roi trang -> huy phien quet (khong de no chay ngam)
+  if (s_wifi_busy && net_wifi_scan_cancel && net_wifi_scanning_weak()) {
+    net_wifi_scan_cancel();
+    WIFILOG("[WIFI] roi trang: da huy phien quet\n");
+  }
+  s_wifi_busy = false;
+  if (s_indev) lv_indev_enable(s_indev, true);   // mo khoa cho chac (truong hop duong lui)
+}
+
 static void page_wifi_create(lv_obj_t *p) {
   wf_state = mk_label_w(p, "WiFi: -", COL_TXT, PAGE_INN_W);
   wf_ssid  = mk_label_w(p, "SSID: -", COL_DIM, PAGE_INN_W);
@@ -2875,6 +2934,18 @@ static void page_wifi_create(lv_obj_t *p) {
 
 static void page_wifi_update(void) {
   if (!wf_state) return;
+
+  // Dang quet mang (duong KHONG CHAN): hoi ket qua moi nhip 400 ms. Xong -> do vao roller + mo khoa.
+  if (s_wifi_busy && net_wifi_scan_poll && net_wifi_scan_begin) {
+    const int r = net_wifi_scan_poll();
+    if (r == -1) return;                       // con dang quet -> giu nguyen lop phu
+    if (r >= 0) wifi_fill_roller(r);
+    else        lv_roller_set_options(wf_roller, "(quet that bai)", LV_ROLLER_MODE_NORMAL);
+    wifi_ov_show(false, NULL);
+    s_wifi_busy = false;
+    refocus_page();
+  }
+
   char b[64];
   if (!wifi_api_ok()) {                                // nhanh firmware chua merge API WiFi
     set_text(wf_state, "WiFi: KHONG HO TRO (chua co module)");
@@ -3387,6 +3458,11 @@ static void show_page(uint8_t p) {
 
   // Lop phu SUA thong so chi thuoc man SETTINGS -> doi man thi dong luon
   if (p != PG_SETTINGS) ov_hide();
+
+  // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
+  // con cua trang) va KHONG dung tới WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
+  if (p != PG_WIFI) wifi_page_leave();
+  else if (s_page_act != PG_WIFI) WIFILOG("[WIFI] vao trang WIFI (chi doc trang thai, khong quet)\n");
 
   // MO man FILE -> tu nha + init lai the SD (M22/M21) ROI MOI xin danh sach (xem files_init_sd
   // va FILES_JOB_DELAY_MS). VI SAO dat o day: show_page() chi chay 1 lan moi lan VAO man, nen

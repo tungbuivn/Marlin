@@ -123,13 +123,42 @@
             const char *arg = s_fwd + 4;
             while (*arg == ' ') arg++;
             if (strncmp(arg, "SCAN", 4) == 0) {
-              Serial.println("[WIFI] dang quet (2-4 s)...");
-              const int n = net_wifi_scan();
+              // Quet KHONG CHAN + bom link trong luc cho: chung minh vong lap van chay (van tra loi
+              // Marlin tung sector the SD) trong suot thoi gian quet mang.
+              Serial.println("[WIFI] dang quet (khong chan vong lap)...");
+              int n = -1;
+              if (net_wifi_scan_begin() == 0) {
+                const uint32_t t0 = millis();
+                uint32_t last = 0;
+                while ((n = net_wifi_scan_poll()) == -1 && (millis() - t0) < 30000u) {
+                  panel_link_task();          // <-- van phuc vu Marlin trong luc quet
+                  net_upload_http_task();     // <-- van phuc vu web server
+                  if (millis() - last > 1000u) { last = millis(); Serial.printf("[WIFI] ... dang quet (%lu ms)\n", (unsigned long)(millis() - t0)); }
+                  delay(5);
+                }
+              }
               for (int i = 0; i < n; i++)
                 Serial.printf("[WIFI]  %2d) %-32s %d dBm\n", i + 1,
                               net_wifi_scan_ssid(i) ? net_wifi_scan_ssid(i) : "?",
                               (int)net_wifi_scan_rssi(i));
               Serial.printf("[WIFI] quet xong: %d mang\n", n);
+            } else if (strncmp(arg, "ASYNC", 5) == 0) {
+              // CHAN DOAN: quet async voi muc "bom" khac nhau de tim tac vu pha phien quet.
+              //   WIFI ASYNC 0 = chi poll (khong bom gi)
+              //   WIFI ASYNC 1 = + panel_link_task() (UART + tra loi the SD)
+              //   WIFI ASYNC 2 = + net_upload_http_task() (web server + poll WiFi)  [giong vong lap that]
+              const int mode = (arg[5] == ' ') ? atoi(arg + 6) : 0;
+              Serial.printf("[WIFI] ASYNC che do bom = %d\n", mode);
+              int n = -1;
+              if (net_wifi_scan_begin() == 0) {
+                const uint32_t t0 = millis();
+                while ((n = net_wifi_scan_poll()) == -1 && (millis() - t0) < 30000u) {
+                  if (mode >= 1) panel_link_task();
+                  if (mode >= 2) net_upload_http_task();
+                  delay(5);
+                }
+              }
+              Serial.printf("[WIFI] ASYNC mode=%d -> %d mang\n", mode, n);
             } else if (strncmp(arg, "CONNECT", 7) == 0) {
               const char *p1 = arg + 7;
               while (*p1 == ' ') p1++;

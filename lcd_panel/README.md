@@ -1177,21 +1177,48 @@ uint8_t     net_wifi_state(void);          // 0 tat/loi, 1 dang ket noi, 2 da ke
 const char *net_wifi_ssid(void);           // SSID dang ket noi ("" neu chua bat)
 const char *net_wifi_ip(void);             // "192.168.0.42" ("" neu chua ket noi)
 int8_t      net_wifi_rssi(void);           // dBm, 0 = khong biet
-int         net_wifi_scan(void);           // !!! CHAN ~2-4 s (Arduino scanNetworks dong bo)
+int         net_wifi_scan(void);           // !!! CHAN 8-12 s (scanNetworks dong bo) - UI KHONG dung nua
 const char *net_wifi_scan_ssid(int i);     // NULL neu i ngoai khoang
 int8_t      net_wifi_scan_rssi(int i);     // 0 neu i ngoai khoang
 bool        net_wifi_connect(const char *ssid, const char *pass, bool save);  // khong chan (save=true -> NVS)
 void        net_wifi_disconnect(bool forget);                                 // khong chan
+// QUET KHONG CHAN (ui_lvgl.cpp dung bo nay, lap vao nhip 400 ms):
+int         net_wifi_scan_begin(void);     // 0 = da bat dau | -1 = dang quet roi
+int         net_wifi_scan_poll(void);      // -1 dang quet | -2 loi/qua han | >=0 XONG (so mang)
+void        net_wifi_scan_cancel(void);    // huy phien (goi khi roi trang WIFI)
+bool        net_wifi_scanning(void);
 // them (khong bat buoc): net_wifi_configured/saved_ssid/scan_max/scan_ms + net_wifi_join_temp/leave_temp
 ```
 
 * **NVS**: `Preferences`, namespace `"wifi"`, khoá `ssid`/`pass`. Chưa có NVS ⇒ dùng giá trị **gợi ý mặc định**
   `PANEL_WIFI_SSID_DEF`/`PANEL_WIFI_PASS_DEF` (= `TP-Link_31A0` / `89278062`); đổi từ trang settings ⇒ ghi NVS.
 * **Tự kết nối lại**: mất mạng thì thử lại mỗi `PANEL_WIFI_RETRY_MS` (8 s); cache cập nhật ở `net_wifi_task()`.
-* **Console COM7** (test không cần UI): `WIFI?`, `WIFI SCAN`, `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS),
-  `WIFI OFF`, `WIFI FORGET`.
-* RAM tĩnh thêm ~0,9 KB (SSID 33 + pass 65 + NVS + 16 mạng quét). **Lưu ý**: đừng bật WiFi từ trang settings
+  **Chống dội (2026-10-14)**: chỉ ép `WiFi.begin()` khi đã mất kết nối **liên tục ≥ 3 s**
+  (`PANEL_WIFI_DOWN_CONFIRM_MS`) và **KHÔNG bao giờ** ép trong lúc đang quét hoặc trong 20 s sau khi quét
+  (`PANEL_WIFI_SCAN_GRACE_MS`) — để core tự auto-reconnect, tránh WiFi chập chờn (đã gặp: panel tự reboot).
+* **Console COM7** (test không cần UI): `WIFI?`, `WIFI SCAN` (quét **không chặn**, vẫn bơm link),
+  `WIFI ASYNC 0|1|2` (chẩn đoán), `WIFI CONNECT <ssid> <pass> [S]` (S = lưu NVS), `WIFI OFF`, `WIFI FORGET`.
+* **RAM tĩnh** thêm ~0,9 KB (SSID 33 + pass 65 + NVS + 16 mạng quét). **Lưu ý**: đừng bật WiFi từ trang settings
   khi `PANEL_BT_UPLOAD 1` (BT + WiFi không đủ RAM) — cờ `PANEL_WIFI_UPLOAD` đã tự tắt trong trường hợp đó.
+
+#### ⚠️ Quét mạng: 3 cái bẫy đã gặp thật (2026-10-14)
+
+1. **Quét ĐỒNG BỘ chặn vòng lặp 8-12 s** (đo thật: **11,6 s** với 39 mạng; `max_ms_per_chan 150` cho 8,2 s).
+   Trong lúc đó panel **không trả lời sector thẻ SD cho Marlin** (đang in mà quét = **hỏng bản in**) và
+   không phục vụ web server; frame PUSH còn bị mất (`err=1`). ⇒ UI **đã chuyển sang quét KHÔNG CHẶN**
+   (`net_wifi_scan_begin`/`poll`, kết quả lấy ở `page_wifi_update()`), và **từ chối quét khi Marlin đang in**.
+2. **Bẫy của core Arduino** (`libraries/WiFi/src/WiFiScan.cpp:63,144`): timeout của quét **async** =
+   `max_ms_per_chan × 20`. Với `150` ⇒ timeout **3 s** < thời gian quét thật ⇒ `scanComplete()` luôn trả
+   `WIFI_SCAN_FAILED (-2)` dù quét vẫn chạy. ⇒ đặt `PANEL_WIFI_SCAN_MS_PER_CHAN 600` (timeout 12 s).
+   Triệu chứng nếu quên: log `[WIFI] quet LOI` sau ~2 s, roller không có mạng nào.
+3. **`net_wifi_poll()` gọi `WiFi.begin()` giữa lúc đang quét sẽ HUỶ phiên quét** (và làm WiFi chập chờn:
+   mỗi lần `begin()` lại là một lần rớt/ nối, trong khi mDNS + web server đang mở). ⇒ `net_wifi_poll()`
+   **return ngay khi `s_scanning`**, và sau khi quét còn 20 s "ân hạn" không ép `begin()`.
+
+**Rời trang WIFI KHÔNG đụng tới WiFi**: `wifi_page_leave()` (gọi từ `show_page()` khi `p != PG_WIFI`) chỉ
+đóng bàn phím mật khẩu, ẩn lớp phủ quét, **huỷ phiên quét đang chạy** và mở khoá input. Chỉ 4 nút
+`QUET` / `KET NOI` / `NGAT` / `XOA` mới thay đổi WiFi — đúng như mong đợi "không sửa thông tin thì đừng
+reset WiFi".
 
 ### 9.21 UPLOAD QUA WiFi: WEB SERVER TRÊN PANEL (`net_upload_http.cpp`, cờ `PANEL_WIFI_UPLOAD`)
 
