@@ -362,7 +362,7 @@ python lcd_panel/tools/make_lvgl_icons.py
 | **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `PANEL_REQ_SAVE_SETTINGS` |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `PANEL_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
-| **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 4 nút **PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
+| **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
 | **INFO** | tên firmware, proto, frame/lỗi, `UI: LVGL 8.3 + encoder/touch`; `REFRESH FULL` → `PANEL_REQ_FULL` |
 
 * **Prompt của Marlin** (hết filament, xác nhận…) hiện hộp thoại OK/CANCEL; OK gửi `ANSWER`
@@ -445,10 +445,16 @@ heartbeat 1 s (xem `src/main.cpp`). **Nhớ bỏ cờ khi dùng thật.**
 | 1 | `MAX  IDLE  goc 2` (mode · phase · góc nozzle đang đứng) + `LINK OK` / `NO LINK` bên phải |
 | 2–3 | **4 góc, 2 góc một dòng**: ` BR  -0.012   BL  +0.021` — `*` = góc đang đứng, mm so với **mốc**; `---` = góc chưa probe được |
 | 4 | **hướng dẫn vặn vít** do **Marlin** gửi: `CW 0.150` / `CCW nhe` / `DAT` / `PROBE` / `ERR` |
-| 5 | **4 nút**: `PROBE` · `MAX/MIN` · `BACK` · `DONE` |
-| 6–7 | chú thích |
+| 5 | nút **`HOME + PROBE 4 GOC`** (rộng cả dòng) |
+| 6 | **4 nút**: `PROBE` · `MAX/MIN` · `BACK` · `DONE` |
+| 7 | chú thích `DONE = goc xong \| MAX/MIN = doi moc` |
 
-**4 nút gửi đúng 1 ký tự xuống Marlin** (`tram_protocol.h`): `P` = probe lại góc đang đứng ·
+**Nút `HOME + PROBE 4 GOC` gửi `R`** = home + probe lại **cả 4 góc** và **là nút khởi động**: nếu
+wizard chưa chạy thì `R` gọi `tramming_run::begin()`, đang chạy thì `restart()`. Vì vậy màn
+TRAMMING trên panel **dùng được độc lập**, không cần mở wizard trên màn 12864 trước. Dòng 1 hiện
+`READY (bam HOME + PROBE)` khi wizard chưa chạy.
+
+**4 nút còn lại gửi đúng 1 ký tự xuống Marlin** (`tram_protocol.h`): `P` = probe lại góc đang đứng ·
 `D` = góc này xong (đi góc cần chỉnh kế tiếp; hết góc → home Z + probe lại 4 góc) · `M` = đổi mốc
 `MAX`↔`MIN` · **`BACK`** gửi `B` (thoát wizard: stow probe + đánh dấu Z chưa home) rồi về MENU.
 Ngoài ra panel gửi `Q` khi mới vào màn. Marlin trả lời bằng **1 dòng ASCII mỗi 200 ms**:

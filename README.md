@@ -2322,7 +2322,9 @@ của họ (`makerbase-mks/MKS-TFT28-32-Firmware` — tham khảo để đối c
   + màn **FEED/FLOW** chỉnh bằng `M220` / `M221`; nhánh dọc: STATUS → MENU → màn con → BACK → MENU → STATUS.
 * **Màn `TRAMMING` (2026-10-13)** — Bed Tramming Wizard của Marlin ngay trên màn riêng, **không cần
   ExtUI** (kiểu TRAM, §15b): 4 số của 4 góc + dấu `*` góc đang đứng + dòng hướng dẫn `CW/CCW…`/`DAT`
-  + mode `MAX`/`MIN` + 4 nút **PROBE · MAX/MIN · BACK · DONE**. Vào từ dòng `Tramming wizard` trong MENU.
+  + mode `MAX`/`MIN` + 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE**. Nút **`HOME + PROBE 4 GOC`**
+  gửi `R` = home + probe lại cả 4 góc, **và là nút khởi động wizard khi panel là nơi bắt đầu** (không cần
+  mở wizard trên màn 12864 trước). Vào từ dòng `Tramming wizard` trong MENU.
 * **Nút BACK duy nhất ở góc PHAI dòng tiêu đề chung** cho mọi màn trừ STATUS; **bỏ thanh 8 nút ở đáy**
   của bản cũ (tài liệu bản cũ có nhắc "bấm giữ để về STATUS" — thực tế UI LVGL **không** có thao tác này).
 * **Icon thật**: `lcd_panel/src/ui_lvgl_icons.h` — **file sinh tự động** từ bitmap GREYSCALE4 của Marlin
@@ -2386,7 +2388,7 @@ Wizard — **không dùng ExtUI**, nên màn 12864 và menu MarlinUI **giữ ngu
 | UART | **MSerial1 = USART1: PA9 (TX) / PA10 (RX)** = header **MKS WiFi** — **không** đụng PD8/NeoPixel, **không** đụng chân reset màn 12864 |
 | Build flag | `-DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9`, khai trong **`ini/features.ini`** (key `PANEL_TRAM_LINK`) ⇒ **chỉ** thêm khi bật define |
 | Giao thức | panel → Marlin: `P` probe · `D` done · `M` đổi MAX/MIN · `R` home+probe lại · `B` thoát · `Q` hỏi. Marlin → panel: `TRAM <phase> <mode> <idx> <ref> <d0..d3> <A0..A3> <active> <all_dat> <hint>`, gửi khi đổi + ~5 Hz |
-| Panel | màn **TRAMMING** trong MENU của UI LVGL (`lcd_panel/src/ui_lvgl.cpp` + `tram_link.cpp`): 4 số 4 góc (`*` = góc đang đứng), dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 4 nút **PROBE · MAX/MIN · BACK · DONE** |
+| Panel | màn **TRAMMING** trong MENU của UI LVGL (`lcd_panel/src/ui_lvgl.cpp` + `tram_link.cpp`): 4 số 4 góc (`*` = góc đang đứng), dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** (`HOME + PROBE 4 GOC` = `R`, khởi động wizard) |
 | Build Marlin (đo 2026-10-13) | tắt: **267.576 B** (25,5 %) / RAM 12.220 B · bật: **270.592 B** (25,8 %) / RAM 12.828 B |
 | Panel build | `panel_f407vgz_lvgl` **158.756 B** / 81.328 B · `panel_esp32_cyd` **463.101 B** / 102.044 B (cả 2 SUCCESS) |
 

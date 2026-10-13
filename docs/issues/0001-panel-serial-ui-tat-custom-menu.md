@@ -131,7 +131,8 @@ menu MarlinUI** đang dùng (Tramming Wizard, `Z ALIGN MANUAL`, custom menu…).
    giữ nguyên 100%.
 6. **Cách bật:** thêm đúng 1 dòng `#define PANEL_TRAM_LINK` vào `Marlin/Configuration.h` rồi build
    `pio run -e mks_monster8`. Khi đó: màn 12864 **vẫn đủ menu như cũ**, màn CYD có thêm màn
-   `TRAMMING` (vào từ MENU) với 4 số của 4 góc + dòng hướng dẫn + 4 nút PROBE / MAX→MIN / BACK / DONE.
+   `TRAMMING` (vào từ MENU) với 4 số của 4 góc + dòng hướng dẫn + 5 nút HOME+PROBE (`R`, khởi động
+   wizard) / PROBE / MAX→MIN / BACK / DONE.
 
 **So với Cách A (§3):** Cách A vẫn hữu ích nếu sau này muốn **toàn bộ** UI panel (file SD, bed mesh,
 PID…) mà không cần màn 12864 — nhưng nó vẫn phải trả giá bằng việc tắt `MKS_MINI_12864_V3` và

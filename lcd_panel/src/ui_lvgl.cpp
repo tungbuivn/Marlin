@@ -1413,14 +1413,18 @@ static void page_tram_create(lv_obj_t *p) {
 
   tr_hint = mk_label_w(p, "NO LINK", COL_ACCENT, PAGE_INN_W);
 
-  lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 40, 0, GAP);
+  // R = home + probe lai ca 4 goc. Marlin tu bat dau wizard neu chua chay (tramming_run::begin)
+  // nen nut nay la diem KHOI DONG cua man Tramming tren panel.
+  lv_obj_t *r0 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
+  mk_btn_grow(r0, "HOME + PROBE 4 GOC", 38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_RESTART);
+
+  lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
   mk_btn_grow(rb, "PROBE",   38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_PROBE);
   mk_btn_grow(rb, "MAX/MIN", 38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_MINMAX);
   mk_btn_grow(rb, "BACK",    38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_BACK);
   mk_btn_grow(rb, "DONE",    38, cb_tram_cmd, (void *)(intptr_t)TRAM_CMD_DONE);
 
-  mk_label_w(p, "PROBE = probe lai goc dang dung", COL_DIM, PAGE_INN_W);
-  mk_label_w(p, "DONE = goc nay xong | MAX/MIN = doi moc", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, "DONE = goc xong | MAX/MIN = doi moc", COL_DIM, PAGE_INN_W);
 }
 
 static void page_tram_update(void) {
@@ -1428,7 +1432,7 @@ static void page_tram_update(void) {
 
   // ---- dong 1: MODE + phase + goc dang dung | LINK ----
   if (!tram.st.active)
-    snprintf(b, sizeof(b), "%s  READY (bam R)", tram.st.mode_max ? "MAX" : "MIN");
+    snprintf(b, sizeof(b), "%s  READY (bam HOME + PROBE)", tram.st.mode_max ? "MAX" : "MIN");
   else
     snprintf(b, sizeof(b), "%s  %s  goc %u", tram.st.mode_max ? "MAX" : "MIN",
              tram_phase_name(tram.st.phase), (unsigned)(tram.st.idx + 1));
