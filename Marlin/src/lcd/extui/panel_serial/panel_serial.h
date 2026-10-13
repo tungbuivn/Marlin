@@ -17,18 +17,24 @@
 
   #include "panel_protocol.h"
 
-  // UART noi voi panel. Tren MKS Monster8 V2: USART3 = PD8 (TX) / PD9 (RX), nam ngay
-  // header EXP1 chan 6/5 (xem README.md muc 12). KHONG dung SERIAL_PORT_2 vi Marlin se
-  // coi do la cong host thu 2 va dien giai frame nhi phan nhu G-code.
+  // UART noi voi panel - 2 lua chon (xem lcd_panel/README.md §2.1):
+  //   1 = USART1 : PA9 (TX) / PA10 (RX) = header MKS WiFi   <-- DANG DUNG (day la cho da di day san)
+  //   3 = USART3 : PD8 (TX) / PD9 (RX) = header EXP1 chan 6/5 (chi dung khi da thao han man 12864)
+  // KHONG dung SERIAL_PORT_2 vi Marlin se coi do la cong host thu 2 va dien giai frame nhi phan nhu G-code.
   #ifndef PANEL_SERIAL_PORT
-    #define PANEL_SERIAL_PORT 3
+    #define PANEL_SERIAL_PORT 1
   #endif
 
-  #if PANEL_SERIAL_PORT != 3
-    #error "PANEL_SERIAL_UI hien chi ho tro PANEL_SERIAL_PORT 3 (MSerial3 / USART3)."
-  #endif
-  #ifndef USING_HW_SERIAL3
-    #error "PANEL_SERIAL_UI can -DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8 trong build_flags (ini/stm32f4.ini, env mks_monster8)."
+  #if PANEL_SERIAL_PORT == 1
+    #ifndef USING_HW_SERIAL1
+      #error "PANEL_SERIAL_UI (port 1) can -DUSING_HW_SERIAL1 -DPIN_SERIAL1_RX=PA10 -DPIN_SERIAL1_TX=PA9 trong build_flags (ini/features.ini)."
+    #endif
+  #elif PANEL_SERIAL_PORT == 3
+    #ifndef USING_HW_SERIAL3
+      #error "PANEL_SERIAL_UI (port 3) can -DUSING_HW_SERIAL3 -DPIN_SERIAL3_RX=PD9 -DPIN_SERIAL3_TX=PD8 trong build_flags."
+    #endif
+  #else
+    #error "PANEL_SERIAL_UI chi ho tro PANEL_SERIAL_PORT 1 (USART1 PA9/PA10) hoac 3 (USART3 PD8/PD9)."
   #endif
 
   #define PANEL_SERIAL  MSERIAL(PANEL_SERIAL_PORT)

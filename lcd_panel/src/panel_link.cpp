@@ -62,6 +62,13 @@ void panel_link_answer(const uint8_t answer) {
   panel.prompt_active = false;
 }
 
+void panel_link_send_tram_cmd(char cmd) {
+  if (!cmd) return;
+  panel_tx_begin(&s_tx, PANEL_F_TRAM_CMD);
+  panel_tx_u8(&s_tx, (uint8_t)cmd);
+  send_frame(panel_tx_finish(&s_tx));
+}
+
 int32_t panel_setting(const uint16_t id, const int32_t def) {
   for (uint8_t i = 0; i < panel.n_settings; i++)
     if (panel.settings[i].id == id) return panel.settings[i].value;
@@ -143,6 +150,15 @@ static void handle_frame() {
         str_at(p, n, 9, panel.prog.file, sizeof(panel.prog.file));
       }
       break;
+
+    case PANEL_F_TRAM: {
+      // 1 dong ASCII "TRAM ..." (che do PUSH, 2026-10-13) -> dua thang vao bo giai cua tram_link,
+      // KHONG qua bo "sniff" byte (bo do chi dung cho duong UART tho cua PANEL_TRAM_LINK).
+      char t[TRAM_LINK_LINE_MAX];
+      str_at(p, n, 0, t, sizeof(t));
+      tram_link_line(t);
+      break;
+    }
 
     case PANEL_F_MESSAGE:
       if (n >= 1) {
@@ -279,7 +295,14 @@ void panel_link_task() {
     // Duong TRAMMING (Marlin: PANEL_TRAM_LINK) dung CHUNG UART nay: tram_link_feed() tra ve 0
     // khi byte thuoc dong "TRAM ...", nguoc lai tra ve so byte (0..4) can dua cho bo giai frame
     // PUSH - cac byte 'T','R','A' dang giu de do duoc tra lai day du nen KHONG mat byte nao.
-    const uint8_t n = tram_link_feed(c, fwd);
+    //
+    // 2026-10-13: che do PUSH (PANEL_SERIAL_UI) gui dong TRAM trong frame PANEL_F_TRAM -> payload
+    // CUA FRAME chua chinh chuoi "TRAM ...". Neu van chay bo sniff thi no se "an" cac byte do lam
+    // frame hong (da gap that: byte tang ~500 B/s nhung panel.linked=0, rx_frames=0).
+    // => Da nhan duoc frame PUSH hop le dau tien (panel.rx_frames > 0) thi TAT sniff VINH VIEN.
+    uint8_t n;
+    if (panel.rx_frames) { fwd[0] = c; n = 1; }
+    else                 n = tram_link_feed(c, fwd);
     for (uint8_t k = 0; k < n; k++)
       if (panel_rx_byte(&s_rx, fwd[k])) handle_frame();
   }

@@ -19,6 +19,7 @@
 
 #include <string.h>
 #include "panel_port.h"
+#include "panel_link.h"     // panel_link_send_tram_cmd() + `panel` (che do PUSH, 2026-10-13)
 
 tram_link_data_t tram;
 
@@ -70,8 +71,30 @@ void tram_link_task(void) {
 
 void tram_link_send(char cmd) {
   if (!cmd) return;
+  // Che do PUSH (PANEL_SERIAL_UI): lenh PHAI di trong frame PANEL_F_TRAM_CMD - ghi ASCII tho vao UART
+  // se lam bo giai frame cua Marlin hieu sai (no cho frame nhi phan, khong cho dong lenh).
+  if (panel.linked) { panel_link_send_tram_cmd(cmd); return; }
   PANEL_MARLIN_SERIAL.write((uint8_t)cmd);
   PANEL_MARLIN_SERIAL.write((uint8_t)'\n');
+}
+
+// Xu ly 1 dong da du (dung chung cho ca 2 duong: sniff byte cua PANEL_TRAM_LINK va frame PANEL_F_TRAM)
+static void tram_parse_line(const char *line) {
+  if (tram_status_parse(line, &tram.st)) {
+    tram.last_rx_ms = panel_millis();
+    tram.lines++;
+    tram.ever = true;
+    tram.linked = true;
+  }
+  else tram.errors++;
+}
+
+// Che do PUSH: panel_link.cpp doc frame PANEL_F_TRAM roi goi ham nay (khong byte-nao di qua sniffer).
+void tram_link_line(const char *line) {
+  if (!line || !*line) return;
+  tram.raw_bytes += (uint32_t)strlen(line);
+  tram.last_byte_ms = panel_millis();
+  tram_parse_line(line);
 }
 
 // Tra ve so byte can dua cho bo giai frame PUSH (ghi vao out[], toi da 4 byte).
@@ -115,13 +138,7 @@ uint8_t tram_link_feed(uint8_t c, uint8_t *out) {
         s_state = TS_IDLE;
         s_len = 0;
         s_bol = true;                     // dong moi bat dau
-        if (tram_status_parse(s_line, &tram.st)) {
-          tram.last_rx_ms = panel_millis();
-          tram.lines++;
-          tram.ever = true;
-          tram.linked = true;
-        }
-        else tram.errors++;
+        tram_parse_line(s_line);
       }
       else if (s_len >= TRAM_LINK_LINE_MAX - 1) {   // dong qua dai -> bo
         s_state = TS_IDLE;

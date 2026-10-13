@@ -29,15 +29,13 @@
 #include "panel_tram_link.h"
 #include "tram_protocol.h"
 #include "tramming_run.h"
+#include "tramming_report.h"        // dong "TRAM ..." + 6 lenh, dung CHUNG voi kenh PUSH (panel_serial)
 
 #include "../MarlinCore.h"          // marlin_state / IsRunning()
 #include "../core/millis_t.h"
 #include "../core/debug_out.h"
 
 #include <string.h>
-
-// Trang thai gui/di cho tramming_run.cpp
-static_assert(G35_PROBE_COUNT == TRAM_PROTO_POINTS, "tram_protocol.h phai khop TRAMMING_POINT_XY (xem Configuration_adv.h).");
 
 namespace panel_tram_link {
 
@@ -50,7 +48,6 @@ static char       s_line[PANEL_TRAM_LINE_MAX];
 static char       s_last[PANEL_TRAM_LINE_MAX];
 static bool       s_have_last = false;
 static millis_t   s_next_ms = 0;
-static bool       s_force = false;        // co lenh -> gui lai ngay
 static uint16_t   s_cmds = 0, s_ignored = 0;
 
 // ---------------------------------------------------------------------------
@@ -70,52 +67,10 @@ static uint16_t   s_cmds = 0, s_ignored = 0;
 #endif
 
 // ---------------------------------------------------------------------------
-// Trang thai hien tai -> struct dung chung (tram_protocol.h)
+// Gui trang thai (dong "TRAM ..." do tramming_report tao - xem tramming_report.h/.cpp)
 // ---------------------------------------------------------------------------
-
-// "hint" = viec can lam o goc dang dung, tinh theo DUNG cac quy tac ma man 12864 dang dung
-// (tramming_turn_cw + TRAM_DONE_MM, xem menu_tramming.cpp dong 2) nhung viet ngan gon, khong
-// khoang trang de nam trong 1 token. Nho vay panel KHONG phai tu suy lai chieu van vit.
-static void build_hint(tram_status_t &st) {
-  if (!tramming_run::active)           { strcpy(st.hint, "-"); return; }
-  if (tramming_run::all_dat)           { strcpy(st.hint, "DAT"); return; }
-  if (tramming_run::state != TR_IDLE)  { strcpy(st.hint, "-"); return; }   // dang chay -> panel hien phase
-  if (tramming_run::probe_state == PR_FAILED) { strcpy(st.hint, "ERR"); return; }
-
-  const uint8_t i = tramming_run::worst_index;
-  if (!tramming_run::ok(i))            { strcpy(st.hint, "PROBE"); return; }
-
-  const float delta = tramming_run::delta(i) - tramming_run::display_ref();
-  if (ABS(delta) <= TRAM_DONE_MM)      { strcpy(st.hint, "DAT"); return; }
-
-  char num[16];
-  if (ABS(delta) < 0.02f)              strcpy(num, "nhe");   // 12864: "van nhe"
-  else                                 tram_fmt_mm(num, ABS(delta));
-  // "%.9s": so dai nhat cua tram_fmt_mm la "-9999.999" (9 ky tu) -> khong bao gio tran st.hint[16]
-  snprintf(st.hint, sizeof(st.hint), "%s:%.9s",
-           tramming_turn_cw(delta, TRAMMING_SCREW_THREAD) ? "CW" : "CCW", num);
-}
-
-static void build_status(tram_status_t &st) {
-  st.phase    = tramming_run::state;
-  st.mode_max = tramming_worst_max ? 1 : 0;
-  st.idx      = tramming_run::worst_index;
-  st.active   = tramming_run::active ? 1 : 0;
-  st.all_dat  = tramming_run::all_dat ? 1 : 0;
-  st.ref      = tramming_run::display_ref();
-  LOOP_L_N(i, TRAM_PROTO_POINTS) {
-    st.d[i]        = tramming_run::delta(i);
-    st.ok[i]       = tramming_run::ok(i) ? 1 : 0;
-    st.accepted[i] = tramming_run::accepted(i) ? 1 : 0;
-  }
-  build_hint(st);
-}
-
 static void send_status(const bool force) {
-  tram_status_t st;
-  build_status(st);
-
-  const int n = tram_status_format(s_line, (int)sizeof(s_line), &st);
+  const int n = tramming_report_line(s_line, (int)sizeof(s_line));
   if (n <= 0) return;
 
   // Gui khi CO DOI, hoac khi duoc yeu cau, hoac dinh ky (de panel biet link con song)
@@ -138,49 +93,13 @@ static void send_status(const bool force) {
 }
 
 // ---------------------------------------------------------------------------
-// Lenh tu panel
+// Lenh tu panel (6 lenh + gate busy nam trong tramming_report.cpp, dung chung voi panel_serial)
 // ---------------------------------------------------------------------------
 static void handle_line(const char *line) {
   const char cmd = tram_cmd_parse_exact(line);   // chi nhan dong DUNG 1 ky tu lenh
   if (!cmd) { if (line[0]) s_ignored++; return; }
   s_cmds++;
-
-  // Trong luc probe/di chuyen (blocking) thi BO QUA lenh HANH DONG: chung se chen vao giua
-  // mot lan probe -> hong trang thai. 'Q' thi van tra loi binh thuong.
-  const bool can_act = !tramming_run::busy;
-
-  switch (cmd) {
-    case TRAM_CMD_QUERY:
-      break;
-
-    case TRAM_CMD_RESTART:
-      if (can_act) {
-        if (tramming_run::active) tramming_run::restart();
-        else                      tramming_run::begin();   // chua chay -> bat dau wizard (home tat ca truc)
-      }
-      break;
-
-    case TRAM_CMD_BACK:
-      if (can_act && tramming_run::active) tramming_run::exit();
-      break;
-
-    case TRAM_CMD_PROBE:
-      if (can_act) tramming_run::probe_here();              // tu kiem tra active
-      break;
-
-    case TRAM_CMD_DONE:
-      if (can_act) tramming_run::done();
-      break;
-
-    case TRAM_CMD_MINMAX:
-      if (can_act) tramming_run::toggle_minmax();
-      break;
-
-    default:
-      break;
-  }
-
-  s_force = true;                                          // co lenh -> tra loi ngay
+  tramming_report_cmd(cmd);                      // 'Q' luon xu ly; lenh khac bi busy chan
 }
 
 // ---------------------------------------------------------------------------
@@ -229,8 +148,7 @@ void tick() {
   // 3) Gui trang thai: khi doi + dinh ky ~5Hz
   const millis_t ms = millis();
   const bool due = (s_next_ms == 0) || ELAPSED(ms, s_next_ms);
-  send_status(s_force || due);
-  if (s_force) s_force = false;
+  send_status(tramming_report_force_take() || due);
   if (due) s_next_ms = ms + PANEL_TRAM_PUSH_MS;
 
   #if PANEL_TRAM_DIAG

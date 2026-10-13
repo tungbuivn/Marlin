@@ -2940,7 +2940,7 @@
 //
 // MKS MINI12864 V3 is an alias for FYSETC_MINI_12864_2_1. Type A/B. NeoPixel RGB Backlight.
 //
-#define MKS_MINI_12864_V3
+//#define MKS_MINI_12864_V3
 
 //
 // MKS LCD12864A/B with graphic controller and SD support. Follows MKS_MINI_12864 pinout.
@@ -3166,7 +3166,7 @@
  * Khong muon nua: comment dong duoi day (hoac chay script tren voi -Mode off).
  * Ke hoach "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
  */
-//#define PANEL_SERIAL_UI
+#define PANEL_SERIAL_UI
 
 /**
  * PANEL_TRAM_LINK -- panel rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
@@ -3180,8 +3180,12 @@
  * tu dong qua ini/features.ini khi bat dong nay.
  *
  * Chi tiet + man hinh TRAMMING tren panel: lcd_panel/README.md §5.6 · README.md §15b.
+ *
+ * 2026-10-13: TAT de chuyen sang PUSH/ExtUI (PANEL_SERIAL_UI) - hai che do LOAI TRU nhau
+ * (cung 1 UART + panel_tram_link.h co #error chan). Man TRAMMING tren panel duoc port sang
+ * kenh PUSH bang frame PANEL_F_TRAM / PANEL_F_TRAM_CMD (xem panel_serial.cpp).
  */
-#define PANEL_TRAM_LINK
+//#define PANEL_TRAM_LINK
 
 #if ENABLED(EXTENSIBLE_UI)
   //#define EXTUI_LOCAL_BEEPER // Enables use of local Beeper pin with external display
@@ -3453,7 +3457,7 @@
 #endif
 
 // Support for Adafruit NeoPixel LED driver
-#define NEOPIXEL_LED
+//#define NEOPIXEL_LED
 #if ENABLED(NEOPIXEL_LED)
   #define NEOPIXEL_TYPE   NEO_RGB // NEO_GRBW / NEO_GRB - four/three channel driver type (defined in Adafruit_NeoPixel.h)
   //#define NEOPIXEL_PIN     4     // LED driving pin

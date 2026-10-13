@@ -101,7 +101,7 @@ kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
 
 | Kiểu | UART (Marlin) | Chân Monster8 | Vì sao |
 |---|---|---|---|
-| **PUSH** (`PANEL_SERIAL_UI`) | USART3 | PD9 (RX) / PD8 (TX) = EXP1 chân 5/6 | chân nằm ngay header màn 12864 cũ |
+| **PUSH** (`PANEL_SERIAL_UI`) | **USART1 (mặc định hiện nay)** hoặc USART3 | **USART1: PA10 (RX) / PA9 (TX) = header MKS WiFi** ← *đang dùng* · USART3: PD9 (RX) / PD8 (TX) = EXP1 chân 5/6 | Chọn bằng `-DPANEL_SERIAL_PORT=1` (USART1, header WiFi — dây đang đi sẵn) hoặc `=3` (USART3/EXP1, chỉ khi đã tháo màn 12864 vì EXP1_06 = `NEOPIXEL_PIN`). Cờ build nằm ngay trong `ini/features.ini` (key `PANEL_SERIAL_UI`). ⚠️ **Trước 2026-10-13 PUSH chỉ chạy USART3** ⇒ panel báo `NO LINK` dù dây đúng ở header WiFi (đã sửa) |
 | **TRAM** (`PANEL_TRAM_LINK`) | **USART1** | **PA10 (RX) / PA9 (TX) = header MKS WiFi** | USART3 **hết chân TX rảnh** (PD8 = `NEOPIXEL_PIN`, PB10 = `HEATER_BED`, PC10 = `SD_SCK`); PA9/PA10 **hoàn toàn rảnh** (`//#define WIFI_SERIAL 1 // USART1` đang comment trong `pins_MKS_MONSTER8_V2.h`) |
 
 **Kiểu TRAM (khuyến nghị cho Tramming Wizard) — KHÔNG đụng PD8/NeoPixel, KHÔNG đụng chân reset màn 12864:**
@@ -483,8 +483,19 @@ wizard chưa chạy thì `R` gọi `tramming_run::begin()`, đang chạy thì `r
 TRAMMING trên panel **dùng được độc lập**, không cần mở wizard trên màn 12864 trước. Dòng 1 hiện
 `READY (bam HOME + PROBE)` khi wizard chưa chạy.
 
-**Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
+> 🔀 **2026-10-13 — CHUYỂN SANG PUSH (ExtUI `PANEL_SERIAL_UI`)**: để panel có **đủ dữ liệu** (nhiệt độ,
+> X/Y/Z, tiến độ + tên file, quạt, lưới bed mesh, danh sách file SD, prompt) thay vì chỉ dòng `TRAM`,
+> dự án đã bật PUSH và **tắt** `MKS_MINI_12864_V3` + `NEOPIXEL_LED` + `CUSTOM_MENU_MAIN` +
+> `LED_CONTROL_MENU` (`lcd_panel/tools/set_panel_mode.ps1 -Mode on`), đồng thời **comment**
+> `PANEL_TRAM_LINK` (2 chế độ loại trừ nhau: cùng 1 UART).
+> **Màn TRAMMING trên panel vẫn chạy**: trạng thái wizard được Marlin gửi trong frame
+> **`PANEL_F_TRAM` (0x0E)** — payload là **1 dòng ASCII đúng format `tram_protocol.h`** (tái dùng
+> nguyên bộ giải `tram_status_parse()`), và lệnh của panel đi trong frame **`PANEL_F_TRAM_CMD` (0x44)**
+> (`u8` ký tự `P/D/M/R/B/Q`) → `tramming_report_cmd()` phía Marlin. Nhờ vậy **không mất** wizard khi
+> đổi giao thức. Code chế độ TRAM cũ **vẫn nằm trong repo** (bật lại bằng `set_panel_mode.ps1 -Mode off`
+> + `#define PANEL_TRAM_LINK`), panel tự nhận cả 2 đường (`panel.linked` → gửi frame; ngược lại → ASCII thô).
 
+**Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
 | Chỗ hiển thị | Nội dung | Ghi chú |
 |---|---|---|
 | **Thanh trên cùng** (mọi màn) | `LINK OK` / `LINK ERR` / `NO LINK` | **NƠI DUY NHẤT** hiện chỉ báo link — `link_state_now()`: **1** = đọc được dòng `TRAM` hợp lệ (`panel.linked \|\| tram.linked`), **2** = **có byte tới nhưng không thành dòng hợp lệ** (`tram.rx_active`, nghi sai baud/khung/nhiễu), **0** = **không có byte nào** (đứt dây/sai cổng/board tắt). Trước đây chỉ xét `panel.linked` nên ở chế độ TRAM **luôn** `NO LINK` dù link tốt |

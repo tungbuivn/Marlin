@@ -58,3 +58,7 @@ uint8_t tram_link_feed(uint8_t c, uint8_t *out);
 
 bool tram_link_active(void);          // da vao che do TRAM (tung nhan duoc dong TRAM)
 void tram_link_send(char cmd);        // gui 1 lenh sang Marlin (tu dong them '\n')
+
+// Che do PUSH (PANEL_SERIAL_UI, 2026-10-13): dong "TRAM ..." duoc Marlin gui trong frame
+// PANEL_F_TRAM (panel_link.cpp doc roi goi ham nay). Khong dung bo "sniff" byte.
+void tram_link_line(const char *line);

@@ -265,6 +265,13 @@ static const char *state_name(uint8_t st) {
 
 static void temp_lookup(const uint8_t id, int16_t *cur, int16_t *tgt) {
   *cur = 0; *tgt = 0;
+  // Che do TRAM (PANEL_TRAM_LINK): KHONG co frame PUSH nang -> nhiet do duoc gui kem trong dong
+  // "TRAM ..." (4 token cuoi, 2026-10-13, xem tram_protocol.h). panel.temps[] se rong nen phai
+  // lay tu day, neu khong moi o nhiet deu hien 0.
+  if (tram.ever) {
+    if (id == PANEL_TEMP_E0)  { *cur = tram.st.t_e0;  *tgt = tram.st.t_e0_tgt;  return; }
+    if (id == PANEL_TEMP_BED) { *cur = tram.st.t_bed; *tgt = tram.st.t_bed_tgt; return; }
+  }
   for (uint8_t i = 0; i < panel.n_temps; i++)
     if (panel.temps[i].id == id) { *cur = panel.temps[i].cur; *tgt = panel.temps[i].tgt; return; }
 }

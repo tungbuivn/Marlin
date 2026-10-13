@@ -1497,7 +1497,7 @@
    * !! CUNG phai comment khi bat PANEL_SERIAL_UI (xem
    *    docs/issues/0001-panel-serial-ui-tat-custom-menu.md)
    */
-  #define LED_CONTROL_MENU
+  //#define LED_CONTROL_MENU
   #if ENABLED(LED_CONTROL_MENU)
     #define LED_COLOR_PRESETS                 // Enable the Preset Color menu option
     // #define NEO2_COLOR_PRESETS              // Enable a second NeoPixel Preset Color menu option
@@ -3784,7 +3784,7 @@
 // Custom Menu: Main Menu
 // !! Neu bat PANEL_SERIAL_UI (man hinh rieng qua ExtUI) thi PHAI comment dong duoi day,
 //    va ghi nho viec "them lai menu tuy bien": docs/issues/0001-panel-serial-ui-tat-custom-menu.md
-#define CUSTOM_MENU_MAIN
+//#define CUSTOM_MENU_MAIN
 #if ENABLED(CUSTOM_MENU_MAIN)
   #define CUSTOM_MENU_MAIN_TITLE "Custom Commands"
   // #define CUSTOM_MENU_MAIN_SCRIPT_DONE "User Script"

@@ -111,6 +111,10 @@ typedef struct {
   uint8_t ok[TRAM_PROTO_POINTS];            // 1 = goc da probe duoc
   uint8_t accepted[TRAM_PROTO_POINTS];      // 1 = da bam DONE
   char    hint[16];                         // viec can lam o goc dang dung (khong co khoang trang)
+  // Nhiet do (2026-10-13): 4 token MO RONG o CUOI dong, don vi = do C * 100 (21050 = 210.50C).
+  // Che do TRAM khong co frame PUSH (ExtUI) nen phai gui kem o day, neu khong man panel khong co
+  // nhiet do nao. Phia doc cu (khong biet 4 token nay) van chay binh thuong vi parser bo qua token thua.
+  int16_t t_e0, t_bed, t_e0_tgt, t_bed_tgt;
 } tram_status_t;
 
 // ---------------------------------------------------------------------------
@@ -172,8 +176,11 @@ static inline int tram_status_format(char *buf, const int len, const tram_status
   for (uint8_t i = 0; i < TRAM_PROTO_POINTS; i++)
     TRAM_APPEND(" %u", (unsigned)(st->accepted[i] ? 1U : 0U));
 
-  TRAM_APPEND(" %u %u %s\n", (unsigned)(st->active ? 1U : 0U), (unsigned)(st->all_dat ? 1U : 0U),
+  TRAM_APPEND(" %u %u %s", (unsigned)(st->active ? 1U : 0U), (unsigned)(st->all_dat ? 1U : 0U),
               st->hint[0] ? st->hint : "-");
+
+  // 4 token nhiet do (do C * 100) - xem chu thich trong tram_status_t.
+  TRAM_APPEND(" %d %d %d %d\n", (int)st->t_e0, (int)st->t_bed, (int)st->t_e0_tgt, (int)st->t_bed_tgt);
 
   #undef TRAM_APPEND
   return n;
@@ -286,6 +293,22 @@ static inline bool tram_status_parse(const char *line, tram_status_t *st) {
     uint8_t n = 0;
     while (n < l && n < (uint8_t)(sizeof(st->hint) - 1U)) { st->hint[n] = t[n]; n++; }
     st->hint[n] = '\0';
+  }
+
+  // Nhiet do (4 token cuoi, MO RONG 2026-10-13): thieu / sai dinh dang cung khong lam dong loi
+  // -> tuong thich nguoc voi ban Marlin cu (khong gui 4 token nay).
+  st->t_e0 = st->t_bed = st->t_e0_tgt = st->t_bed_tgt = 0;
+  for (uint8_t i = 0; i < 4; i++) {
+    t = tram_next_tok(&p, &l);
+    if (!t) break;
+    const int a = tram_tok_uint(t, l);
+    if (a < 0) break;
+    switch (i) {
+      case 0:  st->t_e0      = (int16_t)a; break;
+      case 1:  st->t_bed     = (int16_t)a; break;
+      case 2:  st->t_e0_tgt  = (int16_t)a; break;
+      default: st->t_bed_tgt = (int16_t)a; break;
+    }
   }
 
   return true;

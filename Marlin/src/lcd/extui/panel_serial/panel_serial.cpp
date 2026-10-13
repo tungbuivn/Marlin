@@ -15,6 +15,10 @@
 #include "panel_serial.h"
 #include "../ui_api.h"
 #include "../../../gcode/queue.h"
+#if ENABLED(ASSISTED_TRAMMING_WIZARD)
+  #include "../../../feature/tramming_report.h"   // dong "TRAM ..." + 6 lenh (dung chung panel_tram_link)
+  #include "../../../feature/tramming_run.h"      // may trang thai Bed Tramming Wizard
+#endif
 #if ENABLED(SDSUPPORT)
   #include "../../../sd/cardreader.h"
 #endif
@@ -35,7 +39,7 @@ namespace {
   FORCE_INLINE void tx_i16(const int16_t v)  { panel_tx_i16(&tx, v); }
   FORCE_INLINE void tx_u32(const uint32_t v) { panel_tx_u32(&tx, v); }
   FORCE_INLINE void tx_i32(const int32_t v)  { panel_tx_i32(&tx, v); }
-  FORCE_INLINE void tx_str(const char *s)    { panel_tx_str(&tx, s, PANEL_STR_MAX); }
+  FORCE_INLINE void tx_str(const char *s, const uint8_t maxlen = PANEL_STR_MAX) { panel_tx_str(&tx, s, maxlen); }
 
   void tx_send() {
     const uint8_t total = panel_tx_finish(&tx);
@@ -44,6 +48,18 @@ namespace {
     PANEL_SERIAL.write(tx.buf, total);
     tx_sent++;
   }
+
+  // Nhu tx_send nhung KHONG BAO GIO bo frame: ghi tung byte de write() tu cho den khi TX buffer
+  // con cho. Dung cho dong "TRAM ..." (~85..110 byte) vi TX ring buffer cua core STM32 chi co
+  // SERIAL_TX_BUFFER_SIZE = 64 byte -> tx_send() se bo frame VINH VIEN (xem panel_tram_link.cpp,
+  // loi da gap that 2026-10-13). Ca dong ~4 ms @250000 baud - qua ngan de anh huong vong lap.
+  #if ENABLED(ASSISTED_TRAMMING_WIZARD)
+    void tx_send_wait() {
+      const uint8_t total = panel_tx_finish(&tx);
+      for (uint8_t i = 0; i < total; i++) PANEL_SERIAL.write(tx.buf[i]);
+      tx_sent++;
+    }
+  #endif
 
   FORCE_INLINE int32_t scaled(const float v, const float s) {
     return (int32_t)(v * s + (v < 0 ? -0.5f : 0.5f));
@@ -180,6 +196,23 @@ namespace {
     #endif
     tx_send();
   }
+
+  #if ENABLED(ASSISTED_TRAMMING_WIZARD)
+    // ------------------------------------------------- Bed Tramming Wizard ----
+    // Man TRAMMING cua panel (thay cho che do PANEL_TRAM_LINK cu): gui NGUYEN 1 dong ASCII
+    // "TRAM ...\n" (tram_protocol.h) lam payload str cua PANEL_F_TRAM, ~5Hz. Panel gui lenh
+    // hanh dong bang PANEL_F_TRAM_CMD ('P','D','M','R','B','Q').
+    char tram_line[TRAM_REPORT_LINE_MAX];
+    millis_t next_tram_ms = 0;
+
+    void push_tram() {
+      const int n = tramming_report_line(tram_line, (int)sizeof(tram_line));
+      if (n <= 0) return;
+      tx_begin(PANEL_F_TRAM);
+      tx_str(tram_line, TRAM_REPORT_LINE_MAX);   // str: u8 len + n byte (co ca '\n' cuoi dong)
+      tx_send_wait();                            // dong dai > TX buffer -> khong duoc bo frame
+    }
+  #endif
 
   void push_progress() {
     tx_begin(PANEL_F_PROGRESS);
@@ -410,6 +443,13 @@ namespace {
       case PANEL_F_ANSWER:
         if (rx.len >= 2 && rx.payload[1]) setUserConfirmed();
         break;
+      #if ENABLED(ASSISTED_TRAMMING_WIZARD)
+        case PANEL_F_TRAM_CMD:
+          // 1 lenh wizard ('P','D','M','R','B','Q'). Lenh hop le tu dat co "gui lai ngay"
+          // (tramming_report_force_take() o onIdle); 'Q' luon duoc xu ly ke ca khi busy.
+          if (rx.len >= 1) tramming_report_cmd((char)rx.payload[0]);
+          break;
+      #endif
       default: break;                       // frame la khong ho tro -> bo qua
     }
   }
@@ -447,6 +487,18 @@ namespace ExtUI {
       next_progress_ms = now + PANEL_PROGRESS_MS;
       push_progress();
     }
+    #if ENABLED(ASSISTED_TRAMMING_WIZARD)
+      // TRAM: day 1 buoc may trang thai. ExtUI KHONG bien dich menu 12864 (menu_tramming.cpp)
+      // nen day la nguon DUY NHAT tien buoc wizard - thieu dong nay thi wizard dung o TR_HOMING.
+      // tick() cu cua panel_tram_link lam dung viec nay; ui_attached giu nguyen y nghia cu.
+      if (tramming_run::active && !tramming_run::ui_attached) tramming_run::step();
+
+      // Gui trang thai TRAM ~5Hz, va NGAY khi co lenh hop le tu panel ('Q' hoi trang thai).
+      const bool tram_due = !next_tram_ms || ELAPSED(now, next_tram_ms);
+      const bool tram_now = tramming_report_force_take();
+      if (tram_due) next_tram_ms = now + TRAM_REPORT_PUSH_MS;
+      if (tram_due || tram_now) push_tram();
+    #endif
     if (mesh_dirty && !flag_leveling) {           // mesh vua doi xong -> day 1 lan
       mesh_dirty = false;
       push_mesh();

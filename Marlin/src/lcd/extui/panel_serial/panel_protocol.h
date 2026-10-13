@@ -70,12 +70,16 @@ enum panel_frame_t : uint8_t {
   PANEL_F_SETTING   = 0x0B,   // u16 id, i32 value
   PANEL_F_PROMPT    = 0x0C,   // u8 prompt_id, u8 type, str text
   PANEL_F_PONG      = 0x0D,   // u8 echo_seq
+  PANEL_F_TRAM      = 0x0E,   // str: dung 1 dong ASCII "TRAM ...\\n" (xem feature/tram_protocol.h),
+                              //      gui ~5Hz (200ms) khi wizard TRAMMING dang chay hay khong
 
   // ---- panel -> Marlin ----
   PANEL_F_GCODE     = 0x40,   // str: 1 dong G-code (khong can '\\n')
   PANEL_F_REQUEST   = 0x41,   // u8 what (panel_request_t), [str tham so]
   PANEL_F_PING      = 0x42,   // u8 seq
-  PANEL_F_ANSWER    = 0x43    // u8 prompt_id, u8 answer
+  PANEL_F_ANSWER    = 0x43,   // u8 prompt_id, u8 answer
+  PANEL_F_TRAM_CMD  = 0x44    // u8 cmd: 'P' probe, 'D' done, 'M' doi MAX/MIN,
+                              //         'R' restart/begin, 'B' thoat, 'Q' hoi trang thai
 };
 
 // ---------------------------------------------------------------------------

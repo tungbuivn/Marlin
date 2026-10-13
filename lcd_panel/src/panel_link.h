@@ -80,6 +80,7 @@ void panel_link_send_gcode2(const char *a, const char *b); // 2 dong lien tiep
 void panel_link_request(const uint8_t what);             // panel_request_t
 void panel_link_request_dir(const char *dirname);        // vao thu muc roi liet ke
 void panel_link_answer(const uint8_t answer);            // tra loi prompt dang cho (1 = OK)
+void panel_link_send_tram_cmd(char cmd);                 // lenh Tramming Wizard P/D/M/R/B/Q (frame 0x44)
 
 // Doi so nguyen trong frame thanh don vi that
 static inline float panel_mm(const int32_t v)   { return (float)v / PANEL_POS_SCALE; }
