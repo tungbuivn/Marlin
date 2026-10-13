@@ -122,10 +122,15 @@ static void send_status(const bool force) {
   const bool changed = !s_have_last || strcmp(s_line, s_last) != 0;
   if (!changed && !force) return;
 
-  // Khong cho block vong lap: TX buffer day thi BO QUA va KHONG ghi nho dong nay -> lan tick sau
-  // (hoac lan dinh ky sau) se gui lai, panel khong bi mat trang thai.
-  if (PANEL_TRAM_SERIAL.availableForWrite() < n) return;
-  PANEL_TRAM_SERIAL.write((const uint8_t *)s_line, (size_t)n);
+  // KHONG dung `availableForWrite() < n` o day!
+  //   TX ring buffer cua core STM32 (HardwareSerial) chi co SERIAL_TX_BUFFER_SIZE = 64 byte.
+  //   1 dong "TRAM ..." dai ~63 byte khi wizard IDLE nhung ~69..75 byte khi co hint CW/CCW/phase
+  //   -> dung `availableForWrite() < n` thi dong dai hon buffer bi BO QUA VINH VIEN (khong bao gio
+  //   duoc gui lai). Da gap that 2026-10-13: link chay luc wizard IDLE, CHET ngay khi wizard bat dau
+  //   probe/di chuyen (panel bao NO LINK) trong khi chieu panel -> Marlin van tot (bam nut may van chay).
+  //   Ghi tung byte: write() tu cho den khi buffer con cho (ca dong ~3 ms @250000 baud - qua ngan de
+  //   anh huong vong lap/watchdog), va KHONG bao gio bi bo qua.
+  for (int i = 0; i < n; i++) PANEL_TRAM_SERIAL.write((uint8_t)s_line[i]);
   TERN_(PANEL_TRAM_DIAG, s_diag_sent++);
 
   memcpy(s_last, s_line, (size_t)n + 1U);
