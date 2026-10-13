@@ -2701,3 +2701,26 @@ LVGL **kep `scroll_y` ve muc toi da ung voi chieu cao lon hon** => nguoi dung ba
 Ngoai ra `lv_obj_get_scroll_bottom()` CONG ca `pad_bottom` vao ket qua => noi dung vua khop
 vung nhin van bao "tran" ~4 px; phai so voi nguong `> PAGE_PAD`, khong dung `> 0`, neu khong
 moi man gon deu bi hien thanh cuon o day.
+
+## Cam bay 45 - Font 1-bit: Adafruit GFXfont KHAC LVGL 8.4 o 2 cho (de lam trang man hinh)
+Khi tu viet `lv_font_t` (khong dung bang cua lv_font_conv):
+1. **Cach xep hang bitmap KHAC nhau.** Adafruit GFXfont canh MOI HANG dau byte (stride = ceil(w/8));
+   LVGL 8.4 xep cac hang thanh MOT CHUOI BIT LIEN TUC (glyph chiem `ceil(w*h*bpp/8)` byte).
+   Bang chung: `lv_draw_sw_letter.c` cong `col_bit += col_bit_row_ofs` = 0 voi hang day du; do delta
+   `bitmap_index` tren chinh font cua LVGL: montserrat_14 = 67/67 lien tuc, dejavu_16 = 253/253 lien tuc.
+   => Phai REPACK tung glyph sang dang lien tuc truoc khi tra cho LVGL.
+2. **`dsc->adv_w` phai la PIXEL NGUYEN**, khong phai 1/16 px. 1/16 px la dinh dang LUU TRONG BANG cua
+   lv_font_conv; `lv_font_fmt_txt.c` tu `>>4` truoc khi gan vao cung truong do (xac nhan them o
+   `lv_freetype.c`, `lv_imgfont.c`). Neu viet `8*16 = 128` thi MOI glyph bi ve lech 128 px ra ngoai
+   vung cat cua nhan => **man hinh trang hoan toan** (dung trieu chung da gap voi font mono).
+   `ofs_y = -(yOffset + height)` va `base_line = line_height - ascender` (do tu day hop dong) moi dung.
+
+## Cam bay 46 - Mau: nguong tuong phan Material/WCAG (do bang so, khong doan)
+Do bang cong thuc WCAG 2.1 (chu thuong >= 4.5:1, chu lon/icon/thanh phan UI >= 3:1). Bang mau CU vi pham:
+- Thanh tien do: ruot `0x0000FF` tren nen `0x000000` = **2.44:1** (xanh duong tren den - kho nhin).
+- Chu mo `0x808080`: 3.83:1 tren nen, 3.29:1 tren nen nut (deu < 4.5).
+- Do loi `0xFF2020` tren nen trang: 3.95:1 khi dung lam CHU THUONG (chi dat neu la icon/chu lon).
+Da doi sang bang mau Material 3 dark (giu sac indigo cua may): nen giu `0x1E156E`/`0x160C52`/`0x2A2080`,
+chu `0xE6E1E5` (11.7:1), chu phu `0xCAC4D0` (8.9:1), accent cyan `0x00E5FF` (9.8:1), amber `0xFFD54F`
+(10.7:1), green `0x81C784` (7.5:1), do `0xFF8A80` (6.7:1), chu mo `0x9E9AA7` (5.5:1), nen chon
+`0x4F378B` (7.2:1 voi chu trang), ruot tien do `0x00E5FF` tren nen `0x2A2080` (8.4:1).

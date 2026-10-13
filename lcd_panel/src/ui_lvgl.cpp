@@ -80,23 +80,75 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <Arduino.h>                // Serial.printf cho log tu kiem tra font (che do 4)
 
 #include "panel_link.h"
 #include "tram_link.h"              // Bed Tramming Wizard cua Marlin (link ASCII, xem tram_link.h)
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
+#include "lv_font_gfxfont.h"        // driver font 1-bit Adafruit GFXfont (che do UI_MONO_FONT 4)
 
 // Font co DAU tieng Viet (sinh bang lv_font_conv, cung thong so: size 14, bpp 4):
 // font Montserrat co san cua LVGL KHONG co U+1EA0..U+1EF9 nen chu co dau se ra o vuong.
 LV_FONT_DECLARE(font_segoe_vn_14);      // Segoe UI 14 - font ty le (ban cu)
-LV_FONT_DECLARE(font_consola_vn_14);    // Consolas 14 - font MONO, moi ky tu rong 7,7 px
+LV_FONT_DECLARE(font_consola_vn_14);    // Consolas 14 - font MONO (da thu: MAT CHU tren panel that)
+LV_FONT_DECLARE(font_robotomono_vn_14); // Roboto Mono 14 - mono cua Google Fonts, du 100% dau tieng Viet
 
-// Chon font cho TOAN BO UI:
-//   1 = Consolas (MONO): moi ky tu cung be rong => so dang chay (nhiet do, XYZ, %, gia tri
-//       setting) KHONG bi nhay ngang khi gia tri doi do dai; so thang cot dep hon.
-//       line_height 17 (Montserrat 14 la 16) nen hang cao 16 px co the bi cat 1 px -> da kiem tra
-//       thuc te, neu thay cut thi chuyen ve 0 hoac chi gan mono cho rieng o GIA TRI.
-//   0 = Montserrat 14 mac dinh cua LVGL (ban cu), chu co dau van dung font_segoe_vn_14.
-#define UI_MONO_FONT 0
+// Chon font cho UI:
+//   0 = Montserrat 14 (mac dinh LVGL) + font_segoe_vn_14 cho nhan co dau.  <<< MAC DINH AN TOAN
+//   1 = Consolas (MONO) gan o CAP MAN HINH de moi vat thua ke.
+//       >>> DA THU TREN MAY THAT: MAT HET CHU, du file font hop le (da doi chieu tung truong
+//       voi font_segoe_vn_14 dang chay tot: cung bpp/bitmap_format/cmap_num/base_line, du lieu
+//       bitmap day du). Giu lai de tham chieu, KHONG dung.
+//   2 = Consolas (MONO) gan TUNG VAT THE (nhan/nut) - cach dang nghiem thu.
+//       >>> CUNG DA THU: MAT CHU. (Luu y: khoi `#if UI_MONO_FONT == 1 || == 2` trong
+//       build_chrome() van dat font_consola_vn_14 o CAP MAN HINH cho che do 2 nua, nen che do 2
+//       thuc chat tron 2 cach gan. Giu nguyen hanh vi cu de tham chieu.)
+//   3 = (danh rieng cho mono theo o gia tri - chua lam)
+//   4 = font 1-BIT TU SINH dinh dang Adafruit GFXfont (xem tools/ttf2gfxfont.py +
+//       lv_font_gfxfont.c + gfx_font_robotomono.h). Gan TUNG nhan/nut y nhu che do 2, va
+//       KHONG dat font o cap man hinh. Ten man (s_title) giu Montserrat lam DOI CHUNG.
+#define UI_MONO_FONT 4
+
+#if UI_MONO_FONT == 4
+// ---------------------------------------------------------------------------
+//  Che do 4: font 1-bit Adafruit GFXfont tu sinh.
+//  - 5 dai roi rac (khong the la 1 bang 0x20..0x1EF9: ton ~55 KB vo ich).
+//  - Moi dai la mot GFXfont rieng; lv_font_gfxfont_get() tra tuan tu.
+//  - line_height/base_line lay tu du lieu glyph cua CA 5 dai (glyph tieng Viet cao hon ASCII).
+// ---------------------------------------------------------------------------
+extern const GFXfont gfx_font_robotomono_ascii;   // U+0020..U+00FF
+extern const GFXfont gfx_font_robotomono_vn1;     // U+0102..U+0103  A(breve) a(breve)
+extern const GFXfont gfx_font_robotomono_vn2;     // U+0110..U+0111  D/ d/ gach ngang
+extern const GFXfont gfx_font_robotomono_vn3;     // U+01A0..U+01B1  O/ o/ U/ u/ moc
+extern const GFXfont gfx_font_robotomono_vn4;     // U+1EA0..U+1EF9  to hop dau tieng Viet
+
+#define UI_GFX_RANGE_COUNT 5
+static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] = {
+  &gfx_font_robotomono_ascii,
+  &gfx_font_robotomono_vn1,
+  &gfx_font_robotomono_vn2,
+  &gfx_font_robotomono_vn3,
+  &gfx_font_robotomono_vn4
+};
+
+// Dien trong ui_lvgl_begin() (sau lv_init). Neu NULL (font loi) thi UI_MONO_FACE lui ve
+// Montserrat: mat dau tieng Viet nhung KHONG mat het chu - duong lui an toan.
+static const lv_font_t *s_gfx_mono = NULL;
+#endif
+
+// <<< DOI FONT MONO O DUY NHAT KHOI NAY >>>
+#if UI_MONO_FONT == 4
+  #define UI_MONO_FACE (s_gfx_mono ? s_gfx_mono : &lv_font_montserrat_14)
+#else
+  #define UI_MONO_FACE (&font_robotomono_vn_14)   // che do 1/2/3: font sinh bang lv_font_conv
+#endif
+
+#if UI_MONO_FONT == 2 || UI_MONO_FONT == 4
+  // Che do 2 va 4: gan font mono cho TUNG nhan/nut (khong dat o cap man hinh).
+  #define mono_obj(o) lv_obj_set_style_text_font((o), UI_MONO_FACE, 0)
+#else
+  #define mono_obj(o) ((void)0)
+#endif
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
 static_assert(LV_COLOR_DEPTH == 16, "UI nay chi ho tro LV_COLOR_DEPTH 16");
@@ -106,28 +158,28 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 //  Mau -- DONG NHAT theo Marlin/src/lcd/tft/tft_color.h (moi man dung cung bang mau)
 // ===========================================================================
 #define MR_BG      lv_color_hex(0x1E156E)   // COLOR_BACKGROUND
-#define MR_COLD    lv_color_hex(0x00FFFF)   // COLOR_COLD / COLOR_FAN (aqua)
-#define MR_HOTEND  lv_color_hex(0xFF2020)   // COLOR_HOTEND (scarlet)
-#define MR_BEDHOT  lv_color_hex(0xFF8C00)   // COLOR_HEATED_BED (dark orange)
+#define MR_COLD    lv_color_hex(0x00E5FF)   // Material 3 dark cyan A400 (12.07 -> 9.84:1, do choi hon)
+#define MR_HOTEND  lv_color_hex(0xFF8A80)   // Material 3 dark red A100: 3.95 -> 6.70:1 (truoc la chu thuong < 4.5)
+#define MR_BEDHOT  lv_color_hex(0xFFB74D)   // Material 3 dark amber 300: 6.49 -> 8.74:1
 #define MR_AXIS    lv_color_hex(0xFFFFFF)   // COLOR_AXIS_HOMED / COLOR_CONTROL_ENABLED
 #define MR_NOAXIS  lv_color_hex(0xFFFF00)   // COLOR_AXIS_NOT_HOMED / COLOR_MENU_TEXT
-#define MR_RATE100 lv_color_hex(0x7FFF00)   // COLOR_RATE_100 (vivid green)
-#define MR_RATEALT lv_color_hex(0xFFFF00)   // COLOR_RATE_ALTERED
-#define MR_TIME    lv_color_hex(0x00FFFF)   // COLOR_PRINT_TIME
-#define MR_MSG     lv_color_hex(0xFFFF00)   // COLOR_STATUS_MESSAGE
-#define MR_PROGBAR lv_color_hex(0x0000FF)   // COLOR_PROGRESS_BAR
-#define MR_PROGBG  lv_color_hex(0x000000)   // COLOR_PROGRESS_BG
-#define MR_FRAME   lv_color_hex(0xFFFFFF)   // COLOR_PROGRESS_FRAME
-#define MR_MENU    lv_color_hex(0xFFFF00)   // COLOR_MENU_TEXT
-#define MR_MENUVAL lv_color_hex(0xFFFFFF)   // COLOR_MENU_VALUE
-#define MR_SELBG   lv_color_hex(0x992380)   // COLOR_SELECTION_BG
-#define MR_DISABLED lv_color_hex(0x808080)  // COLOR_CONTROL_DISABLED
+#define MR_RATE100 lv_color_hex(0x81C784)   // Material 3 dark green 300: 11.68 -> 7.52:1
+#define MR_RATEALT lv_color_hex(0xFFD54F)   // Material 3 dark amber 300: 16.18 -> 10.73:1
+#define MR_TIME    lv_color_hex(0x00E5FF)   // Material 3 dark cyan A400
+#define MR_MSG     lv_color_hex(0xFFD54F)   // Material 3 dark amber 300
+#define MR_PROGBAR lv_color_hex(0x00E5FF)   // Material 3 dark cyan A400: xanh tren den chi 2.44:1 -> 8.44:1
+#define MR_PROGBG  lv_color_hex(0x2A2080)   // Material 3 dark: nen rong = mau nut (truoc la den tuyet doi)
+#define MR_FRAME   lv_color_hex(0xE6E1E5)   // Material 3 dark on-surface
+#define MR_MENU    lv_color_hex(0xFFD54F)   // Material 3 dark amber 300
+#define MR_MENUVAL lv_color_hex(0xE6E1E5)   // Material 3 dark on-surface: 15.13 -> 11.72:1
+#define MR_SELBG   lv_color_hex(0x4F378B)   // Material 3 dark primary-container: chu trang 7.22:1
+#define MR_DISABLED lv_color_hex(0x9E9AA7)  // Material 3 dark: chu mo 3.83/3.29 -> 5.50:1 (truoc < 4.5)
 
 // Cac man con dung cung bang mau nay (khong con theme rieng)
 #define COL_BG     MR_BG
 #define COL_BAR    lv_color_hex(0x160C52)   // dong tieu de: dam hon nen
 #define COL_TXT    MR_MENUVAL
-#define COL_DIM    lv_color_hex(0x9AA7E8)   // chu phu (xanh nhat)
+#define COL_DIM    lv_color_hex(0xCAC4D0)   // Material 3 dark on-surface-variant: 6.53 -> 8.88:1
 #define COL_BTN    lv_color_hex(0x2A2080)   // nen nut
 #define COL_ACCENT MR_COLD                   // focus / diem nhan
 #define COL_WARN   MR_RATEALT
@@ -319,8 +371,10 @@ static void set_text(lv_obj_t *lbl, const char *txt) {
 // U+1EA0..U+1EF9, nen chi nhung nhan that su co dau moi duoc doi font.
 // Khi UI_MONO_FONT = 1 thi CA MAN da la font co dau (xem build_chrome) -> khong phai doi rieng nua.
 static void vn_font(lv_obj_t *label) {
-#if UI_MONO_FONT
+#if UI_MONO_FONT == 1
   (void)label;                                    // font mono da dat o cap man hinh + layer_top
+#elif UI_MONO_FONT == 2 || UI_MONO_FONT == 4
+  if (label) lv_obj_set_style_text_font(label, UI_MONO_FACE, 0);   // mono: nhan co dau
 #else
   if (label) lv_obj_set_style_text_font(label, &font_segoe_vn_14, 0);
 #endif
@@ -343,6 +397,7 @@ static void style_flat(lv_obj_t *o, lv_color_t bg) {
 // Nhan 1 dong: rong theo noi dung (dat trong flex thi layout tu xep cho)
 static lv_obj_t *mk_label(lv_obj_t *parent, const char *txt, lv_color_t col) {
   lv_obj_t *l = lv_label_create(parent);
+  mono_obj(l);                                   // che do 2: mono cho TUNG nhan
   lv_obj_set_style_text_color(l, col, 0);
   lv_label_set_text(l, txt);
   return l;
@@ -425,6 +480,7 @@ static lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coor
   lv_obj_set_style_pad_all(b, 0, 0);
   lv_obj_set_style_shadow_width(b, 0, 0);
   lv_obj_t *l = lv_label_create(b);
+  mono_obj(l);                                   // che do 2: mono cho nhan trong nut
   lv_obj_set_style_text_color(l, COL_TXT, 0);
   lv_label_set_text(l, txt);
   lv_obj_center(l);
@@ -2429,11 +2485,15 @@ static void build_chrome(void) {
   lv_obj_set_style_pad_all(scr, 0, 0);
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-#if UI_MONO_FONT
-  // Font MONO cho TOAN BO UI (xem UI_MONO_FONT). Dat o cap MAN HINH: `text_font` la thuoc tinh
-  // THUA KE nen moi vat tao sau (ke ca nut/nhan trong nut) deu dung mono, khong phai sua tung cho.
+#if UI_MONO_FONT == 1 || UI_MONO_FONT == 2
+  // Font MONO cho TOAN BO UI (che do 1 va 2 - CA HAI DEU DA HONG tren may that, giu nguyen
+  // hanh vi cu de tham chieu). Dat o cap MAN HINH: `text_font` la thuoc tinh THUA KE nen moi
+  // vat tao sau (ke ca nut/nhan trong nut) deu dung mono, khong phai sua tung cho.
   // Hop thoai lv_msgbox duoc tao voi parent = NULL -> nam o layer_top, KHONG thua ke tu man hinh,
   // nen phai dat rieng cho layer_top.
+  // LUU Y: che do 2 (mono TUNG nhan) theo thiet ke KHONG nen dat font o day, nhung dieu kien cu
+  // `#if UI_MONO_FONT` vo tinh bat ca che do 2 -> che do 2 thuc chat tron 2 cach gan. Giu nguyen.
+  // Che do 4 CO Y KHONG nam trong khoi nay: no chi gan tung nhan qua mono_obj().
   lv_obj_set_style_text_font(scr, &font_consola_vn_14, 0);
   lv_obj_set_style_text_font(lv_layer_top(), &font_consola_vn_14, 0);
 #endif
@@ -2449,6 +2509,12 @@ static void build_chrome(void) {
   lv_obj_set_flex_align(s_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   s_title = mk_label(s_bar, "STATUS", COL_TXT);
+#if UI_MONO_FONT == 2 || UI_MONO_FONT == 4
+  // DOI CHUNG cho phep thu mono: giu TEN MAN o font Montserrat. Neu man hinh chi con doc duoc ten
+  // man ma moi chu khac mat => font mono khong ve duoc. Neu chu khac hien binh thuong => font tot.
+  // (Uu tien nhat: neu CA ten man lan chu khac deu mat thi loi nam o cho khac, khong phai font.)
+  lv_obj_set_style_text_font(s_title, &lv_font_montserrat_14, 0);
+#endif
   mk_spacer(s_bar, 0, 1, 1);                     // an het cho trong -> day 2 vat sau ve phai
   // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de
   s_link  = mk_label_w(s_bar, "NO LINK", COL_ERR, 96);
@@ -2655,6 +2721,20 @@ static void boxes_update(void) {
 // ===========================================================================
 void ui_lvgl_begin(void) {
   lv_init();
+
+#if UI_MONO_FONT == 4
+  // Font 1-bit tu sinh (Adafruit GFXfont): tao descriptor + tu kiem tra, in ket qua ra Serial
+  // (COM7, 115200) MOT LAN. Nap xong chi can doc log la biet driver tra dung du lieu hay khong:
+  //   [GFXFONT] 'A' -> OK box=8x9 adv_w=128 ofs=(0,0) ... checksum8=... first8=...
+  // Neu dong nao ghi "KHONG TRA DUOC GLYPH" hoac "BITMAP NULL" thi driver co van de.
+  s_gfx_mono = lv_font_gfxfont_get(UI_FONT_RANGES, UI_GFX_RANGE_COUNT);
+  if (!s_gfx_mono) {
+    Serial.printf("[UI] UI_MONO_FONT 4: lv_font_gfxfont_get() tra NULL -> lui ve Montserrat "
+                  "(mat dau tieng Viet, KHONG mat het chu)\n");
+  }
+  lv_font_gfxfont_selftest(s_gfx_mono);
+#endif
+
   ui_port_display_init();
 
   // 1 vung dem UI_LCD_HOR_RES x 40 pixel: du nhanh ma khong ton RAM

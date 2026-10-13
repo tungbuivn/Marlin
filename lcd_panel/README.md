@@ -862,3 +862,19 @@ Baud **250000 8N1 = 25 000 B/s, 40 us/byte**. Frame PUSH toi da 198 B (`PANEL_MA
 - Tran RX thi **im lang** ca hai phia (khong co co tran o lop Arduino); phia Marlin `MarlinSerial.cpp`
   bo byte khi ring day, phia ESP32 driver bo byte khi het buffer => bieu hien la thieu du lieu chu
   khong bao loi. Vi vay moi nguong dem phai rong rai.
+
+## Font 1-bit tu sinh (Adafruit GFXfont) - thay cho lv_font_conv
+Vi sao: font sinh bang `lv_font_conv` (Consolas/Roboto Mono) **lam mat het chu** tren panel that
+(xem cam bay 45 o README goc: dinh dang bitmap + don vi `adv_w`). Nay dung font 1-bit tu sinh:
+- `tools/ttf2gfxfont.py` - TTF -> header C dung dinh dang Adafruit GFXfont, nhieu dai lien tuc
+  (`--font --size --extra-ranges --name -o`, co `--yadvance`/`--threshold`/`--dump`).
+- `src/gfx_font_robotomono.h/.c` - Roboto Mono **size 13 px**: `xAdvance 8`, `yAdvance 17`, `base_line 3`,
+  5 dai (0x20-0xFF, 0x0102-0x0103, 0x0110-0x0111, 0x01A0-0x01B1, 0x1EA0-0x1EF9), 287 glyph co net,
+  **2926 byte bitmap**, tong 5714 byte flash (nam o DROM). Du 100% dau tieng Viet.
+- `src/lv_font_gfxfont.c/.h` - driver `lv_font_t` doc GFXfont (repack sang dang lien tuc cua LVGL) +
+  `lv_font_gfxfont_selftest()` in ra COM7: box/adv/ofs/checksum cua 'A' '0' 'a' U+1EC7 U+0110.
+- Cong tac `UI_MONO_FONT` trong `ui_lvgl.cpp`: 0 = Montserrat + Segoe (mac dinh an toan), 4 = mono GFX
+  gan tung nhan (**dang dung**), 1/2 = mono kieu cu (**da biet lam mat chu**, giu de tham chieu).
+- Doi font mono: sua DUY NHAT `UI_MONO_FACE` trong `ui_lvgl.cpp`.
+- Kiem tra tren may: reset board roi doc COM7 -> khoi `[GFXFONT]` phai khop gia tri trong
+  `tools/test_gfxfont_layout.py` (tool nay con so TUNG PIXEL voi FreeType: 0 lech cho ca tieng Viet).
