@@ -46,9 +46,27 @@
     // Task chan doan: khong dung vong lap chinh nen van chay duoc khi vong lap bi chan.
     static void cyd_diag_task(void *) {
       uint32_t last_n = 0, stall = 0;
+      bool exempt_logged = false;
       for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));
-        if (s_loop_n != last_n) { last_n = s_loop_n; stall = 0; s_hung_s = 0; continue; }
+        if (s_loop_n != last_n) { last_n = s_loop_n; stall = 0; s_hung_s = 0; exempt_logged = false; continue; }
+        // ---------------------------------------------------------------------------
+        // MIEN TRU KHI DANG NHAN FILE UPLOAD (WiFi).
+        // VI SAO: `server.handleClient()` cua WebServer (ESP32 core) xu ly CA BODY cua POST trong 1
+        // lan goi (DONG BO) -> vong lap chinh DUNG HOP LE suot phien upload. Do dai ti le voi kich
+        // thuoc file: ~13 s cho 2 MB, ~30 s cho 4,3 MB. Neu khong mien tru thi watchdog 15 s tuong
+        // "treo" va TU KHOI DONG LAI giua phien -> PC thay "ket noi bi dut giua chung" va `SD.write()`
+        // bao "ghi the TF loi" (loi THAT 2026-10-15: gui file 4,3 MB chet o ~46%, file 2 MB thi lot).
+        // Trong luc upload thi KHONG the la treo that (moi buoc deu co tien do tu client) -> bo qua.
+        // ---------------------------------------------------------------------------
+        if (net_upload_active()) {
+          if (!exempt_logged) {
+            Serial.println("[CYD] dang nhan file WiFi -> MIEN TRU watchdog (vong lap dung la binh thuong)");
+            exempt_logged = true;
+          }
+          stall = 0; s_hung_s = 0;
+          continue;
+        }
         stall++;
         s_hung_s = stall;                          // RTC: lan sau boot biet da treo bao lau
         if (stall == 2 || stall == 5 || stall == 10)

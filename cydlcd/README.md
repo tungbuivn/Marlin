@@ -871,6 +871,35 @@ Luồng: **PC/điện thoại → WiFi → màn hình CYD ghi `/cydlcd_tmp/<tên
 thẻ → `M22`+`M21` cho Marlin mount lại + xin lại danh sách file → xoá file tạm.** Đây là **đường duy nhất**
 còn lại: đường POST sang module WiFi rời và đường upload qua Bluetooth **đã xoá 2026-10-14** (xem **§9.23**).
 
+> 🐞 **LỖI ĐÃ SỬA 2026-10-15 — "gửi file 4,3 MB bị đứt kết nối giữa chừng"**: file **2 MB** gửi được
+> (~13 s) nhưng file **4,3 MB** luôn chết ở **~46%** (~1,9 MB). Log màn hình cho thấy nguyên nhân **không
+> phải** mạng/thẻ:
+> ```
+> 5.0s [HTTP] nhan file "V300_bot_2.gcode" tu 192.168.0.174 ...
+> 7.8s [CYD] CANH BAO: vong lap KHONG chay 2 s (dang o chang 3)     <- chang 3 = web server
+> 15.8s ... 10 s
+> 20.8s [CYD] TREO > 15 s o chang 3 -> TU KHOI DONG LAI             <- watchdog chan doan TU REBOOT panel
+> ```
+> `server.handleClient()` của WebServer (ESP32 core) xử lý **CẢ BODY** của POST trong **một** lần gọi
+> (đồng bộ) ⇒ vòng lặp chính **đứng HỢP LỆ** suốt phiên upload, thời gian **tỉ lệ với kích thước file**
+> (~13 s cho 2 MB, ~30 s cho 4,3 MB) ⇒ watchdog 15 s (`cyd_diag_task`) tưởng "treo" và **tự khởi động
+> lại giữa phiên** ⇒ PC thấy `ket noi bi dut giua chung`, và `SD.write()` báo `ghi the TF loi` (do bị
+> ngắt giữa đường).
+> **Sửa 3 lớp**:
+> 1. `main.cpp` (`cyd_diag_task`): **MIỄN TRỪ watchdog khi `net_upload_active()`** (đang nhận/ghi file) —
+>    log `dang nhan file WiFi -> MIEN TRU watchdog`. Đây là mấu chốt.
+> 2. `cyd_sd_temp_open()`: gửi **`M22`** ngay khi bắt đầu nhận file (Marlin **nhả thẻ**, thôi đọc sector
+>    trong suốt phiên; cuối phiên `notify_media_changed()` gửi `M22`+`M21` để mount lại).
+> 3. `cyd_sd_raw_read()`: **từ chối** đọc sector thô khi `s_file`/`s_busy` (phòng khi Marlin chưa kịp xử
+>    lý `M22`) — đếm ở `refused=` trong dòng `[MRL]`; an toàn vì phiên upload đã bị chặn khi máy đang in.
+> **Đo lại trên máy thật**: `V300_bot_2.gcode` **4 523 980 byte** gửi trong **33,1 s (133,6 KB/s)** →
+> `{"state":"done","rx_bytes":4523980,"total_bytes":4523980,"written_bytes":4523980,
+> "file":"V300_bot_2.gcode","result":"DONE 4523980"}`; `UI TAP L` xác nhận trên thẻ đúng **4 523 980 B**,
+> và file hiện trong danh sách màn FILE SD.
+> (Nhánh script `cydlcd/tools/cydlcd-upload.ps1` cũng đã sửa: thông báo lỗi "No route to host" không còn
+> bị dịch nhầm thành "không phân giải được tên", thêm dòng trắng trước thông báo lỗi để không dính vào
+> thanh tiến độ `KB/s`, và **thử lại 3 lần** với chờ lâu dần — commit `331c91a8e7`.)
+
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
   `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,

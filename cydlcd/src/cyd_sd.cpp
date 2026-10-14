@@ -306,6 +306,7 @@ bool s_fatfs_written = false;
 
 // Bo dem phuc vu Marlin (de KIEM CHUNG driver SD qua UART: doc bao nhieu sector, bao nhieu loi)
 uint32_t s_raw_rd = 0, s_raw_rd_err = 0, s_raw_wr = 0, s_raw_wr_err = 0;
+uint32_t s_raw_rd_refused = 0;          // so lan TU CHOI doc tho vi dang nhan/ghi upload (xem cyd_sd_raw_read)
 
 void fatfs_sync(void) {
   if (!s_sd_ready) return;
@@ -446,6 +447,21 @@ bool cyd_sd_printer_busy(void) { return printer_busy(); }
 bool cyd_sd_raw_read(const uint32_t sector, uint8_t *dst) {
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !dst) return false;
+  // ---------------------------------------------------------------------------
+  // TU CHOI DOC THO KHI MAN HINH DANG NHAN/GHI FILE UPLOAD (`s_file` dang mo).
+  // VI SAO (loi that 2026-10-15: "gui file 4,3 MB qua WiFi bi dut ket noi giua chung"):
+  //   Trong luc nhan upload, man hinh ghi file tam qua FATFS (cyd_sd_temp_write -> SD.write) MA
+  //   Marlin VAN doc the qua UART (moi lan liet ke file / kiem tra the -> hang tram sector). Hai
+  //   duong cung dung MOT driver SD cua ESP32 -> FATFS dang giu phien ghi thi SD.readRAW() lam hong
+  //   phien do: `SD.write()` tra ve thieu byte -> "ghi the TF loi" -> driver SD con bi treo vai giay
+  //   (vong lap chinh khong chay 15 s) -> watchdog chan doan cua man hinh TU KHOI DONG LAI -> PC thay
+  //   "ket noi bi dut giua chung". Da do duoc: upload 2 MB (trang dang mo KHONG phai FILES) thi qua,
+  //   con upload 4,3 MB (trang FILES dang mo -> Marlin liet ke lien tuc) thi chet o ~46%.
+  //   Tra false => man hinh tra frame loi cho sector do; Marlin coi la loi doc the (KHONG the dang in
+  //   vi phien upload da bi chan khi may ban) va se doc lai sau khi phien xong (cuoi phien man hinh
+  //   gui M22+M21 -> Marlin mount lai).
+  // ---------------------------------------------------------------------------
+  if (s_file || s_busy) { s_raw_rd_refused++; return false; }
   // SD.readRAW(): doc THANG sector vat ly, khong qua FATFS (core ESP32 SD.cpp:124 -> sd_read_raw).
   // Doc lap voi FATFS dang mount: chi doc, khong dung cache cua FATFS.
   const bool ok = SD.readRAW(dst, sector);
@@ -679,6 +695,20 @@ bool cyd_sd_temp_open(const char *name, uint32_t size_hint) {
   }
   s_got = 0;
   ELOG("[UP] ghi vao %s (ten dich: %s)\n", s_tmp, s_name);
+  // ---------------------------------------------------------------------------
+  // BAO MARLIN NHA THE (M22) TRONG SUOT PHIEN UPLOAD.
+  // VI SAO: trong luc nhan file, man hinh ghi the qua FATFS; neu Marlin van doc the qua UART (moi lan
+  // liet ke file / kiem tra the = hang tram sector) thi hai duong dung chung 1 driver SD -> phien ghi
+  // FATFS bi hong ("ghi the TF loi") -> man hinh treo >15 s -> watchdog TU KHOI DONG LAI -> PC thay
+  // "ket noi bi dut giua chung" (loi that 2026-10-15 voi file 4,3 MB, chet o ~46%).
+  // M22 = card.release() -> Marlin dong volume, KHONG doc sector nua (board nay bat NO_SD_DETECT nen
+  // Marlin khong tu mount lai). Cuoi phien, cyd_sd_finish_upload() -> notify_media_changed() gui
+  // M22+M21 -> Marlin mount lai va thay file moi.
+  // (Lop chan thu 2: cyd_sd_raw_read() cung TU CHOI sector trong luc s_file/s_busy - phong khi lenh
+  //  M22 chua kip duoc Marlin xu ly.)
+  // ---------------------------------------------------------------------------
+  cydlcd_link_send_gcode("M22");
+  ELOG("[UP] da bao Marlin NHA THE (M22) trong luc nhan file\n");
   return true;
 }
 
@@ -860,11 +890,12 @@ void cyd_sd_log(void) {
   //   st = cydlcd_state_t (0 idle, 1 printing, 2 paused, 3 homing, 4 leveling, 5 killed...),
   //   fl = cydlcd_status_flags_t (bit1 CYDLCD_SF_MEDIA, bit2 CYDLCD_SF_SD_PRINTING, bit3 PAUSED),
   //   r=%lu/%lu = so sector DOC thanh cong / loi, w=%lu/%lu = so sector GHI thanh cong / loi.
-  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\" | SD r=%lu/%lu w=%lu/%lu\n",
+  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\" | SD r=%lu/%lu w=%lu/%lu refused=%lu\n",
                 (unsigned)cydlcd.state, (unsigned)cydlcd.flags, (unsigned)cydlcd.progress_pct,
                 cydlcd.prog.file,
                 (unsigned long)s_raw_rd, (unsigned long)s_raw_rd_err,
-                (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err);
+                (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err,
+                (unsigned long)s_raw_rd_refused);
 }
 
 #else   // ---- CYDLCD_WIFI_UPLOAD = 0: stub rong (moi env van link duoc) ----
