@@ -1063,7 +1063,8 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 >   cắt ngắn) và **xoá ngay khi bấm, KHÔNG hỏi xác nhận** (yêu cầu người dùng). Thẻ này **giãn full size**:
 >   `body` là flex cột cao 100%, thẻ gửi file `flex:0 0 auto`, thẻ danh sách `flex:1 1 auto; min-height:180px`
 >   và `.list` tự cuộn khi danh sách dài hơn màn hình. Danh sách tự nạp khi mở trang và **tự nạp lại sau khi
->   upload xong** hoặc sau mỗi lần xoá.
+>   upload xong**; riêng khi **xoá** thì **KHÔNG gọi lại `/files`** — JS **gỡ luôn dòng vừa xoá** khỏi danh
+>   sách đang hiện (nhanh, không nháy trang); nếu xoá LỖI thì giữ nguyên dòng và trả nút lại để bấm lại.
 > * **Ô token được điền sẵn `CYDLCD_HTTP_TOKEN`** (mặc định `TBT-3D-up`) khi trả trang: `handle_root()` copy
 >   trang từ PROGMEM ra `String` rồi thay placeholder `%%TOKEN%%` — không phải gõ tay nữa. Vẫn đổi được bằng
 >   `?token=...` (JS ghi đè giá trị trong ô nhập nếu URL có token).

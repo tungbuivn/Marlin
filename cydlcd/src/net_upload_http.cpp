@@ -104,7 +104,7 @@ function loadFiles(){
        var row=document.createElement('div'); row.className='row';
        var b=document.createElement('button'); b.className='del'; b.textContent='Xoa';
        b.title='Xoa '+(f.d?'thu muc ':'file ')+f.n;
-       b.onclick=function(){ delFile(f.n, f.d); };
+       b.onclick=function(){ delFile(f.n, f.d, row, b); };
        var sp=document.createElement('span');
        sp.textContent=(f.d?'[TM] ':'')+f.n+(f.d?'':' - '+fmtB(f.s));
        row.appendChild(b); row.appendChild(sp);      // NUT XOA TRUOC, ten file sau
@@ -112,14 +112,24 @@ function loadFiles(){
      });
    }).catch(function(){ box.textContent='loi ket noi toi cydlcd'; });
 }
-function delFile(n,isdir){
-  // KHONG hoi xac nhan (yeu cau nguoi dung 2026-10-15: "bo confirm xoa di") -> xoa ngay khi bam.
+function delFile(n,isdir,row,btn){
+  // KHONG hoi xac nhan + KHONG goi lai /files sau khi xoa (yeu cau nguoi dung 2026-10-15):
+  // xoa xong thi GO LUON dong do khoi danh sach dang hien (nhanh, khong nhay trang).
+  // Xoa LOI thi giu nguyen dong + tra nut lai de bam lai (server da bao ly do o o log).
+  if(btn) btn.disabled=true;
   var tok=document.getElementById('tok').value;
   fetch('/delete?token='+encodeURIComponent(tok)+'&name='+encodeURIComponent(n),{method:'POST'})
    .then(r=>r.json()).then(function(j){
-     log('xoa '+n+': '+(j.status==='Ok'?'XONG':'LOI')+' - '+(j.message||''));
-     loadFiles();
-   }).catch(function(){ log('loi ket noi khi xoa '+n); });
+     log('xoa '+(isdir?'thu muc ':'file ')+n+': '+(j.status==='Ok'?'XONG':'LOI')+' - '+(j.message||''));
+     if(j.status==='Ok'){
+       if(row && row.parentNode) row.parentNode.removeChild(row);
+       var box=document.getElementById('flist');
+       if(box && !box.querySelector('.row')) box.textContent='(khong con file nao tren the)';
+     } else if(btn) btn.disabled=false;
+   }).catch(function(){
+     log('loi ket noi khi xoa '+n);
+     if(btn) btn.disabled=false;
+   });
 }
 function send(){
   var f=document.getElementById('f').files[0]; if(!f){log('chua chon file');return;}
