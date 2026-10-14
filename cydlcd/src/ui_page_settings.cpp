@@ -41,15 +41,18 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_PROBE_OFFSET_Z,"Probe Z mm",    1000, 3 },
   { CYDLCD_SET_PROBE_OFFSET_X,"Probe X mm",    1000, 2 },
   { CYDLCD_SET_PROBE_OFFSET_Y,"Probe Y mm",    1000, 2 },
+  // FADE HEIGHT (M420 Z, mm): chieu cao ma ban in chuyen dan tu "bu mesh" sang "khong bu mesh".
+  // YEU CAU 2026-10-15: "trong setting chua co fade height". Chi hien khi ban build Marlin co
+  // ENABLE_LEVELING_FADE_HEIGHT (Marlin day gia tri xuong; khong co thi dong nay tu bi loc khoi bang).
+  // VI TRI (sua 2026-10-15: nguoi dung bao "mat setting fade height roi"): bang SETTINGS gio co 56 dong ma
+  // khung chi hien ~7 dong -> dong nao nam duoi mep thi phai CUON moi thay. Fade height truoc o dong 9 (ngay
+  // duoi mep) nen bi tuong la "mat"; nay dua len NGAY SAU 3 dong probe (dong 4) de luon thay khong can cuon.
+  { CYDLCD_SET_FADE_HEIGHT,   "Fade height mm", 1000, 1 },
   { CYDLCD_SET_FEEDRATE_PCT,  "Feed %",         100, 0 },
   { CYDLCD_SET_FLOW_PCT,      "Flow %",         100, 0 },
   { CYDLCD_SET_FAN_PCT_E0,    "Fan E0 %",       100, 0 },
   { CYDLCD_SET_TARGET_TEMP_E0,"Target E0 C",    100, 0 },
   { CYDLCD_SET_TARGET_TEMP_BED,"Target bed C",  100, 0 },
-  // FADE HEIGHT (M420 Z, mm): chieu cao ma ban in chuyen dan tu "bu mesh" sang "khong bu mesh".
-  // YEU CAU 2026-10-15: "trong setting chua co fade height". Chi hien khi ban build Marlin co
-  // ENABLE_LEVELING_FADE_HEIGHT (Marlin day gia tri xuong; khong co thi dong nay tu bi loc khoi bang).
-  { CYDLCD_SET_FADE_HEIGHT,   "Fade height mm", 1000, 1 },
   // 6 tham so MPC (M306) - SUA duoc o day, va man TUNING chi hien thi (giong menu MPC cua Marlin 12864).
   // Chi hien khi Marlin co MPCTEMP (khong co thi Marlin khong day -> dong tu bi loc).
   { CYDLCD_SET_MPC_P,         "MPC P heater W",   1000, 2 },
@@ -605,7 +608,10 @@ void page_settings_update(void) {
     if (!old || strcmp(old, a) != 0)
       lv_table_set_cell_value(se_table, (uint16_t)(k + 1), 1, a);
   }
-  snprintf(b, sizeof(b), "cham 1 dong de SUA - %u/%u thong so", (unsigned)se_n, (unsigned)SET_NROWS);
+  // Ghi ro cach dung: bang co the NHIEU dong hon khung nhin (~7 dong) -> phai VUOT de cuon; dong nao cung
+  // cham duoc de sua. (Them 2026-10-15 sau khi nguoi dung tuong "mat setting fade height" - thuc ra dong do
+  // nam duoi mep bang, phai cuon moi thay.)
+  snprintf(b, sizeof(b), "vuot=cuon | cham=SUA | %u/%u thong so", (unsigned)se_n, (unsigned)SET_NROWS);
   set_text(se_info, b);
 
   // Lop phu SUA co the dang mo -> ve lai dau "buoc dang chon" moi chu ky (giong jog_axis_mark()
