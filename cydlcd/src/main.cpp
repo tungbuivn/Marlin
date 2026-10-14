@@ -324,6 +324,10 @@
             // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
             // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
             else if (strcasecmp(a3, "GRAD") == 0)    ui_lvgl_test_grad();
+            // `UI HELLO` = in `hello_flags` + xin lai FULL/SETTINGS/MESH (kiem tra duong panel -> Marlin).
+            else if (strcasecmp(a3, "HELLO") == 0)   ui_lvgl_test_hello();
+            // `UI RX` = in 2 chieu cua UART (frame theo loai + tuoi PONG) - xem ui_lvgl_test_rx().
+            else if (strcasecmp(a3, "RX") == 0)      ui_lvgl_test_rx();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
             // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).

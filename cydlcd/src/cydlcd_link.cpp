@@ -25,6 +25,13 @@ static bool        s_want_full = true;         // xin FULL ngay khi lien ket duo
 // RESYNC "co link nhung chua tung nhan HELLO" (xem cydlcd_link_task): dem so lan da xin lai + moc thoi gian.
 static uint8_t     s_nohello_req = 0;
 static uint32_t    s_nohello_ms = 0;
+// PONG: Marlin tra loi moi frame PING. VI SAO CAN DO: Marlin -> man hinh co the chay tot trong khi chieu
+// NGUOC LAI (lenh tu man hinh) chet han (da gap that 2026-10-15: bam nut / `M220` gui tu man hinh khong
+// chay, ma khong co cho nao bao). PONG la dau hieu DUY NHAT phia man hinh de biet Marlin CON NHAN duoc lenh.
+static uint32_t    s_pong_ms = 0;               // lan cuoi nhan PONG
+static uint32_t    s_pong_canh_bao_ms = 0;      // lan cuoi in canh bao "khong co PONG"
+static uint16_t    s_pong_lost = 0;             // so lan phat hien mat PONG (chan doan)
+static uint16_t    s_rx_type[0x50];             // dem frame theo LOAI (chan doan: xem UI RX)
 // Anh cua bo dem loi 16-bit trong cydlcd_protocol.h (cydlcd_rx_t.errors) o lan doc truoc, de biet
 // "VUA co loi moi" ma khong phai sua cydlcd_protocol.h (file do phai giu byte-identical voi ban
 // Marlin). Chi so sanh KHAC NHAU, khong cong don: bo dem 16-bit co the tran ve 0 sau 65 536 loi
@@ -82,6 +89,13 @@ void cydlcd_link_tx_task(void) {
 uint32_t cydlcd_link_tx_dropped(void) { return s_tx_drop; }
 // So frame dang cho trong hang doi TX (0 = da gui het).
 uint8_t cydlcd_link_tx_pending(void) { return s_txq_n; }
+
+// ---- chan doan chieu MARLIN -> MAN HINH (khai bao o cydlcd_link.h; lenh `UI RX`) ----
+uint16_t cydlcd_link_rx_count(const uint8_t type) { return (type < 0x50) ? s_rx_type[type] : 0; }
+uint32_t cydlcd_link_pong_age_ms(void) {
+  return s_pong_ms ? (uint32_t)(cydlcd_millis() - s_pong_ms) : 0xFFFFFFFFu;
+}
+uint16_t cydlcd_link_pong_lost(void) { return s_pong_lost; }
 
 // Gui frame BAT BUOC (du lieu the SD / SDACK): CHO cho TX ring toi da timeout_ms, KHONG BAO GIO bo
 // frame. VI SAO RIENG DUONG THE SD: Marlin doc 1 sector 512 B = 4 frame; mat DUY NHAT 1 frame la
@@ -296,6 +310,7 @@ static void handle_frame() {
   const uint8_t  n = s_rx.len;
   cydlcd.last_rx_ms = cydlcd_millis();
   cydlcd.linked = true;
+  if (s_rx.type < 0x50) s_rx_type[s_rx.type]++;    // chan doan: dem frame theo loai (xem UI RX)
 
   switch ((cydlcd_frame_t)s_rx.type) {
 
@@ -516,7 +531,8 @@ static void handle_frame() {
       break;
 
     case CYDLCD_F_PONG:
-      break;                                   // da nhan duoc gi -> linked = true
+      s_pong_ms = cydlcd_millis();               // Marlin CON NHAN duoc lenh tu man hinh (xem s_pong_ms)
+      break;
 
     #if CYDLCD_SD_UART
       case CYDLCD_F_SDREQ: {
@@ -565,6 +581,8 @@ void cydlcd_link_begin(const uint32_t baud) {
   tbt_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
   s_want_full = true;
   s_next_ping_ms = 0;
+  memset(s_rx_type, 0, sizeof(s_rx_type));   // chan doan: dem lai tu dau
+  s_pong_ms = 0; s_pong_canh_bao_ms = 0; s_pong_lost = 0;
 }
 
 bool cydlcd_link_connected() { return cydlcd.linked; }
@@ -612,11 +630,16 @@ void cydlcd_link_task() {
     s_want_full = true;                        // khi noi lai thi xin lai tu dau
   }
 
-  // PING 1s/lan: vua de kiem tra lien ket, vua de Marlin biet MAN HINH CYD con song.
-  // KHONG gui khi dang o che do TRAM: byte nhi phan cua frame PING co the lot vao bo giai
-  // lenh ASCII cua Marlin (cydlcd_tbt_link). O che do TRAM, Marlin tu gui dong TBT dinh ky
-  // nen khong can PING.
-  if (!tbt_link_active() && (!s_next_ping_ms || now >= s_next_ping_ms)) {
+  // PING 1s/lan: vua de kiem tra lien ket (PONG), vua de Marlin biet MAN HINH CYD con song.
+  // 2026-10-15 (sua loi "bam nut tren man hinh ma may khong chay" + "bed mesh mat du lieu"): TRUOC DAY
+  // KHONG gui PING khi `tbt_link_active()` (= da nhan dong TBT dau tien) voi ly do "byte nhi phan cua PING
+  // co the lot vao bo giai ASCII cua Marlin (che do CYDLCD_TBT_LINK)". Nhung che do PUSH (dang dung) gui
+  // dong TBT trong FRAME nhi phan (CYDLCD_F_TBT) -> `tbt.ever` = true NGAY tu frame dau => PING bi tat VINH
+  // VIEN. Hau qua: Marlin khong bao gio biet man hinh con song, va man hinh khong bao gio biet Marlin co nhan
+  // duoc lenh khong (ben Marlin ket RX ma khong ai bao - xem pong_task()).
+  // Nay chi BO PING khi THAT SU dang o che do TRAM ASCII tho: da nhan dong TBT MA CHUA bao gio nhan duoc
+  // frame PUSH hop le nao (`cydlcd.rx_frames` = false). Che do PUSH: nhan frame dau tien la PING bat lai.
+  if (!(tbt_link_active() && !cydlcd.rx_frames) && (!s_next_ping_ms || now >= s_next_ping_ms)) {
     s_next_ping_ms = now + CYDLCD_LINK_PING_MS;
     cydlcd_link_ping();
   }
@@ -637,19 +660,49 @@ void cydlcd_link_task() {
   // `s_want_full` (chi bat khi MAT link) khong chay => panel khong bao gio biet `hello_flags` (co SD/mesh/
   // probe) => trang BED MESH bao "khong ho tro" VA **khong xin lai luoi** (luoi 0x0) du Marlin van giu
   // nguyen mesh trong EEPROM/slot (do lai bang `M420 V`: 7x7 gia tri that, slot 0).
-  // Nay: co link ma `hello_flags` = 0 thi xin lai FULL (HELLO + STATUS + SETTINGS...) toi da 5 lan moi lan
-  // noi link; mat link thi RESET bo dem de lan sau noi lai con thu lai.
+  // 2026-10-15 (lan 2): ban dau chi xin lai **5 lan** roi THOI -> do la duong "mat mesh vinh vien": chi can
+  // 5 lan do truot (Marlin dang ban doc the SD -> frame REQUEST bi HOAN roi BO, xem sd_defer() ben Marlin)
+  // la panel het co hoi xin lai. Nay XIN MAI: 2 s/lan trong 10 s dau, sau do 10 s/lan (co dem + log thua dan),
+  // va khi MAT link thi bo dem ve 0. Chi khi nao nhan duoc HELLO moi thoi.
   // ---------------------------------------------------------------------------
   if (cydlcd.linked && !cydlcd.hello_flags) {
+    const uint32_t gap = (s_nohello_req < 6) ? 2000u : 10000u;
     if (!s_nohello_req) { s_nohello_req = 1; s_nohello_ms = now; }
-    else if (s_nohello_req <= 5 && (uint32_t)(now - s_nohello_ms) >= 2000u) {
+    else if ((uint32_t)(now - s_nohello_ms) >= gap) {
+      const uint16_t truoc = s_nohello_req;
       s_nohello_ms = now;
-      SDLOG("[UP] co link nhung CHUA co HELLO -> xin lai FULL (lan %u/5)\n", (unsigned)s_nohello_req);
+      s_nohello_req++;                                  // dem 8-bit -> tran: coi nhu 1 (khong bao gio "thoi xin")
+      if (s_nohello_req == 0) s_nohello_req = 1;
+      // Log thua dan: 5 lan dau in het, sau do chi in moi 6 lan (1 phut/lan) cho khoi ngap log.
+      if (truoc <= 5 || (truoc % 6) == 0)
+        SDLOG("[UP] co link nhung CHUA co HELLO -> xin lai FULL (lan %u, cach %lu ms)\n",
+              (unsigned)truoc, (unsigned long)gap);
       cydlcd_link_request((uint8_t)CYDLCD_REQ_FULL);
-      s_nohello_req++;
     }
   }
   else if (!cydlcd.linked) s_nohello_req = 0;
+
+  // ---------------------------------------------------------------------------
+  // CANH BAO "MARLIN KHONG TRA LOI" - do PONG (loi that 2026-10-15: lenh tu man hinh khong chay).
+  // PING gui 1 s/lan, Marlin tra PONG ngay (khong qua hang doi) nen binh thuong `s_pong_ms` luon moi.
+  // Qua 5 s khong co PONG trong khi VAN nhan duoc frame tu Marlin (`linked`) = chieu man hinh -> Marlin
+  // hong (RX cua Marlin ket, day sai chan, ...): bao ra log (khong the bao tren man hinh vi man hinh
+  // khong co cho hien). Mat link han thi khong bao (khong phai loi PONG).
+  // ---------------------------------------------------------------------------
+  if (cydlcd.linked) {
+    if (!s_pong_ms) s_pong_ms = now;                    // chua tung co PONG -> bat dau dem tu day
+    if ((uint32_t)(now - s_pong_ms) > 5000u) {
+      if (!s_pong_canh_bao_ms || (uint32_t)(now - s_pong_canh_bao_ms) >= 10000u) {
+        s_pong_canh_bao_ms = now;
+        s_pong_lost++;
+        SDLOG("[UP] CANH BAO: khong nhan duoc PONG tu Marlin > 5 s (van co frame trang thai) -> "
+              "LENH GUI TU MAN HINH CO THE KHONG CHAY. Kiem tra day TX cua man hinh -> RX cua mainboard "
+              "hoac reset mainboard (lan %u).\n", (unsigned)s_pong_lost);
+      }
+    }
+    else { s_pong_canh_bao_ms = 0; }
+  }
+  else { s_pong_ms = 0; s_pong_canh_bao_ms = 0; }
 
   // Trai hang doi TX (frame chua gui duoc vi TX ring day). Goi o CUOI: cac frame sinh ra o tren
   // (PING / REQUEST) van duoc trai ngay trong vong lap nay neu con cho.

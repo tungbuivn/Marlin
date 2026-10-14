@@ -114,6 +114,13 @@ namespace {
     }
   }
 
+  // ---- CHAN DOAN DUONG MAN HINH -> MARLIN ----
+  // VI SAO CAN (loi that 2026-10-15): bam nut / go lenh tu man hinh CYD ma Marlin KHONG chay, trong khi
+  // Marlin van day STATUS xuong deu -> khong co cho nao bao ben nao hong. Dem frame theo LOAI + so frame bi
+  // HOAN/BO trong luc cho sector SD, in 1 dong/5 s ra USB (COM4) - xem cydlcd/README.md muc "chan doan link".
+  uint16_t s_rx_type[0x50];              // dem theo type (0x40..0x46 = man hinh -> Marlin)
+  uint32_t s_rx_defer = 0, s_rx_defer_drop = 0;
+
   // ------------------------------------------------- SD qua UART (proto 3) ----
   // Marlin KHONG tu doc the SPI nua (the nam o khe man hinh): moi sector 512 B duoc hoi man hinh CYD qua
   // chinh UART nay. Xem cydlcd_serial.h + cydlcd/README.md muc 12.
@@ -151,7 +158,12 @@ namespace {
     // luc dang cho sector: chung co the enqueue G-code, chay M500 hay nhay DFU... -> HOAN lai, onIdle
     // xu ly sau. Payload cua chung rat ngan (<= 48 byte) nen chi ton vai chuc byte RAM.
     struct sd_defer_t { uint8_t type, len, payload[CYDLCD_STR_MAX + 8]; };
-    sd_defer_t s_defer[2];
+    // SO SLOT HOAN FRAME LENH trong luc cho sector SD. Truoc day chi 2 -> gap that 2026-10-15: man hinh
+    // gui 3 REQUEST lien tiep (REQ_FULL + REQ_SETTINGS + REQ_MESH, vd lenh `UI HELLO` hoac luc resync)
+    // trong luc Marlin dang doc the -> cai thu 3 bi BO (`s_rx_defer_drop`), va neu REQ_FULL bi bo thi man
+    // hinh KHONG BAO GIO nhan duoc HELLO (trang BED MESH bao "khong ho tro", tham so thieu). Nay 8 slot.
+    #define CYDLCD_DEFER_SLOTS 8
+    sd_defer_t s_defer[CYDLCD_DEFER_SLOTS];
     uint8_t    s_defer_n = 0;
 
     FORCE_INLINE bool is_cmd_frame(const uint8_t t) {
@@ -701,7 +713,8 @@ namespace {
     }
 
     void sd_defer() {
-      if (s_defer_n >= 2) return;                    // hang hoan day -> bo (cuc hiem)
+      s_rx_defer++;
+      if (s_defer_n >= CYDLCD_DEFER_SLOTS) { s_rx_defer_drop++; return; }   // hang hoan day -> bo (cuc hiem)
       sd_defer_t &d = s_defer[s_defer_n++];
       uint8_t n = rx.len;
       if (n > (uint8_t)sizeof(d.payload)) n = (uint8_t)sizeof(d.payload);
@@ -782,9 +795,38 @@ namespace {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // CHAN DOAN LINK (1 dong/5 s ra USB): man hinh CYD co gui duoc frame sang Marlin khong, va frame nao.
+  // Doc tren COM4 (115200) - dung khi "bam nut tren man hinh ma may khong chay".
+  //   GCODE/REQ/PING/TBT = frame LENH tu man hinh (phai tang deu: PING 1 lan/giay),
+  //   SDDATA/SDACK       = tra loi sector the SD,
+  //   sd_busy            = dang cho sector (moi frame LENH toi luc nay bi HOAN lai),
+  //   hoan/bo            = so frame bi hoan / bi BO vi hang hoan day,
+  //   alive              = co frame nao toi trong CYDLCD_TIMEOUT_MS khong (0 = MAN HINH IM LANG).
+  // ---------------------------------------------------------------------------
+  #if ENABLED(CYDLCD_SERIAL_UI)
+    void link_diag_log() {
+      static millis_t next_ms = 0;
+      const millis_t now = millis();
+      if (next_ms && !ELAPSED(now, next_ms)) return;
+      next_ms = now + 5000;
+      SERIAL_ECHOLNPGM("PANEL DIAG: frames=", rx.frames, " err=", rx.errors,
+                       " | GCODE=", s_rx_type[CYDLCD_F_GCODE], " REQ=", s_rx_type[CYDLCD_F_REQUEST],
+                       " PING=", s_rx_type[CYDLCD_F_PING], " ANS=", s_rx_type[CYDLCD_F_ANSWER]);
+      SERIAL_ECHOLNPGM("PANEL DIAG: TBT=", s_rx_type[CYDLCD_F_TBT_CMD],
+                       " SDDATA=", s_rx_type[CYDLCD_F_SDDATA], " SDACK=", s_rx_type[CYDLCD_F_SDACK],
+                       " | alive=", (int)cydlcd_alive);
+      #if ENABLED(CYDLCD_SD_OVER_UART)
+        SERIAL_ECHOLNPGM("PANEL DIAG: sd_busy=", (int)s_sd_busy, " defer=", s_defer_n,
+                         " hoan=", s_rx_defer, " bo=", s_rx_defer_drop);
+      #endif
+    }
+  #endif  // CYDLCD_SERIAL_UI
+
   void handle_frame() {
     last_rx_ms = millis();
     cydlcd_alive = true;
+    if (rx.type < 0x50) s_rx_type[rx.type]++;          // chan doan: dem frame theo loai (xem link_diag_log)
     #if ENABLED(CYDLCD_SD_OVER_UART)
       // Dang cho du lieu sector: tra loi SD xu ly NGAY, cac frame mang lenh thi HOAN lai.
       if (rx.type == CYDLCD_F_SDDATA) { sd_take_chunk(); return; }
@@ -967,6 +1009,35 @@ namespace ExtUI {
     // Cuoi cung moi nap them 1 frame liet ke (setting/file/mesh) neu hang doi con cho: cac
     // frame su kien o tren luon duoc di truoc, con du lieu hang loat thi chay dan theo UART.
     tx_pump();
+
+    // Chan doan link (1 dong/5 s ra USB): xem link_diag_log().
+    link_diag_log();
+
+    // ---------------------------------------------------------------------------
+    // WATCHDOG RX (2026-10-15): khong nhan duoc frame NAO tu man hinh trong 10 s -> KHOI TAO LAI UART.
+    // VI SAO CAN (loi that, kho ton tai nhat cua muc nay): sau mot thoi gian chay, chieu MAN HINH -> MARLIN
+    // CHET HAN trong khi chieu xuong (STATUS/TEMPS) van deu dan:
+    //   - bam nut / gui lenh tu man hinh khong chay (M220 gui tu man hinh: Marlin van bao FR:100%),
+    //   - man hinh reset xong thi khong bao gio nhan duoc HELLO -> trang BED MESH "khong ho tro" (mat mesh),
+    //     n_settings tut (49 -> 9), n_files = 0.
+    // Reset mainboard thi het => khong phai day long, ma la RX cua Marlin bi KET (STM32: loi OverRun/ORE
+    // khong duoc xoa thi RXNE khong bao gio bat lai). Nay tu phat hien va tu `begin()` lai UART - khong can
+    // reset may, khong mat gi (frame PUSH tu dong bo lai sau 1-2 frame).
+    // ---------------------------------------------------------------------------
+    static millis_t next_rx_wd_ms = 0;
+    static uint16_t s_rx_wd = 0;
+    if (!next_rx_wd_ms || ELAPSED(now, next_rx_wd_ms)) {
+      next_rx_wd_ms = now + 10000;
+      if (last_rx_ms && ELAPSED(now, last_rx_ms + 10000)) {
+        s_rx_wd++;
+        if (s_rx_wd <= 5 || (s_rx_wd % 6) == 0)     // 5 lan dau in het, sau do 1 phut/lan (the nho rut ra)
+          SERIAL_ECHOLNPGM("PANEL: khong nhan duoc frame nao tu man hinh > 10 s -> khoi tao lai UART (lan ",
+                           s_rx_wd, ")");
+        CYDLCD_SERIAL.begin(CYDLCD_BAUD);
+        rx.state = CYDLCD_RXS_SYNC0;                // bo nua frame dang do
+        last_rx_ms = now;                           // lan sau dem lai tu day
+      }
+    }
   }
 
   #if ENABLED(CYDLCD_SD_OVER_UART)

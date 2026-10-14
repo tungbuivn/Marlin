@@ -74,6 +74,16 @@ void ui_lvgl_dump_temps(void);
 // "khi nhiet do tang dan thi mau co chuyen dan sang do khong" ma KHONG phai dot nong may.
 void ui_lvgl_test_grad(void);
 
+// CHAN DOAN duong PANEL -> MARLIN (lenh `UI HELLO` tren COM7): in `hello_flags` + so tham so/danh sach dang co
+// roi xin lai REQ_FULL/SETTINGS/MESH. Dung khi flash lai panel ma `hello_flags` = 0 (trang BED MESH bao "khong
+// ho tro", `n_settings` tut) - de biet panel co gui duoc REQUEST sang Marlin hay khong.
+void ui_lvgl_test_hello(void);
+
+// CHAN DOAN 2 CHIEU UART (lenh `UI RX` tren COM8): so frame da nhan theo loai + tuoi PONG + vi tri/FR-FL.
+// Dung khi "bam nut tren man hinh ma may khong chay": PONG = 0 / tuoi lon nghia la chieu MAN HINH -> MARLIN
+// hong (trong khi STATUS van den = chieu xuong van tot). Doi chieu voi `PANEL DIAG` in o COM4.
+void ui_lvgl_test_rx(void);
+
 // CHAN DOAN trang thai may: in `st`/`fl`/file dang in/tien do + **co cho nhan file upload khong**
 // (lenh `UI BUSY` tren COM7, cung in kem trong `UI BOX`). Tra loi "lam sao biet may dang in?":
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.

@@ -802,6 +802,65 @@ void ui_lvgl_test_grad(void) {
   Serial.println();
 }
 
+// CHAN DOAN duong PANEL -> MARLIN (lenh `UI HELLO` tren COM7): in trang thai HELLO + so tham so/danh sach dang
+// co, roi XIN LAI FULL + SETTINGS + MESH y nhu luc panel vua khoi dong lai.
+// VI SAO CAN (loi that 2026-10-15): flash lai PANEL xong thi `hello_flags` MAI = 0 - panel khong bao gio nhan
+// duoc HELLO du link PUSH van chay => trang BED MESH bao "khong ho tro" va `n_settings` tut ve vai muc. Lenh nay
+// cho biet: (1) panel CO gui duoc REQUEST sang Marlin khong, (2) Marlin co tra loi khong. Xem them cydlcd_link.h
+// (resync `s_nohello_req`) - resync chi thu 5 lan roi thoi, nen neu 5 lan do truot thi phai xin tay.
+void ui_lvgl_test_hello(void) {
+  Serial.printf("[UI] LINK: linked=%u hello_flags=0x%02X (MESH=%u SD=%u) | n_settings=%u n_files=%u"
+                " | mesh %ux%u rows %u | tx cho=%u bo=%lu\n",
+                (unsigned)cydlcd.linked, (unsigned)cydlcd.hello_flags,
+                (unsigned)((cydlcd.hello_flags & CYDLCD_HAS_MESH) ? 1 : 0),
+                (unsigned)((cydlcd.hello_flags & CYDLCD_HAS_SD) ? 1 : 0),
+                (unsigned)cydlcd.n_settings, (unsigned)cydlcd.n_files,
+                (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny, (unsigned)cydlcd.mesh_rows,
+                (unsigned)cydlcd_link_tx_pending(), (unsigned long)cydlcd_link_tx_dropped());
+  Serial.println("[UI] LINK: gui lai REQ_FULL + REQ_SETTINGS + REQ_MESH (cho ~2 s roi chay lai lenh nay)");
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_FULL);
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS);
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_MESH);
+}
+
+// CHAN DOAN 2 CHIEU CUA UART (lenh `UI RX` tren COM8): in so frame da nhan theo LOAI + tuoi PONG + vi tri
+// dang giu. VI SAO CAN: hai chieu hong DOC LAP - da gap that 2026-10-15: Marlin van day STATUS deu (chieu
+// xuong tot) nhung lenh tu man hinh (M220/G-code/REQUEST) khong toi Marlin => moi thu tren man hinh "nhu
+// binh thuong" nhung bam nut khong chay, va khong co cho nao bao. Bang nay cho biet ngay ben nao hong:
+//   PONG  = Marlin tra loi PING (0 lan / tuoi lon = chieu MAN HINH -> MARLIN hong, hoac day TX long),
+//   POS/STATUS/TEMPS = chieu MARLIN -> MAN HINH (con so la "dang nhan duoc gi").
+// Doi chieu voi `PANEL DIAG` in ra COM4 (xem cydlcd_serial.cpp) de biet frame co toi Marlin khong.
+void ui_lvgl_test_rx(void) {
+  const uint32_t age = cydlcd_link_pong_age_ms();
+  Serial.printf("[UI] RX: linked=%u hello=0x%02X | PONG %s | mat PONG %u lan | RSSI %d\n",
+                (unsigned)cydlcd.linked, (unsigned)cydlcd.hello_flags,
+                (age == 0xFFFFFFFFu) ? "CHUA BAO GIO" : "co", (unsigned)cydlcd_link_pong_lost(),
+                (int)net_wifi_rssi());
+  if (age != 0xFFFFFFFFu) Serial.printf("[UI] RX: PONG cuoi %lu ms truoc (binh thuong < 1500 ms)\n",
+                                        (unsigned long)age);
+  Serial.printf("[UI] RX: HELLO=%u STATUS=%u TEMPS=%u POS=%u PROGRESS=%u FANS=%u MESH=%u FILES=%u "
+                "SETTING=%u EVENT=%u PROMPT=%u PONG_F=%u TBT=%u ENDSTOP=%u\n",
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_HELLO),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_STATUS),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_TEMPS),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_POSITION),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_PROGRESS),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_FANS),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_MESH),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_FILES),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_SETTING),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_EVENT),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_PROMPT),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_PONG),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_TBT),
+                (unsigned)cydlcd_link_rx_count(CYDLCD_F_ENDSTOPS));
+  Serial.printf("[UI] RX: POS x=%ld y=%ld z=%ld e=%ld | FR/FL %d/%d | n_settings=%u mesh %ux%u rows %u\n",
+                (long)(cydlcd.pos.x / 1000), (long)(cydlcd.pos.y / 1000), (long)(cydlcd.pos.z / 1000),
+                (long)(cydlcd.pos.e / 1000), (int)cydlcd.pos.feed_pct, (int)cydlcd.pos.flow_pct,
+                (unsigned)cydlcd.n_settings, (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
+                (unsigned)cydlcd.mesh_rows);
+}
+
 // CHAN DOAN: MAY DANG LAM GI + co cho nhan file upload khong - lenh `UI BUSY` tren COM7 (cung in kem
 // trong `UI BOX`). Tra loi cau hoi "lam sao biet may in dang in?": xem `st` (trang thai Marlin bao),
 // `file`/`prog` (dang in file nao) va `IN TU THE SD` (co THAT SU in tu the hay khong).

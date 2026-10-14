@@ -139,8 +139,11 @@ void page_menu_update(void) {
            (long)(cydlcd_setting(CYDLCD_SET_FLOW_PCT, 10000) / 100));
   set_text(mn_val[2], b);
 
-  snprintf(b, sizeof(b), "%u file%s", (unsigned)cydlcd.n_files, cydlcd.files_done ? "" : "...");
-  set_text(mn_val[3], b);
+  // YEU CAU NGUOI DUNG 2026-10-15: "bo phan dem so luong file o menu file" -> dong "SD card" o trang MENU
+  // KHONG con hien so file (truoc: "12 file"). Cach Marlin cung vay: muc "Card" trong menu khong co gia tri;
+  // the co doc duoc hay khong da co ICON THE o thanh tren, con so luong thi thay ngay khi mo trang.
+  // (Bam vao dong nay la mo thang trang FILE SD - xem MENU_ITEMS.)
+  set_text(mn_val[3], "");
 
   if (cydlcd.hello_flags & CYDLCD_HAS_MESH)
     // Them TRANG THAI UBL ON/OFF ngay o dong MENU (yeu cau nguoi dung 2026-10-15: bam UBL ON/OFF xong khong
@@ -151,7 +154,10 @@ void page_menu_update(void) {
   set_text(mn_val[4], b);
 
   set_text(mn_val[5], "G34/M22");
-  snprintf(b, sizeof(b), "%u/33", (unsigned)cydlcd.n_settings);
+  // So dong thong so da nhan tu Marlin. KHONG con ghi "58/33": tong so 33 la con so CU (Marlin gui 58 dong
+  // tu 2026-10-15) nen dong do thanh vo nghia/kho hieu. Man hinh KHONG biet tong so that (Marlin khong gui
+  // frame "het danh sach" cho SETTING) -> chi ghi so da nhan.
+  snprintf(b, sizeof(b), "%u muc", (unsigned)cydlcd.n_settings);
   set_text(mn_val[6], b);
 
   // Muc 8 "Tuning (MPC/PID)" (chen 2026-10-15): hien cong suat heater cua MPC (tham so P) de thay ngay

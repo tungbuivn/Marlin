@@ -124,6 +124,13 @@ void     cydlcd_link_tx_task();                           // trai hang doi (goi 
 uint32_t cydlcd_link_tx_dropped();                        // so frame bi bo (hang doi day) - chan doan
 uint8_t  cydlcd_link_tx_pending();                        // so frame dang cho trong hang doi
 
+// Chan doan chieu MARLIN -> MAN HINH (lenh `UI RX` tren COM8): so frame da nhan theo LOAI + tuoi PONG.
+// VI SAO CAN: hai chieu cua UART hong DOC LAP nhau - Marlin van day STATUS deu (chieu xuong OK) trong khi
+// lenh tu man hinh khong toi Marlin (chieu len hong). Nhin "frame nao den" la biet ngay ben nao hong.
+uint16_t cydlcd_link_rx_count(uint8_t type);              // so frame loai `type` da nhan
+uint32_t cydlcd_link_pong_age_ms();                       // tu lan cuoi nhan PONG (0xFFFFFFFF = chua bao gio)
+uint16_t cydlcd_link_pong_lost();                         // so lan phat hien "mat PONG > 5 s"
+
 void cydlcd_link_ping();
 void cydlcd_link_send_gcode(const char *line);            // 1 dong, khong can '\n'
 void cydlcd_link_send_gcode2(const char *a, const char *b); // 2 dong lien tiep

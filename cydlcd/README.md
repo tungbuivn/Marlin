@@ -422,7 +422,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | Màn | Nội dung / lệnh gửi |
 |---|---|
 | **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
-| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · Settings · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, số file, cỡ mesh, `n/33`, LINK…) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · Settings · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n/33`, LINK…). Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
@@ -2029,6 +2029,55 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
 
+## Chan doan link 2 chieu UART panel ↔ Marlin (2026-10-15, vòng 2)
+
+**Triệu chứng người dùng:** *"bấm nút trên màn hình mà máy không chạy"*; trước đó là *"bed mesh mất hết dữ liệu,
+vào thấy trắng"*. Trên màn hình **không có gì bất thường** (nhiệt độ, tiến độ, tên file vẫn chạy).
+
+**Đo được (không đoán):**
+
+| Đo bằng | Kết quả |
+|---|---|
+| `M220 S42` gửi **từ màn hình** rồi hỏi Marlin qua COM4 (`M220`) | Marlin vẫn `FR:100%` ⇒ lệnh **không tới** Marlin |
+| `M20` trên COM4 (Marlin hỏi thẻ qua UART) | `V300_P~1.GCO 64439` rồi `PANEL SD: doc sector 3010 THAT BAI` |
+| `UI BOX` trang BED MESH | `khong ho tro (CYDLCD_HAS_MESH=0)`, `PROTO: 0/4`, `MARLIN: 0x0000` ⇒ **chưa từng nhận HELLO** |
+| `UI RX` (mới) | `STATUS=67 POS=67 …` nhưng `PING` (bên Marlin) `= 0`, `PONG CHUA BAO GIO` |
+| `PANEL DIAG` (mới, in ở COM4 mỗi 5 s) | `frames=44 err=0 GCODE=1 REQ=13 PING=0 … hoan=6 bo=4` |
+
+⇒ **Hai chiều của UART hỏng ĐỘC LẬP nhau**: chiều Marlin → màn hình tốt (STATUS/TEMPS/HELLO đều tới khi Marlin
+mới khởi động), còn chiều **màn hình → Marlin bị KẾT** (mọi G-code/REQUEST/PING đều mất). Nạp lại Marlin (DFU)
+thì hết ngay ⇒ **không phải dây lỏng** mà là RX của Marlin bị treo (STM32: cờ OverRun/ORE không được xoá thì
+`RXNE` không bao giờ bật lại). Hệ quả kép: (a) bấm nút không chạy; (b) màn hình reset xong **không bao giờ** nhận
+được HELLO ⇒ mất mesh/tham số ⇒ đúng triệu chứng *"bed mesh trắng"*.
+
+**5 lỗi đã sửa:**
+
+1. **Màn hình KHÔNG BAO GIỜ gửi PING** (`cydlcd_link.cpp`): điều kiện cũ `if (!tbt_link_active())` — mà ở chế độ
+   PUSH, dòng TBT đi trong **frame nhị phân** `CYDLCD_F_TBT` nên `tbt.ever = true` **ngay frame đầu** ⇒ PING bị tắt
+   vĩnh viễn ⇒ Marlin không bao giờ biết màn hình còn sống (`cydlcd_alive` luôn false) và màn hình không có cách
+   nào biết Marlin có nhận được lệnh hay không. Nay chỉ bỏ PING khi **đúng chế độ TRAM ASCII thô** (`tbt.ever &&
+   !cydlcd.rx_frames`); chế độ PUSH: PING 1 s/lần.
+2. **PONG + cảnh báo** (`cydlcd_link.cpp`): đếm tuổi PONG; quá **5 s không có PONG** trong khi vẫn nhận frame
+   trạng thái ⇒ in `[UP] CANH BAO: khong nhan duoc PONG tu Marlin > 5 s … LENH GUI TU MAN HINH CO THE KHONG CHAY`
+   (10 s/lần, kèm số lần) — chính lỗi này trước đây **im lặng hoàn toàn**.
+3. **HELLO resync nay XIN MÃI** (`cydlcd_link.cpp`): bản trước chỉ xin lại **5 lần** rồi thôi ⇒ chỉ cần 5 lần đó
+   trượt (Marlin đang bận đọc thẻ ⇒ frame REQUEST bị **hoãn rồi bỏ**) là màn hình **mất mesh vĩnh viễn**. Nay
+   2 s/lần trong 10 s đầu, sau đó 10 s/lần cho tới khi nhận được HELLO (mất link thì đếm lại từ đầu).
+4. **Hàng hoãn frame lệnh: 2 → 8 slot** (`cydlcd_serial.cpp`, phía Marlin): màn hình gửi **3 REQUEST liền nhau**
+   (`REQ_FULL` + `REQ_SETTINGS` + `REQ_MESH` — lệnh `UI HELLO` hoặc lúc resync) mà Marlin đang đọc thẻ thì cái thứ
+   3 bị **bỏ** (`bo=4` đo được) ⇒ mất HELLO/mesh. Nay 8 slot + đếm `hoan/bo`.
+5. **Watchdog RX phía Marlin** (`cydlcd_serial.cpp`): **10 s không nhận được frame nào** ⇒ tự
+   `CYDLCD_SERIAL.begin()` lại + xoá nửa frame đang dở + log `PANEL: khong nhan duoc frame nao tu man hinh > 10 s
+   -> khoi tao lai UART (lan N)` ⇒ tự phục hồi **không cần reset máy**.
+
+**Đo lại sau khi sửa** (đã nạp cả 2 board): `UI RX` → `hello=0x9F`, `PONG cuoi 561 ms`, `HELLO=1 STATUS=66 POS=66
+MESH=7 FILES=3 SETTING=52`; `PANEL DIAG` → `PING=47 … alive=1`; `M220 S42` từ màn hình ⇒ Marlin `FR:43%` và màn
+hình hiện **43%** (đã trả lại `M220 S100`).
+
+**Sửa kèm (dòng MENU):** mục `SD card` **không còn đếm số file** (yêu cầu người dùng: *"bỏ phần đếm số lượng file ở
+menu file"*) và mục `Settings` không còn ghi `58/33` (tổng 33 là con số cũ; Marlin gửi 58 dòng) mà ghi **`58 muc`**
+— màn hình không biết tổng số thật vì Marlin không gửi frame "hết danh sách" cho SETTING.
+
 ## Dai mau nhiet do cua man STATUS (2026-10-15)
 
 Tra loi cau hoi *"khi nhiệt độ tăng dần thì màu của icon hotend và bed có chuyển dần sang đỏ không?"* — **có**,
@@ -2188,6 +2237,7 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `UI BUSY` | in **máy đang làm gì** + **có cho nhận file upload không**: `[UI] MAY: st=<mã> (<tên>) fl=0x.. file="<file đang in>" prog=<%> | IN TU THE SD=0/1 TAM DUNG=0/1` rồi `[UI] upload: cho nhan file \| BI CHAN (...)`. Trả lời *"làm sao biết máy đang in?"* — upload **chỉ** bị chặn khi đang in / tạm dừng bản in **từ thẻ SD** (HOME/PROBE/G35 không tính). Tự in kèm trong `UI BOX` |
 | 🆕 `UI TEMPS` | in **cả 2 nguồn nhiệt độ** mà màn hình đang có để đối chiếu: **PUSH** = frame `CYDLCD_F_TEMPS` (`id=1` đầu in, `id=0` bàn in; `cur/tgt` đơn vị °C×100) và **TRAM** = 4 token nhiệt độ cuối dòng `TBT ...`, kèm dòng "đang HIỂN THỊ" = đúng giá trị `temp_lookup()` dùng để vẽ. Dùng khi *"nhiệt hiển thị không đúng"* (đã dùng để tìm ra lỗi target bàn in luôn 0). Tự in kèm trong `UI BOX` |
 | 🆕 `UI GRAD` | in **bảng màu của dải nhiệt độ** mà màn STATUS dùng cho **cả icon lẫn 2 con số**: dòng đầu in 2 đầu dải (`hotend 25..250`, `bed 25..60`, mốc giữa `MR_WARM`), dòng 2 in **màu ĐANG HIỂN THỊ** thật (kèm °C của cả đầu in và bàn in), rồi 2 dòng quét `25C(0%)=#00E6FF … 250C(100%)=#FF8983` / `30C(14%)=#41DEC5 … 60C(100%)=#FFB64A` (kèm **% vị trí trong dải**). Trả lời *"nhiệt độ tăng dần thì màu có chuyển dần sang đỏ không?"* **mà KHÔNG phải đốt nóng máy**, và bắt được lỗi **sai đơn vị** (°C so với °C×100) — xem mục **"Dai mau nhiet do cua man STATUS"** |
+| 🆕 `UI RX` | in **2 CHIỀU của UART** để biết bên nào hỏng: `PONG co/CHUA BAO GIO` + **tuổi PONG** (bình thường < 1500 ms) + **số lần mất PONG**, rồi bảng **số frame đã nhận theo LOẠI** (`HELLO/STATUS/TEMPS/POS/MESH/FILES/SETTING/PONG…`), và vị trí + FR/FL + `n_settings`/cỡ lưới. Dùng khi *"bấm nút trên màn hình mà máy không chạy"*: **PONG = 0 / tuổi lớn ⇒ chiều MÀN HÌNH → MARLIN hỏng** (trong khi `STATUS/TEMPS` vẫn tăng = chiều xuống vẫn tốt) — đối chiếu với `PANEL DIAG` in ở COM4. Xem mục **"Chan doan link 2 chieu"** |
 | 🆕 `UI PRE <0\|1\|2>` | **bấm nút preset preheat** PLA/PETG/ABS của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
 | 🆕 `UI TAP <0..4>` · `P\|N` · `I` · `D` · `K` · `C` · `L [đường dẫn]` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (mở `UI FILE SD` trước), `P`/`N` = **PREV/NEXT**, `I` = **PRINT** (kiểm tra đường in: có gửi `M23`+`M24` không), `D` = **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì**), `K` = **bấm OK** hộp thoại đang mở (**mọi màn**; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật), `L` = **liệt kê thư mục bằng FATFS của chính màn hình** (tên ĐẦY ĐỦ, không bị SdFat cắt 27 ký tự; `UI TAP L /BTUP` để xem 1 thư mục). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_files_print`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA`/`PRINT` đúng dòng, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách (kèm `PRINT=`/`XOA=` khoá hay mở) |
 
