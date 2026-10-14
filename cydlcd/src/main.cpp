@@ -280,7 +280,10 @@
             // trang (`UI` / `UI ?`). Dung de TAI HIEN loi UI tu PC, khong phai cham tay vao man hinh.
             const char *a3 = s_fwd + 2;
             while (*a3 == ' ') a3++;
-            ui_lvgl_show_page_name(a3);
+            // `UI BOX` = in bo cuc trang dang mo (toa do/kich thuoc tung vat + thanh day) - man hinh
+            // CYD khong co framebuffer doc nguoc nen day la cach DUY NHAT kiem tra bo cuc tu PC.
+            if (strcasecmp(a3, "BOX") == 0) ui_lvgl_dump_layout();
+            else                           ui_lvgl_show_page_name(a3);
           } else
 #endif
           {

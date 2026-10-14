@@ -632,4 +632,43 @@ void ui_lvgl_show_page_name(const char *name) {
   Serial.printf("[UI] khong co trang '%s' (go 'UI ?' de xem danh sach)\n", name);
 }
 
+// In BO CUC (toa do + kich thuoc) cac vat con TRUC TIEP cua trang dang mo + trang thai thanh day.
+// VI SAO CO: man hinh CYD khong co framebuffer doc nguoc (driver ve thang ra SPI - xem
+// tft_ili9341.h) nen khong the "chup anh" man hinh tu PC. Khi can kiem tra mot man co bi tran,
+// nut co nam sat day khong, hay roller cao bao nhieu dong thi doc bang `UI BOX` tren COM7.
+void ui_lvgl_dump_layout(void) {
+  lv_obj_t *pg = s_page[s_page_act];
+  Serial.printf("[UI] trang %u '%s' | vung noi dung %dx%d | thanh day %s\n",
+                (unsigned)s_page_act, PG_TITLE[s_page_act], (int)PAGE_INN_W, (int)PAGE_INN_H,
+                bot_shown() ? "HIEN (noi dung tran)" : "an (noi dung gon)");
+  if (!pg) { Serial.println("[UI] (trang chua duoc tao)"); return; }
+
+  const uint32_t n = lv_obj_get_child_cnt(pg);
+  for (uint32_t i = 0; i < n; i++) {
+    lv_obj_t *c = lv_obj_get_child(pg, i);
+    if (!c) continue;
+    const bool hidden = lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN);
+    // Ten lop vat: lv_label / lv_btn / lv_roller / lv_obj ... (lv_obj_get_class khong co API ten)
+    const char *cls = lv_obj_check_type(c, &lv_label_class)  ? "label"
+                    : lv_obj_check_type(c, &lv_btn_class)    ? "btn"
+                    : lv_obj_check_type(c, &lv_roller_class) ? "roller"
+                    : lv_obj_check_type(c, &lv_table_class)  ? "table"
+                    : lv_obj_check_type(c, &lv_bar_class)    ? "bar"
+                                                             : "obj";
+    const char *txt = lv_obj_check_type(c, &lv_label_class)  ? lv_label_get_text(c)
+                    : lv_obj_check_type(c, &lv_roller_class) ? lv_roller_get_options(c)
+                                                             : "";
+    const bool is_roller = lv_obj_check_type(c, &lv_roller_class);
+    Serial.printf("[UI]  #%u %-6s x=%d y=%d %dx%d%s%s%s\n",
+                  (unsigned)i, cls,
+                  (int)lv_obj_get_x(c), (int)lv_obj_get_y(c),
+                  (int)lv_obj_get_width(c), (int)lv_obj_get_height(c),
+                  hidden ? " [AN]" : "",
+                  (!is_roller && txt[0]) ? " : " : "", is_roller ? "" : txt);
+    // Roller: in NGUYEN chuoi lua chon (moi dong 1 muc) - de kiem tra danh sach file man FILE SD
+    // (co lan muc "." / ".." cua FAT khong, dong dau co rong khong).
+    if (is_roller && txt[0]) Serial.printf("[UI]      lua chon: <<%s>>\n", txt);
+  }
+}
+
 #endif  // CYDLCD_USE_LVGL

@@ -1149,7 +1149,7 @@ git diff upstream/lts-2.1.2 HEAD --stat
 
 | Tính năng | Mô tả |
 |---|---|
-| **`CYDLCD_SERIAL_UI`** (ExtUI `src/lcd/extui/cydlcd_serial/`) | Marlin **đẩy** dữ liệu xuống màn hình CYD bằng frame nhị phân (proto **3**): `HELLO/STATUS/TEMPS/POSITION/PROGRESS/FILES/MESH/SETTING/EVENT/MESSAGE/PROMPT/ENDSTOPS/TRAM/PONG` + nhận `GCODE/REQUEST/ANSWER/TBT_CMD` và (mới) `SDREQ/SDDATA/SDACK` |
+| **`CYDLCD_SERIAL_UI`** (ExtUI `src/lcd/extui/cydlcd_serial/`) | Marlin **đẩy** dữ liệu xuống màn hình CYD bằng frame nhị phân (proto **3**): `HELLO/STATUS/TEMPS/POSITION/PROGRESS/FILES/MESH/SETTING/EVENT/MESSAGE/PROMPT/ENDSTOPS/TRAM/PONG` + nhận `GCODE/REQUEST/ANSWER/TBT_CMD` và (mới) `SDREQ/SDDATA/SDACK`. Frame `FILES` gửi **tên dài (LFN)**, nếu entry **không có LFN thì lùi về tên 8.3** (`files_pump()`) — trước đây gửi chuỗi rỗng nên màn hình hiện 1 dòng trống (gặp thật với thư mục `BTUP` trên thẻ) |
 | **TRAM** (`CYDLCD_TBT_LINK`, `feature/cydlcd_tbt_link.*`, `tbt_protocol.h`) | màn hình CYD hiển thị & điều khiển **Tramming Wizard** qua chính UART đó (kể cả chế độ ASCII cũ). Hiện `CYDLCD_TBT_LINK` **đang tắt** — wizard chạy qua kênh PUSH (frame `CYDLCD_F_TBT`/`CYDLCD_F_TBT_CMD`) |
 | **SD qua UART** (`src/sd/cydlcd_sd_uart.*`) | **driver thẻ SD mới**: thay `DiskIODriver_SPI_SD` bằng `DiskIODriver_PanelUART`; đọc/ghi sector 512 B qua UART; `SdVolume/SdBaseFile/FAT/liệt kê thư mục/M23-M24/tiến độ/M28-M29-M30` giữ nguyên vì chỉ đi qua `readBlock()/writeBlock()` |
 

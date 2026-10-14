@@ -34,6 +34,9 @@ static bool       s_bot_shown = false;      // trang thai hien tai cua s_bot (tr
 static uint8_t    s_bot_nav = 0xFF;
 
 
+// Trang thai hien/an cua thanh day (cho chan doan bo cuc: `UI BOX` tren COM7 - xem ui_lvgl.cpp).
+bool bot_shown(void) { return s_bot_shown; }
+
 // "Co link voi Marlin" - CO HAI giao thuc LOAI TRU nhau (PUSH: cydlcd.linked / TRAM: tbt.linked)
 // nen phai xet CA HAI. Dung ham nay o MOI cho hien thi link (thanh tren + trang STATUS).
 // Chinh sach hien thi (2026-10-13, theo yeu cau): chi bao link chi nam o

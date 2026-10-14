@@ -581,7 +581,14 @@ namespace {
         tx_begin(CYDLCD_F_FILES);
         tx_u8(cydlcd_files.isDir() ? 0x01 : 0x00);
         tx_i32(0);                                    // size: ExtUI khong cung cap -> 0
-        tx_str(cydlcd_files.longFilename());
+        // TEN FILE: uu tien ten DAI (LFN), nhung PHAI co duong lui ve ten 8.3 khi entry KHONG co
+        // LFN - neu khong man hinh CYD se hien 1 dong TEN RONG (gap that tren the nay: mot thu muc
+        // chi co ten 8.3 -> longFilename() tra "" => danh sach co 1 muc trong, trong nhu loi UI).
+        {
+          const char *nm = cydlcd_files.longFilename();
+          if (!nm || !nm[0]) nm = cydlcd_files.shortFilename();
+          tx_str(nm ? nm : "");
+        }
         tx_send();
         return;
       }

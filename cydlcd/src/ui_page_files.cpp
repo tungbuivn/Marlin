@@ -38,13 +38,15 @@ extern "C" bool net_sd_delete_file(const char *name) __attribute__((weak));
 
 // ===========================================================================
 //  FILES  (PAGE_INN_H = 206)
-//    info 17 (font mono mode 4: line_height = 17) + roller 64
-//    + hang1 26 + hang2 26 + hang3 (XOA FILE) 26 + 4*GAP 8 = 167 <= 206
-//    (truoc khi them nut XOA FILE: 17 + 64 + 26 + 26 + 3*GAP = 139)
-//  (167 + 2*PAGE_PAD = 175 < 206 nen man nay KHONG tran -> khong hien thanh day PREV/NEXT)
+//    info 17 (font mono mode 4: line_height = 17) + roller 6 dong (6*16 = 96 voi Montserrat 14
+//    - chieu cao TINH THEO FONT THAT cua roller, xem page_files_create) + 3 hang nut 78
+//    + 5*GAP 10 = 201 <= 206.
+//  DAY MAN: 3 hang nut bi DAY XUONG DAY bang mk_spacer(grow) - truoc day roller chi 4 dong (64 px)
+//  nen thua 39 px o duoi; nay roller cao 6 dong (them ~2 dong file) va nut nam sat day man.
+//  (201 + 2*PAGE_PAD < CONT_H nen man nay KHONG tran -> khong hien thanh day PREV/NEXT)
 // ===========================================================================
 #define FILES_BTN_H   26
-#define FILES_ROLLER_H (4 * ROW_H)      // 64: 4 dong nhin thay (< 104)
+#define FILES_ROWS    6                 // so dong file nhin thay (truoc: 4)
 
 static lv_obj_t *fl_roller, *fl_info;
 static lv_obj_t *fl_del;                        // nut XOA FILE (tam khoa trong luc dang xoa)
@@ -107,8 +109,12 @@ static void files_rebuild(void) {
   else {
     for (uint8_t i = 0; i < n; i++) {
       const bool isdir = ((cydlcd.files[i].flags & 0x01U) != 0);
-      const int w = snprintf(p, left, "%s%s%s", (i ? "\n" : ""), isdir ? "[D] " : "",
-                             cydlcd.files[i].name);
+      // Ten RONG (Marlin khong gui ten dai va cung khong lui ve ten 8.3 - ban cu): hien ro
+      // "(khong ten)" thay vi de 1 dong TRONG, vi dong trong trong nhu loi UI (gap that tren the nay:
+      // mot thu muc chi co ten 8.3). Xem cydlcd_serial.cpp: files_pump() da co duong lui 8.3.
+      const char *pname = cydlcd.files[i].name;
+      if (!pname[0]) pname = "(khong ten)";
+      const int w = snprintf(p, left, "%s%s%s", (i ? "\n" : ""), isdir ? "[D] " : "", pname);
       if (w < 0 || (size_t)w >= left) break;
       p += w;
       left -= (size_t)w;
@@ -287,8 +293,11 @@ void page_files_create(lv_obj_t *p) {
 
   fl_roller = lv_roller_create(p);
   lv_obj_set_width(fl_roller, PAGE_INN_W);
-  lv_roller_set_visible_row_count(fl_roller, 4);
-  lv_obj_set_height(fl_roller, FILES_ROLLER_H);
+  lv_roller_set_visible_row_count(fl_roller, FILES_ROWS);
+  // Chieu cao TINH THEO FONT THAT cua roller (lv_roller_set_visible_row_count() chi dat chieu cao
+  // theo font LUC GOI; o day dat lai bang so nguyen lan line_height de khong co dong bi cat ngang).
+  const lv_font_t *rf = lv_obj_get_style_text_font(fl_roller, LV_PART_MAIN);
+  lv_obj_set_height(fl_roller, (lv_coord_t)(lv_font_get_line_height(rf) * FILES_ROWS));
   lv_roller_set_options(fl_roller, "(chua co du lieu)", LV_ROLLER_MODE_NORMAL);
   lv_obj_set_style_bg_color(fl_roller, COL_BTN, 0);
   lv_obj_set_style_bg_opa(fl_roller, LV_OPA_COVER, 0);
@@ -304,6 +313,10 @@ void page_files_create(lv_obj_t *p) {
 
   // 3 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut duoi (PAUSE/RESUME/STOP)
   // + 1 hang rieng cho XOA FILE (viec khong hoan tac duoc -> de rieng, de bam nham)
+  // Vat dem GROW truoc hang nut: hut het cho trong con lai -> 3 hang nut luon nam SAT DAY man
+  // (nho vay phan tren danh tron cho danh sach file - xem khoi chu thich dau file).
+  mk_spacer(p, 0, 0, 1);
+
   lv_obj_t *r1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
   mk_btn_grow(r1, "PRINT",   FILES_BTN_H, cb_files_print, NULL);
   mk_btn_grow(r1, "DIR",     FILES_BTN_H, cb_files_dir, NULL);

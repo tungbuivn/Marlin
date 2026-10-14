@@ -446,6 +446,8 @@ uint8_t link_state_now(void);
 void page_scroll(const int8_t dir);
 /** Bat/tat thanh day [PREV][TRANG x/y][NEXT] theo noi dung THUC TE cua man dang mo. */
 void bot_sync(const bool remeasure);
+/** Thanh day dang HIEN khong (true = noi dung man dang mo BI TRAN) - cho chan doan `UI BOX`. */
+bool bot_shown(void);
 /** Tao icon WiFi (font NHO, khe phai hang nhiet do) + chu dBm tren man STATUS + giu icon the SD. */
 void status_icons_create(lv_obj_t *p, lv_obj_t *sd_icon);
 /**

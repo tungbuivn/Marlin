@@ -43,6 +43,11 @@ void ui_lvgl_task(void);
 void ui_lvgl_show_page_name(const char *name);
 uint8_t ui_lvgl_page_count(void);
 
+// In BO CUC trang dang mo ra console COM7: toa do/kich thuoc tung vat con truc tiep + trang thai
+// thanh day (man hinh CYD khong co framebuffer doc nguoc nen khong the chup anh tu PC).
+// Dung de kiem tra mot man co bi tran, nut co nam sat day khong, roller cao bao nhieu px.
+void ui_lvgl_dump_layout(void);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.

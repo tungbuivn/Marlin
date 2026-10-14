@@ -426,7 +426,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100` |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
-| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): `PRINT`/bấm file → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524` |
+| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): `PRINT`/bấm file → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15):** roller **6 dòng** (96 px, trước 4 dòng/64 px) và **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)` — nhờ vậy phần trên dành trọn cho danh sách file (kiểm bằng `UI BOX`: nút ở y=124/152/180, đáy 206 = đáy vùng nội dung). **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
 | **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS` |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
@@ -1702,6 +1702,9 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | `WIFI CONNECT <ssid> <pass> [S]` · `WIFI OFF` · `WIFI FORGET` | ket noi (S = luu NVS) · tat · xoa cau hinh |
 | 🆕 `PRE?` | in 3 preset preheat (nozzle/bed/fan) — xem **§9.22** |
 | 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
+| 🆕 `UI ?` (hoac `UI`) | in danh sach 13 man + so thu tu (khong mo man nao) |
+| 🆕 `UI <ten man>` | **mo** 1 man theo ten, vd `UI FILE SD`, `UI TRAMMING` — de tai hien loi UI tu PC |
+| 🆕 `UI BOX` | in **bo cuc** man dang mo: toa do + kich thuoc tung vat con truc tiep, noi dung `lv_roller` (danh sach file) va trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong |
 
 ⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang
 Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen tiep nen khong bi lan.
