@@ -72,7 +72,7 @@
 #undef  LV_FONT_MONTSERRAT_20
 #define LV_FONT_MONTSERRAT_20 1
 
-/* Bang phim + o nhap cho TRANG WIFI (nhap mat khau WiFi - xem ui_lvgl.cpp).
+/* Bang phim + o nhap cho TRANG WIFI (nhap mat khau WiFi - xem ui_page_wifi.cpp).
  * lv_conf.h (dung chung) de 0; o day chi bat cho env cydlcd_esp32_cyd nen env STM32 khong ton them.
  * FLASH: widget lv_keyboard/lv_textarea + bang phim (const, nam trong flash) ~vai KB code.
  * RAM (pool LVGL 24 KB, do dung ~17,7 KB): keyboard + textarea chi duoc TAO khi nguoi dung bam

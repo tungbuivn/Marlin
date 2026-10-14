@@ -331,10 +331,15 @@ extern lv_group_t *s_group;
 extern uint8_t s_page_act;
 /** Da giu tay du 1.5 s tren dong "Calibrate touch" (ui_page_menu.cpp) -> ui_lvgl_task() chay hieu chuan. */
 extern bool s_cal_req;
+/**
+ * Input device (encoder hoac cam ung) - gan 1 lan trong ui_lvgl_begin(). Man WIFI dung no de KHOA/MO
+ * input trong luc quet mang (net_wifi_scan() chan vai giay): xem ui_page_wifi.cpp.
+ */
+extern lv_indev_t *s_indev;
 
 // ===========================================================================
 //  KHO PRESET PREHEAT (PLA/PETG/ABS) - dinh nghia trong ui_preheat.cpp
-//  Cac macro nay dung o NHIEU file (ui_preheat.cpp, ui_page_temp.cpp va ui_lvgl.cpp - trang
+//  Cac macro nay dung o NHIEU file (ui_preheat.cpp, ui_page_temp.cpp va ui_page_settings.cpp - trang
 //  SETTINGS) nen phai nam o header. Mang du lieu `s_pre_*` va ham load/save/inject do
 //  ui_preheat.cpp giu; cac file khac doc/ghi qua API cong khai ui_preheat_get() /
 //  ui_preheat_set() / ui_preheat_label() (khai bao trong ui_lvgl.h).
@@ -346,9 +351,32 @@ extern bool s_cal_req;
 #define PRE_B_MAX 120
 #define PRE_F_MAX 255
 
-// ===========================================================================
+// ---------------------------------------------------------------------------
+//  WiFi (weak) - hop dong voi net_wifi.cpp / net_upload.h
+// ---------------------------------------------------------------------------
+//  Linkage `extern "C"`: net_wifi_state() da duoc khai bao trong net_upload.h trong khoi
+//  extern "C" (dinh nghia trong net_wifi.cpp voi linkage C nhu khai bao trong net_wifi.h), nen
+//  cac ham WiFi phai cung linkage C moi bind dung ten.
+//
+//  `weak`: nhanh firmware CHUA merge -> con tro NULL -> trang WIFI van MO DUOC va bao
+//  "khong ho tro" (khong crash, khong loi link). Cac khai bao nay dung o NHIEU file
+//  (ui_lvgl.cpp: accessor an toan + A_WIFI_FORGET; ui_page_wifi.cpp: quet/ket noi/ngat)
+//  nen phai nam MOT cho o day. Manh WIFI con khai bao rieng 4 ham quet ASYNC (scan_begin/poll/
+//  cancel/scanning) + cyd_sd_printer_busy() ngay trong ui_page_wifi.cpp.
+// ---------------------------------------------------------------------------
+extern "C" uint8_t     net_wifi_state(void) __attribute__((weak));
+extern "C" const char *net_wifi_ssid(void) __attribute__((weak));
+extern "C" const char *net_wifi_ip(void) __attribute__((weak));
+extern "C" int8_t      net_wifi_rssi(void) __attribute__((weak));
+extern "C" int         net_wifi_scan(void) __attribute__((weak));
+extern "C" const char *net_wifi_scan_ssid(int i) __attribute__((weak));
+extern "C" int8_t      net_wifi_scan_rssi(int i) __attribute__((weak));
+extern "C" bool        net_wifi_connect(const char *ssid, const char *pass, bool save) __attribute__((weak));
+extern "C" void        net_wifi_disconnect(bool forget) __attribute__((weak));
+
+// ---------------------------------------------------------------------------
 //  Prototype ham dung chung
-// ===========================================================================
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_widgets.cpp
 // ---------------------------------------------------------------------------
@@ -455,6 +483,15 @@ uint8_t wifi_state_now(void);
 bool wifi_api_ok(void);
 /** Trang thai the SD (SD_ST_*) cho icon the tren man STATUS. */
 uint8_t sd_state_now(void);
+// ---------------------------------------------------------------------------
+//  WiFi (weak) + accessor an toan - dinh nghia trong ui_lvgl.cpp, dung o nhieu file
+// ---------------------------------------------------------------------------
+/** SSID cua mang dang ket noi ("" neu khong co/khong biet) - ui_page_info.cpp. */
+const char *wifi_ssid_now(void);
+/** IP cua man hinh CYD ("" neu chua ket noi) - ui_page_info.cpp. */
+const char *wifi_ip_now(void);
+/** RSSI cua ket noi hien tai (dBm, 0 = khong biet) - ui_page_info.cpp + ui_wifi_rssi(). */
+int8_t wifi_rssi_now(void);
 /** Hien 1 man (tao neu chua co), cap nhat dong tieu de + focus + thanh day. */
 void show_page(uint8_t p);
 /** Chay lenh THAT SU cua cac muc phai xac nhon (M502 / reboot DFU / xoa file SD). */
@@ -519,6 +556,34 @@ void page_settings_update(void);
 void ov_hide(void);
 /** Mo lop phu SUA cho 1 dong thong so theo id (CYDLCD_SET_* / CYDLCD_PRE_ID_BASE + n). */
 void ov_open_id(const uint16_t id);
+// ---------------------------------------------------------------------------
+//  Dinh nghia trong ui_page_mesh.cpp / ui_page_custom.cpp / ui_page_endstop.cpp /
+//  ui_page_info.cpp / ui_page_wifi.cpp / ui_page_tbt.cpp (chang 4/4)
+// ---------------------------------------------------------------------------
+/** Man BED MESH: luoi bed mesh dung het be rong + 2 hang nut UBL (G29). */
+void page_mesh_create(lv_obj_t *p);
+void page_mesh_update(void);
+/** Man CUSTOM: G34 / Init SD / M119 endstop / M412 filament / reboot DFU. */
+void page_custom_create(lv_obj_t *p);
+void page_custom_update(void);
+/** Man ENDSTOP: 6 o trang thai kieu M119 (frame CYDLCD_F_ENDSTOPS). */
+void page_endstop_create(lv_obj_t *p);
+void page_endstop_update(void);
+/** Man INFO: 11 dong thong tin THAT (firmware, board, font, WiFi, protocol, link, SD, he thong). */
+void page_info_create(lv_obj_t *p);
+void page_info_update(void);
+/** Man WIFI: trang thai + quet mang + nhap mat khau + ket noi/ngat/quen cau hinh (NVS). */
+void page_wifi_create(lv_obj_t *p);
+void page_wifi_update(void);
+/**
+ * Don moi thu CUA TRANG WIFI khi roi trang: dong ban phim nhap mat khau + lop phu "DANG QUET..."
+ * (ca 2 la con cua lv_scr_act, KHONG phai con cua trang) va huy phien quet dang chay (mo lai input).
+ * Goi tu show_page() moi khi doi man, va tu page_wifi_destroy() (idempotent).
+ */
+void wifi_page_leave(void);
+/** Man TRAMMING: dieu khien Bed Tramming Wizard qua link ASCII (4 so 4 goc + 4 nut lenh). */
+void page_tbt_create(lv_obj_t *p);
+void page_tbt_update(void);
 
 // ---------------------------------------------------------------------------
 //  HUY TRANG (page recycling) - vong doi bo nho cua cac man UI

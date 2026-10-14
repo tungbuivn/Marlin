@@ -250,7 +250,7 @@
                             (unsigned)ESP.getFreeHeap());
             }
           } else if (strncmp(s_fwd, "PRE", 3) == 0) {
-            // PRESET PREHEAT cua MAN HINH (kho rieng trong NVS namespace "ph" - xem ui_lvgl.cpp).
+            // PRESET PREHEAT cua MAN HINH (kho rieng trong NVS namespace "ph" - xem ui_preheat.cpp).
             // LUU Y: lenh nay KHONG gui sang Marlin, chi doi gia tri preset cua man hinh.
             //   PRE?                               -> in ca 3 preset
             //   PRE <i 0..2> <nozzle> <bed> [fan]  -> dat + luu NVS (0=PLA, 1=PETG, 2=ABS)

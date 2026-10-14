@@ -256,7 +256,7 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_TMC_CURRENT_E,       // mA (E0)
   CYDLCD_SET_RUNOUT_EN            // 1 = bat cam bien het filament (runout.enabled)
   // GHI CHU: 3 preset preheat (PLA/PETG/ABS) KHONG nam o day vi ban nay khong co M145/HAS_PREHEAT.
-  // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_lvgl.cpp khoi "PREHEAT presets").
+  // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_preheat.cpp va ui_page_settings.cpp - bang SET_ROWS).
 };
 
 // Prompt (CYDLCD_F_PROMPT)

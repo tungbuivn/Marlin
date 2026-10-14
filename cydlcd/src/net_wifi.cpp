@@ -71,7 +71,7 @@ uint32_t s_down_since = 0;              // millis luc BAT DAU thay mat ket noi (
 
 // Thoi gian dwell toi da moi kenh khi QUET MANG.
 //
-// Ã¢Å¡Â Ã¯Â¸ÂÃ¢Å¡Â Ã¯Â¸Â BAY CUA CORE (doc WiFiScan.cpp:63,144): timeout cua quet ASYNC = `max_ms_per_chan * 20`.
+// !! BAY CUA CORE (doc WiFiScan.cpp:63,144): timeout cua quet ASYNC = `max_ms_per_chan * 20`.
 //    Voi 150 ms -> timeout chi 3 s, trong khi DO THAT tren may nay (khu vuc 30 mang) mot lan quet mat
 //    **8,2 giay** => scanComplete() luon tra WIFI_SCAN_FAILED (-2) du quet van chay.
 //    Chon 600 ms => timeout 12 s (du cho ~8 s) va van la "tran" dwell moi kenh (min = 100 ms).
@@ -233,10 +233,10 @@ int net_wifi_scan(void) {
   // scanNetworks(false=chan cho xong, false=khong liet ke mang an, false=active, max_ms_per_chan):
   // Arduino core ngu toi khi driver bao xong. PHai goi tu task UI/main loop, KHONG duoc tu ISR.
   //
-  // Ã¢Å¡Â Ã¯Â¸Â max_ms_per_chan: mac dinh cua core la 300 ms/kenh => 13 kenh = ~4 s (co the HON 5 s khi
+  // !! max_ms_per_chan: mac dinh cua core la 300 ms/kenh => 13 kenh = ~4 s (co the HON 5 s khi
   // dong kenh) - trong suot thoi gian do MAN HINH CYD KHONG chay duoc gi khac: khong tra loi sector the SD
   // cho Marlin (=> dang in ma quet = hong ban in) va khong phuc vu web server. Dat 150 ms/kenh de
-  // rut ngan cua so chan lai. Xem canh bao trong ui_lvgl.cpp: cb_wifi_scan() chan quet khi
+  // rut ngan cua so chan lai. Xem canh bao trong ui_page_wifi.cpp: cb_wifi_scan() chan quet khi
   // Marlin dang in.
   const uint32_t t0 = millis();
   WiFi.scanDelete();
@@ -411,10 +411,10 @@ void net_wifi_poll(void) {
   if (!s_started) { s_state = WS_OFF; return; }
   refresh();
   const uint32_t now = millis();
-  if (s_state == WS_UP) { s_down_since = 0; return; }     // dang ket noi -> khong dung tÃ¡Â»â€ºi gi
+  if (s_state == WS_UP) { s_down_since = 0; return; } // dang ket noi -> khong dung toi gi
   if (!s_want) return;
 
-  // Ã¢Å¡Â Ã¯Â¸Â DANG QUET MANG (async): TUYET DOI khong goi WiFi.begin()/mode() luc nay - no se HUY phien
+  // !! DANG QUET MANG (async): TUYET DOI khong goi WiFi.begin()/mode() luc nay - no se HUY phien
   // quet (do that: scanComplete() tra WIFI_SCAN_FAILED sau ~2 s) va lam WiFi chap chon.
   if (s_scanning) return;
 

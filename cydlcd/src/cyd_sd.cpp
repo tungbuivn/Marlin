@@ -43,7 +43,7 @@
 
 namespace {
 
-// Mau lop phu: lay DUNG gia tri cua ui_lvgl.cpp (MR_BG/MR_PROGBG/MR_PROGBAR/MR_FRAME/MR_RATE100)
+// Mau lop phu: lay DUNG gia tri cua ui_lvgl_int.h (MR_BG/MR_PROGBG/MR_PROGBAR/MR_FRAME/MR_RATE100)
 constexpr uint32_t OV_BG = 0x1E156E, OV_BAR = 0x2A2080, OV_FILL = 0x00E5FF,
                    OV_TXT = 0xE6E1E5, OV_OK = 0x81C784, OV_ERR = 0xFF8A80;
 
@@ -490,7 +490,7 @@ bool cyd_sd_delete(const char *name) {
   ELOG("[UP] %s file %s (cydlcd tu xoa - che do the qua UART)\n",
        ok ? "da xoa" : "KHONG xoa duoc", path);
   // LUU Y: KHONG goi notify_media_changed() o day - ham do cho ~800 ms (M22/M21 + xin danh sach),
-  // goi tu callback nut bam se treo LVGL. Nguoi goi (ui_lvgl.cpp) tu lo phan do bang files_init_sd().
+  // goi tu callback nut bam se treo LVGL. Nguoi goi (ui_page_files.cpp) tu lo phan do bang files_init_sd().
   return ok;
 #else
   (void)name;

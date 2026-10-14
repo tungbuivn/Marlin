@@ -92,7 +92,7 @@
 #define LV_USE_WIN          0
 
 /* ---------------------------------------------------------------------------
- * Theme: TAT ca. UI tu set mau cho tung doi tuong (xem ui_lvgl.cpp) nen khong phu thuoc
+ * Theme: TAT ca. UI tu set mau cho tung doi tuong (xem ui_widgets.cpp / ui_page_*.cpp) nen khong phu thuoc
  * theme, va tiet kiem ~10KB flash. (lv_msgbox van chay: no chi goi API lv_theme_get_*,
  * ham nay tra ve mau mac dinh khi khong co theme.)
  * -------------------------------------------------------------------------*/

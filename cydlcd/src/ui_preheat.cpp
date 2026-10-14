@@ -12,7 +12,7 @@
  *
  * File nay la NOI DUY NHAT giu mang `s_pre_h/s_pre_b/s_pre_f`:
  *   - ui_preheat_get()/ui_preheat_set()/ui_preheat_label() la API CONG KHAI (ui_lvgl.h);
- *   - preheat_load()/preheat_save()/preheat_inject() duoc ui_lvgl.cpp (trang SETTINGS + luc
+ *   - preheat_load()/preheat_save()/preheat_inject() duoc ui_page_settings.cpp (trang SETTINGS) + luc
  *     khoi dong) va chinh file nay goi -> khai bao trong ui_lvgl_int.h;
  *   - trang TEMP (ui_page_temp.cpp) doc qua API cong khai, KHONG cham thang mang.
  */
@@ -40,7 +40,7 @@
 //  Duong ghi NVS chi co tren CYD (ESP32 co Preferences) - board khac: chi giu trong RAM.
 // ===========================================================================
 // CYDLCD_PRE_COUNT / CYDLCD_PRE_ID_BASE / PRE_H_MAX / PRE_B_MAX / PRE_F_MAX va comment gioi han
-// ngay tren da chuyen sang ui_lvgl_int.h (dung cheo file: ui_lvgl.cpp - trang SETTINGS - va
+// ngay tren da chuyen sang ui_lvgl_int.h (dung cheo file: ui_page_settings.cpp - trang SETTINGS - va
 // ui_page_temp.cpp). Kho du lieu `s_pre_*` VAN chi nam trong file nay.
 
 static const char *const PRE_LABEL[CYDLCD_PRE_COUNT] = { "PLA", "PETG", "ABS" };

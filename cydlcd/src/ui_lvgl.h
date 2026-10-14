@@ -9,7 +9,7 @@
  * Khi CYDLCD_USE_LVGL = 0 (F411/F103C6 -- UI tu ve) thi file nay KHONG khai bao gi ca,
  * nen main.cpp cu van build duoc ma khong keo theo LVGL.
  *
- * Man hinh (xem ui_lvgl.cpp): STATUS / TEMP / JOG / FILES / SETTINGS / MESH / CUSTOM / TRAMMING / INFO.
+ * Man hinh (xem ui_page_*.cpp): STATUS / MENU / FEED-FLOW / TEMP / JOG / FILES / SETTINGS / MESH /
  */
 #pragma once
 
@@ -23,7 +23,7 @@
 // Kich thuoc LCD: ca 2 board dich (2.4" tren F407/F411, 2.8" tren CYD) deu la
 // ILI9341/ST7789 240x320. Port xoay 90 do: CYD dung TFT_eSPI setRotation(1),
 // STM32 (tft_ili9341) dung TFT_ROTATION 1 -> man NGANG 320x240.
-// Doi 2 so nay thi phai xem lai layout trong ui_lvgl.cpp.
+// Doi 2 so nay thi phai xem lai layout trong cac file ui_page_*.cpp.
 // ---------------------------------------------------------------------------
 #define UI_LCD_HOR_RES 320
 #define UI_LCD_VER_RES 240

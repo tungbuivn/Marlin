@@ -167,7 +167,7 @@ int32_t cydlcd_setting(const uint16_t id, const int32_t def) {
 }
 
 // Ghi 1 thong so vao bang `cydlcd.settings[]` (them neu chua co). Dung cho cac thong so do CHINH MAN HINH CYD
-// quan ly - Marlin khong bao gio gui chung, vd 9 preset preheat (id 0x40xx, xem ui_lvgl.cpp).
+// quan ly - Marlin khong bao gio gui chung, vd 9 preset preheat (id 0x40xx, xem ui_preheat.cpp).
 // Marlin gui frame CYDLCD_F_SETTING thi di qua duong rieng o handle_frame (logic y het).
 void cydlcd_setting_set(const uint16_t id, const int32_t value) {
   for (uint8_t i = 0; i < cydlcd.n_settings; i++)
