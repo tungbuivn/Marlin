@@ -24,6 +24,7 @@
   #include "ui_lvgl.h"
   #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
   #include "net_upload_http.h"    // web server tren cydlcd: PC/dien thoai gui file qua WiFi
+  #include "cyd_sd.h"             // chan doan: cyd_sd_write_test() (lenh `UI WTEST`)
   #include <lvgl.h>              // lv_mem_monitor(): theo doi pool LVGL trong log 1 Hz
 
   #if defined(CYDLCD_CYD_DEBUG)
@@ -60,12 +61,21 @@
         // Trong luc upload thi KHONG the la treo that (moi buoc deu co tien do tu client) -> bo qua.
         // ---------------------------------------------------------------------------
         if (net_upload_active()) {
-          if (!exempt_logged) {
-            Serial.println("[CYD] dang nhan file WiFi -> MIEN TRU watchdog (vong lap dung la binh thuong)");
-            exempt_logged = true;
+          // MIEN TRU CO DIEU KIEN: chi khi upload CON TIEN TRIEN (co du lieu moi trong 30 s).
+          // Neu dung y nguyen (khong xet tien trien) thi khi upload bi ket giua duong (driver SD ket),
+          // watchdog KHONG BAO GIO cuu -> panel TREO VINH VIEN, phai rut dien (da gap that 2026-10-15).
+          const uint32_t idle_ms = (uint32_t)(millis() - net_upload_last_activity_ms());
+          if (idle_ms < 30000u) {
+            if (!exempt_logged) {
+              Serial.println("[CYD] dang nhan file WiFi -> MIEN TRU watchdog (vong lap dung la binh thuong)");
+              exempt_logged = true;
+            }
+            stall = 0; s_hung_s = 0;
+            continue;
           }
-          stall = 0; s_hung_s = 0;
-          continue;
+          if (stall == 2 || stall == 5)
+            Serial.printf("[CYD] CANH BAO: upload KHONG tien trien %lu s (chang %u) - se tu khoi dong lai\n",
+                          (unsigned long)stall, (unsigned)s_stage);
         }
         stall++;
         s_hung_s = stall;                          // RTC: lan sau boot biet da treo bao lau
@@ -312,6 +322,12 @@
             else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
+            else if (strncasecmp(a3, "WTEST", 5) == 0) {
+              // `UI WTEST [KB]` = ghi thu the (khong qua WiFi) de tach nguyen nhan loi ghi the.
+              unsigned kb = 4096;
+              if (a3[5]) sscanf(a3 + 5, "%u", &kb);
+              cyd_sd_write_test(kb);
+            }
             else                                     ui_lvgl_show_page_name(a3);
           } else
 #endif

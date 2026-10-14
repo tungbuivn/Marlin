@@ -35,6 +35,12 @@ bool net_upload_http_active(void);  // true = WebServer dang chay (de main.cpp k
 // trong luc man hinh CYD dang giu bus SPI cua the dung chung (xem ui_lvgl.cpp: sd_host_busy).
 bool net_upload_active(void);
 
+// Thoi diem (millis) lan cuoi phien upload co TIEN TRIEN (nhan them du lieu). Dung cho watchdog chan
+// doan (main.cpp): CHI mien tru "vong lap dung" khi upload CON tien trien; qua 30 s khong tien trien =
+// treo that -> tu khoi dong lai. Neu mien tru vo dieu kien thi upload bi ket giua duong se lam panel
+// treo vinh vien (da gap that 2026-10-15, phai rut dien).
+uint32_t net_upload_last_activity_ms(void);
+
 // XOA 1 file NGAY TREN MAN HINH CYD (che do CYDLCD_SD_UART: the o khe man hinh, man hinh CYD giu the con Marlin
 // chay SDCARD_READONLY nen M30 se loi). Tra true = da xoa xong. Nguoi goi PHAI tu bao Marlin mount
 // lai the (ui_lvgl.cpp goi files_init_sd() -> M22/M21 qua UART + xin lai danh sach file).

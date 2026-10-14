@@ -165,6 +165,15 @@ bool start_sta(const bool want) {
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);       // driver tu ket noi lai khi mat (chot ha o net_wifi_poll)
     WiFi.setSleep(true);               // tiet kiem dien; net_wifi_ps(false) khi day file
+    // ---------------------------------------------------------------------------
+    // GIAM CONG SUAT PHAT WiFi (2026-10-15). LY DO (do tren may that): ghi file upload qua WiFi bi
+    // "ghi the TF loi" CHAP CHON (co lan ghi tron 4,3 MB, co lan chet o ~1-2 MB) trong khi ghi TRUC
+    // TIEP len the (khong co WiFi) thi LUON duoc => nghi nguon 3V3 sut khi WiFi PHAT cong voi the SD
+    // dang ghi (dien tro/tu loc tren board CYD rat mong). Mac dinh cua core la 19,5 dBm (toi da).
+    // Ha xuong 8,5 dBm: RSSI dang ~-50 dBm (rat tot) nen khong anh huong thuc te, ma dong dinh giam
+    // dang ke -> ghi the on dinh hon. Neu sau nay can xa hon: doi so nay (WIFI_POWER_11dBm...).
+    // ---------------------------------------------------------------------------
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
     s_started = true;
   }
   WiFi.begin(s_ssid, s_pass);

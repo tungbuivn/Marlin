@@ -917,6 +917,52 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > bị dịch nhầm thành "không phân giải được tên", thêm dòng trắng trước thông báo lỗi để không dính vào
 > thanh tiến độ `KB/s`, và **thử lại 3 lần** với chờ lâu dần — commit `331c91a8e7`.)
 
+> **VÒNG SỬA 2026-10-15 (sau khi người dùng hỏi "có phải do multiple part dẫn đến open/close file khác?").**
+>
+> **Trả lời bằng số đo, không đoán.** Đã thêm bộ đếm chẩn đoán rồi upload lại 1 lần file 4,3 MB:
+> ```text
+> [HTTP] PHAN FILE #1: "V300_bot_2.gcode" tu 192.168.0.174 (kich thuoc chua biet)
+> [UP] MO file tam lan 1 (phien moi, lan mo thu 1) heap=126284 B heapmin=130840 B
+> [UP] da ghi 1024 KB / 6347 ms (161 KB/s, heap=120304 B)
+> [UP] da ghi 2048 KB / 13477 ms (151 KB/s, heap=121976 B)
+> [UP] da ghi 3072 KB / 19833 ms (154 KB/s, heap=120304 B)
+> [UP] da ghi 4096 KB / 26889 ms (152 KB/s, heap=121824 B)
+> [HTTP] PHAN FILE #1 xong: 4523980 B (file con MO, cho het request)
+> [HTTP] HET REQUEST (OK): parts=1 chunks=3151 da nhan 4523980 B -> dong file + ghi vao the SD
+> [UP] DONG file tam ...: 4523980 B, 1 lan mo trong phien
+> [UP] da doi ten ... -> /V300_bot_2.gcode (4523980 B) ; [UP] bao Marlin mount lai the (M22/M21)
+> ```
+> ⇒ **`parts=1`, mở file **1 lần**, đóng **1 lần** cho cả file** ⇒ **KHÔNG phải do nhiều phần**: script
+> (`New-MultipartParts`) chỉ gửi **1 field text `name` + 1 phần file**, và `Parsing.cpp` gọi
+> `UPLOAD_FILE_START` **một lần cho mỗi phần file** (core 2.0.17, dòng 423-433). Tốc độ **đều 151-161 KB/s**
+> (trước đây 10-16 KB/s rồi đứt), heap thấp nhất **113 KB** — không hề cạn heap/không phân mảnh.
+>
+> **Nhưng câu hỏi đó chỉ ra 1 lỗi thật trong code cũ, đã sửa:** bản cũ **đóng file tạm ngay ở
+> `UPLOAD_FILE_END`** — mà `_parseForm()` (Parsing.cpp:480-486) **quay lại đọc phần kế tiếp** nếu request
+> có ≥2 phần file. Khi đó: phần #2 gọi `cyd_sd_temp_open()` → `SD.remove(s_tmp)` **XOÁ SẠCH dữ liệu đã
+> nhận của phần #1**; còn nếu file đã bị đóng thì mọi chunk sau trả về 0 ⇒ báo `ghi the TF loi` (thông báo
+> SAI bản chất). Sửa:
+> 1. `net_upload_http.cpp`: **chỉ đóng file MỘT LẦN khi hết request** (`handle_upload_done`) — không đóng ở
+>    `UPLOAD_FILE_END`; cờ `s_sess_busy` đánh dấu ranh giới request.
+> 2. `cyd_sd_temp_open(name, size_hint, same_request)`: phần #≥2 **GHI TIẾP** vào file đang mở (cùng tên
+>    đích) thay vì xoá/mở lại ⇒ có nhiều phần thì file vẫn liền mạch, không mất dữ liệu.
+> 3. Thông báo lỗi **tách bạch 2 nguyên nhân**: `file tam khong mo (phien bi ngat?)` (lỗi logic) vs
+>    `the ghi thieu (n/m B)` (lỗi thẻ/FATFS) — trước đây gộp cả thành `ghi the TF loi` nên không biết
+>    đường nào hỏng. Lý do lấy từ `cyd_sd_temp_err()`.
+>
+> **Chẩn đoán mới** (để lần sau đọc log là biết ngay, không phải suy đoán):
+> * log `[UP] MO file tam lan N (phien moi, lan mo thu M)` + `[UP] DONG file tam …: N B, M lan mo trong
+>   phien` ⇒ **M ≥ 2 là dấu hiệu bị mở lại giữa phiên** (đúng thứ câu hỏi trên lo);
+> * log tiến độ **mỗi 1 MB** kèm **KB/s + heap** ⇒ thấy ngay phiên chậm/đứt ở mốc nào;
+> * log `[UP] PHAN tiep theo (lan mo thu M trong request) -> GHI TIEP …` khi client gửi nhiều phần;
+> * `/status` thêm **`parts`** (số phần file của request) và **`chunks`** (số chunk WRITE) — nhìn là biết
+>   client gửi 1 phần hay nhiều phần, và có phải "gửi lại" (mỗi lần script thử lại = **request mới** =
+>   phiên mới ⇒ đó mới là trường hợp "mở/đóng file khác", hiện ra thành 2 dòng `[UP] MO file tam lan 1` và
+>   `lan 2` trong log).
+> * **Đo lần này**: 4 523 980 B trong **28,9 s (152,7 KB/s)**, `{"status":"Ok",…,"parts":1}`, `/status` →
+>   `state=done written=4523980`; `UI TAP L` xác nhận trên thẻ `V300_bot_2.gcode 4523980 B` (gốc thẻ 8 mục,
+>   `cydlcd_tmp` rỗng — không còn file `.tmp` rác). RSSI −43…−57, `heapmin=113076 B`.
+
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
   `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,
@@ -926,8 +972,8 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
   | Endpoint | Trả về |
   |---|---|
   | `GET /` | HTML (chứa chuỗi `TBT-CYDLCD`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
-  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes`, `total_bytes`, `written_bytes`, `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
-  | `POST /upload?token=…` | `multipart/form-data`: field text `name="name"` (tên đích, **đặt TRƯỚC** phần file) + phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF) |
+  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes`, `total_bytes`, `written_bytes`, `parts` (số PHẦN FILE của request), `chunks` (số chunk WRITE), `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `POST /upload?token=…` | `multipart/form-data`: field text `name="name"` (tên đích, **đặt TRƯỚC** phần file) + phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…,"parts":N}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF). **Nhiều phần file trong cùng request được chấp nhận**: phần #≥2 ghi TIẾP vào cùng file tạm (không xoá/mở lại) — xem vòng sửa 2026-10-15 ở §9.21 |
 
 * **Token**: query `?token=` **hoặc** header `X-CYDLCD-Token` (`CYDLCD_HTTP_TOKEN ""` = tắt kiểm, không khuyến nghị).
 * **Trả lời ngay** sau khi nhận đủ file; bước **ghi vào thẻ** (`cyd_sd_finish_upload()`) chạy ở nhịp sau của

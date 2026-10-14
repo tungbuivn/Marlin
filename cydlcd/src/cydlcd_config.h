@@ -401,7 +401,13 @@
 #define CYDLCD_SD_MISO  19
 #define CYDLCD_SD_MOSI  23
 #define CYDLCD_SD_CS     5
-#define CYDLCD_SD_HZ    20000000      // 20 MHz: an toan cho khe TF cua CYD
+#define CYDLCD_SD_HZ     4000000      // 4 MHz: GHI dai qua WiFi bi loi o 20 MHz VA 10 MHz tren the nay
+                                      // (loi that 2026-10-15: `SD.write()` tra ve thieu sau ~1,7-2 MB, moi
+                                      //  lan ghi 1436 B mat 50-170 ms; cung the do CO lan ghi tron 4,3 MB
+                                      //  => the/khe the bi margin, khong hong han). 4 MHz = cham hon
+                                      //  (~50-90 KB/s) nhung doc sector cho Marlin van du
+                                      //  (512 B @4 MHz ~1 ms, van nho hon chi phi khung UART).
+                                      // Muon thu lai toc do cao: doi so nay roi chay lai upload file lon.
 #define CYDLCD_UPLOAD_TMP_DIR "/cydlcd_tmp"       // thu muc file tam (Marlin chi liet ke goc the -> khong thay)
 
 // Cac THU MUC HE THONG khong hien tren man FILE SD (danh sach TEN, ngan cach bang dau phay; so sanh

@@ -101,6 +101,18 @@ uint32_t s_rx = 0;                 // byte da nhan tu client (nhanh)
 uint32_t s_total = 0;              // tong byte theo Content-Length cua phan file (0 = khong biet)
 char     s_file[40] = "";          // ten file dang nhan / vua nhan
 char     s_msg[96] = "";           // thong bao cho /status (message)
+// Thoi diem lan cuoi phien upload co TIEN TRIEN (xem net_upload_active()/watchdog o main.cpp).
+static volatile uint32_t s_last_activity_ms = 0;
+
+// ---- CHAN DOAN: 1 request co MAY PHAN FILE? ----
+// VI SAO (cau hoi nguoi dung 2026-10-15: "co phai do multiple part dan den open close file khac?"):
+// WebServer cua ESP32 goi `UPLOAD_FILE_START` MOT LAN cho MOI PHAN FILE trong multipart. Neu client gui
+// file thanh nhieu phan thi moi phan se vao `cyd_sd_temp_open()` -> (ban cu) XOA file tam roi mo lai =>
+// MAT het du lieu da nhan. Dem lai de BIET CHAC thay vi doan: `parts`=so phan file cua request dang chay,
+// `chunks`=so chunk WRITE. Ca 2 deu hien o /status va trong log.
+static uint8_t  s_parts = 0;          // so phan file (UPLOAD_FILE_START) trong request dang chay
+static uint32_t s_chunks = 0;         // so chunk (UPLOAD_FILE_WRITE) da nhan trong request dang chay
+static bool     s_sess_busy = false;  // dang trong 1 request upload (tu START dau tien den handle_upload_done)
 
 const char *state_str(void) {
   switch (s_http_state) {
@@ -157,9 +169,11 @@ void handle_status(void) {
   snprintf(js, sizeof(js),
            "{\"cydlcd\":\"TBT\",\"device\":\"TBT-CYDLCD\",\"state\":\"%s\","
            "\"rx_bytes\":%lu,\"total_bytes\":%lu,\"written_bytes\":%lu,"
+           "\"parts\":%u,\"chunks\":%lu,"
            "\"file\":\"%s\",\"result\":\"%s\",\"message\":\"%s\","
            "\"sd\":%d,\"wifi\":%u,\"ip\":\"%s\",\"heap\":%lu}",
            state_str(), (unsigned long)s_rx, (unsigned long)s_total, (unsigned long)written,
+           (unsigned)s_parts, (unsigned long)s_chunks,
            s_file, res, s_msg, (int)cyd_sd_ready(), (unsigned)net_wifi_state(),
            net_wifi_ip(), (unsigned long)ESP.getFreeHeap());
   send_json(200, js);
@@ -176,6 +190,9 @@ void handle_upload_stream(void) {
     case UPLOAD_FILE_START: {
       s_client[0] = '\0';
       snprintf(s_client, sizeof(s_client), "%s", server.client().remoteIP().toString().c_str());
+      // Ranh gioi request: phan file DAU TIEN cua 1 request = phien moi (dem lai parts/chunks).
+      if (!s_sess_busy) { s_sess_busy = true; s_parts = 0; s_chunks = 0; }
+      s_parts++;
       // LUU Y (do that 2026-10-14): core ESP32 2.0.17 dat `totalSize = 0` o UPLOAD_FILE_START
       // (Parsing.cpp:428) va chi CONG DON dan trong luc ghi -> o day luon = 0. Kich thuoc THAT chi
       // biet duoc o UPLOAD_FILE_END (Parsing.cpp:471) => s_total duoc gan o nhanh END.
@@ -196,10 +213,16 @@ void handle_upload_stream(void) {
       unquote(nm, sizeof(nm), server.arg("name").c_str());
       if (nm[0] == '\0') unquote(nm, sizeof(nm), up.filename.c_str());
       snprintf(s_file, sizeof(s_file), "%s", nm);
-      HLOG("[HTTP] nhan file \"%s\" tu %s (kich thuoc chua biet)\n", s_file, s_client);
+      HLOG("[HTTP] PHAN FILE #%u: \"%s\" tu %s (kich thuoc chua biet)\n",
+           (unsigned)s_parts, s_file, s_client);
+      if (s_parts > 1) {
+        // Nhieu phan trong CUNG 1 request: TUYET DOI khong duoc coi la phien moi (se xoa file tam).
+        HLOG("[HTTP] CANH BAO: request nay co >=2 PHAN FILE - ghi TIEP vao file tam (khong mo lai)\n");
+      }
       s_http_state = HS_RECV;
+      s_last_activity_ms = millis();
       snprintf(s_msg, sizeof(s_msg), "dang nhan file");
-      if (!cyd_sd_temp_open(nm, s_total)) {
+      if (!cyd_sd_temp_open(nm, s_total, s_parts > 1)) {
         s_http_state = HS_ERR;
         snprintf(s_msg, sizeof(s_msg), "khong mo duoc file tam (the TF?)");
         HLOG("[HTTP] LOI: %s\n", s_msg);
@@ -209,12 +232,18 @@ void handle_upload_stream(void) {
     }
     case UPLOAD_FILE_WRITE: {
       if (s_http_state != HS_RECV) return;
+      s_chunks++;
+      s_last_activity_ms = millis();                 // con tien trien -> watchdog tiep tuc mien tru
       const size_t w = cyd_sd_temp_write(up.buf, up.currentSize);
       s_rx += (uint32_t)w;
+      s_last_activity_ms = millis();                 // (cap nhat lai SAU khi ghi: ghi the co the lau)
       if (w != up.currentSize) {
         s_http_state = HS_ERR;
-        snprintf(s_msg, sizeof(s_msg), "ghi the TF loi (the day / rut ra?)");
-        HLOG("[HTTP] LOI: %s\n", s_msg);
+        // Ly do THAT lay tu lop the SD (cyd_sd_temp_err) - truoc day luon bao "ghi the TF loi" nen khong
+        // phan biet duoc "file tam khong mo" (loi logic) voi "the ghi thieu" (loi the/FATFS).
+        snprintf(s_msg, sizeof(s_msg), "%s", cyd_sd_temp_err()[0] ? cyd_sd_temp_err() : "ghi the TF loi");
+        HLOG("[HTTP] LOI ghi the: %s (chunk %u B, da nhan %lu B, phan #%u)\n",
+             s_msg, (unsigned)up.currentSize, (unsigned long)s_rx, (unsigned)s_parts);
       }
       break;
     }
@@ -222,32 +251,39 @@ void handle_upload_stream(void) {
       // Kich thuoc THAT cua phan file chi co o day (totalSize = tong da cong don - Parsing.cpp:471)
       s_total = up.totalSize;
       if (s_http_state == HS_RECV) {
-        cyd_sd_temp_close();
+        // KHONG dong file o day: mot request co the co NHIEU phan file (Parsing.cpp:480-486 quay lai
+        // doc phan ke tiep) - dong file ngay tai phan dau se lam phan sau ghi vao file da dong
+        // ("file tam khong mo"). File duoc dong MOT LAN khi het request (handle_upload_done).
         snprintf(s_msg, sizeof(s_msg), "da nhan xong, cho ghi vao the SD");
-        HLOG("[HTTP] nhan xong %lu B (totalSize=%lu) -> %s\n", (unsigned long)s_rx,
-             (unsigned long)s_total, cyd_sd_temp_path());
+        HLOG("[HTTP] PHAN FILE #%u xong: %lu B (totalSize=%lu) -> %s (file con MO, cho het request)\n",
+             (unsigned)s_parts, (unsigned long)s_rx, (unsigned long)s_total, cyd_sd_temp_path());
       }
       break;
     }
     default:                                       // UPLOAD_FILE_ABORT
       cyd_sd_temp_abort();
       s_http_state = HS_ERR;
+      s_sess_busy = false;
       snprintf(s_msg, sizeof(s_msg), "client ngat giua luc gui");
-      HLOG("[HTTP] %s\n", s_msg);
+      HLOG("[HTTP] %s (phan #%u, %u chunk, da nhan %lu B)\n",
+           s_msg, (unsigned)s_parts, (unsigned)s_chunks, (unsigned long)s_rx);
       break;
   }
 }
 
 void handle_upload_done(void) {
   char js[256];
+  // Het request (du thanh cong hay loi): mo phien ra de request sau lai la "phien moi".
+  // Ghi chu chan doan: `parts`>1 nghia la client gui file thanh NHIEU PHAN (multipart nhieu phan file).
   if (!token_ok()) {
     s_http_state = HS_ERR;
     snprintf(s_msg, sizeof(s_msg), "sai ma token");
-    HLOG("[HTTP] TU CHOI /upload tu %s: sai token\n",
-         server.client().remoteIP().toString().c_str());
+    HLOG("[HTTP] TU CHOI /upload tu %s: sai token (parts=%u)\n",
+         server.client().remoteIP().toString().c_str(), (unsigned)s_parts);
     snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"sai ma token\"}");
     send_json(401, js);
     cyd_sd_temp_abort();
+    s_sess_busy = false;
     return;
   }
 #if !CYDLCD_HTTP_ALLOW_WHILE_PRINTING
@@ -263,13 +299,17 @@ void handle_upload_done(void) {
              "{\"status\":\"Error\",\"message\":\"Marlin dang IN TU THE SD (dang in thi khong nhan file) - dung in roi gui lai\"}");
     send_json(409, js);
     cyd_sd_temp_abort();
+    s_sess_busy = false;
     return;
   }
 #endif
   if (s_http_state == HS_ERR) {
     snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"%s\"}", s_msg);
     send_json(500, js);
+    HLOG("[HTTP] HET REQUEST (LOI): parts=%u chunks=%u rx=%lu B, ly do: %s\n",
+         (unsigned)s_parts, (unsigned)s_chunks, (unsigned long)s_rx, s_msg);
     cyd_sd_temp_abort();
+    s_sess_busy = false;
     return;
   }
   if (s_rx == 0 || cyd_sd_temp_path()[0] == '\0') {
@@ -278,18 +318,21 @@ void handle_upload_done(void) {
     snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"khong nhan duoc du lieu\"}");
     send_json(400, js);
     cyd_sd_temp_abort();              // file tam 0 byte / con mo -> don ngay (khong de lai rac)
+    s_sess_busy = false;
     return;
   }
   // Tra loi NGAY (khong de trinh duyet cho vai chuc giay): viec ghi vao the SD chay o task()
   snprintf(js, sizeof(js),
-           "{\"status\":\"Ok\",\"file\":\"%s\",\"rx_bytes\":%lu,\"total_bytes\":%lu,"
+           "{\"status\":\"Ok\",\"file\":\"%s\",\"rx_bytes\":%lu,\"total_bytes\":%lu,\"parts\":%u,"
            "\"message\":\"da nhan, man hinh dang ghi vao the SD\"}",
-           s_file, (unsigned long)s_rx, (unsigned long)s_total);
-  HLOG("[HTTP] da nhan du %lu B (%s) -> se ghi vao the SD\n", (unsigned long)s_rx, s_file);
+           s_file, (unsigned long)s_rx, (unsigned long)s_total, (unsigned)s_parts);
+  HLOG("[HTTP] HET REQUEST (OK): parts=%u chunks=%u da nhan %lu B (%s) -> dong file + ghi vao the SD\n",
+       (unsigned)s_parts, (unsigned)s_chunks, (unsigned long)s_rx, s_file);
   send_json(200, js);
   s_finish_pending = true;
   s_http_state = HS_WRITE;
   snprintf(s_msg, sizeof(s_msg), "dang ghi vao the SD");
+  s_sess_busy = false;                 // request nay xong; request sau = phien moi
 }
 
 void handle_not_found(void) {
@@ -340,7 +383,9 @@ void net_upload_http_task(void) {
     s_finish_pending = false;
     uint32_t written = 0;
     char err[64] = "";
-    const uint32_t got = cyd_sd_temp_bytes();
+    // Dong file tam MOT LAN o day (khong dong o UPLOAD_FILE_END: 1 request co the co nhieu phan file).
+    // Day cung chinh la luc day not dem ghi 4 KB xuong the.
+    const uint32_t got = cyd_sd_temp_close();
     const bool ok = cyd_sd_finish_upload(s_file, got, &written, err, sizeof(err));
     if (ok) {
       s_http_state = HS_DONE;
@@ -362,6 +407,8 @@ bool net_upload_http_active(void) { return s_started; }
 
 // true = dang co phien nhan/ghi file (UI dung de chan cac lenh lam Marlin doc the SD)
 bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state == HS_WRITE; }
+
+uint32_t net_upload_last_activity_ms(void) { return s_last_activity_ms; }
 
 // Xoa file ngay tren man hinh CYD (che do the qua UART). Xem net_upload_http.h.
 bool net_sd_delete_file(const char *name) { return cyd_sd_delete(name); }

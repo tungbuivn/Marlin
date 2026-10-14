@@ -38,12 +38,15 @@ void cyd_sd_retry(void);        // xin mount lai o vong lap ke tiep (khong chan)
 
 // ---- Ghi file tam /cydlcd_tmp/<ten>.tmp (net_upload_http.cpp goi khi nhan duoc file) ----
 // `name` = ten file DICH (nhu Marlin se nhin thay tren the). Dong thoi gian: khong chan (chi FATFS).
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint);
+// `same_request` = true khi day la PHAN FILE thu >=2 cua CUNG mot request multipart: khi do KHONG duoc
+// mo lai file tam (mo lai = xoa sach du lieu da nhan) ma phai GHI TIEP vao file dang mo.
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, bool same_request = false);
 size_t cyd_sd_temp_write(const uint8_t *d, size_t n);
 uint32_t cyd_sd_temp_close(void);       // dong file, tra ve so byte da ghi
 void cyd_sd_temp_abort(void);           // dong + xoa file tam (khi loi / bi ngat)
 const char *cyd_sd_temp_path(void);     // duong dan file tam dang mo ("" neu khong co)
 uint32_t cyd_sd_temp_bytes(void);       // so byte da ghi vao file tam
+const char *cyd_sd_temp_err(void);      // ly do loi cua phien dang chay ("" neu khong co)
 bool cyd_sd_printer_busy(void);         // Marlin dang in? (de tu choi phien upload moi)
 
 // ---- Chot phien upload: doi ten /cydlcd_tmp/<ten>.tmp -> /<ten> + bao Marlin mount lai (CHAN) ----
@@ -67,6 +70,12 @@ int cyd_sd_dir_count(const char *name);
  * `not_empty` co the NULL (chi can biet xoa duoc hay khong).
  */
 bool cyd_sd_delete_dir(const char *name, bool *not_empty);
+/**
+ * CHAN DOAN (lenh `UI WTEST <KB>` tren COM7): ghi thu `kb` KB vao file tam tren the bang CHINH duong
+ * cua upload nhung KHONG qua WiFi - de tach nguyen nhan "ghi the TF loi" (the/FATFS hay duong upload).
+ * Xoa file tam sau khi xong. Tra true = ghi du.
+ */
+bool cyd_sd_write_test(uint32_t kb);
 /**
  * CHAN DOAN: liet ke cac muc o GOC the bang chinh FATFS cua MAN HINH - ten DAY DU (khong bi cat o 32
  * byte nhu truong `name` cua giao thuc) + co thu muc hay khong + kich thuoc. Dung khi ten hien tren
