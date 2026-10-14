@@ -303,8 +303,18 @@ function Get-ShortError {
     if ($ex) { $msg = "$($ex.Message)" } else { $msg = "$ErrorRecord" }
     if ($msg -match 'canceled|cancelled|timed out|timeout') { $msg = 'het thoi gian cho phan hoi' }
     elseif ($msg -match 'actively refused') { $msg = 'bi tu choi ket noi (khong co gi o port do)' }
+    # THU TU QUAN TRONG: 'No route to host' phai xet TRUOC 'host' (ban cu de 'host' bat het -> dich
+    # nham thanh "khong phan giai duoc ten", gay hieu sai: day la loi DINH TUYEN/MANG, khong phai DNS).
+    # Gap that 2026-10-15: man hinh CYD dang khoi dong lai (sau khi nap firmware) -> PC khong co duong
+    # toi -> SocketException "No route to host" -> script bao "khong phan giai duoc ten".
+    elseif ($msg -match 'No route to host|unreachable|Network is down|network is unreachable') {
+        $msg = 'khong co duong toi man hinh (khac mang WiFi, hoac man hinh dang khoi dong lai?)'
+    }
+    elseif ($msg -match 'connection attempt failed|did not properly respond|forcibly closed|reset by peer|broken pipe') {
+        $msg = 'ket noi bi dut giua chung (man hinh khoi dong lai / WiFi chap chon)'
+    }
     elseif ($msg -match 'Unable to connect|No connection could be made|khong the ket noi') { $msg = 'khong ket noi duoc' }
-    elseif ($msg -match 'Name or service not known|host') { $msg = 'khong phan giai duoc ten' }
+    elseif ($msg -match 'Name or service not known|No such host is known|khong phan giai duoc') { $msg = 'khong phan giai duoc TEN (kiem tra lai dia chi)' }
     if ($msg.Length -gt 90) { $msg = $msg.Substring(0, 90) + '...' }
     return $msg
 }
@@ -616,11 +626,15 @@ function Send-FileRaw {
     }
     $total = [int64](Get-Item -LiteralPath $LocalPath).Length
 
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
         $res.Attempt = $attempt
         if ($attempt -gt 1) {
-            Write-Warn "  ... loi ket noi -> THU LAI lan 2 sau 1,5 s"
-            Start-Sleep -Milliseconds 1500
+            # Thanh tien do dung `-NoNewline` + "`r" nen PHAI xuong dong truoc khi bao loi/thu lai,
+            # neu khong thong bao se DINH LIEN vao chuoi "KB/s" cua thanh tien do (gap that 2026-10-15:
+            # "LOI GUI FILE: khong phan giai duoc ten KB/s").
+            Write-Host ""
+            Write-Warn ("  ... loi ket noi -> THU LAI lan {0}/3 sau {1:N1} s" -f $attempt, (1.5 * ($attempt - 1)))
+            Start-Sleep -Milliseconds ([int](1500 * ($attempt - 1)))
         }
 
         $parts = New-MultipartParts -FieldName $FieldName -SendName $SendName
@@ -1200,7 +1214,13 @@ $up = Send-FileRaw -Ip $foundIp -Port $Port -PathAndQuery $path -LocalPath $fi.F
                    -SendName $sendName -FieldName $CYDLCD_FIELD_NAME -Token $Token -TimeoutSec $TimeoutSec
 
 if ($up.Status -ne 200) {
+    Write-Host ""       # thanh tien do dung -NoNewline -> xuong dong truoc khi bao loi
     Write-Err ("LOI GUI FILE: {0}" -f $up.Error)
+    if ($up.Error -match 'khong co duong toi') {
+        Write-Note "  => PC khong co duong toi man hinh: kiem tra PC dang o CUNG mang WiFi voi man hinh,"
+        Write-Note "     va man hinh KHONG dang khoi dong lai (sau khi nap firmware man hinh can ~5-10 s)."
+        Write-Note "     Thu lai sau vai giay, hoac chay lai script (no se tu tim lai IP neu IP doi)."
+    }
     if ($up.Status -gt 0) { Write-Dim ("  HTTP {0}" -f $up.Status) }
     if ($up.Body) { Write-Dim ("  tra loi: {0}" -f ((Get-FirstLine $up.Body))) }
     if ($up.Status -eq 401) {
