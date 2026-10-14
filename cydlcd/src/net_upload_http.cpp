@@ -74,8 +74,8 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
 <div class="card up">
   <input type="text" id="tok" placeholder="token (vd TBT-3D-up)" value="%%TOKEN%%">
-  <input type="file" id="f">
-  <button id="go" onclick="send()">Gui file</button>
+  <input type="file" id="f" onchange="updGo()">
+  <button id="go" onclick="send()" disabled>Gui file</button>
   <div id="bar"><i id="bi"></i></div>
   <pre id="log">san sang.</pre>
 </div>
@@ -85,7 +85,14 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 </div>
 <script>
 var q=new URLSearchParams(location.search); if(q.get('token')) document.getElementById('tok').value=q.get('token');
+var upBusy=false;                      // dang gui file -> khoa nut "Gui file"
 function log(t){document.getElementById('log').textContent=t;}
+// Nut "Gui file": CHI bat khi DA CHON FILE va KHONG dang gui (yeu cau nguoi dung 2026-10-15).
+// CSS da co `button:disabled{opacity:.5}` va trinh duyet chan click khi nut bi disabled.
+function updGo(){
+  var hasFile=document.getElementById('f').files.length>0;
+  document.getElementById('go').disabled=(!hasFile || upBusy);
+}
 function fmtB(n){ if(n>=1048576) return (n/1048576).toFixed(2)+' MB'; if(n>=1024) return Math.round(n/1024)+' KB'; return n+' B'; }
 function poll(){fetch('/status').then(r=>r.json()).then(j=>{
   document.getElementById('bi').style.width=(j.total_bytes?Math.round(j.rx_bytes*100/j.total_bytes):0)+'%';
@@ -132,7 +139,9 @@ function delFile(n,isdir,row,btn){
    });
 }
 function send(){
-  var f=document.getElementById('f').files[0]; if(!f){log('chua chon file');return;}
+  var f=document.getElementById('f').files[0];
+  if(!f){log('chua chon file');updGo();return;}
+  if(upBusy){log('dang gui file khac - doi xong da');updGo();return;}
   var tok=document.getElementById('tok').value;
   var fd=new FormData(); fd.append('name',f.name); fd.append('size',f.size); fd.append('file',f, f.name);
   var x=new XMLHttpRequest();
@@ -140,10 +149,12 @@ function send(){
   x.setRequestHeader('X-CYDLCD-Token',tok);
   x.upload.onprogress=function(e){document.getElementById('bi').style.width=
      (e.lengthComputable?Math.round(e.loaded*100/e.total):0)+'%';};
-  x.onload=function(){log('tra loi: '+x.responseText); poll(); loadFiles();};
-  x.onerror=function(){log('loi ket noi toi cydlcd');};
+  x.onload=function(){log('tra loi: '+x.responseText);upBusy=false;updGo();poll();loadFiles();};
+  x.onerror=function(){log('loi ket noi toi cydlcd');upBusy=false;updGo();};
   x.send(fd); log('dang gui '+f.name+' ('+f.size+' B)...');
+  upBusy=true; updGo();                // KHOA nut ngay khi bat dau gui (tranh bam 2 lan)
 }
+updGo();
 loadFiles();
 </script></body></html>)HTML";
 

@@ -1068,6 +1068,9 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > * **Ô token được điền sẵn `CYDLCD_HTTP_TOKEN`** (mặc định `TBT-3D-up`) khi trả trang: `handle_root()` copy
 >   trang từ PROGMEM ra `String` rồi thay placeholder `%%TOKEN%%` — không phải gõ tay nữa. Vẫn đổi được bằng
 >   `?token=...` (JS ghi đè giá trị trong ô nhập nếu URL có token).
+> * **Nút “Gửi file” chỉ bật khi đã chọn file** (`<button … disabled>` + `input[type=file] onchange="updGo()"`)
+>   và **bị khoá trong suốt lúc đang gửi** (`upBusy`, mở lại ở `x.onload`/`x.onerror`) ⇒ không bấm được khi
+>   chưa có file và không gửi trùng 2 lần.
 > * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
 >   đồng ở §9.21. Cả hai đều cần token như `/upload`.
 > * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
