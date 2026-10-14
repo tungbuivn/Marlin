@@ -50,7 +50,8 @@
  *             1 hang preset PLA 200/60 | PETG 230/60 | ABS 240/60 (M104 + M140), COOLDOWN.
  *   JOG     : chon truc X/Y/Z, nut -0.1/+0.1/-1/+1/-10/+10 mm -> G91 + G1 <truc><d> F600 + G90,
  *             nut HOME ALL -> G28.
- *   FILES   : lv_roller danh sach cydlcd.files[], PRINT (M23 + M24), DIR, UP, REFRESH,
+ *   FILES   : FILES_ROWS dong file cua cydlcd.files[] (cham 1 dong = chon + to sang; lat trang
+ *             bang PREV/NEXT), PRINT (M23 + M24), DIR, UP, REFRESH, PREV/NEXT, XOA FILE (M30),
  *             PAUSE (M25), RESUME (M24), STOP (M524).
  *   SETTINGS: bang thong so cydlcd_setting(CYDLCD_SET_*), cham 1 dong -> lop phu -/+/OK de SUA
  *             (gui M92/M203/M201/M205/M851/M220/M221/M301/M304/M106/M104/M140) +
@@ -705,6 +706,9 @@ void ui_lvgl_dump_layout(void) {
   }
   else Serial.println("[UI] (trang chua duoc tao)");
 
+  // Man FILE: in them DONG DANG CHON (chi so + ten) - de doi chieu voi dong vua cham (`UI TAP <i>`).
+  if (s_page_act == PG_FILES) page_files_dump();
+
   // LOP PHU / HOP THOAI nam tren `lv_layer_top()` (msgbox, lop phu SUA, ban phim WiFi...).
   // In luon de kiem tra vi tri: hop thong bao PHAI o GIUA man hinh (khong phai goc tren-trai).
   lv_obj_t *top = lv_layer_top();
@@ -719,6 +723,16 @@ void ui_lvgl_dump_layout(void) {
 void ui_lvgl_test_dialog(void) {
   ui_confirm("KIEM TRA", "Hop thoai nay phai nam GIUA man hinh", 0xFF, 1);
   ui_confirm_autoclose(6000);      // tu dong dong sau 6 s (khong de hop modal nam tren man)
+}
+
+// CHAN DOAN: ban su kien CHAM vao man FILE (lenh `UI TAP <gi>` tren COM7). Chi co y nghia khi man
+// FILE dang mo. Dung de kiem tra duong "cham 1 dong -> chon dung dong do" tu PC.
+void ui_lvgl_test_tap(const char *arg) {
+  if (s_page_act != PG_FILES) {
+    Serial.println("[UI] TAP chi dung cho man FILE (mo truoc bang 'UI FILE SD')");
+    return;
+  }
+  files_test_cmd(arg);
 }
 
 #endif  // CYDLCD_USE_LVGL

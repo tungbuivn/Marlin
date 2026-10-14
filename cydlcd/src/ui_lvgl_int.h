@@ -539,9 +539,9 @@ void preheat_inject(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_files.cpp (chang 3/4)
 // ---------------------------------------------------------------------------
-/** Man FILE SD: dong info + roller danh sach file + PRINT / DIR / XOA FILE. */
+/** Man FILE SD: dong info + FILES_ROWS dong file (moi dong la 1 nut: cham = chon + to sang) + 3 hang nut. */
 void page_files_create(lv_obj_t *p);
-/** Cap nhat dong info + roller danh sach file (chi dung lai roller khi danh sach DOI). */
+/** Cap nhat dong info + cac dong file (chi ve lai danh sach khi dau van tay / so file DOI). */
 void page_files_update(void);
 /**
  * Nha + init lai the SD roi moi xin danh sach file: gui M22 (nha the) + M21 (mount lai) xuong Marlin,
@@ -556,6 +556,14 @@ void files_delete_now(void);
  * init lai the SD / xoa file da het thoi gian cho -> xin lai danh sach + mo khoa nut + xoa ghi chu.
  */
 void files_job_task(void);
+/**
+ * CHAN DOAN man FILE (lenh `UI TAP <gi>` tren COM7): ban su kien CHAM vao 1 dong cua TRANG dang xem
+ * (`0..FILES_ROWS-1`), vao nut PREV (`P`) / NEXT (`N`) hoac nut XOA FILE (`D`); khong tham so = in
+ * trang thai. Di DUNG duong su kien that (cb_files_row/cb_files_prev/...) de kiem tra tu PC.
+ */
+void files_test_cmd(const char *arg);
+/** CHAN DOAN: in so file / trang dang xem / DONG DANG CHON cua man FILE (goi tu `UI BOX`). */
+void page_files_dump(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_settings.cpp (chang 3/4)
 // ---------------------------------------------------------------------------
@@ -638,7 +646,7 @@ void page_temp_destroy(void);
 void page_rate_destroy(void);
 /** Huy man JOG (3 nut truc). Giu `s_axis` (truc nguoi dung dang chon). */
 void page_jog_destroy(void);
-/** Huy man FILE SD (roller + dong info + nut XOA) va xoa cache danh sach de ve lai roller. */
+/** Huy man FILE SD (cac dong file + dong info + nut) va xoa cache danh sach de ve lai danh sach. */
 void page_files_destroy(void);
 /** Huy man SETTINGS (bang + dong info). Lop phu SUA (ov_*) thuoc lv_scr_act, KHONG xoa o day. */
 void page_settings_destroy(void);

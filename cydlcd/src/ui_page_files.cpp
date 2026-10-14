@@ -8,7 +8,8 @@
  * Gom:
  *   - "viec cham" cua man FILE (init lai the SD sau khi module khac ghi the, xoa file qua
  *     net_sd_delete_file) - chay o nhip 400 ms trong ui_lvgl_task() ke CA khi da roi man;
- *   - roller danh sach file + 3 nut (PRINT / DIR / XOA FILE) + dong info.
+ *   - FILES_ROWS dong file (moi dong la 1 NUT: cham = chon + to sang) + 3 hang nut
+ *     (PRINT/DIR/UP/REFRESH, PAUSE/RESUME/STOP, PREV/XOA FILE/NEXT) + dong info.
  *
  * HOP DONG voi net_upload_http.cpp (2 ham `weak`): xem khoi chu thich ngay duoi day.
  */
@@ -16,7 +17,8 @@
 #include "ui_lvgl_int.h"
 
 #include <stdio.h>                  // snprintf
-#include <string.h>                 // strcmp
+#include <stdlib.h>                 // atoi (lenh chan doan UI TAP)
+#include <string.h>                 // strcmp, strncpy
 #include <Arduino.h>                // Serial.printf (WIFILOG - xem ui_lvgl_int.h)
 
 #if CYDLCD_USE_LVGL
@@ -37,22 +39,40 @@ static bool sd_host_busy(void) { return net_upload_active && net_upload_active()
 extern "C" bool net_sd_delete_file(const char *name) __attribute__((weak));
 
 // ===========================================================================
-//  FILES  (PAGE_INN_H = 206)
-//    info 17 (font mono mode 4: line_height = 17) + roller 6 dong (6*16 = 96 voi Montserrat 14
-//    - chieu cao TINH THEO FONT THAT cua roller, xem page_files_create) + 3 hang nut 78
-//    + 5*GAP 10 = 201 <= 206.
-//  DAY MAN: 3 hang nut bi DAY XUONG DAY bang mk_spacer(grow) - truoc day roller chi 4 dong (64 px)
-//  nen thua 39 px o duoi; nay roller cao 6 dong (them ~2 dong file) va nut nam sat day man.
-//  (201 + 2*PAGE_PAD < CONT_H nen man nay KHONG tran -> khong hien thanh day PREV/NEXT)
+//  FILES  (vung noi dung 206 px = CONT_H 214 - 2*PAGE_PAD 4)
+//    info 17 (font mono mode 4: line_height = 17)
+//    + khung danh sach FILES_ROWS dong: 5*18 + 4*GAP(2) = 98
+//    + 3 hang nut 78 + 5*GAP 10 = 203 <= 206 (con 3 px cho vat dem GROW).
+//  DAY MAN: 3 hang nut bi DAY XUONG DAY bang mk_spacer(grow) -> danh sach file nam gon o tren.
+//  KHONG CUON: danh sach la FILES_ROWS NUT CO DINH, lat trang bang 2 nut PREV/NEXT o hang nut cuoi.
+//
+//  VI SAO BO ROLLER (yeu cau nguoi dung 2026-10-15: "danh sach file khong cuon nua, rat kho cuon,
+//  hay dung phan trang next prev va cham vao file/thu muc nao thi highlight cho do"):
+//   1) Cuon bang NGON TAY tren roller rat kho: phai keo dung cu ly moi doi duoc dong dang chon,
+//      cham nhe thi khong an -> nguoi dung tuong man hinh hong.
+//   2) LOI NANG HON: cham vao 1 dong cua roller KHONG lam `lv_roller_get_selected()` doi theo dong
+//      vua cham (roller chi doi lua chon khi KEO roi thang lai). Vi vay `files_selected()` tra ve
+//      dong DANG CHON CU -> bam XOA FILE tren 1 file lai di xoa/thu muc dang chon truoc do, gap
+//      that: nguoi dung chon 1 file ma man hinh bao "Khong xoa thu muc".
+//      Nay moi dong la 1 nut: cham vao dong nao la `s_sel` = dung dong do, va dong do duoc to sang.
 // ===========================================================================
-#define FILES_BTN_H   26
-#define FILES_ROWS    6                 // so dong file nhin thay (truoc: 4)
+#define FILES_BTN_H   26                // cao 1 hang nut (PRINT... / PAUSE... / PREV...)
+#define FILES_ROWS    5                 // so dong file trong 1 TRANG
+#define FILES_ROW_H   18                // cao 1 dong file (= 1 nut chon; >= line_height 17 cua font)
 
-static lv_obj_t *fl_roller, *fl_info;
-static lv_obj_t *fl_del;                        // nut XOA FILE (tam khoa trong luc dang xoa)
-static char      s_roller_buf[CYDLCD_MAX_FILES * CYDLCD_FILE_NAME_LEN + 1];
-static uint32_t  s_files_sig = 0;
-static uint8_t   s_files_n   = 0;
+static lv_obj_t *fl_info;                        // dong "SD: n file  T1/2" (hoac ghi chu tam thoi)
+static lv_obj_t *fl_rows;                        // khung flex COLUMN chua FILES_ROWS dong file
+static lv_obj_t *fl_row[FILES_ROWS];             // FILES_ROWS nut dong file
+static lv_obj_t *fl_del;                         // nut XOA FILE (tam khoa trong luc dang xoa)
+static lv_obj_t *fl_prev, *fl_next;              // lat trang danh sach file
+static uint32_t  s_files_sig = 0;                // dau van tay cua danh sach da ve
+static uint8_t   s_files_n   = 0;                // so file cua lan ve truoc
+// Dong dang CHON: luu CHI SO TUYET DOI trong cydlcd.files[] (KHONG phai chi so trong trang) + TEN
+// cua no. Ten dung de giu lua chon qua cac lan danh sach DOI (REFRESH / xoa xong): thu tu file do
+// FAT/Marlin quyet dinh nen chi so cu co the tro sang file KHAC.
+static uint8_t   s_sel = 0;
+static uint8_t   s_pg  = 0;                      // trang dang xem (0-based)
+static char      s_sel_name[CYDLCD_FILE_NAME_LEN];
 
 // ---------------------------------------------------------------------------
 //  Viec CHAM cua man FILE (init the SD + xoa file): chay o nhip 400 ms trong ui_lvgl_task(),
@@ -84,56 +104,150 @@ static void files_job_start(const uint8_t job) {
   s_fl_job_ms = lv_tick_get();
 }
 
-// FNV-1a don gian tren ten+co cua danh sach file -> biet khi nao phai tao lai roller
+// So file THAT SU dung duoc (Marlin co the gui qua CYDLCD_MAX_FILES -> chan lai cho an toan)
+static uint8_t files_count(void) {
+  return (cydlcd.n_files > CYDLCD_MAX_FILES) ? (uint8_t)CYDLCD_MAX_FILES : cydlcd.n_files;
+}
+
+// Tong so TRANG danh sach (luon >= 1 de mau so cua "T x/y" khac 0)
+static uint8_t files_npages(void) {
+  const uint8_t n = files_count();
+  const uint8_t p = (uint8_t)((n + FILES_ROWS - 1) / FILES_ROWS);
+  return p ? p : 1;
+}
+
+// FNV-1a don gian tren ten+co cua danh sach file -> biet khi nao phai ve lai cac dong
 static uint32_t files_signature(void) {
   uint32_t h = 2166136261UL;
-  for (uint8_t i = 0; i < cydlcd.n_files; i++) {
+  for (uint8_t i = 0; i < files_count(); i++) {
     for (const char *s = cydlcd.files[i].name; *s; s++) h = (h ^ (uint8_t)*s) * 16777619UL;
     h = (h ^ cydlcd.files[i].flags) * 16777619UL;
   }
   return h ^ ((uint32_t)cydlcd.n_files << 24);
 }
 
-static void files_rebuild(void) {
-  if (!fl_roller) return;             // trang FILE da bi thu hoi -> khong con roller de ve lai
-  uint8_t n = cydlcd.n_files;
-  if (n > CYDLCD_MAX_FILES) n = CYDLCD_MAX_FILES;
-
-  char *p = s_roller_buf;
-  size_t left = sizeof(s_roller_buf);
-  s_roller_buf[0] = '\0';
-
-  if (!n) {
-    snprintf(p, left, "(khong co file)");
-  }
-  else {
-    for (uint8_t i = 0; i < n; i++) {
-      const bool isdir = ((cydlcd.files[i].flags & 0x01U) != 0);
-      // Ten RONG (Marlin khong gui ten dai va cung khong lui ve ten 8.3 - ban cu): hien ro
-      // "(khong ten)" thay vi de 1 dong TRONG, vi dong trong trong nhu loi UI (gap that tren the nay:
-      // mot thu muc chi co ten 8.3). Xem cydlcd_serial.cpp: files_pump() da co duong lui 8.3.
-      const char *pname = cydlcd.files[i].name;
-      if (!pname[0]) pname = "(khong ten)";
-      const int w = snprintf(p, left, "%s%s%s", (i ? "\n" : ""), isdir ? "[D] " : "", pname);
-      if (w < 0 || (size_t)w >= left) break;
-      p += w;
-      left -= (size_t)w;
-    }
-  }
-
-  uint16_t sel = lv_roller_get_selected(fl_roller);
-  if (sel >= n) sel = n ? (uint16_t)(n - 1) : 0;
-  lv_roller_set_options(fl_roller, s_roller_buf, LV_ROLLER_MODE_NORMAL);
-  lv_roller_set_selected(fl_roller, sel, LV_ANIM_OFF);
+// Chu cua 1 dong: "[D] ten" cho thu muc. Ten RONG (Marlin khong gui ten dai va cung khong lui ve
+// ten 8.3 - ban cu): hien ro "(khong ten)" thay vi de 1 dong TRONG, vi dong trong trong nhu loi UI
+// (gap that tren the nay: mot thu muc chi co ten 8.3). Xem cydlcd_serial.cpp: files_pump() da co
+// duong lui 8.3.
+static void files_row_text(const uint8_t i, char *b, const size_t n) {
+  const char *nm = cydlcd.files[i].name;
+  if (!nm[0]) nm = "(khong ten)";
+  snprintf(b, n, "%s%s", (cydlcd.files[i].flags & 0x01U) ? "[D] " : "", nm);
 }
 
-// Lay ten file dang chon trong roller (tra ve NULL neu khong hop le)
+// Khoa/mo 1 nut theo kieu "khong bam duoc": LV_STATE_DISABLED KHONG chi de to mo -
+//   - lv_indev.c:412 chan luon su kien CHAM vao vat disabled,
+//   - lv_group.c:434 bo qua vat disabled khi di chuyen focus (chan ca duong encoder),
+// nen day la cach khoa THAT SU (khac han viec chi doi mau chu). Chi ghi khi trang thai DOI.
+static void files_btn_enable(lv_obj_t *b, const bool on) {
+  if (!b) return;
+  if (lv_obj_has_state(b, LV_STATE_DISABLED) == !on) return;   // da dung trang thai -> thoi
+  lv_obj_t *l = lv_obj_get_child(b, 0);
+  if (on) lv_obj_clear_state(b, LV_STATE_DISABLED);
+  else    lv_obj_add_state(b, LV_STATE_DISABLED);
+  if (l) lv_obj_set_style_text_color(l, on ? COL_TXT : COL_DIM, 0);
+}
+
+// Khoa/mo 2 nut lat trang theo TRANG dang xem (goi ngay sau moi lan doi trang, khong doi nhip 400 ms
+// cua page_files_update() - de nut khoa/mo dung luc nguoi dung vua bam).
+static void files_nav_mark(void) {
+  const uint8_t np = files_npages();
+  files_btn_enable(fl_prev, s_pg > 0);
+  files_btn_enable(fl_next, (uint8_t)(s_pg + 1) < np);
+}
+
+// To lai tung dong cua TRANG dang xem: dong nao ngoai danh sach -> AN; dong DANG CHON -> nen
+// COL_ACCENT + chu dam (giong dong dang chon cua roller cu), con lai -> nen nut / chu thuong.
+static void files_rows_mark(void) {
+  const uint8_t n = files_count();
+  for (uint8_t i = 0; i < FILES_ROWS; i++) {
+    lv_obj_t *r = fl_row[i];
+    if (!r) continue;                              // trang FILE da bi thu hoi
+    const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
+    if (idx >= n) { lv_obj_add_flag(r, LV_OBJ_FLAG_HIDDEN); continue; }
+    lv_obj_clear_flag(r, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *l = lv_obj_get_child(r, 0);
+    if (!l) continue;
+    char b[CYDLCD_FILE_NAME_LEN + 6];
+    files_row_text(idx, b, sizeof(b));
+    set_text(l, b);                                // set_text() tu bo qua khi chu khong doi
+    const bool on = (idx == s_sel);
+    lv_obj_set_style_bg_color(r, on ? COL_ACCENT : COL_BTN, 0);
+    lv_obj_set_style_text_color(l, on ? lv_color_hex(0x102030) : COL_TXT, 0);
+  }
+}
+
+// Ve lai danh sach tu dau: GIU LUA CHON THEO TEN (danh sach vua doi), dua con tro ve trang chua
+// dong dang chon, khoa/mo 2 nut PREV/NEXT theo trang. Goi khi trang vua tao lai hoac danh sach DOI.
+static void files_rows_reload(void) {
+  if (!fl_rows) return;                            // trang FILE da bi thu hoi -> khong co dong nao
+  const uint8_t n = files_count();
+  const uint8_t old = s_sel;
+
+  if (s_sel_name[0]) {
+    uint8_t found = 0xFFU;
+    for (uint8_t i = 0; i < n; i++)
+      if (strcmp(cydlcd.files[i].name, s_sel_name) == 0) { found = i; break; }
+    s_sel = (found != 0xFFU) ? found : 0;          // ten cu khong con (vua bi xoa) -> ve dong dau
+  }
+  if (!n) s_sel = 0;
+  else if (s_sel >= n) s_sel = (uint8_t)(n - 1);
+  s_pg = (uint8_t)(s_sel / FILES_ROWS);
+
+  if (n) {
+    strncpy(s_sel_name, cydlcd.files[s_sel].name, sizeof(s_sel_name) - 1);
+    s_sel_name[sizeof(s_sel_name) - 1] = '\0';
+  }
+  else s_sel_name[0] = '\0';
+
+  // Log khi danh sach DOI lam DONG DANG CHON doi theo (chi so cu -> chi so moi): de phan biet voi
+  // 1 lan CHAM that (xem log trong cb_files_row).
+  if (s_sel != old)
+    WIFILOG("FILES: danh sach doi -> chon lai #%u <<%s>>\n", (unsigned)s_sel, s_sel_name);
+
+  files_rows_mark();
+  files_nav_mark();
+}
+
+// Lat 1 trang danh sach (dir > 0 = NEXT, dir < 0 = PREV). Dung lai o 2 dau.
+static void files_page_move(const int8_t dir) {
+  const uint8_t np = files_npages();
+  int p = (int)s_pg + ((dir > 0) ? 1 : -1);
+  if (p < 0) p = 0;
+  if (p > (int)np - 1) p = (int)np - 1;
+  if ((uint8_t)p == s_pg) return;                  // dang o dau/cuoi -> khong lam gi
+  s_pg = (uint8_t)p;
+  files_rows_mark();
+  files_nav_mark();
+  WIFILOG("FILES: trang %u/%u (dong dang chon %u/%u)\n", (unsigned)(s_pg + 1), (unsigned)np,
+          (unsigned)(s_sel + 1), (unsigned)files_count());
+}
+
+// Lay file dang CHON (dong da to sang). Tra NULL khi danh sach rong / chi so ngoai pham vi.
+// DUNG CHUNG cho PRINT / DIR / XOA FILE -> moi lenh tac dong DUNG dong nguoi dung da cham.
 static const cydlcd_file_t *files_selected(void) {
-  if (!fl_roller) return NULL;        // trang FILE da bi thu hoi (an toan: xem page_files_destroy)
-  const uint16_t sel = lv_roller_get_selected(fl_roller);
-  if (sel >= cydlcd.n_files || sel >= CYDLCD_MAX_FILES) return NULL;
-  return &cydlcd.files[sel];
+  const uint8_t n = files_count();
+  if (!n || s_sel >= n) return NULL;
+  return &cydlcd.files[s_sel];
 }
+
+// Cham 1 dong: CHI CHON (to sang) - KHONG in, KHONG vao thu muc (theo yeu cau: chi nut PRINT moi in).
+static void cb_files_row(lv_event_t *e) {
+  const uint8_t i = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
+  if (idx >= files_count() || idx == s_sel) return;
+  s_sel = idx;
+  strncpy(s_sel_name, cydlcd.files[idx].name, sizeof(s_sel_name) - 1);
+  s_sel_name[sizeof(s_sel_name) - 1] = '\0';
+  files_rows_mark();
+  // Log moi lan CHON file: de doi chieu voi dong vua cham that (`UI TAP <n>` hoac tay cham man hinh).
+  WIFILOG("FILES: cham dong %u -> chon file #%u <<%s>>%s\n", (unsigned)i, (unsigned)idx,
+          cydlcd.files[idx].name, (cydlcd.files[idx].flags & 0x01U) ? " [thu muc]" : "");
+}
+
+static void cb_files_prev(lv_event_t *e) { (void)e; files_page_move(-1); }
+static void cb_files_next(lv_event_t *e) { (void)e; files_page_move(+1); }
 
 static void files_do(const bool force_dir) {
   // The SD DUNG CHUNG: dang nhan file qua WiFi thi MAN HINH CYD dang giu bus SPI -> khong duoc gui lenh
@@ -195,13 +309,12 @@ void files_init_sd(void) {
 static void cb_files_refresh(lv_event_t *e) { (void)e; files_init_sd(); }
 
 // ---------------------------------------------------------------------------
-//  XOA FILE dang chon trong roller (M30)
+//  XOA FILE dang chon (M30)
 // ---------------------------------------------------------------------------
 static char    s_del_name[CYDLCD_FILE_NAME_LEN];   // ten file nguoi dung da xac nhan xoa
 static uint8_t s_del_flags = 0;                   // flags tai luc hoi (bit0 = thu muc)
 
-// Khoa/mo nut XOA FILE. Chi doi khi trang thai THAT SU doi (tranh invalidate moi 400 ms).
-// Dung LV_STATE_DISABLED: lv_group bo qua vat disabled (lv_group.c) -> khoa ca duong encoder.
+// Khoa/mo nut XOA FILE trong luc dang xoa (xem files_btn_enable: LV_STATE_DISABLED la khoa THAT SU).
 static void files_del_lock(const bool on) {
   if (!fl_del || lv_obj_has_state(fl_del, LV_STATE_DISABLED) == on) return;
   lv_obj_t *l = lv_obj_get_child(fl_del, 0);
@@ -282,41 +395,41 @@ void files_job_task(void) {
   files_del_lock(false);
 
   // Xoa dem TRUOC khi xin: neu thu muc chi con 0 file thi Marlin chi gui frame KET THUC (0xFF)
-  // -> handle_frame() khong tu reset n_files, roller se van hien file vua xoa.
+  // -> handle_frame() khong tu reset n_files, danh sach se van hien file vua xoa.
   cydlcd.files_done = false;
   cydlcd.n_files    = 0;
-  do_action((int)A_REQ_FILES);           // xin lai danh sach -> page_files_update() ve lai roller
+  do_action((int)A_REQ_FILES);           // xin lai danh sach -> page_files_update() ve lai cac dong
 }
 
 void page_files_create(lv_obj_t *p) {
   fl_info = mk_label_w(p, "SD: -", COL_TXT, PAGE_INN_W);
 
-  fl_roller = lv_roller_create(p);
-  lv_obj_set_width(fl_roller, PAGE_INN_W);
-  lv_roller_set_visible_row_count(fl_roller, FILES_ROWS);
-  // Chieu cao TINH THEO FONT THAT cua roller (lv_roller_set_visible_row_count() chi dat chieu cao
-  // theo font LUC GOI; o day dat lai bang so nguyen lan line_height de khong co dong bi cat ngang).
-  const lv_font_t *rf = lv_obj_get_style_text_font(fl_roller, LV_PART_MAIN);
-  lv_obj_set_height(fl_roller, (lv_coord_t)(lv_font_get_line_height(rf) * FILES_ROWS));
-  lv_roller_set_options(fl_roller, "(chua co du lieu)", LV_ROLLER_MODE_NORMAL);
-  lv_obj_set_style_bg_color(fl_roller, COL_BTN, 0);
-  lv_obj_set_style_bg_opa(fl_roller, LV_OPA_COVER, 0);
-  lv_obj_set_style_text_color(fl_roller, COL_TXT, 0);
-  lv_obj_set_style_border_width(fl_roller, 0, 0);
-  lv_obj_set_style_text_color(fl_roller, lv_color_hex(0x102030), LV_PART_SELECTED);
-  lv_obj_set_style_bg_color(fl_roller, COL_ACCENT, LV_PART_SELECTED);
-  lv_obj_set_style_bg_opa(fl_roller, LV_OPA_COVER, LV_PART_SELECTED);
-  lv_obj_add_flag(fl_roller, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-  if (s_group) lv_group_add_obj(s_group, fl_roller);
-  // CHAM/QUAY CHI DE CHON FILE - KHONG tu in (theo yeu cau 2026-10-15).
-  // VI SAO BO: truoc day roller co `LV_EVENT_CLICKED -> cb_files_print` (hop ly voi encoder kieu cu
-  // "bam lan 2 = in"), nhung tren man CAM UNG thi chi CHAM VAO danh sach la may in luon (gap that:
-  // nguoi dung chi dinh keo danh sach da kich hoat ban in). Nay chi nut `PRINT` moi gui M23+M24;
-  // voi encoder: quay = chon file, bam nut = vao che do chon (LVGL tu xu ly), roi bam `PRINT`.
-  // (Ham cb_files_print() van dung cho nut PRINT.)
+  // Khung danh sach: FILES_ROWS dong CO DINH, KHONG cuon (phan trang bang PREV/NEXT).
+  // Cao = FILES_ROWS*FILES_ROW_H + (FILES_ROWS-1)*GAP: khop DUNG so dong ben trong nen khung khong
+  // bao gio tu cuon (khung la mk_flex -> da clear SCROLLABLE).
+  fl_rows = mk_flex(p, LV_FLEX_FLOW_COLUMN, PAGE_INN_W,
+                    (lv_coord_t)(FILES_ROWS * FILES_ROW_H + (FILES_ROWS - 1) * GAP), 0, GAP);
+  for (uint8_t i = 0; i < FILES_ROWS; i++) {
+    lv_obj_t *r = mk_btn(fl_rows, "", PAGE_INN_W, FILES_ROW_H, cb_files_row, (void *)(intptr_t)i);
+    // Nen cua dong do CHINH NO quan ly (chon = COL_ACCENT) nen phai dat LV_OBJ_FLAG_USER_1: focus_mark()
+    // chi ve VIEN cho vat co co nay, khong ghi de nen -> dau "dang chon" khong bi focus xoa mat
+    // (xem focus_mark() o ui_widgets.cpp - cung ly do voi cac nut truc o man JOG).
+    lv_obj_add_flag(r, LV_OBJ_FLAG_USER_1);
+    // Chu canh TRAI (ten file doc de hon chu canh giua) + CAT BANG "..." khi ten dai:
+    // KHONG dung che do cuon vong nhu fl_info vi FILES_ROWS nhan cung cuon = FILES_ROWS animator
+    // chay lien tuc, ton CPU vo ich (ten file toi da 32 ky tu x 8 px = 256 < 312 px nen it khi cat).
+    lv_obj_t *l = lv_obj_get_child(r, 0);
+    if (l) {
+      lv_obj_set_width(l, PAGE_INN_W - 6);
+      lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+      lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_LEFT, 0);
+      lv_obj_align(l, LV_ALIGN_LEFT_MID, 3, 0);
+    }
+    fl_row[i] = r;
+  }
 
-  // 3 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut duoi (PAUSE/RESUME/STOP)
-  // + 1 hang rieng cho XOA FILE (viec khong hoan tac duoc -> de rieng, de bam nham)
+  // 3 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut giua (PAUSE/RESUME/STOP)
+  // + 1 hang cuoi (PREV / XOA FILE / NEXT).
   // Vat dem GROW truoc hang nut: hut het cho trong con lai -> 3 hang nut luon nam SAT DAY man
   // (nho vay phan tren danh tron cho danh sach file - xem khoi chu thich dau file).
   mk_spacer(p, 0, 0, 1);
@@ -333,44 +446,145 @@ void page_files_create(lv_obj_t *p) {
   mk_btn_grow(r2, "RESUME", FILES_BTN_H, cb_action, (void *)(intptr_t)A_RESUME);
   mk_btn_grow(r2, "STOP (M524)", FILES_BTN_H, cb_action, (void *)(intptr_t)A_STOP);
 
-  // Hang 3: XOA FILE dang chon trong roller (M30). Phai xac nhan 2 buoc (xem cb_files_delete).
+  // Hang cuoi: [PREV] [XOA FILE] [NEXT]. PREV/NEXT lat TUNG TRANG danh sach (khong cuon tay).
+  // XOA FILE nam giua 2 nut lat trang (thao tac KHONG hoan tac duoc -> phai xac nhan 2 buoc, xem
+  // cb_files_delete) - 2 nut lat trang la vo hai nen dat canh nhau khong lam tang rui ro bam nham.
   lv_obj_t *r3 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
-  fl_del = mk_btn_grow(r3, "XOA FILE", FILES_BTN_H, cb_files_delete, NULL);
+  fl_prev = mk_btn_grow(r3, "PREV", FILES_BTN_H, cb_files_prev, NULL);
+  fl_del  = mk_btn_grow(r3, "XOA FILE", FILES_BTN_H, cb_files_delete, NULL);
+  fl_next = mk_btn_grow(r3, "NEXT", FILES_BTN_H, cb_files_next, NULL);
 }
 
 void page_files_update(void) {
-  if (!fl_roller || !fl_info) return;     // trang da bi thu hoi (an toan: xem page_files_destroy)
-  char b[40];
-  // Dong info: uu tien trang thai viec cham (init the / dang xoa) va ghi chu ngan, roi moi den so file.
-  const bool live = (s_fl_note && s_fl_job != FLJOB_NONE);
-  const bool temp = (s_fl_note && s_fl_note_ms && lv_tick_elaps(s_fl_note_ms) < FILES_NOTE_MS);
-  if (live || temp) set_text(fl_info, s_fl_note);
-  else {
-    snprintf(b, sizeof(b), "SD: %u file%s", (unsigned)cydlcd.n_files, cydlcd.files_done ? "" : " (dang nhan)");
-    set_text(fl_info, b);
-  }
+  if (!fl_rows || !fl_info) return;     // trang da bi thu hoi (an toan: xem page_files_destroy)
 
   const uint32_t sig = files_signature();
   if (sig != s_files_sig || cydlcd.n_files != s_files_n) {
     s_files_sig = sig;
     s_files_n   = cydlcd.n_files;
-    files_rebuild();
+    files_rows_reload();                // danh sach DOI -> giu lua chon theo ten roi ve lai cac dong
+  }
+
+  const uint8_t n  = files_count();
+  const uint8_t np = files_npages();
+  // Dong info: uu tien trang thai viec cham (init the / dang xoa) va ghi chu ngan, roi moi den so file.
+  // So trang chi hien khi danh sach co nhieu hon 1 trang (man gon thi khong them chu thua).
+  // Ten file dang CHON luon hien o cuoi (" >ten"): khi lat sang trang khac thi khong dong nao duoc to
+  // sang nua, nen day la cho DUY NHAT con cho biet dang chon file nao (truoc khi bam PRINT/XOA FILE).
+  // Ten dai hon o -> fl_info tu cuon vong (mk_label_w), khong bi cat cut.
+  char b[96], sel[CYDLCD_FILE_NAME_LEN + 6];
+  sel[0] = '\0';
+  if (n) files_row_text(s_sel, sel, sizeof(sel));      // "[D] ten" hoac "(khong ten)"
+  const char *sn = sel[0] ? " >" : "";
+  if (np > 1)
+    snprintf(b, sizeof(b), "SD: %u file%s T%u/%u%s%s", (unsigned)n,
+             cydlcd.files_done ? "" : " (dang nhan)", (unsigned)(s_pg + 1), (unsigned)np, sn, sel);
+  else
+    snprintf(b, sizeof(b), "SD: %u file%s%s%s", (unsigned)n,
+             cydlcd.files_done ? "" : " (dang nhan)", sn, sel);
+
+  const bool live = (s_fl_note && s_fl_job != FLJOB_NONE);
+  const bool temp = (s_fl_note && s_fl_note_ms && lv_tick_elaps(s_fl_note_ms) < FILES_NOTE_MS);
+  if (live || temp) set_text(fl_info, s_fl_note);
+  else set_text(fl_info, b);
+
+  // PREV/NEXT: nut nao khong con gi de lat thi KHOA THAT SU (xem files_btn_enable) - khong de nguoi
+  // dung bam mai ma khong hieu vi sao khong co gi xay ra. Chi ghi khi trang thai doi.
+  files_nav_mark();
+}
+
+// Huy man FILE SD (xem quy uoc o ui_lvgl_int.h): dat NULL cac con tro widget va XOA CACHE danh sach
+// file. VI SAO phai xoa cache: page_files_update() chi goi files_rows_reload() khi dau van tay
+// (s_files_sig) hoac so file DOI - ma lan mo lai trang thi cac dong la vat MOI (chu rong), nen neu
+// giu cache cu thi danh sach file se KHONG duoc ve lai.
+// s_fl_note / s_fl_job: GIU NGUYEN - viec cham (M22/M21, M30) van phai chay tiep khi da roi trang
+// (xem files_job_task), va files_job_task() tu xoa ghi chu khi xong.
+// s_sel / s_pg / s_sel_name: GIU NGUYEN - lan mo lai trang van dung dong dang chon (files_rows_reload
+// tu kiem tra lai ten file va dua con tro ve dung trang).
+void page_files_destroy(void) {
+  fl_info = NULL;
+  fl_rows = NULL;
+  fl_del  = NULL;
+  fl_prev = NULL;
+  fl_next = NULL;
+  for (uint8_t i = 0; i < FILES_ROWS; i++) fl_row[i] = NULL;
+  s_files_sig = 0;
+  s_files_n   = 0xFFU;      // 0xFF = "chua biet" -> buoc page_files_update() ke tiep dung lai danh sach
+}
+
+// ---------------------------------------------------------------------------
+//  CHAN DOAN (khong anh huong logic) - de kiem tra man FILE tu PC qua COM7.
+//  VI SAO CAN: man hinh CYD khong co framebuffer doc nguoc (driver ve thang ra SPI) nen khong the
+//  "chup anh" man hinh, va cung khong the cham tay vao man khi dang ngoi o PC. Hai ham duoi day
+//  cho phep: (1) ban su kien CHAM vao 1 dong de kiem tra duong chon file, (2) in ra dong nao
+//  dang duoc CHON - dung de kiem chung loi "chon 1 file ma bao Khong xoa thu muc".
+// ---------------------------------------------------------------------------
+// Ban su kien CLICKED vao 1 nut (di DUNG duong su kien that, nhu khi co nguoi cham vao nut do).
+static void files_test_click(lv_obj_t *b, const char *name) {
+  if (!b) { Serial.printf("[UI] FILES: khong co nut %s\n", name); return; }
+  lv_event_send(b, LV_EVENT_CLICKED, NULL);
+}
+
+// Lenh chan doan `UI TAP <gi>` tren COM7:
+//   <so 0..4> : ban CHAM vao dong thu <so> CUA TRANG dang xem (kiem tra chon dung dong + to sang);
+//   P / N     : ban cham vao nut PREV / NEXT (kiem tra lat trang);
+//   D         : ban cham vao nut XOA FILE (kiem tra dung dong nao bi coi la "thu muc"); hop xac nhan
+//               (neu mo) TU DONG dong sau 4 s -> khong de hop modal nam tren man.
+//   (khong tham so): chi in trang thai (giong `UI BOX`).
+void files_test_cmd(const char *arg) {
+  if (!fl_rows) { Serial.println("[UI] FILES: trang chua duoc tao (mo truoc bang 'UI FILE SD')"); return; }
+  while (arg && *arg == ' ') arg++;
+  if (!arg || !*arg) { page_files_dump(); return; }
+
+  char c = *arg;
+  if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');   // khong can ctype.h
+  if (c == 'P') { files_page_move(-1); page_files_dump(); return; }
+  if (c == 'N') { files_page_move(+1); page_files_dump(); return; }
+  if (c == 'D') {
+    files_test_click(fl_del, "XOA FILE");
+    ui_confirm_autoclose(4000);          // vo hai khi khong co hop nao duoc mo
+    page_files_dump();
+    return;
+  }
+
+  const int i = atoi(arg);
+  if (i < 0 || i >= (int)FILES_ROWS) {
+    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P (trang truoc) | N (trang sau) | D (XOA FILE)\n",
+                  (unsigned)(FILES_ROWS - 1));
+    return;
+  }
+  if (lv_obj_has_flag(fl_row[i], LV_OBJ_FLAG_HIDDEN)) {
+    Serial.printf("[UI] FILES: dong %d dang AN (ngoai danh sach)\n", i);
+    return;
+  }
+  files_test_click(fl_row[i], "dong file");
+  page_files_dump();
+}
+
+// In trang thai danh sach FILE (goi tu `UI BOX` khi dang o man FILE): so file, trang dang xem, DONG
+// DANG CHON (chi so TUYET DOI + ten + co thu muc) va TUNG DONG dang hien (chu THAT tren widget +
+// dong nao dang to nen COL_ACCENT) - nho vay kiem chung duoc ca phan "cham vao dong nao thi dong do
+// sang" chu khong chi doc lai du lieu cua Marlin.
+void page_files_dump(void) {
+  if (!fl_rows) { Serial.println("[UI] FILES: trang chua duoc tao"); return; }
+  const cydlcd_file_t *f = files_selected();
+  Serial.printf("[UI] FILES: %u file | trang %u/%u | chon #%u <<%s>> (s_sel_name=\"%s\") | PREV=%s NEXT=%s\n",
+                (unsigned)files_count(), (unsigned)(s_pg + 1), (unsigned)files_npages(),
+                (unsigned)s_sel, f ? f->name : "", s_sel_name,
+                (fl_prev && lv_obj_has_state(fl_prev, LV_STATE_DISABLED)) ? "khoa" : "mo",
+                (fl_next && lv_obj_has_state(fl_next, LV_STATE_DISABLED)) ? "khoa" : "mo");
+  for (uint8_t i = 0; i < FILES_ROWS; i++) {
+    lv_obj_t *r = fl_row[i];
+    if (!r) continue;
+    lv_obj_t *l = lv_obj_get_child(r, 0);
+    const char *txt = l ? lv_label_get_text(l) : "";
+    const bool hidden = lv_obj_has_flag(r, LV_OBJ_FLAG_HIDDEN);
+    const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
+    const bool lit = (lv_obj_get_style_bg_color(r, 0).full == COL_ACCENT.full);   // dang to sang?
+    Serial.printf("[UI]   dong %u -> file #%u%s%s%s : \"%s\"\n", (unsigned)i, (unsigned)idx,
+                  (idx == s_sel) ? " [CHON]" : "", lit ? " [NEN SANG]" : "",
+                  hidden ? " [AN]" : "", txt);
   }
 }
 
-// Huy man FILE SD (xem quy uoc o ui_lvgl_int.h): dat NULL 3 con tro widget va XOA CACHE danh sach
-// file. VI SAO phai xoa cache: page_files_update() chi goi files_rebuild() khi dau van tay
-// (s_files_sig) hoac so file DOI - ma lan mo lai trang thi fl_roller la vat MOI (dang hien
-// "(chua co du lieu)"), nen neu giu cache cu thi danh sach file se KHONG duoc ve lai.
-// s_fl_note / s_fl_job: GIU NGUYEN - viec cham (M22/M21, M30) van phai chay tiep khi da roi trang
-// (xem files_job_task), va files_job_task() tu xoa ghi chu khi xong.
-void page_files_destroy(void) {
-  fl_roller   = NULL;
-  fl_info     = NULL;
-  fl_del      = NULL;
-  s_files_sig = 0;
-  s_files_n   = 0xFFU;      // 0xFF = "chua biet" -> buoc page_files_update() ke tiep dung lai roller
-}
-
 #endif  // CYDLCD_USE_LVGL
-

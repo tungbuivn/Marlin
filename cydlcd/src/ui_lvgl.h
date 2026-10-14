@@ -52,6 +52,12 @@ void ui_lvgl_dump_layout(void);
 // hop thong bao phai nam GIUA man hinh. Dung voi lenh `UI TESTBOX` tren COM7.
 void ui_lvgl_test_dialog(void);
 
+// CHAN DOAN man FILE: ban su kien CHAM vao 1 dong cua TRANG dang xem (`UI TAP <0..4>`), vao nut
+// PREV (`UI TAP P`) / NEXT (`UI TAP N`) hoac nut XOA FILE (`UI TAP D`); khong tham so = in trang
+// thai danh sach. Di DUNG duong su kien that nen kiem tra duoc phan CHON file + to sang + lat trang
+// ma khong can cham tay vao man hinh.
+void ui_lvgl_test_tap(const char *arg);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.
