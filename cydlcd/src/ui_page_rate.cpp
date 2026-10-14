@@ -27,6 +27,23 @@
 
 static lv_obj_t *rt_fr, *rt_fl;
 
+// ---------------------------------------------------------------------------
+//  TU XIN LAI BANG THONG SO (FR/FL lay tu cydlcd_setting -> goi CYDLCD_F_SETTING cua Marlin).
+//
+//  VI SAO CAN: Marlin CHI gui lai bang thong so khi duoc HOI (`CYDLCD_REQ_SETTINGS`), khong tu day
+//  khi gia tri doi. Truoc day trang chi hoi SAU KHI BAM +/- cua chinh no, nen neu FR/FL doi tu cho
+//  khac (console COM7, G-code cua ban in, M220/M221 trong start G-code...) thi 2 nhan dung yen o
+//  gia tri CU cho toi khi roi trang roi vao lai (gap that khi do `M220 S42` tu console).
+//  => Mo trang thi hoi NGAY, va khi trang dang mo thi hoi lai dinh ky RT_REQ_MS.
+// ---------------------------------------------------------------------------
+static uint32_t s_req_ms = 0;               // moc lan hoi gan nhat
+#define RT_REQ_MS 2000u                     // 2 s: du tuoi, khong ton bang thong (1 lenh ngan)
+
+static void rate_request(void) {
+  s_req_ms = lv_tick_get();
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS);
+}
+
 // user_data: (which << 8) | delta   (which 0 = feed -> M220, 1 = flow -> M221)
 #define RATE_ADJ(w, d) ((void *)(intptr_t)(((unsigned)(w) << 8) | (unsigned)(uint8_t)(int8_t)(d)))
 
@@ -44,13 +61,13 @@ static void cb_rate_adj(lv_event_t *e) {
   snprintf(cmd, sizeof(cmd), which ? "M221 S%ld" : "M220 S%ld", (long)next);
   cydlcd_link_send_gcode(cmd);
   // Marlin doi that nhung so tren man lay tu goi SETTING -> xin gui lai cho khoi cu
-  cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS);
+  rate_request();
 }
 
 static void cb_rate_reset(lv_event_t *e) {
   (void)e;
   cydlcd_link_send_gcode2("M220 S100", "M221 S100");
-  cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS);
+  rate_request();
 }
 
 static void rate_row(lv_obj_t *p, const char *name, uint8_t which, const lv_img_dsc_t *icon,
@@ -72,10 +89,13 @@ void page_rate_create(lv_obj_t *p) {
   mk_btn(p, "RESET 100% (M220/M221 S100)", PAGE_INN_W, 34, cb_rate_reset, NULL);
   mk_label_w(p, "M220 S<n> = feed rate, M221 S<n> = flow rate", COL_DIM, PAGE_INN_W);
   mk_label_w(p, "gui ngay khi bam +/-  (xem o FR/FL tren STATUS)", COL_DIM, PAGE_INN_W);
+  rate_request();                          // hoi NGAY khi mo trang (dung gia tri, khong cho nhip sau)
 }
 
 void page_rate_update(void) {
   if (!rt_fr || !rt_fl) return;          // trang da bi thu hoi (an toan: xem page_rate_destroy)
+  // Dinh ky hoi lai bang thong so: FR/FL co the doi tu CHO KHAC (console, G-code ban in...).
+  if (lv_tick_elaps(s_req_ms) >= RT_REQ_MS) rate_request();
   char b[24];
   const int32_t fr = cydlcd_setting(CYDLCD_SET_FEEDRATE_PCT, 10000) / 100;
   const int32_t fl = cydlcd_setting(CYDLCD_SET_FLOW_PCT, 10000) / 100;
