@@ -69,6 +69,11 @@ void ui_lvgl_test_preheat(const char *arg);
 // ma `temp_lookup()` dang dung de HIEN THI. Dung khi "nhiet hien thi khong dung".
 void ui_lvgl_dump_temps(void);
 
+// CHAN DOAN trang thai may: in `st`/`fl`/file dang in/tien do + **co cho nhan file upload khong**
+// (lenh `UI BUSY` tren COM7, cung in kem trong `UI BOX`). Tra loi "lam sao biet may dang in?":
+// upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.
+void ui_lvgl_dump_busy(void);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.

@@ -78,20 +78,21 @@ void ip_str(char *dst, const size_t n, const IPAddress &ip) {
   snprintf(dst, n, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
 }
 
-// Marlin dang in? (khong cho nhan file khi may dang in - 2 nguoi ghi cung 1 FAT la khong an toan)
+// Marlin dang IN TU THE SD? (khong cho nhan file khi may dang in - 2 nguoi ghi cung 1 FAT la khong an toan)
+//
+// !!! CHI xet CO IN TU THE SD, KHONG xet trang thai may noi chung !!!
+// VI SAO (loi nguoi dung bao 2026-10-15: "upload cung bi block voi ly do may in dang in, toi bam G35
+// thoi chu co phai in dau?"): truoc day ham nay con chan khi `cydlcd.state` la PRINTING/HOMING/
+// LEVELING/RUNOUT/KILLED. Nhung:
+//   - G35 (Bed Tramming Wizard) chi HOME + PROBE -> Marlin bao HOMING/LEVELING (hoac PRINTING qua
+//     `isPrinting()` vi print_job_timer dang chay) trong khi KHONG he doc the SD;
+//   - cac trang thai do KHONG dung the SD -> ghi file upload tu man hinh la AN TOAN.
+// Chi khi Marlin dang IN TU THE SD (`CYDLCD_SF_SD_PRINTING`: Marlin doc the lien tuc) hoac dang TAM
+// DUNG ban in tu the (`CYDLCD_SF_PAUSED`) thi moi that su co 2 ben cung dung 1 FAT -> phai chan.
+// (Ngoai ra `cyd_sd_temp_open()` con gui M22 cho Marlin nha the trong suot phien upload, va
+//  `cyd_sd_raw_read()` tu choi sector khi dang ghi -> lop chan an toan thu 2.)
 bool printer_busy(void) {
-  if (cydlcd.flags & CYDLCD_SF_SD_PRINTING) return true;
-  switch (cydlcd.state) {
-    case CYDLCD_ST_PRINTING:
-    case CYDLCD_ST_PAUSED:
-    case CYDLCD_ST_HOMING:
-    case CYDLCD_ST_LEVELING:
-    case CYDLCD_ST_RUNOUT:
-    case CYDLCD_ST_KILLED:
-      return true;
-    default:
-      return false;
-  }
+  return (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
 }
 
 // Ten file an toan (bo duong dan, ky tu la, gioi han do dai + duoi .gco)
@@ -624,9 +625,12 @@ void cyd_sd_log_dir(const char *path) {
 bool cyd_sd_temp_open(const char *name, uint32_t size_hint) {
   s_err[0] = '\0';
   s_result[0] = '\0';
-  // Chua in moi duoc ghi the (the dung chung voi Marlin) - lop chan thu 2 sau net_upload_http.
+  // Chua in TU THE SD moi duoc ghi the (2 ben cung dung 1 FAT) - lop chan thu 2 sau net_upload_http.
+  // LUU Y: `printer_busy()` chi xet co IN TU THE SD, khong xet HOMING/LEVELING/G35 (khong dung the).
   if (printer_busy()) {
-    snprintf(s_err, sizeof(s_err), "Marlin dang in - khong dung the");
+    snprintf(s_err, sizeof(s_err), "Marlin dang IN TU THE SD - khong dung the");
+    ELOG("[UP] TU CHOI ghi the: dang in tu the SD (st=%u fl=0x%02X)\n",
+         (unsigned)cydlcd.state, (unsigned)cydlcd.flags);
     return false;
   }
 #if CYDLCD_SD_UART

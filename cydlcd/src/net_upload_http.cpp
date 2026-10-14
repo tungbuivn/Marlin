@@ -253,9 +253,14 @@ void handle_upload_done(void) {
 #if !CYDLCD_HTTP_ALLOW_WHILE_PRINTING
   if (cyd_sd_printer_busy()) {
     s_http_state = HS_ERR;
-    snprintf(s_msg, sizeof(s_msg), "Marlin dang in");
-    HLOG("[HTTP] TU CHOI /upload tu %s: Marlin dang in\n", s_client);
-    snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"Marlin dang in - khong nhan file\"}");
+    // Thong bao PHAI noi ro LY DO (va chi dung khi THAT SU in tu the SD): nguoi dung tung hieu nham
+    // "Marlin dang in" chi vi may dang HOME/PROBE (G35) - xem giai thich o printer_busy() (cyd_sd.cpp).
+    // In kem trang thai de doc log biet vi sao bi tu choi.
+    snprintf(s_msg, sizeof(s_msg), "Marlin dang IN TU THE SD - khong nhan file");
+    HLOG("[HTTP] TU CHOI /upload tu %s: dang in tu the SD (st=%u fl=0x%02X) - xem printer_busy()\n",
+         s_client, (unsigned)cydlcd.state, (unsigned)cydlcd.flags);
+    snprintf(js, sizeof(js),
+             "{\"status\":\"Error\",\"message\":\"Marlin dang IN TU THE SD (dang in thi khong nhan file) - dung in roi gui lai\"}");
     send_json(409, js);
     cyd_sd_temp_abort();
     return;

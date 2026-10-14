@@ -214,7 +214,9 @@ static void stop_request(void) { s_stop_try = STOP_RETRY_TIMES; }
 
 static void stop_retry_task(void) {
   if (!s_stop_try) return;
-  const bool printing = (cydlcd.state == CYDLCD_ST_PRINTING) || (cydlcd.state == CYDLCD_ST_PAUSED);
+  // CO IN TU THE SD moi gui M108+M524 (dung CO, khong dung `cydlcd.state`): HOME/PROBE (vd G35) khong
+  // phai ban in nen khong duoc gui lenh huy. Xem printer_busy() (cyd_sd.cpp).
+  const bool printing = (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
   if (!printing) { s_stop_try = 0; return; }  // Marlin da dung -> xong
   // M108 TRUOC: thoat vong CHO NONG (M109/M190). Neu ban in dang cho ban nong ma khong nong duoc
   // (vd PSU tat) thi M524 mot minh KHONG du. Phia Marlin (cydlcd_serial.cpp) xu ly NGAY 2 lenh nay
@@ -712,6 +714,9 @@ void ui_lvgl_dump_layout(void) {
   // Doi chieu 2 NGUON nhiet do (PUSH frame TEMPS vs dong TRAM "TBT ..."): xem ui_lvgl_dump_temps().
   ui_lvgl_dump_temps();
 
+  // May dang lam gi + co cho nhan file upload khong (xem ui_lvgl_dump_busy).
+  ui_lvgl_dump_busy();
+
   // Hop nao dang mo (prompt cua Marlin / XAC NHAN / THONG BAO / PID) + noi dung cua no.
   boxes_dump();
 
@@ -751,6 +756,23 @@ void ui_lvgl_dump_temps(void) {
   Serial.printf("[UI] dang HIEN THI (temp_lookup): NOZZLE %d/%d", (int)c, (int)t);
   temp_lookup(CYDLCD_TEMP_BED, &c, &t);
   Serial.printf(" | BED %d/%d  (scale /100)\n", (int)c, (int)t);
+}
+
+// CHAN DOAN: MAY DANG LAM GI + co cho nhan file upload khong - lenh `UI BUSY` tren COM7 (cung in kem
+// trong `UI BOX`). Tra loi cau hoi "lam sao biet may in dang in?": xem `st` (trang thai Marlin bao),
+// `file`/`prog` (dang in file nao) va `IN TU THE SD` (co THAT SU in tu the hay khong).
+// `upload bi chan` CHI bat khi dang in tu the SD / tam dung ban in tu the (xem printer_busy() o cyd_sd.cpp):
+// HOME/PROBE (vd G35) KHONG con bi coi la "dang in".
+void ui_lvgl_dump_busy(void) {
+  const bool sd = (cydlcd.flags & CYDLCD_SF_SD_PRINTING) != 0;
+  const bool ps = (cydlcd.flags & CYDLCD_SF_PAUSED) != 0;
+  const bool busy = cyd_sd_printer_busy();
+  Serial.printf("[UI] MAY: st=%u (%s) fl=0x%02X file=\"%s\" prog=%u%% | IN TU THE SD=%u TAM DUNG=%u%s\n",
+                (unsigned)cydlcd.state, state_name(cydlcd.state), (unsigned)cydlcd.flags,
+                cydlcd.prog.file, (unsigned)cydlcd.progress_pct, (unsigned)sd, (unsigned)ps,
+                (cydlcd.flags & CYDLCD_SF_LEVELING) ? " DANG LEVELING" : "");
+  Serial.printf("[UI] upload: %s%s\n", busy ? "BI CHAN" : "cho nhan file",
+                busy ? " (dang in / tam dung ban in TU THE SD - dung in roi gui lai)" : "");
 }
 
 // CHAN DOAN: bam nut preset preheat (PLA/PETG/ABS) cua man TEMP tu console (`UI PRE <k>` tren COM7).

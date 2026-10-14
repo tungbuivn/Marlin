@@ -311,6 +311,7 @@
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
             else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
+            else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else                                     ui_lvgl_show_page_name(a3);
           } else
 #endif
