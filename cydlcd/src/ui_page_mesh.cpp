@@ -35,6 +35,149 @@ static uint8_t   s_mesh_nx = 0, s_mesh_ny = 0;
 static bool      s_mesh_on_prev = false, s_mesh_on_valid = false;
 static bool      s_mesh_valid_prev = false;
 
+// ===========================================================================
+//  CHE DO SUA (EDIT) - yeu cau nguoi dung 2026-10-15:
+//    "them nut edit vao bed mesh day la nut toogle, khi click thi fill mau, click lan nua ve ban dau, o che
+//     do edit nguoi dung co the [cham] 1 o de thay doi gia tri giong trang setting, page navigation nam o
+//     4 huong trai, tren, phai, duoi de dich chuyen vung view"
+//  - Nut EDIT: TOGGLE - bat thi to NEN mau COL_ACCENT (fill), tat thi ve mau nut thuong.
+//  - Bat EDIT: cham vao 1 o -> mo hop sua (giong lop phu SUA cua trang THONG SO: chon buoc 0.01/0.05/0.1 mm,
+//    nut -/+ doi gia tri, OK gui `M421 I<cot> J<hang> Z<mm>` cho Marlin (UBL: M421.cpp - co ping ExtUI nen
+//    Marlin TU day lai luoi), HUY thi thoi).
+//  - 4 nut dieu huong < ^ v > (chi hien khi bat EDIT) de DICH CHUYEN vung nhin cua bang (cuon bang).
+// ===========================================================================
+#define ME_NAV_W   30                       // be rong/cao nut dieu huong
+#define ME_NAV_H   24
+#define ME_EDIT_W  56                       // nut EDIT (goc tren phai cua bang)
+#define ME_EDIT_H  20
+#define ME_STEP_N  3
+static const int32_t ME_STEP_UM[ME_STEP_N] = { 10, 50, 100 };            // 0.01 / 0.05 / 0.1 mm (um)
+static const char *const ME_STEP_TXT[ME_STEP_N] = { "0.01", "0.05", "0.1" };
+
+static lv_obj_t *me_layer;                  // lop phu dinh vi tuyet doi tren bang (nut EDIT + dieu huong)
+static lv_obj_t *me_edit_btn;
+static lv_obj_t *me_nav[4];                 // 0 trai, 1 tren, 2 phai, 3 duoi
+static bool      me_edit = false;
+static lv_obj_t *me_mask, *me_box;          // lop phu + hop sua 1 o
+static lv_obj_t *me_box_title, *me_box_val;
+static lv_obj_t *me_step_btn[ME_STEP_N];
+static uint8_t   me_c = 0, me_r = 0;        // o dang sua
+static int32_t   me_raw = 0;                // gia tri dang sua (um, cung don vi cydlcd.mesh[][])
+static uint8_t   me_step_k = 1;             // buoc dang chon (mac dinh 0.05 mm)
+
+// To nut buoc dang chon (giong trang THONG SO: nen COL_ACCENT cho muc dang chon).
+static void me_step_marks(void) {
+  for (uint8_t k = 0; k < ME_STEP_N; k++) {
+    if (!me_step_btn[k]) continue;
+    const lv_color_t want = (k == me_step_k) ? COL_ACCENT : COL_BTN;
+    if (lv_obj_get_style_bg_color(me_step_btn[k], 0).full != want.full)
+      lv_obj_set_style_bg_color(me_step_btn[k], want, 0);
+  }
+}
+
+// Hien lai gia tri dang sua trong hop.
+static void me_box_refresh(void) {
+  char a[16], b[32];
+  fmt_scaled(a, sizeof(a), me_raw, 1000, 3);           // um -> mm, 3 so le (du chinh xac tung um)
+  snprintf(b, sizeof(b), "Z = %s mm", a);
+  set_text(me_box_val, b);
+  snprintf(b, sizeof(b), "MESH o %u,%u", (unsigned)me_c, (unsigned)me_r);
+  set_text(me_box_title, b);
+  me_step_marks();
+}
+
+static void me_box_hide(void) {
+  if (me_mask) lv_obj_add_flag(me_mask, LV_OBJ_FLAG_HIDDEN);
+  if (me_box)  lv_obj_add_flag(me_box, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Hien hop sua cho o vua cham (me_c/me_r/me_raw da dat truoc).
+static void me_box_show(void) {
+  if (!me_box) return;
+  me_box_refresh();
+  if (me_mask) lv_obj_clear_flag(me_mask, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(me_box, LV_OBJ_FLAG_HIDDEN);
+  if (s_group && me_box) lv_group_focus_obj(me_step_btn[me_step_k]);
+}
+
+// Cham vao 1 o cua bang -> (chi khi bat EDIT) mo hop sua o do.
+static void cb_mesh_cell(lv_event_t *e) {
+  (void)e;
+  if (!me_edit || !me_table) return;
+  uint16_t r = 0, c = 0;
+  lv_table_get_selected_cell(me_table, &r, &c);
+  if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return;
+  me_c = (uint8_t)c;
+  me_r = (uint8_t)r;
+  me_raw = cydlcd.mesh[c][r];
+  WIFILOG("[UI] MESH EDIT: cham o %u,%u (dang %ld um) -> mo hop sua\n",
+          (unsigned)me_c, (unsigned)me_r, (long)me_raw);
+  me_box_show();
+}
+
+// Toggle EDIT: bat -> to nen (fill) + hien 4 nut dieu huong; tat -> ve nhu cu.
+static void cb_mesh_edit_toggle(lv_event_t *e) {
+  (void)e;
+  me_edit = !me_edit;
+  if (me_edit_btn) lv_obj_set_style_bg_color(me_edit_btn, me_edit ? COL_ACCENT : COL_BTN, 0);
+  for (uint8_t k = 0; k < 4; k++)
+    if (me_nav[k]) {
+      if (me_edit) lv_obj_clear_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);
+      else         lv_obj_add_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);
+    }
+  if (!me_edit) me_box_hide();
+  WIFILOG("[UI] MESH EDIT: %s\n", me_edit ? "BAT (cham o de sua, 4 nut dieu huong hien ra)"
+                                          : "TAT (xem luoi binh thuong)");
+}
+
+// 4 nut dieu huong: dich vung nhin cua bang (cuon) theo trai/tren/phai/duoi.
+static void cb_mesh_nav(lv_event_t *e) {
+  if (!me_table) return;
+  const intptr_t d = (intptr_t)lv_event_get_user_data(e);
+  lv_coord_t dx = 0, dy = 0;
+  switch (d) {
+    case 0: dx = -40; break;                 // trai
+    case 1: dy = -20; break;                 // tren
+    case 2: dx = +40; break;                 // phai
+    default: dy = +20; break;                // duoi
+  }
+  lv_obj_scroll_by(me_table, dx, dy, LV_ANIM_OFF);
+  WIFILOG("[UI] MESH VIEW: dich %s (bang dang o x=%d y=%d)\n",
+          d == 0 ? "trai" : (d == 1 ? "tren" : (d == 2 ? "phai" : "duoi")),
+          (int)lv_obj_get_scroll_x(me_table), (int)lv_obj_get_scroll_y(me_table));
+}
+
+// Chon buoc sua.
+static void cb_mesh_step(lv_event_t *e) {
+  me_step_k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  if (me_step_k >= ME_STEP_N) me_step_k = 0;
+  me_step_marks();
+}
+
+// -/+ : doi gia tri theo buoc dang chon (gioi han +-2 mm).
+static void cb_mesh_adj(lv_event_t *e) {
+  const int8_t s = (int8_t)(intptr_t)lv_event_get_user_data(e);
+  int32_t v = me_raw + (int32_t)s * ME_STEP_UM[me_step_k];
+  if (v >  2000) v =  2000;
+  if (v < -2000) v = -2000;
+  me_raw = v;
+  me_box_refresh();
+}
+
+// OK: gui `M421 I<cot> J<hang> Z<mm>` (UBL). Marlin ping ExtUI onMeshUpdate -> TU day lai luoi.
+static void cb_mesh_ok(lv_event_t *e) {
+  (void)e;
+  char a[16], cmd[40];
+  fmt_scaled(a, sizeof(a), me_raw, 1000, 3);
+  snprintf(cmd, sizeof(cmd), "M421 I%u J%u Z%s", (unsigned)me_c, (unsigned)me_r, a);
+  cydlcd_link_send_gcode(cmd);
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_MESH);      // xin lai cho chac (Marlin cung tu day khi mesh doi)
+  WIFILOG("[UI] MESH EDIT: gui \"%s\"\n", cmd);
+  me_box_hide();
+}
+
+static void cb_mesh_cancel(lv_event_t *e) { (void)e; me_box_hide(); }
+
 // Nguong to mau: |z| > 0.05mm thi to xanh (cao) / do (thap)
 #define MESH_HI_UM  50
 #define MESH_LO_UM (-50)
@@ -110,6 +253,72 @@ void page_mesh_create(lv_obj_t *p) {
   me_btn_on  = mk_btn_grow(ru2, "UBL ON",   28, cb_action, (void *)(intptr_t)A_G29_ON);
   me_btn_off = mk_btn_grow(ru2, "UBL OFF",  28, cb_action, (void *)(intptr_t)A_G29_OFF);
   mk_btn_grow(ru2, "SAVE S0",  28, cb_action, (void *)(intptr_t)A_G29_SAVE);
+
+  // ---------------------------------------------------------------------------
+  // LOP PHU DINH VI TUYET DOI TREN BANG: nut EDIT (toggle) + 4 nut dieu huong + hop sua 1 o.
+  // PHai dat SAU khi tao bang/ cac hang nut de tinh duoc toa do that cua bang, va phai co
+  // LV_OBJ_FLAG_IGNORE_LAYOUT de flex COLUMN cua trang BO QUA lop nay (khong day cac vat khac le).
+  // ---------------------------------------------------------------------------
+  lv_obj_update_layout(p);                       // chot vi tri that cua cac con truoc khi do
+  me_layer = lv_obj_create(p);
+  lv_obj_add_flag(me_layer, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_size(me_layer, MESH_TABLE_W, MESH_TABLE_H);
+  lv_obj_set_pos(me_layer, lv_obj_get_x(me_table), lv_obj_get_y(me_table));
+  lv_obj_set_style_bg_opa(me_layer, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(me_layer, 0, 0);
+  lv_obj_set_style_pad_all(me_layer, 0, 0);
+  lv_obj_clear_flag(me_layer, LV_OBJ_FLAG_SCROLLABLE);   // khong de lop nay cuon/an su kien cua bang
+
+  me_edit_btn = mk_btn(me_layer, "EDIT", ME_EDIT_W, ME_EDIT_H, cb_mesh_edit_toggle, NULL);
+  lv_obj_set_pos(me_edit_btn, MESH_TABLE_W - ME_EDIT_W - 2, 2);
+  lv_obj_set_style_bg_color(me_edit_btn, COL_BTN, 0);    // tat = mau nut thuong (bat -> COL_ACCENT)
+
+  static const char *const NAV_TXT[4] = { "<", "^", "v", ">" };
+  for (uint8_t k = 0; k < 4; k++) {
+    me_nav[k] = mk_btn(me_layer, NAV_TXT[k], ME_NAV_W, ME_NAV_H, cb_mesh_nav, (void *)(intptr_t)k);
+    const lv_coord_t w = MESH_TABLE_W, h = MESH_TABLE_H;
+    if (k == 0)      lv_obj_set_pos(me_nav[k], 2, h / 2 - ME_NAV_H / 2);            // trai
+    else if (k == 1) lv_obj_set_pos(me_nav[k], w / 2 - ME_NAV_W / 2, 2);            // tren
+    else if (k == 2) lv_obj_set_pos(me_nav[k], w - ME_NAV_W - 2, h / 2 - ME_NAV_H / 2);  // phai
+    else             lv_obj_set_pos(me_nav[k], w / 2 - ME_NAV_W / 2, h - ME_NAV_H - 2);   // duoi
+    lv_obj_add_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);       // chi hien khi bat EDIT
+  }
+  lv_obj_add_event_cb(me_table, cb_mesh_cell, LV_EVENT_VALUE_CHANGED, NULL);   // cham 1 o -> mo hop sua
+
+  // ---- MASK + HOP SUA 1 O (an san) ----
+  me_mask = lv_obj_create(p);
+  lv_obj_add_flag(me_mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_pos(me_mask, 0, 0);
+  lv_obj_set_size(me_mask, UI_LCD_HOR_RES, CONT_H);
+  lv_obj_set_style_bg_color(me_mask, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(me_mask, LV_OPA_50, 0);
+  lv_obj_set_style_border_width(me_mask, 0, 0);
+  lv_obj_add_flag(me_mask, LV_OBJ_FLAG_HIDDEN);
+
+  me_box = lv_obj_create(p);
+  lv_obj_add_flag(me_box, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_size(me_box, 240, 116);
+  lv_obj_align(me_box, LV_ALIGN_TOP_MID, 0, 40);
+  lv_obj_set_style_bg_color(me_box, COL_BG, 0);
+  lv_obj_set_style_border_color(me_box, COL_ACCENT, 0);
+  lv_obj_set_style_border_width(me_box, 2, 0);
+  lv_obj_set_style_pad_all(me_box, 6, 0);
+  lv_obj_set_flex_flow(me_box, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(me_box, 4, 0);
+  lv_obj_clear_flag(me_box, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(me_box, LV_OBJ_FLAG_HIDDEN);
+
+  me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
+  me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
+  lv_obj_t *rs = mk_flex(me_box, LV_FLEX_FLOW_ROW, 220, 24, 0, GAP);
+  for (uint8_t k = 0; k < ME_STEP_N; k++)
+    me_step_btn[k] = mk_btn_grow(rs, ME_STEP_TXT[k], 24, cb_mesh_step, (void *)(intptr_t)k);
+  lv_obj_t *ra = mk_flex(me_box, LV_FLEX_FLOW_ROW, 220, 26, 0, GAP);
+  mk_btn_grow(ra, "-", 26, cb_mesh_adj, (void *)(intptr_t)(int8_t)-1);
+  mk_btn_grow(ra, "+", 26, cb_mesh_adj, (void *)(intptr_t)(int8_t)+1);
+  mk_btn_grow(ra, "OK", 26, cb_mesh_ok, NULL);
+  mk_btn_grow(ra, "HUY", 26, cb_mesh_cancel, NULL);
+  me_step_marks();
 }
 
 void page_mesh_update(void) {
@@ -175,11 +384,20 @@ void page_mesh_update(void) {
 // DOI so voi gia tri da nho - ma bang moi luon duoc tao 1 cot x 1 hang, nen neu giu cache cu thi
 // luoi se KHONG duoc dung lai (bang 1x1 = khong hien gi).
 void page_mesh_destroy(void) {
-  me_table = NULL;
+  if (me_table) {
+    me_table = NULL;
+  }
   me_info  = NULL;
   me_note  = NULL;
   me_btn_on = NULL;
   me_btn_off = NULL;
+  // Lop phu EDIT/dieu huong + hop sua 1 o la CON cua trang -> bi xoa theo trang, chi can quen con tro va
+  // tra trang thai ve ban dau (lan mo sau phai la "khong sua", nut EDIT mau thuong).
+  me_layer = NULL; me_edit_btn = NULL;
+  for (uint8_t k = 0; k < 4; k++) me_nav[k] = NULL;
+  for (uint8_t k = 0; k < ME_STEP_N; k++) me_step_btn[k] = NULL;
+  me_mask = NULL; me_box = NULL; me_box_title = NULL; me_box_val = NULL;
+  me_edit = false;
   s_mesh_nx = 0;
   s_mesh_ny = 0;
   s_mesh_on_valid = false;      // de lan mo sau cap nhat lai dong UBL ON/OFF

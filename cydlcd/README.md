@@ -1706,6 +1706,24 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
 - HELLO mang them `SHORT_BUILD_VERSION` -> `cydlcd.marlin_ver`.
 - Trang TEMP: dong dau `Profile: PLA/PETG/ABS` hoac `Profile: ---` (khong con dialog).
 - Trang MESH: `G29 P1 | G29 P3T0 | G29 P4RT` + `G29 A | G29 D | G29 S0`.
+- **(2026-10-15) Trang BED MESH có CHẾ ĐỘ SỬA (EDIT)** — yêu cầu người dùng: *“thêm nút edit vào bed mesh,
+  đây là nút toggle, khi click thì fill màu, click lần nữa về ban đầu; ở chế độ edit người dùng có thể [chạm]
+  1 ô để thay đổi giá trị giống trang setting; page navigation nằm ở 4 hướng trái, trên, phải, dưới để dịch
+  chuyển vùng view”*:
+  * Nút **EDIT** (góc phải-trên của lưới): **toggle** — bật thì tô nền `COL_ACCENT` (fill), tắt thì về màu nút
+    thường; log `[UI] MESH EDIT: BAT/TAT`.
+  * Bật EDIT: **chạm 1 ô** → mở **hộp sửa** giống lớp phủ của trang THÔNG SO: chọn bước **0.01 / 0.05 / 0.1 mm**
+    (mục đang chọn tô nền), nút **−/+** đổi giá trị (±2 mm), **OK** gửi
+    `M421 I<cột> J<hàng> Z<mm>` (UBL: `Marlin/src/gcode/bedlevel/ubl/M421.cpp`, có `ExtUI::onMeshUpdate()`
+    nên **Marlin tự đẩy lại lưới**), **HUY** thì thôi. Có lớp mờ (mask) chặn chạm khi hộp đang mở.
+  * **4 nút điều hướng `< ^ v >`** (chỉ hiện khi bật EDIT, đặt ở 4 phía của lưới) để **dịch vùng nhìn**
+    (`lv_obj_scroll_by` 40 px ngang / 20 px dọc mỗi lần bấm).
+  * **Đo trên máy thật**: `UI BED MESH` + `UI BOX` xác nhận nút EDIT 56x20 ở (254,2) và 4 nút điều hướng
+    `[AN]` (ẩn) ở 4 phía; gửi `M421 I5 J0 Z0.500` ⇒ dòng thông tin của panel **đổi ngay** `0.01..0.50`
+    (chứng minh vòng Marlin→panel chạy), trả lại `Z0.420` ⇒ `M420 V` về đúng `+0.42` như ban đầu.
+  * *Lưu ý*: với lưới **7×7 hiện tại** thì toàn bộ lưới đã vừa khung (308×119 trong bảng 312×124) nên **4 nút
+    điều hướng chưa có gì để dịch** — chúng dùng khi lưới lớn hơn (10×10) hoặc khi ô được phóng to; muốn
+    phóng to ô (`MESH_CELL_W`) để phải cuộn thì chỉ cần đổi 1 dòng.
 - **(2026-10-15) Trang TUNING (MPC/PID) mới** (`ui_page_mpc.cpp`, `PG_MPC`): mở từ nút **“TUNING (MPC/PID)”**
   ở man NHIỆT ĐỘ hoặc mục **“Tuning (MPC/PID)”** trong MENU. Hiển thị **6 tham số MPC (M306)** đúng như menu
   MPC của Marlin 12864: `P heater W`, `C block J/K`, `R sensor`, `A amb fan0 W/K`, `F amb fanN W/K`,
