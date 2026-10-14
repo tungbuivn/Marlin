@@ -633,6 +633,54 @@ bool cyd_sd_delete_dir(const char *name, bool *not_empty) {
 
 const char *cyd_sd_last_result(void) { return s_result; }
 uint32_t    cyd_sd_last_written(void) { return s_written; }
+
+// ===========================================================================
+// DUYET GOC THE + BAO MARLIN MOUNT LAI (cho TRANG WEB cua man hinh)
+// ===========================================================================
+// Lay muc thu `idx` o goc the (an cac muc he thong nhu man FILES tren LCD). Moi lan goi MO LAI thu muc roi
+// dem toi `idx` - chi phi khong dang ke (the co vai chuc muc) va KHONG can giu trang thai giua 2 lan goi
+// (an toan khi vua doc vua co phien upload/xoa).
+bool cyd_sd_root_entry(const uint8_t idx, char *name, const size_t name_n, uint32_t *size, bool *isdir) {
+#if CYDLCD_SD_UART
+  if (!s_sd_ready || !name || name_n == 0) return false;
+  if (s_fatfs_stale) fatfs_sync();          // chi khi Marlin vua ghi tho (xem cyd_sd_delete())
+  if (!s_sd_ready) return false;
+  File dir = SD.open("/");
+  if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return false; }
+  bool found = false;
+  uint8_t i = 0;
+  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    const bool   d  = f.isDirectory();
+    const String nm = f.name();             // ESP32 core: ten DAY DU, dang "/ten"
+    const uint32_t sz = (uint32_t)f.size();
+    f.close();
+    const char *p = nm.c_str();
+    if (*p == '/') p++;
+    if (cydlcd_hidden_dir(p, d ? 1u : 0u)) continue;   // muc he thong -> an (khong tinh vao idx)
+    if (i++ != idx) continue;
+    snprintf(name, name_n, "%s", p);
+    if (size)  *size  = sz;
+    if (isdir) *isdir = d;
+    found = true;
+    break;
+  }
+  dir.close();
+  return found;
+#else
+  (void)idx; (void)name; (void)name_n; (void)size; (void)isdir;
+  return false;
+#endif
+}
+
+// Bao Marlin mount lai the + xin lai danh sach file. Dung sau khi XOA file qua trang web: FAT cua Marlin
+// dang cache trang thai CU (file vua xoa) nen phai mount lai, neu khong Marlin co the ghi de cache cu len
+// the (lam file da xoa "song lai") hoac hien file da xoa trong danh sach.
+void cyd_sd_notify_marlin_remount(void) {
+#if CYDLCD_SD_UART
+  if (!s_sd_ready) return;
+  notify_media_changed();
+#endif
+}
 const char *cyd_sd_temp_path(void) { return s_tmp; }
 uint32_t    cyd_sd_temp_bytes(void) { return s_got; }
 uint8_t     cyd_sd_temp_parts_done(void) { return s_parts_done; }
@@ -1449,6 +1497,10 @@ bool cyd_sd_raw_write(uint32_t sector, const uint8_t *src) { (void)sector; (void
 bool cyd_sd_delete(const char *name) { (void)name; return false; }
 int  cyd_sd_dir_count(const char *name) { (void)name; return -1; }
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
+bool cyd_sd_root_entry(uint8_t idx, char *name, size_t name_n, uint32_t *size, bool *isdir) {
+  (void)idx; (void)name; (void)name_n; (void)size; (void)isdir; return false;
+}
+void cyd_sd_notify_marlin_remount(void) {}
 void cyd_sd_log_dir(const char *path) { (void)path; ELOG("[UP] goc the: che do the khong phai CYDLCD_SD_UART\n"); }
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, size_t errn) {
   (void)name; (void)size; (void)written; (void)err; (void)errn;

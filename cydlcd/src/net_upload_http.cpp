@@ -55,6 +55,13 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  #bar{height:14px;background:#2a2080;border-radius:3px;overflow:hidden;margin-top:10px}
  #bar>i{display:block;height:100%;width:0;background:#00e5ff}
  pre{white-space:pre-wrap;font-size:12px;color:#9aa;margin:8px 0 0}
+ .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+ button.mini{width:auto;padding:6px 10px;font-size:13px}
+ .list{font-size:13px;max-height:260px;overflow:auto}
+ .list .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
+   padding:6px 0;border-bottom:1px solid #2a2080}
+ .list .row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ button.del{width:auto;padding:6px 10px;font-size:13px;background:#ff5252;color:#fff}
 </style></head><body>
 <h1>TBT-CYDLCD</h1>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
@@ -65,15 +72,46 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
   <div id="bar"><i id="bi"></i></div>
   <pre id="log">san sang.</pre>
 </div>
+<div class="card">
+  <div class="hd"><b>File tren the SD</b><button id="rf" class="mini" onclick="loadFiles()">Lam moi</button></div>
+  <div id="flist" class="list">dang doc...</div>
+</div>
 <script>
 var q=new URLSearchParams(location.search); if(q.get('token')) document.getElementById('tok').value=q.get('token');
 function log(t){document.getElementById('log').textContent=t;}
+function fmtB(n){ if(n>=1048576) return (n/1048576).toFixed(2)+' MB'; if(n>=1024) return Math.round(n/1024)+' KB'; return n+' B'; }
 function poll(){fetch('/status').then(r=>r.json()).then(j=>{
   document.getElementById('bi').style.width=(j.total_bytes?Math.round(j.rx_bytes*100/j.total_bytes):0)+'%';
   log('cydlcd: '+j.state+' | nhan '+j.rx_bytes+'/'+j.total_bytes+' B | da day '+j.written_bytes+
       ' B | '+j.file+'\nket qua: '+(j.result||'-')+' '+(j.message||''));
   if(j.state=='writing'||j.state=='receiving') setTimeout(poll,700);
 });}
+function loadFiles(){
+  var box=document.getElementById('flist'); box.textContent='dang doc...';
+  fetch('/files?token='+encodeURIComponent(document.getElementById('tok').value))
+   .then(r=>r.json()).then(function(j){
+     box.textContent='';
+     if(j.status!=='Ok'){ box.textContent='loi: '+(j.message||'?'); return; }
+     if(!j.count){ box.textContent='(khong co file nao tren the / chua cam the)'; return; }
+     j.files.forEach(function(f){
+       var row=document.createElement('div'); row.className='row';
+       var sp=document.createElement('span');
+       sp.textContent=(f.d?'[TM] ':'')+f.n+' - '+(f.d?'thu muc':fmtB(f.s));
+       var b=document.createElement('button'); b.className='del'; b.textContent='Xoa';
+       b.onclick=function(){ delFile(f.n, f.d); };
+       row.appendChild(sp); row.appendChild(b); box.appendChild(row);
+     });
+   }).catch(function(){ box.textContent='loi ket noi toi cydlcd'; });
+}
+function delFile(n,isdir){
+  if(!confirm('Xoa '+(isdir?'THU MUC (chi xoa duoc khi RONG) ':'file ')+n+' ?')) return;
+  var tok=document.getElementById('tok').value;
+  fetch('/delete?token='+encodeURIComponent(tok)+'&name='+encodeURIComponent(n),{method:'POST'})
+   .then(r=>r.json()).then(function(j){
+     log('xoa '+n+': '+(j.status==='Ok'?'XONG':'LOI')+' - '+(j.message||''));
+     loadFiles();
+   }).catch(function(){ log('loi ket noi khi xoa '+n); });
+}
 function send(){
   var f=document.getElementById('f').files[0]; if(!f){log('chua chon file');return;}
   var tok=document.getElementById('tok').value;
@@ -83,10 +121,11 @@ function send(){
   x.setRequestHeader('X-CYDLCD-Token',tok);
   x.upload.onprogress=function(e){document.getElementById('bi').style.width=
      (e.lengthComputable?Math.round(e.loaded*100/e.total):0)+'%';};
-  x.onload=function(){log('tra loi: '+x.responseText); poll();};
+  x.onload=function(){log('tra loi: '+x.responseText); poll(); loadFiles();};
   x.onerror=function(){log('loi ket noi toi cydlcd');};
   x.send(fd); log('dang gui '+f.name+' ('+f.size+' B)...');
 }
+loadFiles();
 </script></body></html>)HTML";
 
 WebServer server(CYDLCD_HTTP_PORT);
@@ -380,6 +419,108 @@ void handle_not_found(void) {
   send_json(404, js);
 }
 
+// ===========================================================================
+// GET /files  -- danh sach file/thu muc o GOC the (cho phan "File tren the SD" cua trang web).
+//   Tra: {"status":"Ok","sd":0|1,"count":N,"files":[{"n":"<ten>","s":<byte>,"d":0|1},...]}
+//   - An cac muc he thong (cydlcd_tmp/BTUP) giong man FILES tren LCD.
+//   - Doc bang FATFS CUA MAN HINH (the nam o khe man hinh) nen khong can Marlin.
+// ===========================================================================
+void handle_files(void) {
+  if (!token_ok()) {
+    HLOG("[HTTP] TU CHOI GET /files tu %s: sai token\n",
+         server.client().remoteIP().toString().c_str());
+    send_json(401, "{\"status\":\"Error\",\"message\":\"sai ma token\"}");
+    return;
+  }
+  String js = "{\"status\":\"Ok\",\"sd\":";
+  js += (cyd_sd_ready() ? '1' : '0');
+  js += ",\"files\":[";
+  char nm[64];
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < 64; i++) {
+    uint32_t sz = 0;
+    bool isdir = false;
+    if (!cyd_sd_root_entry(i, nm, sizeof(nm), &sz, &isdir)) break;
+    if (n) js += ',';
+    js += "{\"n\":\"";
+    for (const char *p = nm; *p; p++) {          // escape JSON (" va \)
+      if (*p == '"' || *p == '\\') js += '\\';
+      js += *p;
+    }
+    js += "\",\"s\":";
+    js += String((unsigned long)sz);
+    js += ",\"d\":";
+    js += (isdir ? '1' : '0');
+    js += '}';
+    n++;
+  }
+  js += "],\"count\":";
+  js += String((unsigned)n);
+  js += '}';
+  HLOG("[HTTP] GET /files -> %u muc (sd=%d)\n", (unsigned)n, (int)cyd_sd_ready());
+  send_json(200, js.c_str());
+}
+
+// ===========================================================================
+// POST /delete?token=...&name=<ten>  -- xoa file (hoac THU MUC RONG) ngay tren trang web.
+//   Chan: sai token (401), dang co phien upload (409), Marlin dang in tu the (409),
+//         ten khong hop le / co duong dan (400), khong xoa duoc (500).
+//   Xoa bang FATFS CUA MAN HINH (nhu nut XOA tren man FILES) roi BAO MARLIN MOUNT LAI (M22/M21) vi cache
+//   cua Marlin dang giu trang thai CU (co the lam file da xoa "song lai" hoac hien lai trong danh sach).
+// ===========================================================================
+void handle_delete(void) {
+  char js[200];
+  if (!token_ok()) {
+    HLOG("[HTTP] TU CHOI /delete tu %s: sai token\n",
+         server.client().remoteIP().toString().c_str());
+    send_json(401, "{\"status\":\"Error\",\"message\":\"sai ma token\"}");
+    return;
+  }
+  if (net_upload_active()) {
+    send_json(409, "{\"status\":\"Error\",\"message\":\"dang nhan file - xoa sau khi gui xong\"}");
+    return;
+  }
+#if !CYDLCD_HTTP_ALLOW_WHILE_PRINTING
+  if (cyd_sd_printer_busy()) {
+    HLOG("[HTTP] TU CHOI /delete: Marlin dang in tu the SD (st=%u fl=0x%02X)\n",
+         (unsigned)cydlcd.state, (unsigned)cydlcd.flags);
+    send_json(409, "{\"status\":\"Error\",\"message\":\"Marlin dang IN TU THE SD - khong xoa file\"}");
+    return;
+  }
+#endif
+  char nm[64];
+  unquote(nm, sizeof(nm), server.arg("name").c_str());
+  // Chi cho xoa o GOC the: khong duong dan, khong "..", khong rong.
+  if (!nm[0] || strchr(nm, '/') || strchr(nm, '\\') || strstr(nm, "..")) {
+    send_json(400, "{\"status\":\"Error\",\"message\":\"ten file khong hop le\"}");
+    return;
+  }
+  if (!cyd_sd_ready()) {
+    send_json(503, "{\"status\":\"Error\",\"message\":\"chua co the TF\"}");
+    return;
+  }
+  const int cnt = cyd_sd_dir_count(nm);      // >=0: la THU MUC (so muc con); -1: khong phai thu muc
+  bool ok = false;
+  if (cnt == 0) {
+    bool not_empty = false;
+    ok = cyd_sd_delete_dir(nm, &not_empty);
+    if (ok) snprintf(js, sizeof(js), "{\"status\":\"Ok\",\"message\":\"da xoa thu muc rong %s\"}", nm);
+    else    snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"%s %s\"}",
+                     not_empty ? "thu muc con muc con - khong xoa:" : "khong xoa duoc thu muc:", nm);
+  } else if (cnt > 0) {
+    snprintf(js, sizeof(js),
+             "{\"status\":\"Error\",\"message\":\"thu muc con %d muc - chi xoa duoc thu muc RONG\"}", cnt);
+  } else {
+    ok = cyd_sd_delete(nm);
+    snprintf(js, sizeof(js), ok ? "{\"status\":\"Ok\",\"message\":\"da xoa file %s\"}"
+                                : "{\"status\":\"Error\",\"message\":\"khong xoa duoc %s (khong thay file?)\"}",
+             nm);
+  }
+  HLOG("[HTTP] /delete \"%s\": %s\n", nm, ok ? "OK" : "LOI");
+  send_json(ok ? 200 : 500, js);
+  if (ok) cyd_sd_notify_marlin_remount();    // M22/M21 + xin lai danh sach (Marlin thay file da xoa)
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -392,6 +533,8 @@ void net_upload_http_begin(void) {
   server.on("/", HTTP_GET, handle_root);
   server.on("/status", HTTP_GET, handle_status);
   server.on("/upload", HTTP_POST, handle_upload_done, handle_upload_stream);
+  server.on("/files", HTTP_GET, handle_files);
+  server.on("/delete", HTTP_POST, handle_delete);
   server.onNotFound(handle_not_found);
   server.begin();
   s_started = true;

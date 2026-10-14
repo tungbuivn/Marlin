@@ -1055,6 +1055,38 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 >   của phiên bị lỗi trước đó. Chu kỳ thật đã trả về **30 phút** (`CYDLCD_SD_CLEANUP_MS`).
 > * `UI TAP L` sau 4 lần: gốc thẻ có `V300_bot.gcode 4563245 B` (đúng size), `/cydlcd_tmp` rỗng.
 
+> **VÒNG SỬA 2026-10-15 (d) — TRANG WEB CÓ DANH SÁCH FILE + NÚT XOÁ NGAY TRÊN WEB.**
+> (Yêu cầu người dùng: *“thêm phần danh sách file ở giao diện web, cho phép người dùng xóa file ngay tại đó”*.)
+>
+> * Trang `GET /` thêm thẻ **“File trên thẻ SD”**: liệt kê tên + kích thước (B/KB/MB, thư mục ghi `[TM]`),
+>   nút **Làm mới**, mỗi dòng một nút **Xoá** (hỏi xác nhận trước khi xoá). Danh sách tự nạp khi mở trang và
+>   **tự nạp lại sau khi upload xong** hoặc sau mỗi lần xoá.
+> * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
+>   đồng ở §9.21. Cả hai đều cần token như `/upload`.
+> * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
+>   `CYDLCD_HIDE_DIRS` — cùng quy tắc với màn FILES trên LCD), tối đa 64 mục.
+> * Xoá: dùng đúng đường của nút XOA trên LCD — `cyd_sd_dir_count()` để biết là thư mục hay file →
+>   `cyd_sd_delete()` (file) / `cyd_sd_delete_dir()` (thư mục **rỗng**, `SD.rmdir`). Sau khi xoá gọi
+>   `cyd_sd_notify_marlin_remount()` = `M22`+`M21` + xin lại danh sách file, vì **cache FAT của Marlin đang
+>   giữ trạng thái cũ** (không mount lại thì file đã xoá có thể “sống lại” khi Marlin ghi cache cũ lên thẻ).
+> * **Chặn an toàn**: sai token (`401`) · đang có phiên upload (`409`) · Marlin đang in từ thẻ (`409`) ·
+>   tên có `/`, `\`, `..` hoặc rỗng (`400`, chống xoá ra ngoài gốc thẻ) · thư mục còn mục con (`500`, không
+>   xoá dữ liệu) · không thấy file (`500`).
+> * **Đo trên máy thật**:
+> ```text
+> GET  /files?token=…            -> {"status":"Ok","sd":1,"count":10,"files":[{"n":"Body10.gcode","s":370404,"d":0}, …]}
+> GET  /files (không token)      -> HTTP 401
+> POST /delete?name=SPLIT3_TEST.gcode -> {"status":"Ok","message":"da xoa file SPLIT3_TEST.gcode"}
+>      [UP] da xoa file /SPLIT3_TEST.gcode (cydlcd tu xoa - che do the qua UART)
+>      [UP] bao Marlin mount lai the (M22/M21) + xin lai danh sach file
+>      [MRL] … | SD r=14/0 …  ->  r=20/0  ->  r=32/0     (Marlin MOUNT LAI va doc sector that)
+>      refused rd/wr=0/0                                  (không lần nào bị từ chối)
+> POST /delete?name=../cydlcd_tmp/x.tmp -> HTTP 400     (chặn đường dẫn)
+> POST /delete?name=KHONGCO.gcode       -> HTTP 500
+> GET  /files?token=…            -> count 9  (SPLIT3_TEST.gcode đã biến mất)
+> ```
+> Build panel: RAM 120 844 B, Flash **1 204 013 B**.
+
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
   `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,
@@ -1065,6 +1097,8 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
   |---|---|
   | `GET /` | HTML (chứa chuỗi `TBT-CYDLCD`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
   | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes` (byte nhận từ mạng), `total_bytes` (tổng byte các part), `written_bytes` (byte ĐÃ GHI xuống thẻ của phiên đang chạy / phiên vừa xong), `parts` (số PHẦN FILE của request), `parts_done` (số part đã đóng), `chunks`, `declared` (size khách khai báo), `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `GET /files?token=…` | JSON danh sách **gốc thẻ** cho phần “File trên thẻ SD” của trang web: `{"status":"Ok","sd":0\|1,"count":N,"files":[{"n":"<tên>","s":<byte>,"d":0\|1},…]}` (`d=1` = thư mục). **Ẩn mục hệ thống** (`cydlcd_tmp`, `BTUP`) giống màn FILES trên LCD; đọc bằng FATFS **của màn hình** nên không cần Marlin. Sai token ⇒ `401` |
+  | `POST /delete?token=…&name=<tên>` | Xoá **file** ở gốc thẻ, hoặc **thư mục RỒNG** (dùng `SD.rmdir`, không xoá được thư mục còn mục con). Xong thì panel **gửi `M22`+`M21`** để Marlin mount lại (FAT của Marlin đang cache trạng thái cũ — không làm bước này thì file đã xoá có thể “sống lại”/hiện lại trong danh sách). Mã lỗi: `401` sai token · `409` đang có phiên upload **hoặc** Marlin đang in từ thẻ · `400` tên không hợp lệ (có `/`, `\`, `..`, rỗng) · `500` không xoá được (không thấy file, thư mục còn mục con) |
   | `POST /upload?token=…` | `multipart/form-data`: các field text `name="name"` (tên đích) + `name="size"` (**tổng số byte**, đặt TRƯỚC phần file) rồi phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…,"parts":N}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF / size không khớp). **Nhiều phần file trong cùng request được chấp nhận**: mỗi phần là một file riêng `_001/_002/…` đóng ngay, hết request thì **đổi tên thẳng** (1 phần) hoặc **GHEP lại** (≥2 phần) rồi kiểm tra size thật trên thẻ — xem vòng sửa 2026-10-15 (b) ở §9.21 |
 
 * **Token**: query `?token=` **hoặc** header `X-CYDLCD-Token` (`CYDLCD_HTTP_TOKEN ""` = tắt kiểm, không khuyến nghị).

@@ -75,6 +75,19 @@ int cyd_sd_dir_count(const char *name);
  */
 bool cyd_sd_delete_dir(const char *name, bool *not_empty);
 /**
+ * DUYET GOC THE cho TRANG WEB cua man hinh (net_upload_http.cpp): lay muc thu `idx` (0..) o goc the.
+ * Ghi ten (KHONG co dau '/') vao `name` (toi da `name_n` byte), kich thuoc vao *size, thu muc vao *isdir.
+ * Tra ve false khi het muc / loi / chua co the. CAC MUC HE THONG (CYDLCD_HIDE_DIRS: cydlcd_tmp, BTUP)
+ * duoc AN (khong tinh vao idx) - cung quy tac voi man FILES tren LCD.
+ */
+bool cyd_sd_root_entry(uint8_t idx, char *name, size_t name_n, uint32_t *size, bool *isdir);
+/**
+ * Bao Marlin mount lai the (M22/M21) + xin lai danh sach file. CHAN ~800 ms (nuoi UART + LVGL).
+ * Dung SAU khi xoa file qua trang web (giong `files_init_sd()` cua man FILES). Goi tu vong lap chinh
+ * (HTTP handler) - KHONG goi tu callback LVGL.
+ */
+void cyd_sd_notify_marlin_remount(void);
+/**
  * CHAN DOAN (lenh `UI WTEST <KB>` tren COM7): ghi thu `kb` KB vao file tam tren the bang CHINH duong
  * cua upload nhung KHONG qua WiFi - de tach nguyen nhan "ghi the TF loi" (the/FATFS hay duong upload).
  * Xoa file tam sau khi xong. Tra true = ghi du.
