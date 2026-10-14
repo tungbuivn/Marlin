@@ -33,6 +33,13 @@
 void ui_lvgl_begin(void);
 void ui_lvgl_task(void);
 
+// ---- Chan doan UI qua console COM7 (main.cpp) -------------------------------
+// Mo 1 trang UI theo TEN, khop voi tieu de trang (khong phan biet hoa/thuong), vi du "TRAMMING".
+// `name` rong hoac "?" -> in danh sach trang + so thu tu (khong mo trang nao).
+// Dung de tai hien loi UI (vd trang treo) ma khong can cham tay vao man hinh.
+void ui_lvgl_show_page_name(const char *name);
+uint8_t ui_lvgl_page_count(void);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.

@@ -32,9 +32,35 @@
 
 #include "lv_conf.h"          /* cau hinh goc: nguon duy nhat, khong copy o day */
 
-/* 48 KB -> 24 KB: nhuong 24.576 byte DRAM cho WiFi + web server. */
+/* 24 KB -> 48 KB (2026-10-14): Bluetooth Classic DA XOA nen DRAM du cho pool 48 KB tro lai.
+ *
+ * VI SAO PHAI NANG (day la NGUYEN NHAN THAT cua "panel treo im lang" khi mo Tramming wizard):
+ *   - LVGL 8.4 bat san `LV_USE_ASSERT_NULL` + `LV_USE_ASSERT_MALLOC` va handler mac dinh la
+ *     `#define LV_ASSERT_HANDLER while(1);` (lv_conf_internal.h:741-745) -> khi pool HET,
+ *     `lv_mem_alloc()` tra NULL -> assert -> vong lap vo tan: panel dung im, KHONG in log,
+ *     khong tra loi console, WiFi/http chet (dung trieu chung da gap).
+ *   - Cac trang UI duoc tao LAZY va KHONG bao gio giai phong (show_page -> create_page mot lan),
+ *     nen mo dan nhieu trang (MENU -> trang thu 8 la Tramming wizard) la pool 24 KB day.
+ * Ngoai viec nang pool, file nay con:
+ *   - bat `LV_USE_LOG` + handler assert RIENG (cydlcd_assert.h) de loi IN RA COM7 va TU KHOI DONG
+ *     LAI thay vi treo im lang;
+ *   - (main.cpp) in muc dung pool LVGL ra log 1 Hz (`lvmem=used/total frag=x%`) de theo doi. */
 #undef  LV_MEM_SIZE
-#define LV_MEM_SIZE (24U * 1024U)
+#define LV_MEM_SIZE (48U * 1024U)
+
+/* Log LVGL: chi muc ERROR (assert in ra "Asserted at expression: ...") -> vua du chan doan,
+ * khong lam ngap log 1 Hz. `LV_LOG_PRINTF 1` = dung printf (Serial cua ESP32). */
+#undef  LV_USE_LOG
+#define LV_USE_LOG 1
+#undef  LV_LOG_LEVEL
+#define LV_LOG_LEVEL LV_LOG_LEVEL_ERROR
+#undef  LV_LOG_PRINTF
+#define LV_LOG_PRINTF 1
+
+/* Assert -> in ro + khoi dong lai (KHONG dung `while(1)` mac dinh cua LVGL). */
+#define LV_ASSERT_HANDLER_INCLUDE "cydlcd_assert.h"
+#undef  LV_ASSERT_HANDLER
+#define LV_ASSERT_HANDLER cyd_lvgl_assert_halt();
 
 /* Them font 20px cho DONG TRANG THAI cua lop phu (init + luc ghi vao the SD).
  * lv_conf.h (dung chung) chi bat montserrat 14; o day CHI bat dung size can dung, va chi cho

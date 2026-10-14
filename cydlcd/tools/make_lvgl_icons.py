@@ -38,6 +38,18 @@ ICONS = [
     ("flowrate_32x32x4.cpp",    "flowrate_32x32x4",    "ui_icon_flowrate",   32, 32),
 ]
 
+# Ban THU NHO cho man STATUS (2026-10-14): 2 o the SD / SETTINGS tren man STATUS chi con 48x48 de
+# nhuong cho icon WiFi + chu dBm nam GIUA khoi FR/FL (xem cydlcd/src/ui_page_status.cpp: ST_TILE_SZ).
+# Vi sao phai sinh san chu khong dung lv_img_set_zoom(): LVGL 8.4 CHI ho tro transform (zoom/xoay)
+# cho TRUE_COLOR / TRUE_COLOR_ALPHA / CHROMA_KEYED / RGB565A8 - xem
+# lvgl/src/draw/sw/lv_draw_sw_transform.c (ALPHA_4BIT roi vao `default:` -> KHONG VE GI).
+# ICON cua Marlin la ALPHA_4BIT nen zoom se lam icon BIEN MAT.
+# (ten file, ten bien, ten symbol xuat ra, rong nguon, cao nguon, rong dich)
+SMALL = [
+    ("sd_64x64x4.cpp",          "sd_64x64x4",          "ui_icon_sd_48",          64, 64, 48),
+    ("settings_64x64x4.cpp",    "settings_64x64x4",    "ui_icon_settings_48",    64, 64, 48),
+]
+
 
 def read_bytes(path: Path, symbol: str, expect: int) -> bytes:
     """Doc mang `const uint8_t <symbol>[N] = { 0x.., ... };` trong file .cpp cua Marlin."""
@@ -59,6 +71,60 @@ def level_map(byte: int) -> int:
         lv = (byte >> shift) & 0x0F
         a = 0 if lv <= 8 else ((lv - 8) * 15 + 3) // 7
         out |= (a & 0x0F) << shift
+    return out
+
+
+def unpack4(raw: bytes, w: int, h: int) -> list[list[int]]:
+    """Giai ma mang 4bpp thanh bang 2 chieu muc alpha 0..15 (pixel trai = nibble CAO)."""
+    rows = []
+    for y in range(h):
+        row = []
+        for x in range(w):
+            b = raw[(y * w + x) // 2]
+            row.append((b >> 4) if (x % 2 == 0) else (b & 0x0F))
+        rows.append(row)
+    return rows
+
+
+def pack4(rows: list[list[int]], w: int) -> bytes:
+    """Dong goi bang 2 chieu muc alpha 0..15 thanh mang 4bpp (pixel trai = nibble CAO)."""
+    out = bytearray()
+    for row in rows:
+        for x in range(0, w, 2):
+            hi = row[x] & 0x0F
+            lo = (row[x + 1] & 0x0F) if (x + 1) < w else 0
+            out.append((hi << 4) | lo)
+    return bytes(out)
+
+
+def downsample(rows: list[list[int]], src_w: int, src_h: int, dst_w: int) -> list[list[int]]:
+    """Thu nho bang TRUNG BINH THEO DIEN TICH (box filter): moi diem dich lay trung binh co trong so
+    cua cac diem nguon phu no. 64 -> 48 dung ti le 3/4 nen mot diem dich ung ~1,33 x 1,33 diem nguon.
+    Dung trung binh dien tich (khong phai nearest) de net icon khong bi rang cua / mat net manh."""
+    dst_h = src_h * dst_w // src_w
+    sx = src_w / dst_w                        # so diem nguon tren 1 diem dich (truc x)
+    sy = src_h / dst_h
+    out = []
+    for dy in range(dst_h):
+        y0, y1 = dy * sy, (dy + 1) * sy
+        row = []
+        for dx in range(dst_w):
+            x0, x1 = dx * sx, (dx + 1) * sx
+            acc = 0.0
+            wsum = 0.0
+            for syi in range(int(y0), min(int(y1 - 1e-9) + 1, src_h)):
+                wy = min(y1, syi + 1) - max(y0, syi)
+                if wy <= 0:
+                    continue
+                for sxi in range(int(x0), min(int(x1 - 1e-9) + 1, src_w)):
+                    wx = min(x1, sxi + 1) - max(x0, sxi)
+                    if wx <= 0:
+                        continue
+                    wgt = wx * wy
+                    acc += rows[syi][sxi] * wgt
+                    wsum += wgt
+            row.append(int(round(acc / wsum)) if wsum > 0 else 0)
+        out.append(row)
     return out
 
 
@@ -84,34 +150,51 @@ def main() -> int:
         "",
     ]
     total = 0
-    for fname, symbol, out_name, w, h in ICONS:
-        path = IMG_DIR / fname
-        if not path.is_file():
-            raise SystemExit(f"Khong thay {path}")
-        raw = read_bytes(path, symbol, w * h // 2)
-        mapped = bytes(level_map(b) for b in raw)
-        total += len(mapped)
+    emitted = 0
 
-        lines.append(f"// {fname} ({w}x{h}, GREYSCALE4) -> ALPHA_4BIT, {len(mapped)} byte")
-        lines.append(f"static const uint8_t {out_name}_map[{len(mapped)}] = {{")
-        for i in range(0, len(mapped), 16):
-            row = ", ".join(f"0x{b:02X}" for b in mapped[i:i + 16])
+    def emit(out_name: str, w: int, h: int, data: bytes, note: str) -> None:
+        """Ghi 1 icon ra header (mang bitmap + lv_img_dsc_t)."""
+        nonlocal total, emitted
+        total += len(data)
+        emitted += 1
+        lines.append(f"// {note} -> ALPHA_4BIT, {len(data)} byte")
+        lines.append(f"static const uint8_t {out_name}_map[{len(data)}] = {{")
+        for i in range(0, len(data), 16):
+            row = ", ".join(f"0x{b:02X}" for b in data[i:i + 16])
             lines.append(f"  {row},")
         lines.append("};")
         # C++ (khac C) khong hieu designated initializer kieu C89 -> dung ngoac nhon theo thu tu:
         #   lv_img_dsc_t = { { cf, always_zero, reserved, w, h }, data_size, data }
         lines.append(f"static const lv_img_dsc_t {out_name} = {{")
         lines.append(f"  {{ LV_IMG_CF_ALPHA_4BIT, 0, 0, {w}, {h} }},")
-        lines.append(f"  {len(mapped)},")
+        lines.append(f"  {len(data)},")
         lines.append(f"  {out_name}_map")
         lines.append("};")
         lines.append("")
+
+    for fname, symbol, out_name, w, h in ICONS:
+        path = IMG_DIR / fname
+        if not path.is_file():
+            raise SystemExit(f"Khong thay {path}")
+        raw = read_bytes(path, symbol, w * h // 2)
+        mapped = bytes(level_map(b) for b in raw)
+        emit(out_name, w, h, mapped, f"{fname} ({w}x{h}, GREYSCALE4)")
+
+    for fname, symbol, out_name, w, h, dst_w in SMALL:
+        path = IMG_DIR / fname
+        if not path.is_file():
+            raise SystemExit(f"Khong thay {path}")
+        raw = read_bytes(path, symbol, w * h // 2)
+        mapped = bytes(level_map(b) for b in raw)
+        small = pack4(downsample(unpack4(mapped, w, h), w, h, dst_w), dst_w)
+        emit(out_name, dst_w, h * dst_w // w, small,
+             f"{fname} ({w}x{h}, GREYSCALE4) THU NHO -> {dst_w}x{h * dst_w // w}")
 
     lines.append("#endif // CYDLCD_USE_LVGL")
     lines.append("")
 
     OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
-    print(f"Da ghi {OUT} ({len(ICONS)} icon, {total} byte du lieu)")
+    print(f"Da ghi {OUT} ({emitted} icon, {total} byte du lieu)")
     return 0
 
 

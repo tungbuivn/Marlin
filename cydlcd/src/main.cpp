@@ -19,13 +19,48 @@
 #if CYDLCD_USE_LVGL
 
   #include "cydlcd_link.h"
-  #include "tbt_link.h"          // chan doan: dem dong/byte TRAM nhan duoc
+  #include "cydlcd_port.h"        // cydlcd_millis() (log 1 Hz: tuoi cua dong TBT cuoi cung)
+  #include "tbt_link.h"          // chan doan: dem dong/byte TBT nhan duoc
   #include "ui_lvgl.h"
   #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
   #include "net_upload_http.h"    // web server tren cydlcd: PC/dien thoai gui file qua WiFi
+  #include <lvgl.h>              // lv_mem_monitor(): theo doi pool LVGL trong log 1 Hz
 
   #if defined(CYDLCD_CYD_DEBUG)
     #include <esp_system.h>
+  #endif
+
+  // Chan doan treo vong lap (2026-10-14 - panel tung dung im khong in log, khong tra loi console):
+  //  - `s_stage` / `s_hung_s` nam trong RTC RAM (KHONG bi xoa boi reset mem/WDT, chi mat khi cat dien)
+  //    -> lan khoi dong sau biet vong lap truoc dung o chang nao va da treo bao lau (in o setup()).
+  //  - Task `cyd_diag_task()` (1 Hz, tren core 0) theo doi `s_loop_n`: vong lap khong chay > 15 s thi
+  //    in ro chang dang dung roi TU KHOI DONG LAI -> panel khong bao gio "chet im" mai mai nua.
+  //  - `s_ms[..]` do thoi gian tung chang o vong lap truoc, in o dong log 1 Hz (thay chang nao cham).
+  RTC_NOINIT_ATTR uint32_t s_stage;      // 0 = het vong, 1 = console, 2 = link, 3 = http, 4 = ui
+  RTC_NOINIT_ATTR uint32_t s_hung_s;     // so giay vong lap bi dung o lan treo truoc
+  static uint32_t s_ms[5];               // thoi gian (ms) tung chang o vong lap truoc
+  static volatile uint32_t s_loop_n = 0; // so vong lap da chay (task chan doan doc)
+  static volatile uint32_t s_loop_ms = 0;// millis() o dau vong lap hien tai
+
+  #if defined(CYDLCD_CYD_DEBUG)
+    // Task chan doan: khong dung vong lap chinh nen van chay duoc khi vong lap bi chan.
+    static void cyd_diag_task(void *) {
+      uint32_t last_n = 0, stall = 0;
+      for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (s_loop_n != last_n) { last_n = s_loop_n; stall = 0; s_hung_s = 0; continue; }
+        stall++;
+        s_hung_s = stall;                          // RTC: lan sau boot biet da treo bao lau
+        if (stall == 2 || stall == 5 || stall == 10)
+          Serial.printf("[CYD] CANH BAO: vong lap KHONG chay %lu s (dang o chang %u)\n",
+                        (unsigned long)stall, (unsigned)s_stage);
+        if (stall >= 15) {                         // treo qua lau -> tu phuc hoi
+          Serial.printf("[CYD] TREO > 15 s o chang %u -> TU KHOI DONG LAI\n", (unsigned)s_stage);
+          Serial.flush();
+          esp_restart();
+        }
+      }
+    }
   #endif
 
   void setup() {
@@ -35,8 +70,17 @@
       Serial.println();
       Serial.println("[CYD] ===== setup bat dau (LVGL + push) =====");
       Serial.printf("[CYD] reset reason = %d (1=poweron,3=sw,4=panic,5/6=wdt)\n", (int)esp_reset_reason());
+      // Chang cua vong lap TRUOC khi reset: RTC RAM khong bi xoa boi reset mem/WDT (chi mat khi cat dien).
+      // 0 = het vong lap (khong treo), 1 = console COM7, 2 = link Marlin, 3 = web server WiFi, 4 = UI LVGL.
+      Serial.printf("[CYD] vong lap truoc dung o chang = %u (0=het vong,1=console,2=link,3=http,4=ui)\n",
+                    (unsigned)s_stage);
+      if (s_hung_s) Serial.printf("[CYD] lan truoc vong lap bi dung %u s (da tu khoi dong lai)\n", (unsigned)s_hung_s);
       Serial.printf("[CYD] free heap = %u B\n", (unsigned)ESP.getFreeHeap());
+      // Task chan doan treo: 1 Hz tren core 0 (core 1 la task loop cua Arduino).
+      xTaskCreatePinnedToCore(cyd_diag_task, "cyd_diag", 4096, nullptr, 1, nullptr, 0);
     #endif
+    s_stage = 0;
+    s_hung_s = 0;
     DBG_BEGIN();
     cydlcd_link_begin(CYDLCD_MARLIN_BAUD);
     #if defined(CYDLCD_CYD_DEBUG)
@@ -53,7 +97,10 @@
     DBGLN("cydlcd ready (LVGL, push mode)");
   }
 
+
   void loop() {
+    s_loop_n++;
+    s_loop_ms = millis();
     static char s_forward_pending[40];     // lenh G-code nhan tu COM7 (console), cho gui sang Marlin
     #if defined(CYDLCD_CYD_DEBUG)
       static uint32_t dbg_next = 0;
@@ -63,10 +110,32 @@
         // voi ca bool lan uint16_t neu nhanh khac doi kieu).
         // t=<ms> = millis(): doc dong DAU TIEN de biet tu reset den luc loop() chay la bao lau
         // (sau khi hoan init BT ra khoi setup() - xem README 9.17).
-        Serial.printf("[CYD] loop OK | t=%lu ms | link PUSH=%d TBT=%d rx=%d err=%d heap=%u\n",
+        // Phan sau dau "|" chi co y nghia o che do TBT (link ASCII tramming): dem dong/byte de biet
+        // day noi SONG hay CHET va sai khung hay khong - xem bang chan doan o cydlcd/README.md muc
+        // "link PUSH/TBT". `cach-day` = ms tu dong TBT cuoi cung (lon dan = Marlin im).
+        Serial.printf("[CYD] loop OK | t=%lu ms | link PUSH=%d TBT=%d rx=%d err=%d heap=%u"
+                      " | TBT dong=%lu loi=%lu byte=%lu cach-day=%lums\n",
                       (unsigned long)millis(),
                       (int)cydlcd.linked, (int)tbt.linked, (int)cydlcd.rx_frames,
-                      (int)cydlcd.rx_errors, (unsigned)ESP.getFreeHeap());
+                      (int)cydlcd.rx_errors, (unsigned)ESP.getFreeHeap(),
+                      (unsigned long)tbt.lines, (unsigned long)tbt.errors,
+                      (unsigned long)tbt.raw_bytes,
+                      (unsigned long)(cydlcd_millis() - tbt.last_rx_ms));
+        // Thoi gian tung chang cua vong lap TRUOC (ms) - de thay chang nao bat dau cham/chan.
+        // Thu tu: 1 = console COM7, 2 = link Marlin, 3 = web server WiFi, 4 = UI LVGL.
+        Serial.printf("[CYD] chang: con=%lu link=%lu http=%lu ui=%lu ms | dang o chang %u\n",
+                      (unsigned long)s_ms[1], (unsigned long)s_ms[2], (unsigned long)s_ms[3],
+                      (unsigned long)s_ms[4], (unsigned)s_stage);
+        // Pool LVGL: `used/total` + do phan manh. Chi so QUAN TRONG: pool day 100% =>
+        // `lv_mem_alloc()` tra NULL => LVGL assert (truoc 2026-10-14 handler la `while(1)`
+        // nen panel TREO IM LANG - xem ghi chu o lv_conf_cydlcd.h).
+        {
+          lv_mem_monitor_t lm;
+          lv_mem_monitor(&lm);
+          Serial.printf("[CYD] lvmem: %lu/%lu B (frag %u%%, max free %lu B)\n",
+                        (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
+                        (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size);
+        }
         net_upload_http_log();     // 1 dong: the TF + WiFi + phien upload qua web (rong neu tat)
       }
     #endif
@@ -79,9 +148,17 @@
       cydlcd_link_send_gcode(s_forward_pending);
       s_forward_pending[0] = '\0';
     }
+    s_stage = 2;
+    uint32_t t_stage = millis();
     cydlcd_link_task();     // nhan frame tu Marlin + giu PING/lien ket
+    s_ms[2] = millis() - t_stage;
+    s_stage = 3; t_stage = millis();
     net_upload_http_task();// web server (nhan file qua WiFi) -> ghi vao the SD cua man hinh
+    s_ms[3] = millis() - t_stage;
+    s_stage = 4; t_stage = millis();
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
+    s_ms[4] = millis() - t_stage;
+    s_stage = 1;           // con lai trong vong lap: doc console COM7
 
     // CONSOLE G-CODE QUA CONG USB CUA MAN HINH CYD (tinh nang, 2026-10-13): nhan tung dong G-code/M-code
     // tu COM7 roi chuyen tiep sang Marlin bang DUNG duong ma cac nut bam tren UI dung
@@ -198,6 +275,12 @@
                 Serial.println("[PRE] dung: PRE?   hoac   PRE <i 0..2> <nozzle> <bed> [fan]");
               }
             }
+          } else if (strncmp(s_fwd, "UI", 2) == 0 && (s_fwd[2] == '\0' || s_fwd[2] == ' ' || s_fwd[2] == '?')) {
+            // CHAN DOAN UI: mo 1 trang theo ten (`UI TRAMMING`, `UI SETTINGS`...) hoac in danh sach
+            // trang (`UI` / `UI ?`). Dung de TAI HIEN loi UI tu PC, khong phai cham tay vao man hinh.
+            const char *a3 = s_fwd + 2;
+            while (*a3 == ' ') a3++;
+            ui_lvgl_show_page_name(a3);
           } else
 #endif
           {
