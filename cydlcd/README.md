@@ -1815,6 +1815,16 @@ khởi động lại**, cuối cùng phải reset board Marlin.
 * **`gcode/sd/M524.cpp`** (bản sửa theo yêu cầu): M524 nay **ngừng feed nội dung file** (`IS_SD_PRINTING()` =
   false) và **xoá hàng đợi** ⇒ coi như file đã đọc xong, các lệnh đã nạp từ file không chạy tiếp; đồng thời
   `wait_for_heatup = false` để thoát vòng chờ nóng.
+* 🆕 **TẮT GIA NHIỆT + DỪNG CHUYỂN ĐỘNG NGAY trong M524** (2026-10-15, người dùng báo: *"hủy in xong vẫn thấy
+  thông báo hotend đang nóng"*): cả `gcode/sd/M524.cpp` **và** nhánh critical của `cydlcd_serial.cpp` nay gọi
+  thêm `quickstop_stepper()` + `thermalManager.disable_all_heaters()` (`IF_DISABLED(SD_ABORT_NO_COOLDOWN, …)`
+  cho đúng như `MarlinCore`). **Vì sao cần**: 2 việc đó trước đây chỉ nằm trong `abortSDPrinting()`
+  (`MarlinCore.cpp:363`) và **chỉ chạy ở vòng `loop()`** (`MarlinCore.cpp:1680`) ⇒ nếu Marlin đang ở trong 1
+  lệnh DÀI (`G4` dwell) hoặc vừa mới thoát vòng chờ nóng thì bị **TRỄ**; trong lúc trễ, **nhiệt độ MỤC TIÊU**
+  do file đặt (vd 250 °C) **vẫn còn** ⇒ hotend vẫn nung. Nay nhiệt độ về 0 **ngay tại lúc nhận M524**.
+  **Đã kiểm trên máy thật (COM7, PSU tắt nên chỉ cần đúng số MỤC TIÊU)**: `M104 S45` → trang NHIỆT ĐỘ hiện
+  `NOZZLE 30.5 / 45 C` → gửi `M524` → **`NOZZLE 30.5 / 0 C`** (target về 0 ngay), `st=1 → 3 → 0`,
+  `fl=0xA7 → 0xA3`; màn hình không restart.
 * **Panel** (`cydlcd_link.cpp`): ghi ra Marlin **không bao giờ chặn cứng** — frame vào **hàng đợi TX 4 khe**
   và trải dần (`cydlcd_link_tx_task()`), chỉ **frame dữ liệu thẻ SD / SDACK** mới chờ (có trần 250 ms) vì mất 1
   frame là hỏng cả sector. `ui_lvgl.cpp`: nút STOP gửi `M108` + `M524` và **gửi lại mỗi 400 ms tối đa 6 s**

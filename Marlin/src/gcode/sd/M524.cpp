@@ -28,6 +28,8 @@
 #include "../../MarlinCore.h"            // wait_for_heatup / wait_for_user
 #include "../../sd/cardreader.h"
 #include "../queue.h"                    // queue.clear() (bo lenh da nap tu file)
+#include "../../module/motion.h"         // quickstop_stepper()
+#include "../../module/temperature.h"    // thermalManager.disable_all_heaters()
 
 #if ENABLED(DWIN_LCD_PROUI)
   #include "../../lcd/marlinui.h"
@@ -44,6 +46,12 @@
  *      duoc ban in, phai reset board. Nay dat luon `wait_for_heatup = false` de vong cho THOAT.
  *   2. Cac lenh DA NAP TU FILE (di chuyen, gia nhiet...) van nam trong hang doi va se CHAY TIEP
  *      sau khi "dung" -> may van dong/nung them. Nay XOA hang doi (coi nhu da doc xong file).
+ *   3. (2026-10-15, nguoi dung bao "huy in xong van thay hotend dang nong") TAT GIA NHIET + DUNG
+ *      CHUYEN DONG NGAY tai day. Truoc day 2 viec do chi nam trong `abortSDPrinting()`
+ *      (MarlinCore.cpp:363) va chi chay o vong `loop()` (MarlinCore.cpp:1680) -> neu Marlin dang o
+ *      trong 1 lenh DAI (vd `G4` dwell) hoac vua moi thoat vong cho nong thi bi TRE; trong luc tre,
+ *      NHIET DO MUC TIEU tu file (vd 250 C) VAN CON -> hotend van nung. Xem cydlcd_serial.cpp (ban
+ *      sao y nguyen cho lenh M524 di tu MAN HINH CYD, xu ly khong qua hang doi).
  */
 void GcodeSuite::M524() {
 
@@ -64,6 +72,8 @@ void GcodeSuite::M524() {
       card.closefile();
 
     queue.clear();                               // bo cac lenh da nap tu file (chua chay)
+    quickstop_stepper();                         // dung moi chuyen dong dang xep
+    IF_DISABLED(SD_ABORT_NO_COOLDOWN, thermalManager.disable_all_heaters());
 
   #endif
 
