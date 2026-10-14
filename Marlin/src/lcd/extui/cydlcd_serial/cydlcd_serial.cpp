@@ -798,22 +798,26 @@ namespace {
           //      nen co abort khong bao gio duoc xu ly);
           //   2) co abort -> IS_SD_PRINTING() = false -> NGUNG FEED noi dung file (coi nhu doc xong);
           //   3) xoa hang doi -> cac lenh da nap tu file khong chay tiep;
-          //   4) TAT GIA NHIET + DUNG CHUYEN DONG NGAY (2026-10-15, nguoi dung bao: "huy in xong van
-          //      thay hotend dang nong"). VI SAO PHAI LAM O DAY: `abortSDPrinting()` cua MarlinCore
-          //      (MarlinCore.cpp:363, co `thermalManager.disable_all_heaters()` + `quickstop_stepper()`)
-          //      CHI chay o vong `loop()` (MarlinCore.cpp:1680) - neu Marlin dang o trong mot lenh DAI
-          //      (vd `G4` dwell, hoac vua moi ra khoi vong cho nong) thi cac buoc do bi TRE; trong luc
-          //      tre, NHIET DO MUC TIEU VAN CON (vd 250 C tu `M104/M109` cua file) -> hotend van nung.
-          //      Tat ngay o day = dung y nguoi dung ("ngay sau M524 thi marlin can..."). Cung ton trong
-          //      `SD_ABORT_NO_COOLDOWN` nhu MarlinCore de ban build khac khong bi doi hanh vi.
+          //   4) TAT GIA NHIET NGAY (2026-10-15, nguoi dung bao: "huy in xong van thay hotend dang
+          //      nong"): `abortSDPrinting()` cua MarlinCore (MarlinCore.cpp:363) co
+          //      `thermalManager.disable_all_heaters()` + `quickstop_stepper()` nhung CHI chay o vong
+          //      `loop()` (MarlinCore.cpp:1680) -> bi TRE neu Marlin dang o trong 1 lenh DAI; trong luc
+          //      tre do NHIET DO MUC TIEU (vd 250 C tu file) VAN CON -> hotend van nung.
+          //      `disable_all_heaters()` KHONG chan (chi ghi lai target = 0) nen goi o day an toan.
+          //
+          // !! KHONG goi `quickstop_stepper()` o day !!
+          //   Ham do goi `planner.synchronize()` = CHO den khi het chuyen dong dang chay -> trong ham
+          //   nhan frame (chay trong `idle()`) se KHOA Marlin lai giua duong (khong doc UART, khong xu
+          //   ly lenh) va co the bi goi LAP (nut STOP gui lai moi 400 ms) -> rui ro treo/restart Marlin.
+          //   Viec dung chuyen dong de `abortSDPrinting()` lam o vong `loop()` (dung cho, ngay sau do
+          //   vi co abort da duoc dat).
           else if (strcasecmp(cmd, "M524") == 0) {
             wait_for_heatup = false;
             TERN_(HAS_RESUME_CONTINUE, wait_for_user = false);
             card.flag.abort_sd_printing = true;
             queue.clear();
-            quickstop_stepper();                                    // dung moi chuyen dong dang xep
             IF_DISABLED(SD_ABORT_NO_COOLDOWN, thermalManager.disable_all_heaters());
-            SERIAL_ECHOLNPGM("PANEL: M524 (huy ban in) - xu ly NGAY: xoa hang doi, tat gia nhiet, quickstop");
+            SERIAL_ECHOLNPGM("PANEL: M524 (huy ban in) - xu ly NGAY: ngung feed, xoa hang doi, TAT gia nhiet");
           }
           // M410: quickstop (dung moi chuyen dong dang xep) - cung la lenh "critical" cho an toan.
           else if (strcasecmp(cmd, "M410") == 0) {

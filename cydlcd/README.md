@@ -1815,16 +1815,31 @@ khởi động lại**, cuối cùng phải reset board Marlin.
 * **`gcode/sd/M524.cpp`** (bản sửa theo yêu cầu): M524 nay **ngừng feed nội dung file** (`IS_SD_PRINTING()` =
   false) và **xoá hàng đợi** ⇒ coi như file đã đọc xong, các lệnh đã nạp từ file không chạy tiếp; đồng thời
   `wait_for_heatup = false` để thoát vòng chờ nóng.
-* 🆕 **TẮT GIA NHIỆT + DỪNG CHUYỂN ĐỘNG NGAY trong M524** (2026-10-15, người dùng báo: *"hủy in xong vẫn thấy
-  thông báo hotend đang nóng"*): cả `gcode/sd/M524.cpp` **và** nhánh critical của `cydlcd_serial.cpp` nay gọi
-  thêm `quickstop_stepper()` + `thermalManager.disable_all_heaters()` (`IF_DISABLED(SD_ABORT_NO_COOLDOWN, …)`
-  cho đúng như `MarlinCore`). **Vì sao cần**: 2 việc đó trước đây chỉ nằm trong `abortSDPrinting()`
-  (`MarlinCore.cpp:363`) và **chỉ chạy ở vòng `loop()`** (`MarlinCore.cpp:1680`) ⇒ nếu Marlin đang ở trong 1
-  lệnh DÀI (`G4` dwell) hoặc vừa mới thoát vòng chờ nóng thì bị **TRỄ**; trong lúc trễ, **nhiệt độ MỤC TIÊU**
-  do file đặt (vd 250 °C) **vẫn còn** ⇒ hotend vẫn nung. Nay nhiệt độ về 0 **ngay tại lúc nhận M524**.
-  **Đã kiểm trên máy thật (COM7, PSU tắt nên chỉ cần đúng số MỤC TIÊU)**: `M104 S45` → trang NHIỆT ĐỘ hiện
-  `NOZZLE 30.5 / 45 C` → gửi `M524` → **`NOZZLE 30.5 / 0 C`** (target về 0 ngay), `st=1 → 3 → 0`,
-  `fl=0xA7 → 0xA3`; màn hình không restart.
+* 🆕 **TẮT GIA NHIỆT NGAY, nhưng KHÔNG được `quickstop_stepper()` trong hàm nhận frame** (2026-10-15:
+  người dùng báo *"hủy in xong vẫn thấy hotend đang nóng"* rồi *"ngừng in v300-case-esp thì Marlin bị
+  restart"*):
+  * `thermalManager.disable_all_heaters()` **được** gọi ngay trong nhánh critical của `cydlcd_serial.cpp`
+    (chỉ ghi lại target = 0, **không chặn**) ⇒ nhiệt độ mục tiêu về 0 ngay, không đợi `loop()`
+    (trước đây `abortSDPrinting()` — nơi có tắt gia nhiệt — chỉ chạy ở vòng `loop()` nên bị TRỄ).
+  * `quickstop_stepper()` **BỊ BỎ KHỎI** nhánh đó: hàm này gọi `planner.synchronize()` = **CHỜ** hết
+    chuyển động đang chạy ⇒ trong hàm nhận frame (chạy trong `idle()`) sẽ **khoá Marlin giữa đường**
+    (không đọc UART, không xử lý lệnh) và bị gọi **LẶP lại** vì nút STOP gửi `M108`+`M524` mỗi 400 ms
+    ⇒ treo/`watchdog` reset = **"Marlin bị restart"**. Việc dừng chuyển động vẫn xảy ra, nhưng ở **đúng
+    chỗ**: `abortSDPrinting()` (`MarlinCore.cpp:363-372`) gọi `quickstop_stepper()` trong vòng `loop()`
+    ngay sau đó (vì cờ abort đã được đặt).
+  * `gcode/sd/M524.cpp` **vẫn** có `quickstop_stepper()` — đường đó chạy **từ hàng đợi** (host trên
+    COM4 gửi `M524`), tức là trong ngữ cảnh `loop()` bình thường, không phải trong hàm nhận frame.
+  * **Đã kiểm trên máy thật (COM7, ĐÚNG thao tác người dùng)**: `UI FILE SD` → chọn
+    `V300_case-esp-2432s208_no-` (36 ký tự) → `PRINT` → `st=1`, `fl=0xA7` (bit `SD_PRINTING`) →
+    **STOP + OK** → `st=1 → 3 → 0`, `fl=0xA7 → 0xA3`, `file=""`, trang NHIỆT ĐỘ hiện
+    `NOZZLE 33.7 / 0 C`, `BED 31.9 / 0 C` (target về 0), **KHÔNG có dòng `MARLIN VUA KHOI DONG LAI`**
+    ⇒ Marlin không restart.
+* 🆕 **Phát hiện Marlin restart từ phía màn hình**: mỗi khung `CYDLCD_F_HELLO` được đếm; từ lần thứ 2
+  trở đi màn hình ghi `*** MARLIN VUA KHOI DONG LAI (HELLO lan N) - truoc do link=..., ly do reset
+  khong ro ***` (`cydlcd_link.cpp`). Đây là **dấu hiệu duy nhất** phía màn hình để biết Marlin vừa
+  reset (Marlin không gửi lý do reset qua kênh này) — dùng để chẩn đoán các lỗi kiểu "bấm STOP thì
+  Marlin restart". ⚠️ **Mở COM4 bằng `marlin-cmd.ps1` (DTR=true) sẽ RESET board** — chỉ mở khi máy đang
+  rảnh, đừng mở trong lúc đang in (làm mất trạng thái bản in).
 * **Panel** (`cydlcd_link.cpp`): ghi ra Marlin **không bao giờ chặn cứng** — frame vào **hàng đợi TX 4 khe**
   và trải dần (`cydlcd_link_tx_task()`), chỉ **frame dữ liệu thẻ SD / SDACK** mới chờ (có trần 250 ms) vì mất 1
   frame là hỏng cả sector. `ui_lvgl.cpp`: nút STOP gửi `M108` + `M524` và **gửi lại mỗi 400 ms tối đa 6 s**

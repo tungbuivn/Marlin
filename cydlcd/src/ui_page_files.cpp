@@ -692,6 +692,7 @@ static void files_test_click(lv_obj_t *b, const char *name) {
 //   <so 0..4> : ban CHAM vao dong thu <so> CUA TRANG dang xem (kiem tra chon dung dong + to sang);
 //   P / N     : ban cham vao nut PREV / NEXT (kiem tra lat trang);
 //   I         : ban cham vao nut PRINT (kiem tra duong IN: co gui M23+M24 khong);
+//   S         : bam STOP + OK (A_STOP_NOW: gui M108 + M524, gui lai moi 400 ms - giong nut that);
 //   D         : ban cham vao nut XOA (kiem tra dong nao bi coi la gi); hop xac nhan (neu mo) TU DONG
 //               dong sau 8 s -> khong de hop modal nam tren man.
 //   K         : bam nut OK cua hop PROMPT/XAC NHAN dang mo (2 lan = chay lenh xoa that);
@@ -709,6 +710,12 @@ void files_test_cmd(const char *arg) {
   if (c == 'P') { files_page_move(-1); page_files_dump(); return; }
   if (c == 'N') { files_page_move(+1); page_files_dump(); return; }
   if (c == 'I') { files_test_click(fl_print, "PRINT"); page_files_dump(); return; }
+  if (c == 'S') {
+    // A_STOP_NOW = dung nhu "bam STOP roi bam OK" (A_STOP chi MO HOP xac nhan, khong gui lenh nao).
+    do_action((int)A_STOP_NOW);
+    Serial.println("[UI] FILES: da bam STOP (A_STOP_NOW: M108 + M524, gui lai moi 400 ms)");
+    return;
+  }
   if (c == 'U') { files_test_click(fl_up, "UP"); page_files_dump(); return; }
   if (c == 'L') {                                        // liet ke 1 thu muc bang FATFS cua man hinh
     const char *path = arg + 1;                          // `UI TAP L` = goc the, `UI TAP L /BTUP` = 1 thu muc
@@ -737,7 +744,7 @@ void files_test_cmd(const char *arg) {
 
   const int i = atoi(arg);
   if (i < 0 || i >= (int)FILES_ROWS) {
-    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P/N (lat trang) | I (PRINT) | D (nut XOA) | K (OK hop thoai) | C (dem muc con) | L (liet ke goc the)\n",
+    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P/N (lat trang) | I (PRINT) | S (STOP) | D (nut XOA) | K (OK hop thoai) | C (dem muc con) | L (liet ke thu muc) | U (UP)\n",
                   (unsigned)(FILES_ROWS - 1));
     return;
   }

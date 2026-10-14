@@ -20,6 +20,7 @@ cydlcd_data_t cydlcd;
 static cydlcd_rx_t  s_rx;
 static cydlcd_tx_t  s_tx;
 static uint32_t    s_next_ping_ms = 0;
+static uint8_t     s_hello_count = 0;           // so lan nhan HELLO (>= 2 = Marlin da restart - xem handle_frame)
 static bool        s_want_full = true;         // xin FULL ngay khi lien ket duoc
 // Anh cua bo dem loi 16-bit trong cydlcd_protocol.h (cydlcd_rx_t.errors) o lan doc truoc, de biet
 // "VUA co loi moi" ma khong phai sua cydlcd_protocol.h (file do phai giu byte-identical voi ban
@@ -296,6 +297,12 @@ static void handle_frame() {
   switch ((cydlcd_frame_t)s_rx.type) {
 
     case CYDLCD_F_HELLO:
+      // HELLO = Marlin vua KHOI DONG (hoac vua reset/panic). Dem lai va LOG RO khi day la lan thu >= 2:
+      // day la dau hieu DUY NHAT phia man hinh de biet "Marlin bi restart" (Marlin khong gui ly do
+      // reset qua kenh nay) - dung de chan doan cac loi kieu "bam STOP thi Marlin restart".
+      if (++s_hello_count > 1)
+        SDLOG("[UP] *** MARLIN VUA KHOI DONG LAI (HELLO lan %u) - truoc do link=%u, ly do reset khong ro ***\n",
+              (unsigned)s_hello_count, (unsigned)cydlcd.linked);
       cydlcd.marlin_ver[0] = '\0';
       if (n >= 6) {
         cydlcd.marlin_fw   = (uint16_t)(p[0] | (p[1] << 8));
