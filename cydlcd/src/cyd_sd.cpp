@@ -498,6 +498,66 @@ bool cyd_sd_delete(const char *name) {
 #endif
 }
 
+// Dem so MUC CON cua 1 thu muc o goc the. ESP32 VFS da bo qua "." va ".." khi liet ke (xem clean_dir()
+// o tren - vong lap do khong phai tu loc gi) nen chi can dem. -1 = khong mo duoc thu muc.
+int cyd_sd_dir_count(const char *name) {
+#if CYDLCD_SD_UART
+  if (!s_sd_ready || !name || !name[0]) return -1;
+  if (s_fatfs_stale) fatfs_sync();          // P3: FATFS co the lech sau khi Marlin ghi tho
+  if (!s_sd_ready) return -1;
+  char path[80];
+  snprintf(path, sizeof(path), "/%s", name);
+  File dir = SD.open(path);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return -1;
+  }
+  int n = 0;
+  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) n++;
+  dir.close();
+  return n;
+#else
+  (void)name;
+  return -1;
+#endif
+}
+
+// Xoa 1 THU MUC RONG o goc the. VI SAO KHONG DUNG M30 CUA MARLIN: `M30` -> CardReader::removeFile()
+// -> SdBaseFile::remove() -> truncate(0) - ham nay KHONG xoa duoc thu muc (chinh chu thich trong
+// Marlin/src/sd/SdBaseFile.cpp: "Reasons for failure include the file read-only, is a directory").
+// The dang o khe MAN HINH CYD (CYDLCD_SD_UART) nen man hinh tu xoa bang FATFS: ESP32 VFS `remove()`
+// goi rmdir() khi duong dan la thu muc, va rmdir chi xoa duoc thu muc RONG.
+bool cyd_sd_delete_dir(const char *name, bool *not_empty) {
+  if (not_empty) *not_empty = false;
+#if CYDLCD_SD_UART
+  if (!s_sd_ready || !name || !name[0]) return false;
+  if (printer_busy()) { ELOG("[UP] TU CHOI xoa thu muc: Marlin dang in\n"); return false; }
+  char path[80];
+  snprintf(path, sizeof(path), "/%s", name);
+  // Dem TRUOC khi xoa: nho vay bao duoc DUNG ly do ("con N muc con") thay vi chi "khong xoa duoc",
+  // va KHONG bao gio cham vao thu muc con du lieu.
+  const int cnt = cyd_sd_dir_count(name);
+  if (cnt < 0) { ELOG("[UP] khong mo duoc thu muc de xoa: %s\n", path); return false; }
+  if (cnt > 0) {
+    if (not_empty) *not_empty = true;
+    ELOG("[UP] KHONG xoa thu muc %s: con %d muc con (chi xoa duoc thu muc RONG)\n", path, cnt);
+    return false;
+  }
+  // PHAI dung SD.rmdir(), KHONG duoc dung SD.remove(): VFSImpl::remove() TU CHOI thu muc
+  // ("%s does not exists or is directory" - FS/src/vfs_api.cpp), con VFSImpl::rmdir() moi goi
+  // rmdir() cua VFS FATFS -> f_unlink (FatFs: xoa duoc thu muc RONG). Da gap that: SD.remove() tra
+  // false lam man hinh bao "Khong xoa duoc thu muc" du thu muc da RONG.
+  const bool ok = SD.rmdir(path);
+  if (ok) s_fatfs_written = true;           // P3: vua ghi FATFS -> phai flush truoc khi Marlin ghi tho
+  ELOG("[UP] %s thu muc RONG %s (cydlcd tu xoa - che do the qua UART)\n",
+       ok ? "da xoa" : "KHONG xoa duoc", path);
+  return ok;
+#else
+  (void)name;
+  return false;
+#endif
+}
+
 const char *cyd_sd_last_result(void) { return s_result; }
 uint32_t    cyd_sd_last_written(void) { return s_written; }
 const char *cyd_sd_temp_path(void) { return s_tmp; }
@@ -788,6 +848,8 @@ bool cyd_sd_printer_busy(void) { return false; }
 bool cyd_sd_raw_read(uint32_t sector, uint8_t *dst) { (void)sector; (void)dst; return false; }
 bool cyd_sd_raw_write(uint32_t sector, const uint8_t *src) { (void)sector; (void)src; return false; }
 bool cyd_sd_delete(const char *name) { (void)name; return false; }
+int  cyd_sd_dir_count(const char *name) { (void)name; return -1; }
+bool cyd_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, size_t errn) {
   (void)name; (void)size; (void)written; (void)err; (void)errn;
   return false;

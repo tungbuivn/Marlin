@@ -474,6 +474,14 @@ void build_chrome(void);
 void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);
 /** Tu dong dong hop XAC NHAN sau `ms` mili giay (0 = tat) - dung cho hop TEST tu console. */
 void ui_confirm_autoclose(const uint32_t ms);
+/**
+ * CHAN DOAN (lenh `UI TAP K` tren COM7): bam nut OK cua hop XAC NHAN dang mo, di dung duong su kien
+ * that (chon nut 0 cua btnmatrix roi ban VALUE_CHANGED vao btnmatrix - no co EVENT_BUBBLE len hop).
+ * Hop xac nhan 2 buoc => phai goi 2 lan moi chay lenh that (vd xoa file/thu muc cua man FILE).
+ */
+void boxes_test_ok(void);
+/** In ra HOP THOAI nao dang mo (prompt/XAC NHAN/THONG BAO/PID) + chu cua no - cho chan doan `UI BOX`. */
+void boxes_dump(void);
 /** Tra focus ve vat dau tien cua man dang mo (sau khi dong hop thoai). */
 void refocus_page(void);
 /** Cap nhat prompt cua Marlin + thong bao + hop "tune xong" (goi moi vong ui_lvgl_task). */
@@ -549,7 +557,10 @@ void page_files_update(void);
  * ngay se nhan danh sach CU). Goi tu show_page() moi lan VAO man FILE, va tu nut DIR/REFRESH.
  */
 void files_init_sd(void);
-/** Xoa file dang chon: uu tien net_sd_delete_file() (the o khe MAN HINH CYD), khong thi gui M30. */
+/**
+ * Xoa dang chon: FILE -> net_sd_delete_file() (the o khe MAN HINH CYD) hoac M30; THU MUC RONG ->
+ * net_sd_delete_dir() (M30 cua Marlin KHONG xoa duoc thu muc). Con muc con thi chi bao ghi chu.
+ */
 void files_delete_now(void);
 /**
  * "Viec cham" cua man FILE, goi o nhip 400 ms trong ui_lvgl_task() ke CA khi da roi man:

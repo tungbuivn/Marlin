@@ -50,12 +50,23 @@ bool cyd_sd_printer_busy(void);         // Marlin dang in? (de tu choi phien upl
 // Tra true = OK. Khi false: `err` (co the NULL) nhan ly do, *written = so byte da ghi vao the.
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, size_t errn);
 
-// ---- DOC/GHI SECTOR THO + XOA FILE (man hinh la "may chu the SD" cho Marlin) ----
+// ---- DOC/GHI SECTOR THO + XOA FILE/THU MUC (man hinh la "may chu the SD" cho Marlin) ----
 // cydlcd_link.cpp goi cyd_sd_raw_read() khi Marlin hoi 1 sector (frame CYDLCD_F_SDREQ) roi tra ket qua
 // qua CYDLCD_F_SDDATA. Xem cydlcd/README.md muc 12.
 bool cyd_sd_raw_read(uint32_t sector, uint8_t *dst);
 bool cyd_sd_raw_write(uint32_t sector, const uint8_t *src);
 bool cyd_sd_delete(const char *name);   // xoa file o GOC the + bao Marlin mount lai
+/**
+ * Dem so MUC CON cua 1 thu muc o goc the ("." va ".." khong tinh). Tra -1 khi khong mo duoc thu muc
+ * (khong co the / khong phai thu muc / loi FATFS). KHONG xoa gi - dung de bao truoc "con N muc con".
+ */
+int cyd_sd_dir_count(const char *name);
+/**
+ * Xoa 1 THU MUC RONG o goc the (FATFS chi cho xoa thu muc trong). Tra true = da xoa.
+ * false + *not_empty = true khi thu muc CON muc con (khong xoa, khong mat du lieu gi).
+ * `not_empty` co the NULL (chi can biet xoa duoc hay khong).
+ */
+bool cyd_sd_delete_dir(const char *name, bool *not_empty);
 
 // Ket qua phien upload gan nhat (de /status tra JSON, khong chan)
 const char *cyd_sd_last_result(void);   // "DONE 12345" / "ERR ..." / ""

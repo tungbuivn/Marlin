@@ -53,9 +53,10 @@ void ui_lvgl_dump_layout(void);
 void ui_lvgl_test_dialog(void);
 
 // CHAN DOAN man FILE: ban su kien CHAM vao 1 dong cua TRANG dang xem (`UI TAP <0..4>`), vao nut
-// PREV (`UI TAP P`) / NEXT (`UI TAP N`) hoac nut XOA FILE (`UI TAP D`); khong tham so = in trang
-// thai danh sach. Di DUNG duong su kien that nen kiem tra duoc phan CHON file + to sang + lat trang
-// ma khong can cham tay vao man hinh.
+// PREV (`UI TAP P`) / NEXT (`UI TAP N`) / XOA (`UI TAP D`), bam OK hop xac nhan (`UI TAP K`, 2 lan =
+// chay lenh that) hoac dem muc con cua thu muc dang chon (`UI TAP C`, khong xoa gi); khong tham so =
+// in trang thai danh sach. Di DUNG duong su kien that nen kiem tra duoc tu PC: cham dong nao thi dong
+// do co duoc chon + to sang khong, dang chon file nao, va xoa file/thu muc rong co chay khong.
 void ui_lvgl_test_tap(const char *arg);
 
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------

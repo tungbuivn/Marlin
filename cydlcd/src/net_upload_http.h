@@ -40,6 +40,15 @@ bool net_upload_active(void);
 // lai the (ui_lvgl.cpp goi files_init_sd() -> M22/M21 qua UART + xin lai danh sach file).
 bool net_sd_delete_file(const char *name);
 
+// Dem so MUC CON cua 1 THU MUC o goc the (-1 = khong mo duoc). KHONG xoa gi.
+int net_sd_dir_count(const char *name);
+
+// XOA 1 THU MUC RONG ngay tren man hinh CYD (giong net_sd_delete_file: the o khe man hinh, Marlin
+// chay SDCARD_READONLY nen `M30` khong dung duoc - va M30 cua Marlin cung KHONG xoa duoc thu muc).
+// Tra true = da xoa; false + *not_empty = true khi thu muc CON muc con (khong mat du lieu gi).
+// Xoa xong nguoi goi PHAI bao Marlin mount lai the (ui_page_files.cpp: files_init_sd()).
+bool net_sd_delete_dir(const char *name, bool *not_empty);
+
 // Tam dung / bat lai mDNS. Dung trong luc QUET MANG: khi quet, STA roi kenh => interface "down",
 // mDNS (responder) rat de panic/assert trong tinh huong do. Tra ve true = mDNS dang BAT sau loi goi.
 // Neu CYDLCD_HTTP_USE_MDNS 0 thi luon tra false.

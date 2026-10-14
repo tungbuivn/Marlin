@@ -8,6 +8,8 @@
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
 
+#include <Arduino.h>                // Serial.printf (lenh chan doan `UI TAP K`)
+
 #if CYDLCD_USE_LVGL
 
 
@@ -88,10 +90,25 @@ void refocus_page(void) {
   else if (s_bar) lv_group_focus_obj(s_bar);
 }
 
+// Lay HOP THOAI tu su kien cua nut ben trong no.
+//
+// !!! PHAI DUNG lv_event_get_current_target(), KHONG duoc dung lv_event_get_target() !!!
+// Nut cua msgbox la 1 `lv_btnmatrix` va no duoc gan LV_OBJ_FLAG_EVENT_BUBBLE (lv_msgbox.c:135 -
+// "To see the event directly on the message box") de su kien VALUE_CHANGED noi len hop. Khi mot su
+// kien BUBBLE thi:
+//     lv_event_get_target()         = vat GOC phat su kien = BTNMATRIX  (khong phai hop!)
+//     lv_event_get_current_target() = vat DANG nhan su kien  = HOP THOAI (vat ta gan callback)
+// (lv_event.c:105-113). Ban cu dung lv_event_get_target() nen `box` la btnmatrix; cac ham
+// lv_msgbox_get_*() se doc con tro `((lv_msgbox_t*)btnmatrix)->btns` -> rac -> LoadProhibited ->
+// PANEL TU REBOOT moi lan bam OK/CANCEL (gap that tren may that 2026-10-15: `UI TAP K` lam CYD
+// panic "Guru Meditation ... LoadProhibited"). Xem cydlcd/README.md muc hop thoai.
+static lv_obj_t *box_from_event(lv_event_t *e) { return lv_event_get_current_target(e); }
+
 static void cb_prompt_value(lv_event_t *e) {
-  lv_obj_t *box = lv_event_get_target(e);
+  lv_obj_t *box = box_from_event(e);
   const char *t = lv_msgbox_get_active_btn_text(box);
   const uint8_t ok = (t && (t[0] == 'O' || t[0] == 'o')) ? 1 : 0;    // OK / CANCEL
+  WIFILOG("[UI] tra loi PROMPT cua Marlin: %s (id=%u)\n", ok ? "OK" : "CANCEL", (unsigned)cydlcd.prompt_id);
   cydlcd_link_answer(ok);          // cydlcd_link_answer() tu dat prompt_active = false
   box_close(&s_prompt_box);
   refocus_page();
@@ -120,7 +137,7 @@ static uint8_t   s_cf_steps  = 1;
 static uint32_t  s_cf_autoclose_ms = 0;      // >0: tu dong dong hop XAC NHAN sau moc nay
 
 static void cb_confirm_value(lv_event_t *e) {
-  lv_obj_t *box = lv_event_get_target(e);
+  lv_obj_t *box = box_from_event(e);             // HOP THOAI (khong phai btnmatrix - xem box_from_event)
   const char *t = lv_msgbox_get_active_btn_text(box);
   const bool ok = (t && (t[0] == 'O' || t[0] == 'o'));
   if (ok && s_cf_steps > 1) {                    // con 1 buoc xac nhan nua (Reboot DFU)
@@ -149,6 +166,41 @@ void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t step
 // (`UI TESTBOX`) - de khong de 1 hop modal nam tren man hinh khi khong ai bam.
 void ui_confirm_autoclose(const uint32_t ms) {
   s_cf_autoclose_ms = ms ? lv_tick_get() + ms : 0;
+}
+
+// CHAN DOAN (lenh `UI TAP K` tren COM7): bam nut OK cua HOP THOAI dang mo (prompt cua Marlin hoac hop
+// XAC NHAN). Di DUNG duong su kien that: nut bam trong msgbox la 1 btnmatrix co LV_OBJ_FLAG_EVENT_BUBBLE
+// (lv_msgbox.c:135), va cb_prompt_value()/cb_confirm_value() doc nut DANG CHON cua btnmatrix
+// (lv_msgbox_get_active_btn_text()) -> chi can chon nut 0 (OK) roi ban VALUE_CHANGED vao chinh
+// btnmatrix, y nhu nguoi dung cham vao nut do.
+// Dung de kiem tra tu PC: duong TRA LOI PROMPT cua Marlin (vd `M0` -> cho nguoi dung) va duong XOA
+// cua man FILE (hop 2 buoc: phai bam OK 2 lan moi chay lenh that).
+void boxes_test_ok(void) {
+  lv_obj_t *box = s_prompt_box ? s_prompt_box : s_cf_box;   // uu tien prompt cua Marlin (dang cho tra loi)
+  if (!box) { Serial.println("[UI] khong co hop PROMPT / XAC NHAN nao dang mo"); return; }
+  lv_obj_t *bm = lv_msgbox_get_btns(box);
+  if (!bm) return;
+  lv_btnmatrix_set_selected_btn(bm, 0);              // 0 = "OK" (mang nut {"OK", "CANCEL", ""})
+  lv_event_send(bm, LV_EVENT_VALUE_CHANGED, NULL);
+  // Hop XAC NHAN 2 buoc con dang mo (moi qua buoc 1) -> hen lai gio tu dong dong de lan `UI TAP K`
+  // ke tiep van kip bam (moi lenh console cach nhau vai giay).
+  if (s_cf_box && box == s_cf_box) s_cf_autoclose_ms = lv_tick_get() + 8000U;
+}
+
+// In ra HOP THOAI nao dang mo (ten + noi dung) - cho chan doan `UI BOX` tren COM7.
+// VI SAO CAN: tren lop tren co 4 hop khac nhau (prompt cua Marlin / XAC NHAN / THONG BAO / PID) va
+// chung deu la msgbox giong het nhau khi nhin theo cay vat; doc chu moi biet dang la hop nao (vd
+// `M0` -> hop PROMPT cua Marlin dang cho nguoi dung tra loi).
+void boxes_dump(void) {
+  lv_obj_t *const boxes[4] = { s_prompt_box, s_cf_box, s_msg_box, s_pid_box };
+  const char *const names[4] = { "PROMPT cua Marlin", "XAC NHAN", "THONG BAO", "PID" };
+  for (uint8_t i = 0; i < 4; i++) {
+    if (!boxes[i]) continue;
+    lv_obj_t *t = lv_msgbox_get_title(boxes[i]);
+    lv_obj_t *x = lv_msgbox_get_text(boxes[i]);
+    Serial.printf("[UI] hop %s: \"%s\" | \"%s\"\n", names[i],
+                  t ? lv_label_get_text(t) : "", x ? lv_label_get_text(x) : "");
+  }
 }
 
 void boxes_update(void) {

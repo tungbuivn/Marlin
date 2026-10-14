@@ -6,10 +6,13 @@
  * o nhung ham dung cheo file (khai bao trong ui_lvgl_int.h), khong doi logic/ten/chuoi.
  *
  * Gom:
- *   - "viec cham" cua man FILE (init lai the SD sau khi module khac ghi the, xoa file qua
- *     net_sd_delete_file) - chay o nhip 400 ms trong ui_lvgl_task() ke CA khi da roi man;
+ *   - "viec cham" cua man FILE (init lai the SD sau khi module khac ghi the, xoa file/thu muc qua
+ *     net_sd_delete_file / net_sd_delete_dir) - chay o nhip 400 ms trong ui_lvgl_task() ke CA khi da
+ *     roi man;
  *   - FILES_ROWS dong file (moi dong la 1 NUT: cham = chon + to sang) + 3 hang nut
- *     (PRINT/DIR/UP/REFRESH, PAUSE/RESUME/STOP, PREV/XOA FILE/NEXT) + dong info.
+ *     (PRINT/DIR/UP/REFRESH, PAUSE/RESUME/STOP, PREV/XOA/NEXT) + dong info.
+ *   - Nut `XOA` xoa CA file LAN thu muc: file -> FATFS cua man hinh (the o khe CYD) hoac M30;
+ *     thu muc -> FATFS cua man hinh va CHI khi thu muc RONG (M30 cua Marlin khong xoa duoc thu muc).
  *
  * HOP DONG voi net_upload_http.cpp (2 ham `weak`): xem khoi chu thich ngay duoi day.
  */
@@ -37,6 +40,14 @@ static bool sd_host_busy(void) { return net_upload_active && net_upload_active()
 // Tra true = da xoa xong; UI PHAI tu bao Marlin mount lai the (files_init_sd() -> M22/M21 qua UART).
 // Vang mat (mode khac) -> con tro NULL -> UI roi ve duong M30 nhu cu.
 extern "C" bool net_sd_delete_file(const char *name) __attribute__((weak));
+
+// HOP DONG voi net_upload_http.cpp: XOA 1 THU MUC RONG + DEM MUC CON cua thu muc (xem net_upload_http.h).
+// VI SAO KHONG DUNG M30 CHO THU MUC: `M30` -> CardReader::removeFile() -> SdBaseFile::remove() ->
+// truncate(0), va ham nay KHONG xoa duoc thu muc (Marlin/src/sd/SdBaseFile.cpp: "Reasons for failure
+// include the file read-only, is a directory"). The dang o khe man hinh CYD nen man hinh tu xoa bang
+// FATFS (`remove()` -> rmdir, chi xoa duoc thu muc RONG).
+extern "C" bool net_sd_delete_dir(const char *name, bool *not_empty) __attribute__((weak));
+extern "C" int  net_sd_dir_count(const char *name) __attribute__((weak));
 
 // ===========================================================================
 //  FILES  (vung noi dung 206 px = CONT_H 214 - 2*PAGE_PAD 4)
@@ -309,12 +320,12 @@ void files_init_sd(void) {
 static void cb_files_refresh(lv_event_t *e) { (void)e; files_init_sd(); }
 
 // ---------------------------------------------------------------------------
-//  XOA FILE dang chon (M30)
+//  XOA dang chon: FILE (M30 hoac FATFS cua man hinh) hoac THU MUC RONG (chi FATFS cua man hinh)
 // ---------------------------------------------------------------------------
-static char    s_del_name[CYDLCD_FILE_NAME_LEN];   // ten file nguoi dung da xac nhan xoa
+static char    s_del_name[CYDLCD_FILE_NAME_LEN];   // ten file/thu muc nguoi dung da xac nhan xoa
 static uint8_t s_del_flags = 0;                   // flags tai luc hoi (bit0 = thu muc)
 
-// Khoa/mo nut XOA FILE trong luc dang xoa (xem files_btn_enable: LV_STATE_DISABLED la khoa THAT SU).
+// Khoa/mo nut XOA trong luc dang xoa (xem files_btn_enable: LV_STATE_DISABLED la khoa THAT SU).
 static void files_del_lock(const bool on) {
   if (!fl_del || lv_obj_has_state(fl_del, LV_STATE_DISABLED) == on) return;
   lv_obj_t *l = lv_obj_get_child(fl_del, 0);
@@ -324,20 +335,33 @@ static void files_del_lock(const bool on) {
   }
   else {
     lv_obj_clear_state(fl_del, LV_STATE_DISABLED);
-    if (l) { set_text(l, "XOA FILE"); lv_obj_set_style_text_color(l, COL_TXT, 0); }
+    if (l) { set_text(l, "XOA"); lv_obj_set_style_text_color(l, COL_TXT, 0); }
   }
 }
 
 // Chay lenh xoa THAT SU - chi duoc goi tu do_confirmed() sau khi nguoi dung bam OK du 2 buoc.
+// Xoa duoc CA file LAN thu muc: thu muc chi xoa duoc khi RONG (FATFS).
 void files_delete_now(void) {
   if (s_fl_job == FLJOB_DELETE) return;                 // dang xoa -> chong bam lap
   if (!s_del_name[0]) return;
-  // The SD dung chung: M30 cung lam Marlin doc/ghi the -> phai doi phien upload WiFi xong.
+  // The SD dung chung: moi lenh xoa deu lam Marlin doc/ghi the -> phai doi phien upload WiFi xong.
   if (sd_host_busy()) { files_note("Dang nhan file qua WiFi - cho xong", true); return; }
-  // Kiem lai co "thu muc" o day nua: hop xac nhan khong khoa duoc vung phia duoi (cham van lot),
-  // nen lua chon co the da doi trong luc hop dang mo.
-  if (s_del_flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }
 
+  // ---- THU MUC: chi xoa duoc khi RONG (va chi xoa duoc TU MAN HINH - xem net_sd_delete_dir) ----
+  if (s_del_flags & 0x01U) {
+    bool not_empty = false;
+    if (net_sd_delete_dir && net_sd_delete_dir(s_del_name, &not_empty)) {
+      files_note("da xoa thu muc rong", false);
+      files_init_sd();                                  // bao Marlin mount lai the + xin lai danh sach
+      return;
+    }
+    // Khong xoa duoc: phan biet "con muc con" (khong mat gi) voi loi khac -> nguoi dung biet phai lam gi.
+    files_note(not_empty ? "Thu muc con file - xoa file ben trong truoc"
+                         : "Khong xoa duoc thu muc", true);
+    return;
+  }
+
+  // ---- FILE ----
   // THE QUA UART (P1): MAN HINH CYD giu the -> TU XOA, roi bao Marlin mount lai the (files_init_sd gui
   // M22+M21 -> Marlin doc lai FAT qua UART) va xin lai danh sach. Khong dung M30 vi Marlin dang
   // chay SDCARD_READONLY (M30 se bao loi).
@@ -355,8 +379,8 @@ void files_delete_now(void) {
   files_del_lock(true);                                 // tam khoa nut toi khi danh sach duoc refresh
 }
 
-// Nut XOA FILE: KHONG xoa ngay ma hoi xac nhan 2 buoc (xoa file KHONG hoan tac duoc -> giong
-// REBOOT DFU). Ten file (ke ca ten khong co phan mo rong - van cho phep) duoc ghi ro trong hop.
+// Nut XOA: KHONG xoa ngay ma hoi xac nhan 2 buoc (xoa KHONG hoan tac duoc -> giong REBOOT DFU).
+// Ten (file hoac thu muc) duoc ghi ro trong hop, kem canh bao rieng cho thu muc (chi xoa duoc khi RONG).
 static void cb_files_delete(lv_event_t *e) {
   (void)e;
   if (s_fl_job == FLJOB_DELETE) return;                 // dang xoa -> khong mo lai hop xac nhan
@@ -366,17 +390,20 @@ static void cb_files_delete(lv_event_t *e) {
   const cydlcd_file_t *f = files_selected();
   if (!f || !f->name[0]) return;
   // flags bit 0 = isDir (Marlin cydlcd_serial.cpp: tx_u8(cydlcd_files.isDir() ? 1 : 0)).
-  if (f->flags & 0x01U) { files_note("Khong xoa thu muc", true); return; }
+  const bool isdir = ((f->flags & 0x01U) != 0);
 
-  // Chot TEN FILE ngay tai day: danh sach co the duoc Marlin day lai trong luc hop dang mo, giu
-  // ten da hoi de nguoi dung xac nhan dung file nao thi xoa dung file do.
+  // Chot TEN ngay tai day: danh sach co the duoc Marlin day lai trong luc hop dang mo, giu
+  // ten da hoi de nguoi dung xac nhan dung file/thu muc nao thi xoa dung cai do.
   strncpy(s_del_name, f->name, sizeof(s_del_name) - 1);
   s_del_name[sizeof(s_del_name) - 1] = '\0';
   s_del_flags = f->flags;
 
-  char txt[80];
-  snprintf(txt, sizeof(txt), "Xoa file?\n%s\nKhong the hoan tac!", s_del_name);
-  ui_confirm("XOA FILE", txt, (uint8_t)A_FILES_DELETE, 2);
+  char txt[96];
+  if (isdir)
+    snprintf(txt, sizeof(txt), "Xoa THU MUC?\n%s\n(chi xoa duoc khi RONG)", s_del_name);
+  else
+    snprintf(txt, sizeof(txt), "Xoa file?\n%s\nKhong the hoan tac!", s_del_name);
+  ui_confirm("XOA", txt, (uint8_t)A_FILES_DELETE, 2);
 }
 
 // Viec cham chay o nhip 400 ms (xem ui_lvgl_task): het do tre thi xin lai danh sach.
@@ -446,12 +473,13 @@ void page_files_create(lv_obj_t *p) {
   mk_btn_grow(r2, "RESUME", FILES_BTN_H, cb_action, (void *)(intptr_t)A_RESUME);
   mk_btn_grow(r2, "STOP (M524)", FILES_BTN_H, cb_action, (void *)(intptr_t)A_STOP);
 
-  // Hang cuoi: [PREV] [XOA FILE] [NEXT]. PREV/NEXT lat TUNG TRANG danh sach (khong cuon tay).
-  // XOA FILE nam giua 2 nut lat trang (thao tac KHONG hoan tac duoc -> phai xac nhan 2 buoc, xem
-  // cb_files_delete) - 2 nut lat trang la vo hai nen dat canh nhau khong lam tang rui ro bam nham.
+  // Hang cuoi: [PREV] [XOA] [NEXT]. PREV/NEXT lat TUNG TRANG danh sach (khong cuon tay).
+  // XOA nam giua 2 nut lat trang: XOA duoc CA FILE LAN THU MUC (thu muc chi xoa duoc khi RONG) va la
+  // thao tac KHONG hoan tac duoc -> phai xac nhan 2 buoc (xem cb_files_delete); 2 nut lat trang la
+  // vo hai nen dat canh nhau khong lam tang rui ro bam nham.
   lv_obj_t *r3 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
   fl_prev = mk_btn_grow(r3, "PREV", FILES_BTN_H, cb_files_prev, NULL);
-  fl_del  = mk_btn_grow(r3, "XOA FILE", FILES_BTN_H, cb_files_delete, NULL);
+  fl_del  = mk_btn_grow(r3, "XOA", FILES_BTN_H, cb_files_delete, NULL);
   fl_next = mk_btn_grow(r3, "NEXT", FILES_BTN_H, cb_files_next, NULL);
 }
 
@@ -528,8 +556,10 @@ static void files_test_click(lv_obj_t *b, const char *name) {
 // Lenh chan doan `UI TAP <gi>` tren COM7:
 //   <so 0..4> : ban CHAM vao dong thu <so> CUA TRANG dang xem (kiem tra chon dung dong + to sang);
 //   P / N     : ban cham vao nut PREV / NEXT (kiem tra lat trang);
-//   D         : ban cham vao nut XOA FILE (kiem tra dung dong nao bi coi la "thu muc"); hop xac nhan
-//               (neu mo) TU DONG dong sau 4 s -> khong de hop modal nam tren man.
+//   D         : ban cham vao nut XOA (kiem tra dong nao bi coi la gi); hop xac nhan (neu mo) TU DONG
+//               dong sau 4 s -> khong de hop modal nam tren man.
+//   K         : bam nut OK cua hop XAC NHAN dang mo (2 lan = chay lenh xoa that - xem boxes_test_ok);
+//   C         : DEM MUC CON cua thu muc dang chon (KHONG xoa gi) - de biet truoc thu muc co RONG khong.
 //   (khong tham so): chi in trang thai (giong `UI BOX`).
 void files_test_cmd(const char *arg) {
   if (!fl_rows) { Serial.println("[UI] FILES: trang chua duoc tao (mo truoc bang 'UI FILE SD')"); return; }
@@ -541,15 +571,27 @@ void files_test_cmd(const char *arg) {
   if (c == 'P') { files_page_move(-1); page_files_dump(); return; }
   if (c == 'N') { files_page_move(+1); page_files_dump(); return; }
   if (c == 'D') {
-    files_test_click(fl_del, "XOA FILE");
-    ui_confirm_autoclose(4000);          // vo hai khi khong co hop nao duoc mo
+    files_test_click(fl_del, "XOA");
+    ui_confirm_autoclose(8000);          // vo hai khi khong co hop nao duoc mo
     page_files_dump();
+    return;
+  }
+  if (c == 'K') { boxes_test_ok(); page_files_dump(); return; }
+  if (c == 'C') {
+    const cydlcd_file_t *f = files_selected();
+    if (!f || !f->name[0]) { Serial.println("[UI] FILES: chua chon gi"); return; }
+    if (!(f->flags & 0x01U)) { Serial.printf("[UI] FILES: <<%s>> la FILE (khong phai thu muc)\n", f->name); return; }
+    const int n = net_sd_dir_count ? net_sd_dir_count(f->name) : -1;
+    Serial.printf("[UI] FILES: thu muc <<%s>> co %d muc con -> %s\n", f->name, n,
+                  (n < 0) ? "KHONG mo duoc (khong co the / khong ho tro)"
+                          : (n ? "CON muc con nen KHONG xoa duoc (chi xoa thu muc RONG)"
+                               : "RONG nen xoa duoc"));
     return;
   }
 
   const int i = atoi(arg);
   if (i < 0 || i >= (int)FILES_ROWS) {
-    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P (trang truoc) | N (trang sau) | D (XOA FILE)\n",
+    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P (trang truoc) | N (trang sau) | D (nut XOA) | K (OK hop xac nhan) | C (dem muc con)\n",
                   (unsigned)(FILES_ROWS - 1));
     return;
   }

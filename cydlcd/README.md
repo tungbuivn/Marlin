@@ -426,7 +426,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
-| **FILES** | danh sách file từ SD (Marlin đẩy xuống): **chạm 1 dòng = CHỌN + tô sáng dòng đó — chỉ nút `PRINT` mới in** (trước đây chạm vào danh sách là in luôn: hợp với encoder nhưng trên màn cảm ứng thì rất dễ in nhầm); `PRINT` → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15, vòng 2):** danh sách là **5 dòng cố định (18 px/dòng, mỗi dòng 1 nút)** + **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)`; **KHÔNG cuộn** — lật trang bằng **`PREV`/`NEXT`** ở hàng nút cuối (kèm `T x/y` ở dòng info, nút nào hết trang thì **khoá thật** bằng `LV_STATE_DISABLED`: `lv_indev.c:412` chặn chạm, `lv_group.c:434` chặn encoder). **Vì sao bỏ `lv_roller` cũ:** (1) cuộn bằng ngón tay rất khó — phải kéo đúng cự ly mới đổi được dòng; (2) **lỗi nặng hơn:** chạm vào 1 dòng roller **không** làm `lv_roller_get_selected()` đổi theo dòng vừa chạm (roller chỉ đổi khi kéo rồi thắng lại) ⇒ `files_selected()` trả về dòng chọn **cũ** ⇒ bấm `XOA FILE` trên 1 file lại đi xoá **thư mục** đang chọn trước đó (triệu chứng: *"chọn 1 file mà báo Không xoá thư mục"*). Nay mỗi dòng là 1 nút giữ **chỉ số tuyệt đối** `s_sel` + **tên** (`s_sel_name`, để giữ lựa chọn qua lần `REFRESH`/xoá xong vì thứ tự file do FAT quyết định). **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống; dòng được **căn trái** và **cắt bằng `...`** khi quá dài. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
+| **FILES** | danh sách file từ SD (Marlin đẩy xuống): **chạm 1 dòng = CHỌN + tô sáng dòng đó — chỉ nút `PRINT` mới in** (trước đây chạm vào danh sách là in luôn: hợp với encoder nhưng trên màn cảm ứng thì rất dễ in nhầm); `PRINT` → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15, vòng 2):** danh sách là **5 dòng cố định (18 px/dòng, mỗi dòng 1 nút)** + **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)`; **KHÔNG cuộn** — lật trang bằng **`PREV`/`NEXT`** ở hàng nút cuối (kèm `T x/y` + **tên mục đang chọn** ở dòng info, nút nào hết trang thì **khoá thật** bằng `LV_STATE_DISABLED`: `lv_indev.c:412` chặn chạm, `lv_group.c:434` chặn encoder). **Vì sao bỏ `lv_roller` cũ:** (1) cuộn bằng ngón tay rất khó — phải kéo đúng cự ly mới đổi được dòng; (2) **lỗi nặng hơn:** chạm vào 1 dòng roller **không** làm `lv_roller_get_selected()` đổi theo dòng vừa chạm (roller chỉ đổi khi kéo rồi thắng lại) ⇒ `files_selected()` trả về dòng chọn **cũ** ⇒ bấm `XOA` trên 1 file lại đi xoá **thư mục** đang chọn trước đó (triệu chứng: *"chọn 1 file mà báo Không xoá thư mục"*). Nay mỗi dòng là 1 nút giữ **chỉ số tuyệt đối** `s_sel` + **tên** (`s_sel_name`, để giữ lựa chọn qua lần `REFRESH`/xoá xong vì thứ tự file do FAT quyết định). **Nút `XOA` xoá CẢ file LẪN thư mục** (2026-10-15, vòng 3), luôn hỏi xác nhận **2 bước** (xem §8b cho hộp thoại): **file** → `net_sd_delete_file()` (`SD.remove()` = FATFS `f_unlink`) hoặc lùi về `M30`; **thư mục** → `net_sd_delete_dir()` = **`SD.rmdir()`** và **chỉ khi thư mục RỖNG** (FATFS `rmdir` không xoá được thư mục còn mục con) — còn mục con thì chỉ hiện ghi chú `Thu muc con file - xoa file ben trong truoc`. ⚠️ **KHÔNG dùng `M30` cho thư mục**: `M30` → `CardReader::removeFile()` → `SdBaseFile::remove()` → `truncate(0)` không xoá được thư mục (chính Marlin ghi trong `SdBaseFile.cpp`), nên đường thư mục **chỉ chạy khi thẻ ở khe màn hình CYD** (§12). ⚠️ `SD.remove()` của ESP32 **từ chối thư mục** (`vfs_api.cpp`: *"does not exists or is directory"*) — đã gặp thật: xoá thư mục rỗng mà báo "Khong xoa duoc"; **phải** dùng `SD.rmdir()`. **Đã kiểm end-to-end (COM7):** chọn `cydlcd_tmp` → `XOA` → OK ×2 → log `[UP] da xoa thu muc RONG /cydlcd_tmp`, danh sách còn 6 mục, không reboot (`cydlcd_tmp` là thư mục tạm của màn hình, `cyd_sd.cpp` **tự tạo lại** khi cần upload). **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống; dòng được **căn trái** và **cắt bằng `...`** khi quá dài. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
 | **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS` |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
@@ -684,6 +684,45 @@ Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
 * Bước 3 có thể mất 10–60 giây; script thoát với mã lỗi = số mục còn hỏng (`0` = xong).
 * Sau khi xong, build/nạp bình thường:
   `pio run -d D:\Marlin\cydlcd -e cydlcd_esp32 -t upload --upload-port COM3`.
+
+---
+
+## 8b. HỘP THOẠI (msgbox): `lv_event_get_target()` **SAI** — phải dùng `lv_event_get_current_target()` (đã sửa 2026-10-15)
+
+**Triệu chứng**: bấm **OK/CANCEL** của **bất kỳ** hộp thoại nào (prompt của Marlin *"Click to Resume..."*,
+hộp **XAC NHAN** của `XOA`/`REBOOT DFU`, hộp **THONG BAO**, hộp **PID**) → màn hình CYD **tự reboot**:
+
+```
+Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
+```
+(rồi log khởi động lại: `[UP] thu mount the TF ...`). Đây **rất có thể** là một phần của các báo cáo
+"huỷ là bị restart LCD" trước đây — không phải lúc nào cũng do hàng đợi Marlin đầy.
+
+**Nguyên nhân** (đọc mã LVGL 8.4 trong `.pio/libdeps/*/lvgl/src`, không đoán):
+* nút của msgbox là một `lv_btnmatrix` và nó được gắn `LV_OBJ_FLAG_EVENT_BUBBLE`
+  (`extra/widgets/msgbox/lv_msgbox.c:135`) để sự kiện `VALUE_CHANGED` **nổi** lên hộp;
+* khi một sự kiện **bubble**:
+  * `lv_event_get_target()` = vật **GỐC** phát sự kiện = **btnmatrix** (không phải hộp!),
+  * `lv_event_get_current_target()` = vật **đang nhận** sự kiện = **hộp** (nơi ta gắn callback)
+  (`core/lv_event.c:105-113`);
+* `cb_prompt_value()` / `cb_confirm_value()` cũ dùng `lv_event_get_target()` ⇒ `box` là **btnmatrix**;
+  `lv_msgbox_get_active_btn_text(box)` gọi `lv_msgbox_get_btns()` = đọc `((lv_msgbox_t*)btnmatrix)->btns`
+  → **con trỏ rác** → `LoadProhibited`.
+
+**Cách sửa**: một helper duy nhất trong `ui_boxes.cpp` — mọi handler lấy hộp qua nó:
+
+```cpp
+static lv_obj_t *box_from_event(lv_event_t *e) { return lv_event_get_current_target(e); }
+```
+
+**Đã kiểm trên máy thật (COM7)**: gửi `M0` → `[UI] hop PROMPT cua Marlin: "MARLIN" | "Click to Resume..."`;
+`UI TAP K` (bấm OK) → `[UI] tra loi PROMPT cua Marlin: OK (id=0)`, Marlin `st=1` → **`st=0`**, hộp biến mất,
+**không reboot**. Hộp XAC NHAN của `XOA` cũng đi đúng đường này (xem §5.3 màn FILES).
+
+> **Ghi chú về prompt**: Marlin chờ người dùng trong `wait_for_user_response()` (`while (wait_for_user) idle();`)
+> — giống kiểu "block" của `M190`/`M524`, nhưng `idle()` **vẫn chạy** nên khung `PROMPT` từ Marlin vẫn tới màn hình
+> và khung `ANSWER` của màn hình vẫn được Marlin xử lý NGAY (không qua hàng đợi). Muốn thoát từ console:
+> gửi `M108` (đường "critical" của `cydlcd_serial.cpp` xử lý tức thì, xem §"DỪNG IN").
 
 ---
 
@@ -1704,9 +1743,9 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
 | 🆕 `UI ?` (hoac `UI`) | in danh sach 13 man + so thu tu (khong mo man nao) |
 | 🆕 `UI <ten man>` | **mo** 1 man theo ten, vd `UI FILE SD`, `UI TRAMMING` — de tai hien loi UI tu PC |
-| 🆕 `UI BOX` | in **bo cuc** man dang mo + **lop tren (hop thoai)**: toa do/kich thuoc tung vat **theo cay** (de quy 2 muc, thay ca nhan nam trong khung/nut), noi dung `lv_roller` (danh sach file), trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong, **hop thoai co o giua man hinh khong** |
+| 🆕 `UI BOX` | in **bo cuc** man dang mo + **lop tren (hop thoai)**: toa do/kich thuoc tung vat **theo cay** (de quy 2 muc, thay ca nhan nam trong khung/nut), noi dung `lv_roller` (danh sach file), trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong, **hop thoai co o giua man hinh khong**. 🆕 Khi dang o man **FILE SD** in them **dong dang chon** (chi so + ten + dong nao dang to nen), va in them **hop nao dang mo** (PROMPT cua Marlin / XAC NHAN / THONG BAO / PID + chu cua no) |
 | 🆕 `UI TESTBOX` | mo 1 **hop thoai XAC NHAN rong** (tu dong dong sau 6 s, bam OK/CANCEL khong lam gi) de kiem tra bo cuc hop thoai: doc `UI BOX` phan "lop tren" — hop PHAI co tam = tam man hinh (vd `x=60 y=82 200x76` ⇒ tam 160,120 = giua 320×240) |
-| 🆕 `UI TAP <0..4>` · `UI TAP P\|N` · `UI TAP D` | **ban su kien CHAM** vao man FILE SD (phai mo `UI FILE SD` truoc): `<0..4>` = dong thu may **cua TRANG dang xem**, `P`/`N` = nut **PREV/NEXT**, `D` = nut **XOA FILE** (hop xac nhan neu mo thi tu dong dong sau 4 s). Di **dung duong su kien that** (`lv_event_send` → `cb_files_row`...) nen kiem tra duoc tu PC: cham dong nao thi **dong do** co duoc chon + to sang khong, dang chon file nao (`UI TAP` khong tham so = in trang thai), va bam XOA FILE khi dang chon **file** thi mo hop xac nhan (khong bao "Khong xoa thu muc") |
+| 🆕 `UI TAP <0..4>` · `UI TAP P\|N` · `UI TAP D` · `UI TAP K` · `UI TAP C` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (phải mở `UI FILE SD` trước), `P`/`N` = nút **PREV/NEXT**, `D` = nút **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì** — dùng để biết thư mục có rỗng), `K` = **bấm OK** của hộp thoại đang mở (**dùng được ở MỌI màn**: prompt của Marlin / XAC NHAN / THONG BAO; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA` mở hộp xác nhận, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách |
 
 ⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang
 Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen tiep nen khong bi lan.

@@ -709,6 +709,9 @@ void ui_lvgl_dump_layout(void) {
   // Man FILE: in them DONG DANG CHON (chi so + ten) - de doi chieu voi dong vua cham (`UI TAP <i>`).
   if (s_page_act == PG_FILES) page_files_dump();
 
+  // Hop nao dang mo (prompt cua Marlin / XAC NHAN / THONG BAO / PID) + noi dung cua no.
+  boxes_dump();
+
   // LOP PHU / HOP THOAI nam tren `lv_layer_top()` (msgbox, lop phu SUA, ban phim WiFi...).
   // In luon de kiem tra vi tri: hop thong bao PHAI o GIUA man hinh (khong phai goc tren-trai).
   lv_obj_t *top = lv_layer_top();
@@ -728,8 +731,14 @@ void ui_lvgl_test_dialog(void) {
 // CHAN DOAN: ban su kien CHAM vao man FILE (lenh `UI TAP <gi>` tren COM7). Chi co y nghia khi man
 // FILE dang mo. Dung de kiem tra duong "cham 1 dong -> chon dung dong do" tu PC.
 void ui_lvgl_test_tap(const char *arg) {
+  // 'K' = bam OK cua HOP THOAI dang mo: dung duoc o MOI man (hop prompt cua Marlin / thong bao
+  // khong thuoc man FILE) nen phai kiem tra TRUOC khi doi hoi man FILE.
+  const char *a = arg;
+  while (a && *a == ' ') a++;
+  if (a && (*a == 'K' || *a == 'k')) { boxes_test_ok(); return; }
+
   if (s_page_act != PG_FILES) {
-    Serial.println("[UI] TAP chi dung cho man FILE (mo truoc bang 'UI FILE SD')");
+    Serial.println("[UI] TAP chi dung cho man FILE (mo truoc bang 'UI FILE SD'); rieng 'UI TAP K' (bam OK hop thoai) dung duoc o moi man");
     return;
   }
   files_test_cmd(arg);

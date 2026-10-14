@@ -361,6 +361,10 @@ bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state ==
 // Xoa file ngay tren man hinh CYD (che do the qua UART). Xem net_upload_http.h.
 bool net_sd_delete_file(const char *name) { return cyd_sd_delete(name); }
 
+// Dem muc con / xoa THU MUC RONG ngay tren man hinh CYD. Xem net_upload_http.h.
+int  net_sd_dir_count(const char *name) { return cyd_sd_dir_count(name); }
+bool net_sd_delete_dir(const char *name, bool *not_empty) { return cyd_sd_delete_dir(name, not_empty); }
+
 // Tam dung / bat lai mDNS (dung khi QUET MANG - xem net_upload_http.h).
 // LY DO: khi quet, STA roi kenh => interface "down"; responder mDNS rat de assert/panic trong tinh
 // huong do (la mot trong cac nghi van gay man hinh CYD tu reboot). Tat han mDNS trong luc quet la an toan
@@ -401,6 +405,8 @@ void net_upload_http_log(void) {}
 bool net_upload_http_active(void) { return false; }
 bool net_upload_active(void) { return false; }
 bool net_sd_delete_file(const char *name) { (void)name; return false; }
+int  net_sd_dir_count(const char *name) { (void)name; return -1; }
+bool net_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
 bool net_upload_mdns_pause(const bool pause) { (void)pause; return false; }
 
 #endif  // CYDLCD_WIFI_UPLOAD
