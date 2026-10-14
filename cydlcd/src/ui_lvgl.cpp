@@ -774,6 +774,11 @@ void ui_lvgl_dump_busy(void) {
                 (cydlcd.flags & CYDLCD_SF_LEVELING) ? " DANG LEVELING" : "");
   Serial.printf("[UI] upload: %s%s\n", busy ? "BI CHAN" : "cho nhan file",
                 busy ? " (dang in / tam dung ban in TU THE SD - dung in roi gui lai)" : "");
+  // Trang thai BED MESH/UBL (byte thu 4 cua CYDLCD_F_STATUS tu 2026-10-15) + kich thuoc luoi + da luu chua.
+  Serial.printf("[UI] mesh: UBL %s | luoi %ux%u rows %u | %s | co MESH=%s\n",
+                cydlcd.mesh_on ? "ON (dang bu)" : "OFF", (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
+                (unsigned)cydlcd.mesh_rows, cydlcd.mesh_valid ? "da co mesh" : "CHUA co mesh",
+                (cydlcd.hello_flags & CYDLCD_HAS_MESH) ? "co" : "khong");
 }
 
 // CHAN DOAN: bam nut preset preheat (PLA/PETG/ABS) cua man TEMP tu console (`UI PRE <k>` tren COM7).

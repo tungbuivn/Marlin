@@ -29,8 +29,10 @@
 #define MESH_TABLE_W PAGE_INN_W                         // 312: luoi dung het be rong
 #define MESH_CELL_W  38                                 // be rong toi thieu 1 o: du "-0.20" (33 px) + 2*2 pad
 
-static lv_obj_t *me_table, *me_info, *me_note;
+static lv_obj_t *me_table, *me_info, *me_note, *me_btn_on, *me_btn_off;
 static uint8_t   s_mesh_nx = 0, s_mesh_ny = 0;
+static bool      s_mesh_on_prev = false, s_mesh_on_valid = false;
+static bool      s_mesh_valid_prev = false;
 
 // Nguong to mau: |z| > 0.05mm thi to xanh (cao) / do (thap)
 #define MESH_HI_UM  50
@@ -96,8 +98,9 @@ void page_mesh_create(lv_obj_t *p) {
   mk_btn_grow(ru1, "G29 P4RT", 28, cb_action, (void *)(intptr_t)A_G29_FT);
 
   lv_obj_t *ru2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
-  mk_btn_grow(ru2, "UBL ON",   28, cb_action, (void *)(intptr_t)A_G29_ON);
-  mk_btn_grow(ru2, "UBL OFF",  28, cb_action, (void *)(intptr_t)A_G29_OFF);
+  // 2 nut nay doi trang thai UBL; giu con tro de TO MAU theo trang thai that (xem page_mesh_update()).
+  me_btn_on  = mk_btn_grow(ru2, "UBL ON",   28, cb_action, (void *)(intptr_t)A_G29_ON);
+  me_btn_off = mk_btn_grow(ru2, "UBL OFF",  28, cb_action, (void *)(intptr_t)A_G29_OFF);
   mk_btn_grow(ru2, "SAVE S0",  28, cb_action, (void *)(intptr_t)A_G29_SAVE);
 }
 
@@ -137,9 +140,26 @@ void page_mesh_update(void) {
   char b1[12], b2[12];
   fmt_scaled(b1, sizeof(b1), vmin, 1000, 2);
   fmt_scaled(b2, sizeof(b2), vmax, 1000, 2);
-  snprintf(b, sizeof(b), "mesh %ux%u  rows %u  %s..%s%s", (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
-           (unsigned)cydlcd.mesh_rows, b1, b2, cydlcd.mesh_valid ? "  valid" : "  -");
+  // Dong thong tin co ca TRANG THAI UBL ON/OFF (phan hoi nguoi dung 2026-10-15: "phan setting bed mesh chua
+  // hien thi duoc tinh trang mesh on hay off, bam xong ma khong biet da duoc hay chua"). `cydlcd.mesh_on` =
+  // planner.leveling_active cua Marlin (byte thu 4 cua CYDLCD_F_STATUS, day ~1 Hz) nen sau khi bam UBL ON/OFF
+  // khoang 1 s dong nay tu doi; dong thoi TO MAU dong nay + 2 nut theo trang thai (xem duoi).
+  snprintf(b, sizeof(b), "%ux%u rows %u %s..%s%s  UBL:%s", (unsigned)cydlcd.mesh_nx,
+           (unsigned)cydlcd.mesh_ny, (unsigned)cydlcd.mesh_rows, b1, b2,
+           cydlcd.mesh_valid ? " valid" : " -", cydlcd.mesh_on ? "ON" : "OFF");
   set_text(me_info, b);
+
+  // ---- TRANG THAI UBL/BED LEVELING: chi cap nhat khi gia tri DOI (khong set style moi vong) ----
+  if (!s_mesh_on_valid || s_mesh_on_prev != cydlcd.mesh_on || s_mesh_valid_prev != cydlcd.mesh_valid) {
+    s_mesh_on_valid   = true;
+    s_mesh_on_prev    = cydlcd.mesh_on;
+    s_mesh_valid_prev = cydlcd.mesh_valid;
+    // Xanh = dang bat (co bu mesh), Vang = dang tat. Neu BAT ma chua co mesh nao duoc luu thi canh bao do.
+    lv_color_t c = cydlcd.mesh_on ? (cydlcd.mesh_valid ? COL_OK : COL_ERR) : COL_WARN;
+    lv_obj_set_style_text_color(me_info, c, 0);
+    if (me_btn_on)  lv_obj_set_style_bg_color(me_btn_on,  cydlcd.mesh_on  ? COL_OK   : COL_BTN, 0);
+    if (me_btn_off) lv_obj_set_style_bg_color(me_btn_off, cydlcd.mesh_on  ? COL_BTN  : COL_WARN, 0);
+  }
 }
 
 // Huy man BED MESH (xem quy uoc o ui_lvgl_int.h): dat NULL bang/nhan va QUEN kich thuoc luoi da ve.
@@ -150,8 +170,12 @@ void page_mesh_destroy(void) {
   me_table = NULL;
   me_info  = NULL;
   me_note  = NULL;
+  me_btn_on = NULL;
+  me_btn_off = NULL;
   s_mesh_nx = 0;
   s_mesh_ny = 0;
+  s_mesh_on_valid = false;      // de lan mo sau cap nhat lai dong UBL ON/OFF
+  s_mesh_valid_prev = false;
 }
 
 #endif  // CYDLCD_USE_LVGL

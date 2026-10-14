@@ -325,6 +325,9 @@ static void handle_frame() {
 
     case CYDLCD_F_STATUS:
       if (n >= 3) { cydlcd.state = p[0]; cydlcd.flags = p[1]; cydlcd.progress_pct = p[2]; }
+      // Byte thu 4 (2026-10-15): mesh/leveling dang BAT hay TAT. Marlin cu chi gui 3 byte -> giu gia tri
+      // cu (khong doan bua); chi cap nhat khi frame co du 4 byte.
+      if (n >= 4) cydlcd.mesh_on = (p[3] != 0);
       break;
 
     case CYDLCD_F_TEMPS: {
@@ -432,6 +435,9 @@ static void handle_frame() {
         cydlcd.mesh_nx = p[2];
         if (row < CYDLCD_MESH_MAX && cydlcd.mesh_nx <= CYDLCD_MESH_MAX) {
           const uint8_t cnt = (uint8_t)((n - 3) / 2);
+          // Hang 0 = BAT DAU 1 luoi moi -> dem lai tu dau. Neu khong, moi lan Marlin day lai ca luoi (sau
+          // reboot / sau G29 / khi link hoi phuc) thi `mesh_rows` CONG DON mai (da thay "7x7 rows 14").
+          if (row == 0) cydlcd.mesh_rows = 0;
           for (uint8_t c = 0; c < cnt && c < cydlcd.mesh_nx; c++)
             cydlcd.mesh[c][row] = cydlcd_i16(&p[3 + c * 2]);
           cydlcd.mesh_rows++;

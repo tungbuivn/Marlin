@@ -252,6 +252,15 @@ namespace {
     tx_u8(state_idle());
     tx_u8(state_bits());
     tx_u8(getProgress_percent());
+    // [2026-10-15] Byte thu 4: BED LEVELING/MESH dang BAT hay TAT - de man hinh hien "UBL ON/OFF".
+    // VI SAO: man BED MESH co nut "UBL ON" (G29 A) / "UBL OFF" (G29 D) nhung khong hien trang thai nao ->
+    // nguoi dung bam xong khong biet da an hay chua. `getLevelingActive()` chinh la planner.leveling_active
+    // (Marlin/src/lcd/extui/ui_api.cpp:916) nen phan anh dung ca G29 A/D, M420 S1/S0 va G29 sau khi do mesh.
+    #if HAS_LEVELING
+      tx_u8(getLevelingActive() ? 1 : 0);
+    #else
+      tx_u8(0);
+    #endif
     tx_send();
   }
 

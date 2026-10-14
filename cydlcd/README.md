@@ -1706,6 +1706,21 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
 - HELLO mang them `SHORT_BUILD_VERSION` -> `cydlcd.marlin_ver`.
 - Trang TEMP: dong dau `Profile: PLA/PETG/ABS` hoac `Profile: ---` (khong con dialog).
 - Trang MESH: `G29 P1 | G29 P3T0 | G29 P4RT` + `G29 A | G29 D | G29 S0`.
+  **(2026-10-15) Hiện TRẠNG THÁI UBL ON/OFF** — yêu cầu người dùng: *“phần setting bed mesh chưa hiển thị
+  được tình trạng mesh on hay off, bấm xong mà không biết đã được hay chưa”*. Cách làm:
+  * `CYDLCD_F_STATUS` thêm **byte thứ 4 `mesh_on`** = `planner.leveling_active` của Marlin (ExtUI
+    `getLevelingActive()`; đúng cho `G29 A`/`G29 D`, `M420 S1/S0` và sau khi đo mesh). Marlin cũ chỉ gửi
+    3 byte nên panel cũ/mới đều tương thích (panel cũ bỏ qua byte thừa, panel mới chỉ cập nhật khi `n >= 4`).
+  * Dòng thông tin trên trang MESH thành `7x7 rows 7 -0.12..0.15 valid  UBL:ON` và **đổi màu**: xanh =
+    đang bật (có mesh), **đỏ = đang bật nhưng CHƯA có mesh**, vàng = đang tắt. Hai nút `UBL ON`/`UBL OFF`
+    cũng **tô màu theo trạng thái** (nút đang có tác dụng = xanh/vàng, nút kia = màu nút thường).
+  * Dòng **MENU** (mục “Bed mesh”) cũng thêm trạng thái: `7x7 ON` / `7x7 OFF`.
+  * Trạng thái cập nhật ~1 s (Marlin đẩy STATUS định kỳ) nên **bấm xong là thấy ngay**.
+  * Chẩn đoán: `UI BUSY` in thêm `[UI] mesh: UBL ON/OFF | luoi 7x7 rows 7 | da co mesh | co MESH=co`.
+  * Sửa kèm: `mesh_rows` **cộng dồn** mỗi lần Marlin đẩy lại cả lưới (thấy “7x7 rows 14”) — nay hàng 0 =
+    bắt đầu lưới mới nên đếm lại từ đầu.
+  * **Đo trên máy thật**: sau khi nạp Marlin mới → `UBL ON (dang bu) | luoi 7x7 rows 7`; gửi `G29 D` →
+    `UBL OFF`; gửi `G29 A` → `UBL ON (dang bu)` (đã trả về đúng trạng thái ban đầu).
 - JOG: 5 muc buoc 0.01/0.05/0.1/1/10 mm, X/Y F3000 (50 mm/s), Z F600.
 - SETTINGS: hang 2 `M501 LOAD | M502 RESET` (co xac nhan), bang 124 px.
 - CUSTOM: `M600 B0`, toggle `M412`, `REBOOT DFU`.

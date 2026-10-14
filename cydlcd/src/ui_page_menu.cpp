@@ -142,7 +142,10 @@ void page_menu_update(void) {
   set_text(mn_val[3], b);
 
   if (cydlcd.hello_flags & CYDLCD_HAS_MESH)
-    snprintf(b, sizeof(b), "%ux%u", (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny);
+    // Them TRANG THAI UBL ON/OFF ngay o dong MENU (yeu cau nguoi dung 2026-10-15: bam UBL ON/OFF xong khong
+    // biet da an hay chua) - nhi`n tu MENU cung thay, khong phai vao man BED MESH.
+    snprintf(b, sizeof(b), "%ux%u %s", (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
+             cydlcd.mesh_on ? "ON" : "OFF");
   else snprintf(b, sizeof(b), "n/a");
   set_text(mn_val[4], b);
 

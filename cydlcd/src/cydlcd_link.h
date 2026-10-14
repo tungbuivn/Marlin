@@ -80,6 +80,10 @@ typedef struct {
 
   // ---- bed mesh ----
   int16_t  mesh[CYDLCD_MESH_MAX][CYDLCD_MESH_MAX]; uint8_t mesh_nx, mesh_ny, mesh_rows; bool mesh_valid;
+  // BED LEVELING dang BAT hay TAT (byte thu 4 cua CYDLCD_F_STATUS, tu 2026-10-15):
+  // = planner.leveling_active cua Marlin (UBL: G29 A/G29 D, ABL: M420 S1/S0...).
+  // Man BED MESH hien "UBL ON/OFF" theo co nay - truoc day bam UBL ON/OFF xong khong biet da an hay chua.
+  bool     mesh_on;
 
   // ---- danh sach file SD ----
   cydlcd_file_t files[CYDLCD_MAX_FILES]; uint8_t n_files; bool files_done, files_pending;

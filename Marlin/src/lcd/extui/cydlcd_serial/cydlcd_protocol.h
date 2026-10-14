@@ -64,7 +64,12 @@ enum cydlcd_frame_t : uint8_t {
   // ---- Marlin -> MAN HINH CYD (push) ----
   CYDLCD_F_HELLO     = 0x01,   // u16 fw_version, u8 proto, u8 flags, u8 n_heaters, u8 n_fans, str name
                               // [proto >= 2] str version (SHORT_BUILD_VERSION cua Marlin)
-  CYDLCD_F_STATUS    = 0x02,   // u8 state, u8 flags, u8 progress_percent
+  CYDLCD_F_STATUS    = 0x02,   // u8 state, u8 flags, u8 progress_percent, u8 mesh_on
+                              // mesh_on (byte thu 4, 2026-10-15) = BED LEVELING/MESH dang BAT hay TAT
+                              // (`planner.leveling_active`: G29 A / M420 S1 = 1, G29 D / M420 S0 = 0).
+                              // VI SAO CAN: man hinh co nut "UBL ON"/"UBL OFF" nhung KHONG hien trang thai
+                              // -> bam xong khong biet da an hay chua (phan hoi nguoi dung 2026-10-15).
+                              // Man hinh cu chi doc 3 byte dau nen them byte nay KHONG pha gi.
   CYDLCD_F_TEMPS     = 0x03,   // u8 n, n * (u8 id, i16 cur, i16 tgt)
   CYDLCD_F_POSITION  = 0x04,   // i32 x, i32 y, i32 z, i32 e, u16 feed_mm_s*10, i16 feed_pct, i16 flow_pct
   CYDLCD_F_PROGRESS  = 0x05,   // u8 pct, u32 elapsed_s, u32 remaining_s, str filename
