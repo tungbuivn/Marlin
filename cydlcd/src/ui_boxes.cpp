@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "net_upload_http.h"        // net_notify_set(): thong bao di TRANG /status thay vi hien hop tren LCD
 
 #include <Arduino.h>                // Serial.printf (lenh chan doan `UI TAP K`)
 
@@ -229,16 +230,29 @@ void boxes_update(void) {
   }
 
   // ---- thong bao moi (cydlcd.message_ms doi) ----
+  // !!! KHONG HIEN HOP THONG BAO TREN LCD NUA !!! (yeu cau nguoi dung 2026-10-15: "cac hop thoai thong bao
+  // status ma co nut ok va tu an khong hien thi tren man hinh, chi hien thi o trang status; o trang status
+  // luon luu lai message lan cuoi, sau thoi gian timeout thi tu bien mat neu co time, khong co time thi cu
+  // de lai"). Hop nay dung la loai "co nut OK + tu an sau 6 s" -> nay chi luu vao trang /status
+  // (`net_notify_set`, TTL = CYDLCD_MSG_TTL_MS) - man hinh khong bi che nua.
+  // Muon quay lai hanh vi cu (hien hop tren LCD): dat CYDLCD_MSG_BOX_ON_LCD = 1 trong cydlcd_config.h.
   if (!s_prompt_box && cydlcd.message[0] && cydlcd.message_ms != s_msg_seen_ms) {
     s_msg_seen_ms = cydlcd.message_ms;
-    box_close(&s_msg_box);
-    static const char *const btns[] = {"OK", ""};
-    s_msg_box = box_make(sev_name(cydlcd.message_sev), cydlcd.message,
-                         sev_color(cydlcd.message_sev), btns);
-    lv_obj_add_event_cb(s_msg_box, cb_msg_value, LV_EVENT_VALUE_CHANGED, NULL);
-    s_msg_shown_ms = lv_tick_get();
+    if (CYDLCD_MSG_BOX_ON_LCD) {
+      box_close(&s_msg_box);
+      static const char *const btns[] = {"OK", ""};
+      s_msg_box = box_make(sev_name(cydlcd.message_sev), cydlcd.message,
+                           sev_color(cydlcd.message_sev), btns);
+      lv_obj_add_event_cb(s_msg_box, cb_msg_value, LV_EVENT_VALUE_CHANGED, NULL);
+      s_msg_shown_ms = lv_tick_get();
+    } else {
+      net_notify_set(cydlcd.message, cydlcd.message_sev, CYDLCD_MSG_TTL_MS);
+      Serial.printf("[UI] thong bao [%s] -> TRANG /status (khong hien hop tren LCD): \"%s\"\n",
+                    sev_name(cydlcd.message_sev), cydlcd.message);
+    }
   }
-  // tu dong dong thong bao sau 6s (prompt thi de nguoi dung tra loi)
+  // tu dong dong thong bao sau 6s (prompt thi de nguoi dung tra loi) - chi con tac dung khi
+  // CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 nen `s_msg_box` luon NULL).
   if (s_msg_box && lv_tick_elaps(s_msg_shown_ms) > 6000U) box_close(&s_msg_box);
 
   // ---- P5: Marlin bao tune xong (CYDLCD_EV_PID_DONE) -> hop "da xong" 1 lan ----

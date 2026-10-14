@@ -60,6 +60,22 @@ bool net_sd_delete_dir(const char *name, bool *not_empty);
 // Neu CYDLCD_HTTP_USE_MDNS 0 thi luon tra false.
 bool net_upload_mdns_pause(bool pause);
 
+// ===========================================================================
+// THONG BAO (status message) - CHI hien o TRANG /status, KHONG hien hop thoai tren man hinh LCD
+// YEU CAU NGUOI DUNG 2026-10-15: "cac hop thoai thong bao status ma co nut ok va tu an khong hien thi tren
+// man hinh, chi hien thi o trang status; o trang status luon luu lai message lan cuoi, sau thoi gian
+// timeout thi tu bien mat neu co time, khong co time thi cu de lai".
+// - `msg`  : noi dung thong bao (ASCII/FAT-safe, khong dau tieng Viet cho gon).
+// - `sev`  : do quan trong (0 info, 1 warn, 2 error - xem cydlcd_msg_sev_t).
+// - `ttl_ms`: thoi gian tu an (ms). 0 = KHONG co thoi gian -> giu lai mai (den khi co thong bao moi / xoa).
+// Moi lan goi se THAY the thong bao cu (luon giu message LAN CUOI).
+// ===========================================================================
+void net_notify_set(const char *msg, uint8_t sev, uint32_t ttl_ms);
+void net_notify_clear(void);
+
+// Chan doan: in thong bao dang luu ra Serial (lenh `UI NOTIFY` tren COM8 khong tham so).
+void net_notify_dump(void);
+
 #ifdef __cplusplus
 }
 #endif

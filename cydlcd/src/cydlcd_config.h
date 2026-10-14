@@ -397,6 +397,22 @@
 #ifndef CYDLCD_NAME_ALLOW_EXTRA
   #define CYDLCD_NAME_ALLOW_EXTRA "-"
 #endif
+// ---------------------------------------------------------------------------
+// THONG BAO tren TRANG /status (yeu cau nguoi dung 2026-10-15): hop thoai "thong bao" cua Marlin (co nut OK
+// + tu dong an tren LCD) KHONG hien tren man hinh nua, chi hien o trang /status va luu lai message LAN CUOI;
+// qua `CYDLCD_MSG_TTL_MS` thi tu bien mat (dat 0 = giu mai).
+//   CYDLCD_MSG_BOX_ON_LCD 0 = khong hien hop thong bao tren LCD (mac dinh, theo yeu cau);
+//                         1 = quay lai hanh vi cu (hien hop OK + tu an sau CYDLCD_MSG_TTL_MS tren LCD).
+// ---------------------------------------------------------------------------
+#ifndef CYDLCD_MSG_BOX_ON_LCD
+  #define CYDLCD_MSG_BOX_ON_LCD 0
+#endif
+#ifndef CYDLCD_MSG_TTL_MS
+  #define CYDLCD_MSG_TTL_MS 6000u        // thoi gian tu an cua thong bao o trang /status (0 = giu mai)
+#endif
+#ifndef CYDLCD_NOTIFY_LEN
+  #define CYDLCD_NOTIFY_LEN 96           // do dai toi da cua 1 thong bao (byte)
+#endif
 // Cho phep nhan file khi Marlin dang in? 0 = tu choi (an toan: 2 nguoi ghi 1 FAT).
 #ifndef CYDLCD_HTTP_ALLOW_WHILE_PRINTING
   #define CYDLCD_HTTP_ALLOW_WHILE_PRINTING 0

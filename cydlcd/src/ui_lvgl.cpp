@@ -89,6 +89,7 @@
 #include <Arduino.h>                // Serial.printf cho log tu kiem tra font (che do 4)
 
 #include "cyd_sd.h"        // cyd_sd_ready() cho icon the SD (the o khe man hinh)
+#include "net_upload_http.h"        // net_notify_set/clear/dump (thong bao di TRANG /status, khong hien LCD)
 #include "net_upload.h"             // net_wifi_state(): trang thai WiFi de ve icon o header
 
 // Trang thai WiFi cho icon o dong tieu de. net_upload.h la "hop dong giao dien" voi nhanh module
@@ -785,6 +786,35 @@ void ui_lvgl_test_preheat(const char *arg) {
   }
   Serial.printf("[UI] bam nut preheat %s\n", ui_preheat_label((uint8_t)k));
   temp_test_preheat((uint8_t)k);
+}
+
+// CHAN DOAN THONG BAO trang /status - lenh `UI NOTIFY [ms] <text>` tren COM8.
+// VI SAO CO: hop thong bao cua Marlin (co nut OK + tu an) nay KHONG hien tren LCD nua ma chi vao trang
+// /status (xem ui_boxes.cpp) -> can 1 lenh de KIEM TRA duong do tu PC ma khong phai cho Marlin gui thong bao.
+//   UI NOTIFY                 -> in thong bao dang luu
+//   UI NOTIFY 0               -> xoa thong bao dang luu
+//   UI NOTIFY 5000 Dang in... -> dat thong bao tu an sau 5000 ms
+//   UI NOTIFY 0 giu mai       -> dat thong bao KHONG co thoi gian (giu lai den khi co cai moi)
+// (Khong co tham so dau tien la so -> hieu la ttl 0 + ca chuoi con lai la text, de go nhanh.)
+void ui_lvgl_test_notify(const char *arg) {
+  const char *p = arg ? arg : "";
+  while (*p == ' ') p++;
+  if (!*p) { net_notify_dump(); return; }            // khong tham so -> in dang luu
+  uint32_t ttl = 0;
+  if (*p >= '0' && *p <= '9') {                       // co thoi gian -> doc so
+    unsigned v = 0;
+    if (sscanf(p, "%u", &v) == 1) ttl = v;
+    while (*p && *p != ' ') p++;
+    while (*p == ' ') p++;
+  }
+  if (!*p) {                                          // chi co so (hoac "0") -> xoa
+    net_notify_clear();
+    Serial.println("[UI] da xoa thong bao (trang /status se het hien)");
+    return;
+  }
+  net_notify_set(p, 0 /* sev = info */, ttl);
+  Serial.printf("[UI] dat thong bao: \"%s\" (ttl=%lu ms%s)\n", p, (unsigned long)ttl,
+                ttl ? "" : " - giu mai");
 }
 
 // CHAN DOAN: ban su kien CHAM vao man FILE (lenh `UI TAP <gi>` tren COM7). Chi co y nghia khi man

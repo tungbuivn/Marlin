@@ -69,6 +69,11 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  .list .row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2a2080}
  .list .row span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  button.del{flex:0 0 auto;width:auto;padding:6px 10px;font-size:13px;background:#ff5252;color:#fff}
+ /* Khu THONG BAO (thay cho hop thoai tren LCD): luon hien message LAN CUOI; het thoi gian tu an thi an di */
+ .ntf{margin-top:10px;padding:8px 10px;border-radius:6px;font-size:13px;background:#2a2080;
+   border-left:4px solid #00e5ff;white-space:pre-wrap}
+ .ntf.warn{border-left-color:#ffb300}
+ .ntf.err{border-left-color:#ff5252}
 </style></head><body>
 <h1>TBT-CYDLCD</h1>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
@@ -77,6 +82,9 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
   <input type="file" id="f" onchange="updGo()">
   <button id="go" onclick="send()" disabled>Gui file</button>
   <div id="bar"><i id="bi"></i></div>
+  <!-- THONG BAO status: hop thong bao tren LCD (co nut OK + tu an) KHONG hien tren man hinh nua ma hien o
+       day; giu lai message LAN CUOI, het thoi gian tu an (neu co) thi tu mat, khong co thoi gian thi de lai -->
+  <div id="ntf" class="ntf" style="display:none"></div>
   <pre id="log">san sang.</pre>
 </div>
 <div class="card fl">
@@ -122,8 +130,17 @@ function poll(reloadAtEnd){
       document.getElementById('bi').style.width=(j.total_bytes?Math.round(j.rx_bytes*100/j.total_bytes):0)+'%';
       log('cydlcd: '+j.state+' | nhan '+j.rx_bytes+'/'+j.total_bytes+' B | da day '+j.written_bytes+
           ' B | '+j.file+'\nket qua: '+(j.result||'-')+' '+(j.message||''));
+      // THONG BAO: /status luu message LAN CUOI; co thoi gian thi dem nguoc roi tu mat, khong co thi de lai.
+      var nd=document.getElementById('ntf'), n=j.notify||'';
+      if(n){
+        nd.className='ntf'+(j.notify_sev==2?' err':(j.notify_sev==1?' warn':''));
+        nd.textContent=n+(j.notify_left_ms?('   ['+Math.ceil(j.notify_left_ms/1000)+'s]'):'');
+        nd.style.display='block';
+      } else { nd.style.display='none'; nd.textContent=''; }
       if(j.state=='writing'||j.state=='receiving') setTimeout(step,700);
-      else { pollRun=false; if(reloadAtEnd) loadFiles(); }   // XONG /status roi MOI goi /files
+      else { pollRun=false; if(reloadAtEnd) loadFiles();
+             // Khi RANH: van hoi lai cham (5 s) de thong bao moi cua Marlin hien ra kip thoi
+             setTimeout(function(){ poll(false); },5000); }
     }).catch(function(){
       if(++pollErr<=5) setTimeout(step,1500);               // thu lai vai lan roi thoi
       else { pollRun=false; log('khong doc duoc /status (man hinh dang ban?) - bam Lam moi sau'); }
@@ -217,6 +234,24 @@ static bool     s_sess_busy = false;  // dang trong 1 request upload (tu START d
 // Dung de: (a) kiem tra cho trong the ngay tu dau, (b) chot "xong" khi tong byte ghi duoc == so nay.
 static uint32_t s_declared = 0;
 
+// ---- THONG BAO (status message): giu message LAN CUOI de tra o /status, co the tu an theo thoi gian ----
+// Xem net_upload_http.h. `s_notify_ttl_ms` = 0 -> giu mai (khong co thoi gian).
+static char     s_notify[CYDLCD_NOTIFY_LEN] = "";
+static uint8_t  s_notify_sev = 0;
+static uint32_t s_notify_set_ms = 0;
+static uint32_t s_notify_ttl_ms = 0;
+static uint32_t s_notify_seq = 0;      // tang moi lan co thong bao moi (client biet la thong bao MOI)
+
+// Don thong bao neu da qua thoi gian tu an. Goi o MOI lan doc /status (va khi doc chan doan).
+static void notify_expire(void) {
+  if (!s_notify[0] || !s_notify_ttl_ms) return;
+  if ((uint32_t)(millis() - s_notify_set_ms) < s_notify_ttl_ms) return;
+  HLOG("[HTTP] thong bao het thoi gian (%lu ms) -> xoa: \"%s\"\n",
+       (unsigned long)s_notify_ttl_ms, s_notify);
+  s_notify[0] = '\0';
+  s_notify_ttl_ms = 0;
+}
+
 const char *state_str(void) {
   switch (s_http_state) {
     case HS_RECV: return "receiving";
@@ -275,22 +310,33 @@ void handle_root(void) {
 // GET /status  (PHAI tra duoc ca khi chua co phien: state=idle)
 // ===========================================================================
 void handle_status(void) {
-  char js[512];
+  char js[900];
+  notify_expire();                       // don thong bao da qua thoi gian tu an (neu co)
   // `written_bytes`: dang NHAN thi lay so byte THUC da ghi xuong the cua phien dang chay; con lai lay ket
   // qua phien vua xong. Truoc day luon lay phien vua xong => trang web hien "da day 4523980 B" (so lieu
   // CU cua file truoc) trong khi file moi chi moi nhan duoc 1,7 MB - dung cai nguoi dung hoi 2026-10-15.
   const uint32_t written = (s_http_state == HS_RECV) ? cyd_sd_temp_bytes() : cyd_sd_last_written();
   const char *res = cyd_sd_last_result();
+  // `notify_*`: THONG BAO luu lai cho trang status (hop thong bao co nut OK + tu an KHONG hien tren LCD nua).
+  // `notify_left_ms` = thoi gian con lai truoc khi tu mat (0 = khong co thoi gian -> giu mai).
+  const uint32_t n_age = s_notify[0] ? (uint32_t)(millis() - s_notify_set_ms) : 0;
+  const uint32_t n_left = (s_notify[0] && s_notify_ttl_ms && s_notify_ttl_ms > n_age)
+                          ? (s_notify_ttl_ms - n_age) : 0;
   snprintf(js, sizeof(js),
            "{\"cydlcd\":\"TBT\",\"device\":\"TBT-CYDLCD\",\"state\":\"%s\","
            "\"rx_bytes\":%lu,\"total_bytes\":%lu,\"written_bytes\":%lu,"
            "\"parts\":%u,\"parts_done\":%u,\"chunks\":%lu,\"declared\":%lu,"
            "\"file\":\"%s\",\"result\":\"%s\",\"message\":\"%s\","
+           "\"notify\":\"%s\",\"notify_sev\":%u,\"notify_ttl_ms\":%lu,\"notify_left_ms\":%lu,"
+           "\"notify_seq\":%lu,\"msg_on_lcd\":%d,"
            "\"sd\":%d,\"wifi\":%u,\"ip\":\"%s\",\"heap\":%lu}",
            state_str(), (unsigned long)s_rx, (unsigned long)s_total, (unsigned long)written,
            (unsigned)s_parts, (unsigned)cyd_sd_temp_parts_done(), (unsigned long)s_chunks,
            (unsigned long)s_declared,
-           s_file, res, s_msg, (int)cyd_sd_ready(), (unsigned)net_wifi_state(),
+           s_file, res, s_msg,
+           s_notify, (unsigned)s_notify_sev, (unsigned long)s_notify_ttl_ms, (unsigned long)n_left,
+           (unsigned long)s_notify_seq, (int)CYDLCD_MSG_BOX_ON_LCD,
+           (int)cyd_sd_ready(), (unsigned)net_wifi_state(),
            net_wifi_ip(), (unsigned long)ESP.getFreeHeap());
   send_json(200, js);
 }
@@ -695,6 +741,46 @@ bool net_upload_active(void) { return s_http_state == HS_RECV || s_http_state ==
 
 uint32_t net_upload_last_activity_ms(void) { return s_last_activity_ms; }
 
+// ===========================================================================
+// THONG BAO cho trang /status (xem net_upload_http.h)
+// ===========================================================================
+void net_notify_set(const char *msg, const uint8_t sev, const uint32_t ttl_ms) {
+  if (!msg || !msg[0]) { net_notify_clear(); return; }
+  // Cat bot neu qua dai + doi ky tu xuong dong thanh ' ' (de JSON/log gon, khong pha 1 dong log).
+  size_t o = 0;
+  for (size_t i = 0; msg[i] && o + 1u < sizeof(s_notify); i++) {
+    char c = msg[i];
+    if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+    if (c == '"' || c == '\\') c = '\'';            // an toan JSON (khong phai escape)
+    s_notify[o++] = c;
+  }
+  s_notify[o] = '\0';
+  s_notify_sev = sev;
+  s_notify_set_ms = millis();
+  s_notify_ttl_ms = ttl_ms;                          // 0 = giu mai (khong co thoi gian)
+  s_notify_seq++;
+  HLOG("[HTTP] thong bao (chi o /status, khong hien LCD): sev=%u ttl=%lu ms \"%s\"\n",
+       (unsigned)sev, (unsigned long)ttl_ms, s_notify);
+}
+
+void net_notify_clear(void) {
+  if (!s_notify[0]) return;
+  HLOG("[HTTP] xoa thong bao: \"%s\"\n", s_notify);
+  s_notify[0] = '\0';
+  s_notify_ttl_ms = 0;
+}
+
+void net_notify_dump(void) {
+  notify_expire();
+  if (!s_notify[0]) { Serial.println("[HTTP] khong co thong bao nao dang luu"); return; }
+  const uint32_t left = s_notify_ttl_ms
+      ? (s_notify_ttl_ms > (millis() - s_notify_set_ms) ? s_notify_ttl_ms - (millis() - s_notify_set_ms) : 0)
+      : 0;
+  Serial.printf("[HTTP] thong bao: sev=%u \"%s\" (ttl=%lu ms, con %lu ms, lan %lu)\n",
+                (unsigned)s_notify_sev, s_notify, (unsigned long)s_notify_ttl_ms,
+                (unsigned long)left, (unsigned long)s_notify_seq);
+}
+
 // Xoa file ngay tren man hinh CYD (che do the qua UART). Xem net_upload_http.h.
 bool net_sd_delete_file(const char *name) { return cyd_sd_delete(name); }
 
@@ -745,5 +831,10 @@ bool net_sd_delete_file(const char *name) { (void)name; return false; }
 int  net_sd_dir_count(const char *name) { (void)name; return -1; }
 bool net_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
 bool net_upload_mdns_pause(const bool pause) { (void)pause; return false; }
+void net_notify_set(const char *msg, uint8_t sev, uint32_t ttl_ms) {
+  (void)msg; (void)sev; (void)ttl_ms;
+}
+void net_notify_clear(void) {}
+void net_notify_dump(void) {}
 
 #endif  // CYDLCD_WIFI_UPLOAD

@@ -322,6 +322,9 @@
             else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
+            // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
+            // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
+            else if (strncasecmp(a3, "NOTIFY", 6) == 0) ui_lvgl_test_notify(a3 + 6);
             else if (strncasecmp(a3, "WTEST", 5) == 0) {
               // `UI WTEST [KB]` = ghi thu the (khong qua WiFi) de tach nguyen nhan loi ghi the.
               unsigned kb = 4096;

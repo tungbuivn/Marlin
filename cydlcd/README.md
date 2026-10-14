@@ -1095,6 +1095,26 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 >   `filename="../../hack.gcode"` ⇒ panel ghi ra **`/evil2.gcode`** (mất hết đường dẫn, không thoát khỏi gốc
 >   thẻ) và log `CANH BAO bao mat: ten khach gui "…" -> lam sach thanh "…"` (log thật cũng bắt được lượt của
 >   người dùng: `V300_[a]_xy_joint_cable_bridge_3hole.gc` → `V300__a__xy_joint_cable_bridge_3hole.gc`).
+> * 📢 **THÔNG BÁO STATUS: KHÔNG hiện hộp thoại trên LCD nữa, chỉ hiện ở trang `/status`** (yêu cầu người
+>   dùng: *“các hộp thoại thông báo status mà có nút ok và tự ẩn không hiển thị trên màn hình, chỉ hiển thị ở
+>   trang status; ở trang status luôn lưu lại message lần cuối, sau thời gian timeout thì tự biến mất nếu có
+>   time, không có time thì cứ để lại”*):
+>   * Hộp **THÔNG BÁO** của Marlin (`cydlcd.message`, đúng loại “1 nút OK + tự ẩn sau 6 s”) nay **không tạo
+>     msgbox** nữa — `ui_boxes.cpp` gọi `net_notify_set(msg, sev, CYDLCD_MSG_TTL_MS)` và log
+>     `[UI] thong bao [INFO] -> TRANG /status (khong hien hop tren LCD)`. Muốn quay lại hành vi cũ: đặt
+>     `CYDLCD_MSG_BOX_ON_LCD 1` (cydlcd_config.h).
+>   * Kho thông báo (`net_upload_http.cpp`): **luôn giữ message LẦN CUỐI** (`notify_seq` tăng mỗi lần có cái
+>     mới), `ttl_ms = 0` ⇒ **giữ mãi**; có `ttl_ms` ⇒ hết hạn thì **tự xoá** (log
+>     `[HTTP] thong bao het thoi gian (6000 ms) -> xoa: "…"`).
+>   * `/status` thêm `notify`, `notify_sev`, `notify_ttl_ms`, `notify_left_ms` (đếm ngược), `notify_seq`,
+>     `msg_on_lcd`. Trang web hiện thông báo trong **khu riêng** (viền màu theo mức độ, kèm `[Ns]` đếm ngược),
+>     tự ẩn khi hết; khi rảnh trang vẫn hỏi `/status` mỗi **5 s** để thông báo mới của Marlin hiện ra kịp thời.
+>   * Chẩn đoán: `UI NOTIFY [ms] <text>` (COM8) — không tham số = in đang lưu; chỉ có số (`UI NOTIFY 0`) =
+>     xoá; có `ms` = tự ẩn sau `ms`; `ms=0` = giữ mãi.
+>   * **Đo trên máy thật**: `M500` (Marlin gửi 2 thông báo liên tiếp) ⇒ `/status` `notify='Da luu EEPROM'
+>     left=2907 ttl=6000` → sau 7 s **rỗng** (tự hết hạn); đặt `ttl=30000` ⇒ `left` giảm 16896 → 12737;
+>     `ttl=0` ⇒ vẫn còn sau nhiều lần đọc; `UI NOTIFY 0` ⇒ xoá ngay. **Trong lúc thông báo tới, `UI BOX` báo
+>     `lop tren (hop thoai): 0 vat`** ⇒ màn hình LCD thật sự **không còn hộp thông báo nào**.
 > * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
 >   đồng ở §9.21. Cả hai đều cần token như `/upload`.
 > * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
@@ -1133,7 +1153,7 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
   | Endpoint | Trả về |
   |---|---|
   | `GET /` | HTML (chứa chuỗi `TBT-CYDLCD`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
-  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes` (byte nhận từ mạng), `total_bytes` (tổng byte các part), `written_bytes` (byte ĐÃ GHI xuống thẻ của phiên đang chạy / phiên vừa xong), `parts` (số PHẦN FILE của request), `parts_done` (số part đã đóng), `chunks`, `declared` (size khách khai báo), `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes` (byte nhận từ mạng), `total_bytes` (tổng byte các part), `written_bytes` (byte ĐÃ GHI xuống thẻ của phiên đang chạy / phiên vừa xong), `parts` (số PHẦN FILE của request), `parts_done` (số part đã đóng), `chunks`, `declared` (size khách khai báo), `file`, `result`, `message`, **`notify`/`notify_sev`/`notify_ttl_ms`/`notify_left_ms`/`notify_seq`/`msg_on_lcd`** (thông báo status — xem §9.21 vòng sửa (e)), `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
   | `GET /files?token=…` | JSON danh sách **gốc thẻ** cho phần “File trên thẻ SD” của trang web: `{"status":"Ok","sd":0\|1,"count":N,"files":[{"n":"<tên>","s":<byte>,"d":0\|1},…]}` (`d=1` = thư mục). **Ẩn mục hệ thống** (`cydlcd_tmp`, `BTUP`) giống màn FILES trên LCD; đọc bằng FATFS **của màn hình** nên không cần Marlin. Sai token ⇒ `401` |
   | `POST /delete?token=…&name=<tên>` | Xoá **file** ở gốc thẻ, hoặc **thư mục RỒNG** (dùng `SD.rmdir`, không xoá được thư mục còn mục con). Xong thì panel **gửi `M22`+`M21`** để Marlin mount lại (FAT của Marlin đang cache trạng thái cũ — không làm bước này thì file đã xoá có thể “sống lại”/hiện lại trong danh sách). Mã lỗi: `401` sai token · `409` đang có phiên upload **hoặc** Marlin đang in từ thẻ · `400` tên không hợp lệ (có `/`, `\`, `..`, rỗng) · `500` không xoá được (không thấy file, thư mục còn mục con) |
   | `POST /upload?token=…` | `multipart/form-data`: các field text `name="name"` (tên đích) + `name="size"` (**tổng số byte**, đặt TRƯỚC phần file) rồi phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…,"parts":N}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF / size không khớp). **Nhiều phần file trong cùng request được chấp nhận**: mỗi phần là một file riêng `_001/_002/…` đóng ngay, hết request thì **đổi tên thẳng** (1 phần) hoặc **GHEP lại** (≥2 phần) rồi kiểm tra size thật trên thẻ — xem vòng sửa 2026-10-15 (b) ở §9.21 |
