@@ -1059,8 +1059,11 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > (Yêu cầu người dùng: *“thêm phần danh sách file ở giao diện web, cho phép người dùng xóa file ngay tại đó”*.)
 >
 > * Trang `GET /` thêm thẻ **“File trên thẻ SD”**: liệt kê tên + kích thước (B/KB/MB, thư mục ghi `[TM]`),
->   nút **Làm mới**, mỗi dòng một nút **Xoá** (hỏi xác nhận trước khi xoá). Danh sách tự nạp khi mở trang và
->   **tự nạp lại sau khi upload xong** hoặc sau mỗi lần xoá.
+>   nút **Làm mới**, mỗi dòng một nút **Xoá** — **nút Xoá đặt TRƯỚC tên file** (tránh nhầm dòng khi tên bị
+>   cắt ngắn) và **xoá ngay khi bấm, KHÔNG hỏi xác nhận** (yêu cầu người dùng). Thẻ này **giãn full size**:
+>   `body` là flex cột cao 100%, thẻ gửi file `flex:0 0 auto`, thẻ danh sách `flex:1 1 auto; min-height:180px`
+>   và `.list` tự cuộn khi danh sách dài hơn màn hình. Danh sách tự nạp khi mở trang và **tự nạp lại sau khi
+>   upload xong** hoặc sau mỗi lần xoá.
 > * **Ô token được điền sẵn `CYDLCD_HTTP_TOKEN`** (mặc định `TBT-3D-up`) khi trả trang: `handle_root()` copy
 >   trang từ PROGMEM ra `String` rồi thay placeholder `%%TOKEN%%` — không phải gõ tay nữa. Vẫn đổi được bằng
 >   `?token=...` (JS ghi đè giá trị trong ô nhập nếu URL có token).

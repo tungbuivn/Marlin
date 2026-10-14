@@ -43,10 +43,15 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TBT-CYDLCD - gui file in</title>
 <style>
- body{font-family:system-ui,Arial,sans-serif;margin:0;padding:16px;background:#12102a;color:#e6e1e5}
+ html,body{height:100%}
+ body{font-family:system-ui,Arial,sans-serif;margin:0;padding:16px;background:#12102a;color:#e6e1e5;
+   box-sizing:border-box;min-height:100vh;display:flex;flex-direction:column}
  h1{font-size:20px;margin:0 0 4px;color:#00e5ff}
  .s{color:#9aa;font-size:13px;margin-bottom:14px}
- .card{background:#1e156e;border:1px solid #2a2080;border-radius:8px;padding:14px;margin-bottom:12px}
+ .card{background:#1e156e;border:1px solid #2a2080;border-radius:8px;padding:14px;margin-bottom:12px;
+   display:flex;flex-direction:column;min-height:0}
+ .card.up{flex:0 0 auto}
+ .card.fl{flex:1 1 auto;min-height:180px}      /* the "File tren the SD": chiem HET phan con lai cua trang */
  input[type=file],input[type=text]{width:100%;box-sizing:border-box;margin:6px 0;padding:8px;
    background:#12102a;border:1px solid #2a2080;border-radius:6px;color:#e6e1e5}
  button{width:100%;padding:12px;font-size:16px;border:0;border-radius:6px;background:#00e5ff;
@@ -55,24 +60,26 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  #bar{height:14px;background:#2a2080;border-radius:3px;overflow:hidden;margin-top:10px}
  #bar>i{display:block;height:100%;width:0;background:#00e5ff}
  pre{white-space:pre-wrap;font-size:12px;color:#9aa;margin:8px 0 0}
- .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+ .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex:0 0 auto}
  button.mini{width:auto;padding:6px 10px;font-size:13px}
- .list{font-size:13px;max-height:260px;overflow:auto}
- .list .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
-   padding:6px 0;border-bottom:1px solid #2a2080}
- .list .row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
- button.del{width:auto;padding:6px 10px;font-size:13px;background:#ff5252;color:#fff}
+ /* Danh sach file: full size - chiem het chieu cao con lai cua the, chi cuon khi danh sach dai hon */
+ .list{font-size:13px;flex:1 1 auto;min-height:0;overflow:auto}
+ /* NUT XOA DAT TRUOC TEN FILE (yeu cau 2026-10-15: "nut xoa de truoc ten file cho khoi nham"): nut nam
+    ben trai, ten file chiem phan con lai -> khong bi lan voi dong khac khi ten bi cat ngan. */
+ .list .row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2a2080}
+ .list .row span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ button.del{flex:0 0 auto;width:auto;padding:6px 10px;font-size:13px;background:#ff5252;color:#fff}
 </style></head><body>
 <h1>TBT-CYDLCD</h1>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
-<div class="card">
+<div class="card up">
   <input type="text" id="tok" placeholder="token (vd TBT-3D-up)" value="%%TOKEN%%">
   <input type="file" id="f">
   <button id="go" onclick="send()">Gui file</button>
   <div id="bar"><i id="bi"></i></div>
   <pre id="log">san sang.</pre>
 </div>
-<div class="card">
+<div class="card fl">
   <div class="hd"><b>File tren the SD</b><button id="rf" class="mini" onclick="loadFiles()">Lam moi</button></div>
   <div id="flist" class="list">dang doc...</div>
 </div>
@@ -95,16 +102,18 @@ function loadFiles(){
      if(!j.count){ box.textContent='(khong co file nao tren the / chua cam the)'; return; }
      j.files.forEach(function(f){
        var row=document.createElement('div'); row.className='row';
-       var sp=document.createElement('span');
-       sp.textContent=(f.d?'[TM] ':'')+f.n+' - '+(f.d?'thu muc':fmtB(f.s));
        var b=document.createElement('button'); b.className='del'; b.textContent='Xoa';
+       b.title='Xoa '+(f.d?'thu muc ':'file ')+f.n;
        b.onclick=function(){ delFile(f.n, f.d); };
-       row.appendChild(sp); row.appendChild(b); box.appendChild(row);
+       var sp=document.createElement('span');
+       sp.textContent=(f.d?'[TM] ':'')+f.n+(f.d?'':' - '+fmtB(f.s));
+       row.appendChild(b); row.appendChild(sp);      // NUT XOA TRUOC, ten file sau
+       box.appendChild(row);
      });
    }).catch(function(){ box.textContent='loi ket noi toi cydlcd'; });
 }
 function delFile(n,isdir){
-  if(!confirm('Xoa '+(isdir?'THU MUC (chi xoa duoc khi RONG) ':'file ')+n+' ?')) return;
+  // KHONG hoi xac nhan (yeu cau nguoi dung 2026-10-15: "bo confirm xoa di") -> xoa ngay khi bam.
   var tok=document.getElementById('tok').value;
   fetch('/delete?token='+encodeURIComponent(tok)+'&name='+encodeURIComponent(n),{method:'POST'})
    .then(r=>r.json()).then(function(j){
