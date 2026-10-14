@@ -223,6 +223,7 @@ enum {
   PG_STATUS = 0, PG_MENU, PG_RATE, PG_TEMP, PG_JOG, PG_FILES, PG_SETTINGS, PG_MESH, PG_CUSTOM,
   PG_TBT, PG_INFO, PG_ENDSTOP,
   PG_WIFI,                 // trang WIFI (mo tu icon WiFi o header/man STATUS hoac muc "WiFi" MENU)
+  PG_MPC,                  // trang TUNING (MPC/PID) - 6 tham so M306 + nut tune (mo tu man NHIET DO/MENU)
   PG_COUNT
 };
 // ===========================================================================
@@ -246,6 +247,7 @@ enum {
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
   A_MPC_TUNE, A_PID_BED,
+  A_GOTO_MPC,           // mo trang TUNING (MPC/PID) - nut "TUNING" o man NHIET DO + muc trong MENU
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
   // Thanh day: phan trang noi dung man dang mo (xem page_scroll/bot_sync)
@@ -616,6 +618,14 @@ void page_wifi_create(lv_obj_t *p);
 /** Cap nhat trang thai quet mang + ket noi WiFi (SSID/IP/RSSI) tren man WIFI. */
 void page_wifi_update(void);
 /**
+ * Man TUNING (MPC/PID): hien 6 tham so MPC (M306 P/C/R/A/F/H) giong menu MPC cua Marlin 12864 + cac nut
+ * tuning (M306 T autotune / M303 E-1 bed PID / SAVE EEPROM / mo man THONG SO de sua tay).
+ * Mo tu nut "TUNING" o man NHIET DO hoac muc trong MENU.
+ */
+void page_mpc_create(lv_obj_t *p);
+/** Cap nhat 6 gia tri MPC tu frame SETTING + dong nhac trang thai nozzle (autotune can nozzle nguoi). */
+void page_mpc_update(void);
+/**
  * Don moi thu CUA TRANG WIFI khi roi trang: dong ban phim nhap mat khau + lop phu "DANG QUET..."
  * (ca 2 la con cua lv_scr_act, KHONG phai con cua trang) va huy phien quet dang chay (mo lai input).
  * Goi tu show_page() moi khi doi man, va tu page_wifi_destroy() (idempotent).
@@ -678,5 +688,7 @@ void page_info_destroy(void);
 void page_endstop_destroy(void);
 /** Huy man WIFI (3 nhan + nut mat khau + roller). Don ban phim/lop phu quet truoc khi xoa trang. */
 void page_wifi_destroy(void);
+/** Huy man TUNING (6 nhan gia tri + 2 nhan nut + dong nhac). */
+void page_mpc_destroy(void);
 
 #endif  // CYDLCD_USE_LVGL

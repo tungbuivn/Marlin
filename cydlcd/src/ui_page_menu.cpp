@@ -21,7 +21,7 @@
 //  MENU -- menu doc kieu Marlin (nut SETTINGS tren man STATUS mo vao day)
 //  Moi dong: [ten vang] .......... [gia tri trang]; dong la 1 nut (encoder bam = mo)
 // ===========================================================================
-#define MENU_ROWS 11
+#define MENU_ROWS 12
 typedef struct { const char *name; uint8_t page; } menu_item_t;
 static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Temperature",     PG_TEMP },
@@ -31,12 +31,13 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Bed mesh",        PG_MESH },
   { "Custom G34/SD",   PG_CUSTOM },
   { "Settings",        PG_SETTINGS },
+  { "Tuning (MPC/PID)",PG_MPC },     // 2026-10-15: 6 tham so MPC (M306) + nut tune, giong Marlin 12864
   { "Tramming wizard", PG_TBT },
   { "Info",            PG_INFO },
   { "Endstops (M119)", PG_ENDSTOP },
-  // Muc 11: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
-  // MENU gio 11 muc + dong "Calibrate touch" = 12 hang x 22 px = 264 > 206 -> thanh day
-  // PREV/NEXT xuat hien va phan trang (TRUOC DAY da vay voi 10+1 hang = 242 px, nen khong doi gi).
+  // Muc 12: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
+  // MENU gio 12 muc + dong "Calibrate touch" = 13 hang x 22 px = 286 > 206 -> thanh day
+  // PREV/NEXT xuat hien va phan trang.
   { "WiFi",            PG_WIFI }
 };
 static lv_obj_t *mn_val[MENU_ROWS];
@@ -153,26 +154,39 @@ void page_menu_update(void) {
   snprintf(b, sizeof(b), "%u/33", (unsigned)cydlcd.n_settings);
   set_text(mn_val[6], b);
 
+  // Muc 8 "Tuning (MPC/PID)" (chen 2026-10-15): hien cong suat heater cua MPC (tham so P) de thay ngay
+  // gia tri tune hien tai; chua nhan duoc (ban build khong co MPCTEMP) thi ghi "M306".
+  {
+    const int32_t p = cydlcd_setting(CYDLCD_SET_MPC_P, INT32_MIN);
+    if (p == INT32_MIN) set_text(mn_val[7], "M306");
+    else {
+      char a[12];
+      fmt_scaled(a, sizeof(a), p, 1000, 2);
+      snprintf(b, sizeof(b), "P%s W", a);
+      set_text(mn_val[7], b);
+    }
+  }
+
   // Tramming wizard: hien trang thai WIZARD (khong phai chi bao link - chi bao link o THANH TREN).
   // Chua co dong TBT nao / mat link thi ghi ro de biet duong nao chua thong.
   if (!link_ok()) snprintf(b, sizeof(b), "%s", tbt.ever ? "mat link" : "chua bat");
   else if (!tbt.st.active) snprintf(b, sizeof(b), "san sang");
   else snprintf(b, sizeof(b), "%s %s", tbt.st.mode_max ? "MAX" : "MIN", tbt_phase_name(tbt.st.phase));
-  set_text(mn_val[7], b);
+  set_text(mn_val[8], b);
 
   // Duong dang dung (PUSH / TRAM / chua co) - KHONG hien lai trang thai link o day,
   // vi chi bao link chi nam o THANH TREN (xem link_ok()).
   snprintf(b, sizeof(b), "%s", tbt.ever ? "TBT" : (cydlcd.linked ? "PUSH" : "-"));
-  set_text(mn_val[8], b);
+  set_text(mn_val[9], b);
 
-  // Muc 10 "Endstops (M119)": man chi hien ket qua M119 nen o day chi ghi lenh da gui
-  set_text(mn_val[9], "M119");
-  // Muc 11 "WiFi": hien trang thai ngan (TAT / DANG KET NOI / DA KET NOI / khong ho tro)
-  if (!wifi_api_ok()) set_text(mn_val[10], "n/a");
+  // Muc "Endstops (M119)": man chi hien ket qua M119 nen o day chi ghi lenh da gui
+  set_text(mn_val[10], "M119");
+  // Muc "WiFi": hien trang thai ngan (TAT / DANG KET NOI / DA KET NOI / khong ho tro)
+  if (!wifi_api_ok()) set_text(mn_val[11], "n/a");
   else {
     static const char *const WST[3] = { "TAT", "dang noi", "DA NOI" };
     const uint8_t ws = wifi_state_now();
-    set_text(mn_val[10], WST[ws <= 2 ? ws : 0]);
+    set_text(mn_val[11], WST[ws <= 2 ? ws : 0]);
   }
   // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
   // hien tien do de nguoi dung biet da du 1.5s chua.

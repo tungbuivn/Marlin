@@ -128,6 +128,27 @@ def downsample(rows: list[list[int]], src_w: int, src_h: int, dst_w: int) -> lis
     return out
 
 
+def outline(rows: list[list[int]], w: int, h: int) -> list[list[int]]:
+    """VIEN (border) cua 1 hinh DAC: giu pixel co alpha > 0 ma co it nhat 1 trong 4 lang gieng alpha == 0
+    (hoac nam sat mep anh). Dung cho icon DAU IN khi CHUA cap nguon:
+    Marlin (man TFT/12864 cu) ve icon dau in DAC khi cap nguon cho hotend, va chi ve VIEN khi ngung cap
+    nguon (yeu cau nguoi dung 2026-10-15: "neu marlin cap nguon cho hot end thi co bieu fill dac icon...
+    den luc ngung cap nguon thi chi ve border ma khong fill"). Bitmap goc cua Marlin la hinh DAC nen phai
+    SINH them ban vien ngay o day (khong the lam bang LVGL: ALPHA_4BIT khong co net/outline).
+    """
+    out = [[0] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            if rows[y][x] == 0:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if nx < 0 or ny < 0 or nx >= w or ny >= h or rows[ny][nx] == 0:
+                    out[y][x] = rows[y][x]      # giu DUNG muc alpha goc de net vien net nhu ban dac
+                    break
+    return out
+
+
 def main() -> int:
     lines = [
         "/**",
@@ -179,6 +200,11 @@ def main() -> int:
         raw = read_bytes(path, symbol, w * h // 2)
         mapped = bytes(level_map(b) for b in raw)
         emit(out_name, w, h, mapped, f"{fname} ({w}x{h}, GREYSCALE4)")
+        # Ban VIEN cua icon DAU IN (xem outline()): dung khi hotend CHUA duoc cap nguon.
+        if out_name == "ui_icon_hotend":
+            line = pack4(outline(unpack4(mapped, w, h), w, h), w)
+            emit("ui_icon_hotend_line", w, h, line,
+                 f"{fname} ({w}x{h}) -> ban VIEN (hotend chua cap nguon)")
 
     for fname, symbol, out_name, w, h, dst_w in SMALL:
         path = IMG_DIR / fname

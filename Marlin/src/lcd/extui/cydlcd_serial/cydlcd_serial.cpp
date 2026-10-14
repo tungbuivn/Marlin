@@ -500,6 +500,20 @@ namespace {
     #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
       push_setting(CYDLCD_SET_FADE_HEIGHT, scaled(planner.z_fade_height, CYDLCD_VAL_SCALE));
     #endif
+    // 6 tham so MPC (M306) - man TUNING cua man hinh hien thi giong menu MPC cua Marlin 12864
+    // (yeu cau nguoi dung 2026-10-15: "chua co MPC value trong setting 'Nhiet do'...").
+    #if ENABLED(MPCTEMP)
+      {
+        const MPC_t &mpc = thermalManager.temp_hotend[0].constants;
+        push_setting(CYDLCD_SET_MPC_P, scaled(mpc.heater_power, CYDLCD_VAL_SCALE));
+        push_setting(CYDLCD_SET_MPC_C, scaled(mpc.block_heat_capacity, CYDLCD_VAL_SCALE));
+        push_setting(CYDLCD_SET_MPC_R, scaled(mpc.sensor_responsiveness, 10000.0f));
+        push_setting(CYDLCD_SET_MPC_A, scaled(mpc.ambient_xfer_coeff_fan0, 10000.0f));
+        push_setting(CYDLCD_SET_MPC_F,
+                     scaled(mpc.ambient_xfer_coeff_fan0 + mpc.fan255_adjustment, 10000.0f));
+        push_setting(CYDLCD_SET_MPC_H, scaled(mpc.filament_heat_capacity_permm, 10000.0f));
+      }
+    #endif
     // GHI CHU (2026-10-14): KHONG gui preheat presets tu day. Ban nay khong co menu MarlinUI 12864
     // nen `HAS_PREHEAT = 0` => `M145` khong duoc bien dich va bang preheat khong nam trong
     // `settings_t`. Bat lai thi `settings_t` doi kich thuoc -> version/CRC EEPROM doi -> Marlin nap

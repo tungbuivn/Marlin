@@ -176,7 +176,7 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 
 static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
                                                "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
-                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI"};
+                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI", "TUNING MPC"};
 
 // ---------------------------------------------------------------------------
 //  Bien toan cuc DUNG CHUNG giua cac file: bo `static` + khai bao `extern` o ui_lvgl_int.h
@@ -243,6 +243,7 @@ void do_action(const int a) {
     case A_GOTO_RATE:     show_page(PG_RATE); break;
     case A_GOTO_STATUS:   show_page(PG_STATUS); break;   // nut HOME: ve thang man STATUS
     case A_GOTO_WIFI:     show_page(PG_WIFI); break;     // icon WiFi / muc MENU: mo trang WIFI
+    case A_GOTO_MPC:      show_page(PG_MPC);  break;     // nut "TUNING" o man NHIET DO -> trang TUNING (MPC)
     case A_GOTO_ENDSTOP:  show_page(PG_ENDSTOP); break;
     case A_HOME:          cydlcd_link_send_gcode("G28"); break;
     case A_HOME_X:        cydlcd_link_send_gcode("G28 X"); break;
@@ -339,6 +340,7 @@ static void create_page(uint8_t p) {
     case PG_INFO:     page_info_create(s_page[p]);     break;
     case PG_ENDSTOP:  page_endstop_create(s_page[p]);  break;
     case PG_WIFI:     page_wifi_create(s_page[p]);     break;
+    case PG_MPC:      page_mpc_create(s_page[p]);      break;
     default: break;
   }
   lv_obj_add_flag(s_page[p], LV_OBJ_FLAG_HIDDEN);      // se duoc hien boi show_page()
@@ -397,6 +399,7 @@ static void page_release(uint8_t p) {
     case PG_INFO:     page_info_destroy();     break;
     case PG_ENDSTOP:  page_endstop_destroy();  break;
     case PG_WIFI:     page_wifi_destroy();     break;
+    case PG_MPC:      page_mpc_destroy();      break;
     case PG_STATUS:   break;                 // khong bao gio toi day (da return o tren)
     default: break;
   }
@@ -618,6 +621,7 @@ void ui_lvgl_task(void) {
       case PG_MESH:     page_mesh_update();     break;
       case PG_CUSTOM:   page_custom_update();   break;
       case PG_WIFI:     page_wifi_update();     break;
+      case PG_MPC:      page_mpc_update();      break;
       default: break;
     }
     // Noi dung man co the doi do (vd SETTINGS loc lai / MENU doi gia tri) -> cap nhat nhan thanh day.

@@ -169,13 +169,34 @@ void page_status_create(lv_obj_t *p) {
   status_icons_create(p, sd_icon);
 }
 
+// Mau theo TI LE nhiet do hien tai / target: XANH (nguoi) -> DO (toi target).
+// VI SAO (yeu cau nguoi dung 2026-10-15: "mau cung thay doi dan tu xanh den do"): ban cu chi doi mau khi
+// qua 50 do C (2 muc MR_COLD / MR_HOTEND) -> khong thay "dan dan". Nay noi suy theo cur/tgt:
+//   tgt <= 0 (khong cap nguon) -> xanh (MR_COLD); cur/tgt = 1 (hoac vuot) -> mau NONG.
+// lv_color_mix(c1, c2, mix): mix = 255 -> c1, mix = 0 -> c2.
+static lv_color_t temp_grad(const int16_t cur, const int16_t tgt, const lv_color_t hot) {
+  if (tgt <= 0) return MR_COLD;
+  int32_t r = (int32_t)cur * 255 / (int32_t)tgt;
+  if (r < 0) r = 0; else if (r > 255) r = 255;
+  return lv_color_mix(hot, MR_COLD, (uint8_t)r);
+}
+
 void page_status_update(void) {
   if (!st_msg) return;                    // trang da bi thu hoi (an toan: xem page_status_destroy)
   char b[48], a1[12], a2[12], t1[10], t2[10];
   int16_t cur = 0, tgt = 0;
   const bool homed = (cydlcd.flags & CYDLCD_SF_HOMED) != 0;
 
-  // ---- 3 o: mau + icon theo nhiet do (Marlin: >= 50 do C moi doi mau/icon) ----
+  // ---- 3 o: icon + mau theo nhiet do VA theo trang thai CAP NGUON cua heater ----
+  // YEU CAU NGUOI DUNG 2026-10-15: "neu marlin cap nguon cho hot end thi co bieu fill dac icon, mau cung
+  // thay doi dan tu xanh den do; den luc ngung cap nguon thi chi ve border ma khong fill. Con bed thi...
+  // luc cap nguon moi co [bieu tuong khoi]".
+  //   - "cap nguon" = co TARGET (tgt > 0): dung y Marlin (man TFT: `targetTemperature > 0 ? imgBedHeated :
+  //     imgBed`) va dung khi PID giu nhiet (luc do van con target).
+  //   - hotend: co target -> icon DAC (ui_icon_hotend), khong target -> chi VIEN (ui_icon_hotend_line).
+  //     Ban VIEN duoc SINH THEM trong tools/make_lvgl_icons.py (bitmap goc cua Marlin la hinh dac).
+  //   - bed: co target -> ui_icon_bed_heated (dia + khoi), khong -> ui_icon_bed (chi dia).
+  //   - mau: noi suy xanh -> do theo cur/tgt (temp_grad()).
   for (uint8_t i = 0; i < ST_CELLS; i++) {
     lv_color_t col = MR_COLD;
     if (i == 2) {                                     // quat: icon theo toc do, chi 1 dong "%"
@@ -188,8 +209,10 @@ void page_status_update(void) {
     }
     else {                                            // dau in / ban in: so nguyen do C
       temp_lookup(i == 0 ? CYDLCD_TEMP_E0 : CYDLCD_TEMP_BED, &cur, &tgt);
-      if (cur >= 50) col = (i == 0) ? MR_HOTEND : MR_BEDHOT;
-      if (i == 1) lv_img_set_src(st_icon[i], (tgt > 0) ? &ui_icon_bed_heated : &ui_icon_bed);
+      const bool powered = (tgt > 0);
+      if (i == 0) lv_img_set_src(st_icon[i], powered ? &ui_icon_hotend : &ui_icon_hotend_line);
+      else        lv_img_set_src(st_icon[i], powered ? &ui_icon_bed_heated : &ui_icon_bed);
+      col = temp_grad(cur, tgt, (i == 0) ? MR_HOTEND : MR_BEDHOT);
       fmt_scaled(a1, sizeof(a1), cur, 100, 0);
       fmt_scaled(a2, sizeof(a2), tgt, 100, 0);
       set_text(st_cur[i], a1);

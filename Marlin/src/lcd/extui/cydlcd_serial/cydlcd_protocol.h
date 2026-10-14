@@ -265,8 +265,16 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_TMC_CURRENT_Z,       // mA
   CYDLCD_SET_TMC_CURRENT_E,       // mA (E0)
   CYDLCD_SET_RUNOUT_EN,           // 1 = bat cam bien het filament (runout.enabled)
-  CYDLCD_SET_FADE_HEIGHT          // mm (planner.z_fade_height: chieu cao bu mesh - M420 Z,
+  CYDLCD_SET_FADE_HEIGHT,         // mm (planner.z_fade_height: chieu cao bu mesh - M420 Z,
                                   //     chi co khi ENABLE_LEVELING_FADE_HEIGHT; 0 = tat fade)
+  // 6 tham so MPC (M306) - de man TUNING hien thi giong menu MPC cua Marlin 12864 (yeu cau 2026-10-15).
+  // Don vi: P W (x1000), C J/K (x1000), R K/s/K (x10000), A W/K (x10000), F W/K (x10000), H J/K/mm (x10000).
+  CYDLCD_SET_MPC_P,               // cong suat heater (W)
+  CYDLCD_SET_MPC_C,               // nhiet dung khoi hotend (J/K)
+  CYDLCD_SET_MPC_R,               // do nhay cam bien (K/s per K)
+  CYDLCD_SET_MPC_A,               // he so mat nhiet ra khong khi, quat TAT (W/K)
+  CYDLCD_SET_MPC_F,               // he so mat nhiet ra khong khi, quat 100% (W/K)
+  CYDLCD_SET_MPC_H                // nhiet dung filament tren mm (J/K/mm)
   // GHI CHU: 3 preset preheat (PLA/PETG/ABS) KHONG nam o day vi ban nay khong co M145/HAS_PREHEAT.
   // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_lvgl.cpp khoi "PREHEAT presets").
 };

@@ -169,11 +169,10 @@ void page_temp_create(lv_obj_t *p) {
 
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 26, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
-  // P5 - tuning: MPC autotune dau in | PID ban in (target 60) | luu EEPROM
-  lv_obj_t *rt = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_TUNE_H, 0, GAP);
-  mk_btn_grow(rt, "M306 T",      TP_TUNE_H, cb_action, (void *)(intptr_t)A_MPC_TUNE);
-  mk_btn_grow(rt, "M303 E-1 60", TP_TUNE_H, cb_action, (void *)(intptr_t)A_PID_BED);
-  mk_btn_grow(rt, "SAVE EEPROM", TP_TUNE_H, cb_action, (void *)(intptr_t)A_SAVE);
+  // TUNING (MPC/PID): theo yeu cau nguoi dung 2026-10-15, cac nut tuning (M306 T / M303 / SAVE) da MOVE
+  // sang trang TUNING rieng (giong menu MPC cua Marlin 12864, co hien 6 tham so MPC) -> o day chi con 1 nut
+  // mo trang do (xem ui_page_mpc.cpp).
+  mk_btn(p, "TUNING (MPC/PID)", PAGE_INN_W, TP_TUNE_H, cb_action, (void *)(intptr_t)A_GOTO_MPC);
 
   // Tong chieu cao: 16 + 30*3 + 28 + 26 + 28 + 6*GAP = 200 <= PAGE_INN_H (206)
 }

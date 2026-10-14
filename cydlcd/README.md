@@ -1706,6 +1706,31 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
 - HELLO mang them `SHORT_BUILD_VERSION` -> `cydlcd.marlin_ver`.
 - Trang TEMP: dong dau `Profile: PLA/PETG/ABS` hoac `Profile: ---` (khong con dialog).
 - Trang MESH: `G29 P1 | G29 P3T0 | G29 P4RT` + `G29 A | G29 D | G29 S0`.
+- **(2026-10-15) Trang TUNING (MPC/PID) mới** (`ui_page_mpc.cpp`, `PG_MPC`): mở từ nút **“TUNING (MPC/PID)”**
+  ở man NHIỆT ĐỘ hoặc mục **“Tuning (MPC/PID)”** trong MENU. Hiển thị **6 tham số MPC (M306)** đúng như menu
+  MPC của Marlin 12864: `P heater W`, `C block J/K`, `R sensor`, `A amb fan0 W/K`, `F amb fanN W/K`,
+  `H filament` (4 số lẻ cho R/A/F/H), kèm dòng nhắc `nozzle <n> C` (vàng + “CHO NGUOI truoc khi tune!” khi
+  nozzle > 40 °C). Nút: **`M306 T (tune)`**, **`M303 E-1 60`**, **`SAVE EEPROM`**, **`THONG SO`** (nhảy sang
+  bảng SETTINGS để sửa tay 6 dòng `MPC …`, đã thêm vào `SET_ROWS` → gửi `M306 P/C/R/A/F/H<giá trị>`).
+  ⇒ 3 nút tuning cũ ở man NHIỆT ĐỘ đã **MOVE** sang trang này (man NHIỆT ĐỘ còn 1 nút mở trang).
+  * Giao thức: `CYDLCD_SET_MPC_P/C/R/A/F/H` (id 43..48); Marlin đẩy trong `push_settings_body()` dưới
+    `#if ENABLED(MPCTEMP)` (P/C scale 1000; R/A/F/H scale 10000).
+  * `fmt_scaled()` nay cho tới **4 số lẻ** (trước chặn ở 3 → R hiện `0.128` thay vì `0.1284`).
+  * **Đo trên máy thật**: `id 43 MPC P = 40.00 · id 44 C = 7.13 · id 45 R = 0.1284 · id 46 A = 0.0680 ·
+    id 47 F = 0.0970 · id 48 H = 0.0056` (khớp `M306` của Marlin) và `UI BOX` xác nhận trang TUNING có đủ
+    6 dòng + 4 nút, **không phải cuộn** (`thanh day an`).
+- **Icon đầu in / bàn in trên man STATUS (2026-10-15)** — theo yêu cầu: *“nếu Marlin cấp nguồn cho hot end thì
+  icon fill đặc, màu thay đổi dần từ xanh đến đỏ; ngừng cấp nguồn thì chỉ vẽ border; bàn in chỉ hiện biểu
+  tượng khói khi cấp nguồn”*:
+  * “Cấp nguồn” = **có target** (`tgt > 0`) — đúng như Marlin TFT (`targetTemperature > 0 ? imgBedHeated :
+    imgBed`) và đúng cả khi PID đang giữ nhiệt.
+  * **Hotend**: có target → icon **ĐẶC** (`ui_icon_hotend`); không target → chỉ **VIỀN**
+    (`ui_icon_hotend_line`). Bản viền được **SINH THÊM** trong `tools/make_lvgl_icons.py` (hàm `outline()`:
+    giữ pixel có alpha>0 mà có láng giềng alpha=0) vì bitmap gốc của Marlin là hình đặc — LVGL ALPHA_4BIT
+    không có khái niệm nét/viền.
+  * **Bàn in**: có target → `ui_icon_bed_heated` (đĩa + **khói**), không → `ui_icon_bed` (chỉ đĩa).
+  * **Màu**: `temp_grad()` nội suy `lv_color_mix(màu nóng, MR_COLD, cur/tgt)` → xanh khi nguội → đỏ khi tới
+    target (bản cũ chỉ đổi màu khi vượt 50 °C nên không thấy “dần dần”). Áp cho cả icon và 2 dòng số.
   **(2026-10-15) Hiện TRẠNG THÁI UBL ON/OFF** — yêu cầu người dùng: *“phần setting bed mesh chưa hiển thị
   được tình trạng mesh on hay off, bấm xong mà không biết đã được hay chưa”*. Cách làm:
   * `CYDLCD_F_STATUS` thêm **byte thứ 4 `mesh_on`** = `planner.leveling_active` của Marlin (ExtUI
@@ -1723,6 +1748,11 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
     `UBL OFF`; gửi `G29 A` → `UBL ON (dang bu)` (đã trả về đúng trạng thái ban đầu).
 - JOG: 5 muc buoc 0.01/0.05/0.1/1/10 mm, X/Y F3000 (50 mm/s), Z F600.
 - SETTINGS: hang 2 `M501 LOAD | M502 RESET` (co xac nhan), bang 124 px.
+  **(2026-10-15) Sửa lỗi nút bước `0.01` vô hiệu** (yêu cầu: *“nút chọn 0.01 trong setting chưa có hiệu lực,
+  khi tăng giảm vẫn là 0.1”*): `ov_step()` trước đây chặn `≥ ov_quantum()` (chữ số thập phân cuối của dòng)
+  nên dòng hiện 1 số lẻ (vd “Fade height 10.0”) bị nâng bước 0.01 → 0.1. Nay trả về **đúng bước đã chọn**,
+  và khi đang sửa dòng nào thì dòng đó **hiện thêm số thập phân theo bước** (`OV_STEP_DEC`, `se_fmt_id()`)
+  để thấy giá trị thật đổi (10.00 → 10.01) — cả khi gửi G-code cũng dùng độ chính xác đó.
 - CUSTOM: `M600 B0`, toggle `M412`, `REBOOT DFU`.
 - Thanh tieu de: 2 nut nho `II` (pause) / `[]` (stop) chi hien khi
   `cydlcd.flags & CYDLCD_SF_SD_PRINTING`; nut STOP luon hoi xac nhan truoc `M524`.

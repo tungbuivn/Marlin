@@ -50,6 +50,14 @@ static const set_row_t SET_ROWS[] = {
   // YEU CAU 2026-10-15: "trong setting chua co fade height". Chi hien khi ban build Marlin co
   // ENABLE_LEVELING_FADE_HEIGHT (Marlin day gia tri xuong; khong co thi dong nay tu bi loc khoi bang).
   { CYDLCD_SET_FADE_HEIGHT,   "Fade height mm", 1000, 1 },
+  // 6 tham so MPC (M306) - SUA duoc o day, va man TUNING chi hien thi (giong menu MPC cua Marlin 12864).
+  // Chi hien khi Marlin co MPCTEMP (khong co thi Marlin khong day -> dong tu bi loc).
+  { CYDLCD_SET_MPC_P,         "MPC P heater W",   1000, 2 },
+  { CYDLCD_SET_MPC_C,         "MPC C block J/K",  1000, 2 },
+  { CYDLCD_SET_MPC_R,         "MPC R sensor",    10000, 4 },
+  { CYDLCD_SET_MPC_A,         "MPC A fan0 W/K",  10000, 4 },
+  { CYDLCD_SET_MPC_F,         "MPC F fanM W/K",  10000, 4 },
+  { CYDLCD_SET_MPC_H,         "MPC H fil J/Kmm", 10000, 4 },
   // PREHEAT presets (MAN HINH CYD tu luu trong NVS - xem khoi o tren): do C / do C / 0..255
   { CYDLCD_PRE_ID_BASE + 1, "PLA nozzle C",     100, 0 },
   { CYDLCD_PRE_ID_BASE + 2, "PLA bed C",        100, 0 },
@@ -148,6 +156,12 @@ static const uint32_t OV_TEN_POW[4] = {1, 10, 100, 1000};
 // 4 muc buoc, don vi HIEN THI nhan 100 (giu so nguyen: 0.01 -> 1)
 static const int32_t OV_STEP100[4] = { 1, 10, 100, 1000 };
 static const char *const OV_STEP_TXT[4] = { "0.01", "0.1", "1", "10" };
+// So CHU SO THAP PHAN tuong ung tung muc buoc (0.01 -> 2, 0.1 -> 1, 1 va 10 -> 0).
+// VI SAO CAN: neu dong chi hien 1 chu so thap phan (vd "Fade height 10.0") ma nguoi dung bam buoc 0.01 thi
+// gia tri CO doi (10.00 -> 10.01) nhung man hinh van hien "10.0" => tuong nhu nut khong co tac dung
+// (phan hoi nguoi dung 2026-10-15: "nut chon 0.01 trong setting chua co hieu luc"). Nay khi dang sua dong
+// nao thi dong do hien DU so thap phan theo buoc dang chon (xem se_fmt_id()).
+static const uint8_t OV_STEP_DEC[4] = { 2, 1, 0, 0 };
 
 static lv_obj_t *ov_bd, *ov_box, *ov_name, *ov_val, *ov_hint, *ov_minus;
 static lv_obj_t *ov_step_btn[4];
@@ -165,12 +179,16 @@ static int32_t ov_quantum(const uint8_t i) {
   return (int32_t)(q ? q : 1);
 }
 
-// Buoc ap dung (raw) = buoc dang chon * scale, nhung khong nho hon 1 don vi hien thi cuoi
+// Buoc ap dung (raw) = buoc dang chon * scale / 100, toi thieu 1 raw.
+// SUA 2026-10-15 (loi nguoi dung bao: "nut chon 0.01 trong setting chua co hieu luc, khi tang giam van la
+// 0.1"): truoc day ham nay con chan `(st > q) ? st : q` voi q = 1 don vi hien thi cuoi cua dong -> dong
+// nao hien 1 chu so thap phan (dec=1) thi buoc 0.01 (raw = scale/100 = 10) bi NANG len q = 100 = 0.1 =>
+// bam 0.01 nhung van nhay 0.1. Nay tra ve DUNG buoc da chon (loai bo chan nay); phan "nhin thay doi" duoc
+// xu ly bang cach tang so chu so thap phan khi hien/sua (OV_STEP_DEC + se_fmt_id()).
 static int32_t ov_step(const uint8_t i) {
   const uint32_t sc = SET_ROWS[i].scale ? SET_ROWS[i].scale : 1;
-  const int32_t  q  = ov_quantum(i);
   const int32_t  st = (int32_t)(((int64_t)OV_STEP100[ov_step_k] * (int64_t)sc) / 100);
-  return (st > q) ? st : q;
+  return st > 0 ? st : 1;
 }
 
 // Muc buoc gan nhat voi 10^(-dec) cua dong (dec 2/3 -> 0.01 - dec 1 -> 0.1 - dec 0 -> 1)
@@ -203,7 +221,12 @@ static const set_row_t *se_find(const uint16_t id) {
 
 static void se_fmt_id(char *b, size_t n, const uint16_t id, const int32_t raw) {
   const set_row_t *r = se_find(id);
-  fmt_scaled(b, n, raw, r ? r->scale : 1000, r ? r->dec : 2);
+  uint8_t dec = r ? r->dec : 2;
+  // Dang SUA dong nay va buoc dang chon MIN HON so thap phan cua dong -> hien du so thap phan theo buoc,
+  // neu khong nguoi dung bam 0.01 ma man hinh van lam tron (xem OV_STEP_DEC).
+  if (r && ov_open && id == SET_ROWS[ov_i].id && OV_STEP_DEC[ov_step_k] > dec)
+    dec = OV_STEP_DEC[ov_step_k];
+  fmt_scaled(b, n, raw, r ? r->scale : 1000, dec);
 }
 
 // Ky tu truc cho nhom id LIEN TIEP X Y Z E (tra 0 neu id khong thuoc nhom).
@@ -253,6 +276,12 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     // Luu y: lenh nay nam TRUOC cac nhanh se_axis_char() o tren trong chuoi if/else -> khong dung nhau
     // (CYDLCD_SET_FADE_HEIGHT = 42, ngoai moi khoang [first, first+n) cua cac nhom truc).
     snprintf(cmd, sizeof(cmd), "M420 Z%s", v);
+  else if (id >= CYDLCD_SET_MPC_P && id <= CYDLCD_SET_MPC_H) {
+    // 6 tham so MPC: gui RIENG tham so dang sua (`M306 P<v>` ... `M306 H<v>`) - Marlin cho phep gui thieu
+    // (M306.cpp: parser.seenval tung chu cai). Thu tu chu cai P C R A F H khop enum CYDLCD_SET_MPC_*.
+    static const char MPC_LET[6] = { 'P', 'C', 'R', 'A', 'F', 'H' };
+    snprintf(cmd, sizeof(cmd), "M306 %c%s", MPC_LET[id - CYDLCD_SET_MPC_P], v);
+  }
   else if (id == CYDLCD_SET_FAN_PCT_E0) {
     // % -> 0..255 (lam tron). raw o day da nhan 100 (CYDLCD_PCT_SCALE)
     int32_t s = (raw * 255 + 5000) / 10000;

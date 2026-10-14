@@ -31,9 +31,11 @@ static lv_obj_t *s_focus_prev;             // doi tuong dang focus (de ve khung)
 // In `raw` (da nhan `scale`) thanh chuoi thap phan `dec` chu so sau dau cham.
 //   vi du fmt_scaled(b, n, 21050, 100, 1) -> "210.5"
 //           fmt_scaled(b, n, -120,  1000, 2) -> "-0.12"
+//           fmt_scaled(b, n, 1284, 10000, 4) -> "0.1284"   (tham so MPC R/A/F/H can 4 so le nhu Marlin 12864)
 void fmt_scaled(char *b, size_t n, int32_t raw, uint32_t scale, uint8_t dec) {
   if (!scale) scale = 1;
-  if (dec > 3) dec = 3;
+  if (dec > 4) dec = 4;                       // SUA 2026-10-15: truoc day chan o 3 -> MPC R/A/F/H bi cat
+                                              // con 3 so le ("0.128" thay vi "0.1284"), khac Marlin 12864.
   const bool neg = (raw < 0);
   const uint32_t v = neg ? (uint32_t)(-(raw + 1)) + 1U : (uint32_t)raw;   // tranh tran INT32_MIN
   uint32_t ip = v / scale;
@@ -48,7 +50,8 @@ void fmt_scaled(char *b, size_t n, int32_t raw, uint32_t scale, uint8_t dec) {
     case 0:  snprintf(b, n, "%s%lu", neg ? "-" : "", (unsigned long)ip); break;
     case 1:  snprintf(b, n, "%s%lu.%01lu", neg ? "-" : "", (unsigned long)ip, (unsigned long)frac); break;
     case 2:  snprintf(b, n, "%s%lu.%02lu", neg ? "-" : "", (unsigned long)ip, (unsigned long)frac); break;
-    default: snprintf(b, n, "%s%lu.%03lu", neg ? "-" : "", (unsigned long)ip, (unsigned long)frac); break;
+    case 3:  snprintf(b, n, "%s%lu.%03lu", neg ? "-" : "", (unsigned long)ip, (unsigned long)frac); break;
+    default: snprintf(b, n, "%s%lu.%04lu", neg ? "-" : "", (unsigned long)ip, (unsigned long)frac); break;
   }
 }
 
