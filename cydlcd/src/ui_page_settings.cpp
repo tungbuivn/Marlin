@@ -58,6 +58,15 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_MPC_A,         "MPC A fan0 W/K",  10000, 4 },
   { CYDLCD_SET_MPC_F,         "MPC F fanM W/K",  10000, 4 },
   { CYDLCD_SET_MPC_H,         "MPC H fil J/Kmm", 10000, 4 },
+  // 2026-10-15: 3 nhom nguoi dung chon them "cho day du nhu M503" (xem cydlcd_serial.cpp: push_settings_body)
+  { CYDLCD_SET_HOME_OFFSET_X, "Home off X mm",   1000, 2 },   // M206 X (KHONG co Z - xem chu thich tren)
+  { CYDLCD_SET_HOME_OFFSET_Y, "Home off Y mm",   1000, 2 },   // M206 Y
+  // M200 D: gui kem S<trang thai hien tai> vi `M200 D<v>` mot minh se TU BAT bu bang the tich (Marlin doc:
+  // "Dn = enable for compatibility") -> luong ep doi => hong ban in. Xem se_send_mcode().
+  { CYDLCD_SET_FILAMENT_DIA,  "Filament D mm",   1000, 2 },
+  { CYDLCD_SET_FILAMENT_VOL,  "Filament vol",       1, 0 },  // M200 S0/S1 (0 = tat bu bang the tich)
+  { CYDLCD_SET_FC_LOAD,       "FC load mm",      1000, 1 },  // M603 L
+  { CYDLCD_SET_FC_UNLOAD,     "FC unload mm",    1000, 1 },  // M603 U
   // PREHEAT presets (MAN HINH CYD tu luu trong NVS - xem khoi o tren): do C / do C / 0..255
   { CYDLCD_PRE_ID_BASE + 1, "PLA nozzle C",     100, 0 },
   { CYDLCD_PRE_ID_BASE + 2, "PLA bed C",        100, 0 },
@@ -285,6 +294,20 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     static const char MPC_LET[6] = { 'P', 'C', 'R', 'A', 'F', 'H' };
     snprintf(cmd, sizeof(cmd), "M306 %c%s", MPC_LET[id - CYDLCD_SET_MPC_P], v);
   }
+  // ---- 2026-10-15: 3 nhom them cho day du nhu M503 ----
+  else if (id == CYDLCD_SET_HOME_OFFSET_X) snprintf(cmd, sizeof(cmd), "M206 X%s", v);
+  else if (id == CYDLCD_SET_HOME_OFFSET_Y) snprintf(cmd, sizeof(cmd), "M206 Y%s", v);
+  else if (id == CYDLCD_SET_FILAMENT_DIA) {
+    // !!! PHAI gui kem `S<trang thai hien tai>`: `M200 D<v>` mot minh se TU BAT bu bang the tich
+    // (M200-M205.cpp: "Dn = enable for compatibility") -> luong ep doi => hong ban in.
+    const int32_t vol = cydlcd_setting(CYDLCD_SET_FILAMENT_VOL, 0);
+    snprintf(cmd, sizeof(cmd), "M200 D%s S%ld", v, (long)(vol ? 1 : 0));
+  }
+  else if (id == CYDLCD_SET_FILAMENT_VOL)
+    // 0/1 (M200 S). Gia tri raw cua dong nay da la 0/1 (scale 1) -> gui thang, chan ve 0/1.
+    snprintf(cmd, sizeof(cmd), "M200 S%ld", (long)(raw ? 1 : 0));
+  else if (id == CYDLCD_SET_FC_LOAD)   snprintf(cmd, sizeof(cmd), "M603 L%s", v);
+  else if (id == CYDLCD_SET_FC_UNLOAD) snprintf(cmd, sizeof(cmd), "M603 U%s", v);
   else if (id == CYDLCD_SET_FAN_PCT_E0) {
     // % -> 0..255 (lam tron). raw o day da nhan 100 (CYDLCD_PCT_SCALE)
     int32_t s = (raw * 255 + 5000) / 10000;

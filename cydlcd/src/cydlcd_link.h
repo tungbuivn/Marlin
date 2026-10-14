@@ -17,7 +17,12 @@
 #define CYDLCD_MAX_FILES      32      // so file nho toi da trong 1 lan liet ke
 #define CYDLCD_FILE_NAME_LEN  32
 #define CYDLCD_FILE_SFN_LEN   16      // ten 8.3 (vd "V300_C~1.GCO") - proto >= 4, xem cydlcd_file_t
-#define CYDLCD_SETTINGS_MAX   56      // 41 thong so Marlin gui + 9 preheat (M145) + du phong
+// 2026-10-15: nang 56 -> 72. LOI THAT: Marlin gui 56 thong so = DUNG BANG gioi han cu => 2 thong so gui
+// CUOI (M200 D + M200 S) bi BO AM THAM (cydlcd_link.cpp: chi luu khi n_settings < MAX, khong bao loi) =>
+// bang THONG SO thieu dong ma khong hieu vi sao. So luong thuc te: ~41 Marlin (them 6 MPC + fade + 2 M206 +
+// 2 M200 + 2 M603 = ~52) + 9 preheat + du phong.
+// (Moi muc = u16 id + i32 value = 8 byte -> tang 16 muc = 128 byte RAM tinh.)
+#define CYDLCD_SETTINGS_MAX   72
 #define CYDLCD_MESH_MAX       16      // UBL 7x7 (hoac 10x10) -> 16 la du
 #define CYDLCD_TEXT_LEN       48
 

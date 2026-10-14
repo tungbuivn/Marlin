@@ -33,6 +33,9 @@
 #if HAS_FILAMENT_SENSOR
   #include "../../../feature/runout.h"             // runout.enabled
 #endif
+#if ENABLED(ADVANCED_PAUSE_FEATURE)
+  #include "../../../feature/pause.h"              // fc_settings[] (M603 L/U)
+#endif
 
 using namespace ExtUI;
 
@@ -513,6 +516,23 @@ namespace {
                      scaled(mpc.ambient_xfer_coeff_fan0 + mpc.fan255_adjustment, 10000.0f));
         push_setting(CYDLCD_SET_MPC_H, scaled(mpc.filament_heat_capacity_permm, 10000.0f));
       }
+    #endif
+    #if ENABLED(ADVANCED_PAUSE_FEATURE)
+      // M603 L/U: chieu dai NAP/RUT filament khi doi filament (M600) - de bang THONG SO co du nhu M503.
+      push_setting(CYDLCD_SET_FC_LOAD,   scaled(fc_settings[0].load_length, CYDLCD_VAL_SCALE));
+      push_setting(CYDLCD_SET_FC_UNLOAD, scaled(fc_settings[0].unload_length, CYDLCD_VAL_SCALE));
+    #endif
+    // M206 home offset X/Y. KHONG gui Z: Voron Tap dung probe Z offset (M851 Z), sua M206 Z se lam sai
+    // do cao dau in (xem ghi chu o ui_page_settings.cpp: SET_ROWS khong co dong "Z offset").
+    push_setting(CYDLCD_SET_HOME_OFFSET_X, scaled(home_offset.x, CYDLCD_VAL_SCALE));
+    push_setting(CYDLCD_SET_HOME_OFFSET_Y, scaled(home_offset.y, CYDLCD_VAL_SCALE));
+    #if DISABLED(NO_VOLUMETRICS)
+      // M200 D (duong kinh filament) + M200 S (bu bang the tich BAT/TAT).
+      // !!! PHAI gui CA HAI khi sua D: trong Marlin, `M200 D<v>` mot minh se TU BAT bu bang the tich
+      // (M200-M205.cpp: "Dn = enable for compatibility") -> luong ep thay doi => hong ban in. Man hinh
+      // doc trang thai S tu day roi gui kem (`M200 D<v> S<s>` - xem ui_page_settings.cpp).
+      push_setting(CYDLCD_SET_FILAMENT_DIA, scaled(planner.filament_size[0], CYDLCD_VAL_SCALE));
+      push_setting(CYDLCD_SET_FILAMENT_VOL, parser.volumetric_enabled ? 1 : 0);
     #endif
     // GHI CHU (2026-10-14): KHONG gui preheat presets tu day. Ban nay khong co menu MarlinUI 12864
     // nen `HAS_PREHEAT = 0` => `M145` khong duoc bien dich va bang preheat khong nam trong

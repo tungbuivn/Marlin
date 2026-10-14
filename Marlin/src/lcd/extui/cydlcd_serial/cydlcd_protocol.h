@@ -274,7 +274,14 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_MPC_R,               // do nhay cam bien (K/s per K)
   CYDLCD_SET_MPC_A,               // he so mat nhiet ra khong khi, quat TAT (W/K)
   CYDLCD_SET_MPC_F,               // he so mat nhiet ra khong khi, quat 100% (W/K)
-  CYDLCD_SET_MPC_H                // nhiet dung filament tren mm (J/K/mm)
+  CYDLCD_SET_MPC_H,               // nhiet dung filament tren mm (J/K/mm)
+  // 2026-10-15: them 3 nhom nguoi dung chon "cho day du nhu M503" (M206 / M200 / M603).
+  CYDLCD_SET_HOME_OFFSET_X,       // mm (home_offset.x - M206 X; CO Y NHUNG KHONG CO Z: Voron Tap dung
+  CYDLCD_SET_HOME_OFFSET_Y,       //     probe Z offset, sua M206 Z se lam sai do cao dau in)
+  CYDLCD_SET_FILAMENT_DIA,        // mm (planner.filament_size[0] - M200 D, duong kinh filament)
+  CYDLCD_SET_FILAMENT_VOL,        // 1/0 (M200 S: bu bang the tich dang BAT hay TAT)
+  CYDLCD_SET_FC_LOAD,             // mm (fc_settings[0].load_length - M603 L, chieu dai nap filament)
+  CYDLCD_SET_FC_UNLOAD            // mm (fc_settings[0].unload_length - M603 U, chieu dai rut filament)
   // GHI CHU: 3 preset preheat (PLA/PETG/ABS) KHONG nam o day vi ban nay khong co M145/HAS_PREHEAT.
   // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_lvgl.cpp khoi "PREHEAT presets").
 };
