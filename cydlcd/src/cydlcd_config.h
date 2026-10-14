@@ -403,5 +403,15 @@
 #define CYDLCD_SD_CS     5
 #define CYDLCD_SD_HZ    20000000      // 20 MHz: an toan cho khe TF cua CYD
 #define CYDLCD_UPLOAD_TMP_DIR "/cydlcd_tmp"       // thu muc file tam (Marlin chi liet ke goc the -> khong thay)
+
+// Cac THU MUC HE THONG khong hien tren man FILE SD (danh sach TEN, ngan cach bang dau phay; so sanh
+// khong phan biet hoa/thuong). Loc NGAY O PHIA MAN HINH (cydlcd_link.cpp: is_hidden_dir) nen khong
+// phai nap lai Marlin:
+//   cydlcd_tmp = thu muc file tam cua CHINH MAN HINH (cyd_sd.cpp tu tao khi nhan file qua WiFi);
+//   BTUP       = thu muc cu cua duong upload qua BLUETOOTH (da xoa khoi firmware 2026-10-14).
+// Trong 2 thu muc nay khong co gi de in/xoa -> an di cho danh sach gon.
+#ifndef CYDLCD_HIDE_DIRS
+  #define CYDLCD_HIDE_DIRS "cydlcd_tmp,BTUP"
+#endif
 #endif  // CYDLCD_WIFI_UPLOAD
 #endif  // CYDLCD_WIFI_MGMT

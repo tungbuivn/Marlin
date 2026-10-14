@@ -16,6 +16,7 @@
 
 #define CYDLCD_MAX_FILES      32      // so file nho toi da trong 1 lan liet ke
 #define CYDLCD_FILE_NAME_LEN  32
+#define CYDLCD_FILE_SFN_LEN   16      // ten 8.3 (vd "V300_C~1.GCO") - proto >= 4, xem cydlcd_file_t
 #define CYDLCD_SETTINGS_MAX   56      // 41 thong so Marlin gui + 9 preheat (M145) + du phong
 #define CYDLCD_MESH_MAX       16      // UBL 7x7 (hoac 10x10) -> 16 la du
 #define CYDLCD_TEXT_LEN       48
@@ -23,7 +24,20 @@
 typedef struct { uint8_t id; int16_t cur, tgt; } cydlcd_temp_t;
 typedef struct { uint8_t idx; int16_t pct; }     cydlcd_fan_t;
 typedef struct { uint16_t id; int32_t value; }   cydlcd_setting_val_t;
-typedef struct { char name[CYDLCD_FILE_NAME_LEN]; uint8_t flags; } cydlcd_file_t;
+// 1 muc trong danh sach file cua Marlin.
+//   name  = ten DAI (LFN) de HIEN thi - co the bi SdFat CAT o 26 ky tu (LONG_FILENAME_LENGTH 27) nen
+//           ten dai se mat ca phan mo rong;
+//   sfn   = TEN 8.3 Marlin gui kem (proto >= 4) - dung de GUI LENH (`M23 <sfn>`): ten 8.3 luon khop
+//           voi ten that tren the, con ten dai da bi cat thi `M23` khong bao gio mo duoc file.
+//           Rong khi Marlin la ban cu (proto 3) -> lui ve dung `name` nhu truoc.
+typedef struct { char name[CYDLCD_FILE_NAME_LEN]; char sfn[CYDLCD_FILE_SFN_LEN]; uint8_t flags; } cydlcd_file_t;
+
+/**
+ * true = `name` (chi khi `flags` bao la THU MUC) la THU MUC HE THONG trong CYDLCD_HIDE_DIRS
+ * (`cydlcd_tmp`, `BTUP`). Danh sach Marlin gui xuong VAN giu DU (cydlcd.files[]/n_files); man hinh
+ * chi AN cac muc nay khi hien (ui_page_files.cpp: files_view_build()).
+ */
+bool cydlcd_hidden_dir(const char *name, uint8_t flags);
 
 typedef struct {
   // ---- lien ket ----

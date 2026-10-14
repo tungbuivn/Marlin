@@ -591,6 +591,14 @@ namespace {
           const char *nm = cydlcd_files.longFilename();
           if (!nm || !nm[0]) nm = cydlcd_files.shortFilename();
           tx_str(nm ? nm : "");
+          // [proto >= 4] THEM TEN 8.3 ngay sau ten dai. VI SAO: SdFat chi giu LFN trong
+          // LONG_FILENAME_LENGTH = 27 byte (SdFatConfig.h: FILENAME_LENGTH 13 * MAX_VFAT_ENTRIES 2 + 1)
+          // nen ten > 26 ky tu bi CAT (mat ca phan mo rong) VA `M23 <ten da cat>` KHONG BAO GIO khop
+          // duoc voi ten that tren the -> bam PRINT khong in duoc (gap that 2026-10-15 voi 2 file
+          // "...bridge_3hole.gcode" (39 ky tu) va "...no-text.gcode" (36 ky tu)). Ten 8.3 (<= 12 ky tu)
+          // thi LUON khop -> man hinh gui `M23 <sfn>`. Panel doc kieu "neu con byte thi doc" nen
+          // Marlin ban cu (proto 3) van chay binh thuong.
+          tx_str(cydlcd_files.shortFilename());
         }
         tx_send();
         return;
@@ -599,6 +607,7 @@ namespace {
       tx_u8(0xFF);
       tx_i32(0);
       tx_str("");
+      tx_str("");                                      // [proto >= 4] ten 8.3 (rong o frame ket thuc)
       tx_send();
       files_listing = false;
     }

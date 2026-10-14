@@ -67,6 +67,12 @@ int cyd_sd_dir_count(const char *name);
  * `not_empty` co the NULL (chi can biet xoa duoc hay khong).
  */
 bool cyd_sd_delete_dir(const char *name, bool *not_empty);
+/**
+ * CHAN DOAN: liet ke cac muc o GOC the bang chinh FATFS cua MAN HINH - ten DAY DU (khong bi cat o 32
+ * byte nhu truong `name` cua giao thuc) + co thu muc hay khong + kich thuoc. Dung khi ten hien tren
+ * man hinh khac ten THAT tren the (=> lenh `M23 <ten>` se KHONG mo duoc file).
+ */
+void cyd_sd_log_dir(const char *path);   // path rong/NULL -> goc the
 
 // Ket qua phien upload gan nhat (de /status tra JSON, khong chan)
 const char *cyd_sd_last_result(void);   // "DONE 12345" / "ERR ..." / ""

@@ -480,7 +480,11 @@ bool cyd_sd_delete(const char *name) {
   // Dang in thi KHONG xoa (Marlin dang doc the qua UART; xoa file khac thi duoc nhung de an toan
   // va don gian, tu choi luon).
   if (printer_busy()) { ELOG("[UP] TU CHOI xoa file: Marlin dang in\n"); return false; }
-  if (s_fatfs_stale) fatfs_sync();          // P3: FATFS co the lech sau khi Marlin ghi tho
+  // LUON mount lai FATFS truoc khi XOA: Marlin ghi the bang SECTOR THO (cyd_sd_raw_write) nen cache
+  // FATFS phia man hinh co the LECH; co `s_fatfs_stale` chi duoc dat khi di qua dung cyd_sd_raw_write
+  // nen khong bao quat het moi duong Marlin ghi. DA GAP THAT (2026-10-15): `SD.open("/BTUP")` MO DUOC
+  // (thu muc CO tren the) nhung `UI TAP L` (readdir goc the) KHONG thay no, va van thay file da xoa.
+  fatfs_sync();
   if (!s_sd_ready) return false;
   char path[80];
   snprintf(path, sizeof(path), "/%s", name);
@@ -503,7 +507,8 @@ bool cyd_sd_delete(const char *name) {
 int cyd_sd_dir_count(const char *name) {
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return -1;
-  if (s_fatfs_stale) fatfs_sync();          // P3: FATFS co the lech sau khi Marlin ghi tho
+  // LUON mount lai FATFS truoc khi DOC trang thai thu muc (xem giai thich o cyd_sd_delete()).
+  fatfs_sync();
   if (!s_sd_ready) return -1;
   char path[80];
   snprintf(path, sizeof(path), "/%s", name);
@@ -562,6 +567,40 @@ const char *cyd_sd_last_result(void) { return s_result; }
 uint32_t    cyd_sd_last_written(void) { return s_written; }
 const char *cyd_sd_temp_path(void) { return s_tmp; }
 uint32_t    cyd_sd_temp_bytes(void) { return s_got; }
+
+// CHAN DOAN: liet ke GOC the bang FATFS cua man hinh (`UI TAP L` tren COM7).
+// VI SAO CAN: frame CYDLCD_F_FILES mang ten trong 1 truong CO DINH 32 byte (CYDLCD_FILE_NAME_LEN) nen
+// ten dai hon se bi CAT; Marlin cung chi giu LFN trong `LONG_FILENAME_LENGTH` byte. Neu ten hien tren
+// man hinh khac ten THAT tren the thi `M23 <ten>` se khong mo duoc file (bam PRINT khong in duoc) -
+// ham nay in ten DAY DU doc thang tu FATFS de doi chieu.
+void cyd_sd_log_dir(const char *path) {
+#if CYDLCD_SD_UART
+  if (!s_sd_ready) { ELOG("[UP] goc the: chua co the\n"); return; }
+  // LUON mount lai FATFS truoc khi LIET KE (xem giai thich o cyd_sd_delete()).
+  fatfs_sync();
+  if (!s_sd_ready) { ELOG("[UP] goc the: chua co the\n"); return; }
+  if (!path || !path[0]) path = "/";
+  File dir = SD.open(path);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    ELOG("[UP] goc the: khong mo duoc\n");
+    return;
+  }
+  uint16_t n = 0;
+  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    const String nm = f.name();                       // ESP32 core: ten DAY DU, dang "/ten"
+    const char  *s  = nm.c_str();
+    ELOG("[UP] goc the %2u: %s %-34s %lu B (%u ky tu)\n", (unsigned)(n + 1),
+         f.isDirectory() ? "[D]" : "   ", s, (unsigned long)f.size(),
+         (unsigned)strlen(s > s ? s + 1 : s));        // bo dau '/' dau tien khi dem do dai
+    n++;
+  }
+  dir.close();
+  ELOG("[UP] goc the: %u muc\n", (unsigned)n);
+#else
+  ELOG("[UP] goc the: che do the khong phai CYDLCD_SD_UART -> khong liet ke duoc\n");
+#endif
+}
 
 // ===========================================================================
 // API: ghi file tam
@@ -850,6 +889,7 @@ bool cyd_sd_raw_write(uint32_t sector, const uint8_t *src) { (void)sector; (void
 bool cyd_sd_delete(const char *name) { (void)name; return false; }
 int  cyd_sd_dir_count(const char *name) { (void)name; return -1; }
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
+void cyd_sd_log_dir(const char *path) { (void)path; ELOG("[UP] goc the: che do the khong phai CYDLCD_SD_UART\n"); }
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, size_t errn) {
   (void)name; (void)size; (void)written; (void)err; (void)errn;
   return false;

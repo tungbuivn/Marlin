@@ -39,7 +39,7 @@
 
 #include <stdint.h>
 
-#define CYDLCD_PROTO_VERSION     3     // 2: HELLO them str version; them F_ENDSTOPS + REQ_ENDSTOPS/DFU
+#define CYDLCD_PROTO_VERSION     4     // 2: HELLO them str version; 3: SD qua UART; 4: F_FILES them ten 8.3
                                       // 3: them F_SDREQ/F_SDDATA (Marlin lay sector the SD qua UART)
 #define CYDLCD_SYNC0             0xA5
 #define CYDLCD_SYNC1             0x5A

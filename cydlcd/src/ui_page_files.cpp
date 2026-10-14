@@ -18,6 +18,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "cyd_sd.h"                 // cyd_sd_log_root() (lenh chan doan `UI TAP L`)
 
 #include <stdio.h>                  // snprintf
 #include <stdlib.h>                 // atoi (lenh chan doan UI TAP)
@@ -74,7 +75,9 @@ extern "C" int  net_sd_dir_count(const char *name) __attribute__((weak));
 static lv_obj_t *fl_info;                        // dong "SD: n file  T1/2" (hoac ghi chu tam thoi)
 static lv_obj_t *fl_rows;                        // khung flex COLUMN chua FILES_ROWS dong file
 static lv_obj_t *fl_row[FILES_ROWS];             // FILES_ROWS nut dong file
-static lv_obj_t *fl_del;                         // nut XOA FILE (tam khoa trong luc dang xoa)
+static lv_obj_t *fl_print;                       // nut PRINT (khoa khi dang in / muc khong phai G-code)
+static lv_obj_t *fl_up;                          // nut UP (chi de chan doan `UI TAP U`)
+static lv_obj_t *fl_del;                         // nut XOA (tam khoa trong luc dang xoa)
 static lv_obj_t *fl_prev, *fl_next;              // lat trang danh sach file
 static uint32_t  s_files_sig = 0;                // dau van tay cua danh sach da ve
 static uint8_t   s_files_n   = 0;                // so file cua lan ve truoc
@@ -115,14 +118,73 @@ static void files_job_start(const uint8_t job) {
   s_fl_job_ms = lv_tick_get();
 }
 
-// So file THAT SU dung duoc (Marlin co the gui qua CYDLCD_MAX_FILES -> chan lai cho an toan)
+// So file THAT SU dung duoc (Marlin co the gui qua CYDLCD_MAX_FILES -> chan lai cho an toan).
+// DAY LA SO MUC CUA DANH SACH MARLIN GUI (du, giu nguyen chi so nhu Marlin) - khong phai so dong
+// hien tren man hinh: man hinh an vai THU MUC HE THONG va sap xep lai -> xem `s_view` o duoi.
 static uint8_t files_count(void) {
   return (cydlcd.n_files > CYDLCD_MAX_FILES) ? (uint8_t)CYDLCD_MAX_FILES : cydlcd.n_files;
 }
 
+// Dang IN hoac TAM DUNG tu the SD? (co nay quyet dinh: co duoc mo file khac de in / xoa / init the khong)
+static bool files_sd_busy(void) {
+  return (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
+}
+
+// ===========================================================================
+//  "VIEW" cua danh sach = phan HIEN THI tren man hinh
+//  `cydlcd.files[]` giu NGUYEN danh sach Marlin gui xuong (du, dung chi so nhu Marlin) - danh sach do
+//  la du lieu Marlin dung de in/xoa nen phai nguyen ven. Man hinh chi khac o CHO HIEN:
+//    1) AN cac THU MUC HE THONG (CYDLCD_HIDE_DIRS: cydlcd_tmp, BTUP - xem cydlcd_config.h);
+//    2) SAP XEP lai: THU MUC truoc, roi theo TEN (khong phan biet hoa/thuong).
+//  VI SAO PHAI SAP XEP: neu hien theo dung thu tu FAT/Marlin gui xuong thi moi lan them/bot 1 muc
+//  (upload/xoa xong) cac dong con lai NHAAY CHO khac -> nguoi dung cham nham. Sap xep theo TEN lam
+//  thu tu ON DINH (muc moi chen dung cho cua no, cac muc cu giu nguyen vi tri tuong doi).
+//  `s_view[pos]` = chi so THAT trong cydlcd.files[]; `s_sel` luon la chi so THAT (khong phai vi tri).
+// ===========================================================================
+static uint8_t s_view[CYDLCD_MAX_FILES];
+static uint8_t s_view_n = 0;
+
+static uint8_t files_view_count(void) { return s_view_n; }
+static uint8_t files_view_model(const uint8_t pos) { return (pos < s_view_n) ? s_view[pos] : 0; }
+
+// Ten dung de SAP XEP/hien thi: uu tien ten dai (nhu tren man hinh), khong co thi ten 8.3.
+static const char *files_show_name(const cydlcd_file_t *f) {
+  if (!f) return "";
+  return f->name[0] ? f->name : f->sfn;
+}
+
+// a dung TRUOC b? (thu muc truoc, roi theo ten khong phan biet hoa/thuong)
+static bool files_before(const uint8_t a, const uint8_t b) {
+  const bool da = ((cydlcd.files[a].flags & 0x01U) != 0);
+  const bool db = ((cydlcd.files[b].flags & 0x01U) != 0);
+  if (da != db) return da;                                     // thu muc len truoc
+  return strcasecmp(files_show_name(&cydlcd.files[a]), files_show_name(&cydlcd.files[b])) < 0;
+}
+
+// Dung lai VIEW tu danh sach Marlin: loc thu muc he thong + sap xep (insertion sort, <= 32 muc).
+static void files_view_build(void) {
+  s_view_n = 0;
+  for (uint8_t i = 0; i < files_count(); i++)
+    if (!cydlcd_hidden_dir(cydlcd.files[i].name, cydlcd.files[i].flags) &&
+        !cydlcd_hidden_dir(cydlcd.files[i].sfn,  cydlcd.files[i].flags))
+      s_view[s_view_n++] = i;
+  for (uint8_t i = 1; i < s_view_n; i++) {
+    const uint8_t v = s_view[i];
+    uint8_t j = i;
+    while (j > 0 && files_before(v, s_view[j - 1])) { s_view[j] = s_view[j - 1]; j--; }
+    s_view[j] = v;
+  }
+}
+
+// Vi TRI (0-based) cua muc `idx` trong view; 0xFF = khong co (bi an / khong ton tai)
+static uint8_t files_view_pos(const uint8_t idx) {
+  for (uint8_t i = 0; i < s_view_n; i++) if (s_view[i] == idx) return i;
+  return 0xFFU;
+}
+
 // Tong so TRANG danh sach (luon >= 1 de mau so cua "T x/y" khac 0)
 static uint8_t files_npages(void) {
-  const uint8_t n = files_count();
+  const uint8_t n = files_view_count();
   const uint8_t p = (uint8_t)((n + FILES_ROWS - 1) / FILES_ROWS);
   return p ? p : 1;
 }
@@ -142,9 +204,19 @@ static uint32_t files_signature(void) {
 // (gap that tren the nay: mot thu muc chi co ten 8.3). Xem cydlcd_serial.cpp: files_pump() da co
 // duong lui 8.3.
 static void files_row_text(const uint8_t i, char *b, const size_t n) {
-  const char *nm = cydlcd.files[i].name;
+  const cydlcd_file_t *f = &cydlcd.files[i];
+  const bool isdir = ((f->flags & 0x01U) != 0);
+  const char *nm = f->name;
   if (!nm[0]) nm = "(khong ten)";
-  snprintf(b, n, "%s%s", (cydlcd.files[i].flags & 0x01U) ? "[D] " : "", nm);
+  // Ten DAI bi Marlin cat o 26 ky tu (SdFat LONG_FILENAME_LENGTH = 27) -> mat LUON phan mo rong, nhin
+  // khong biet file gi. Khi ten da cham tran VA chua co dau '.', noi them phan mo rong lay tu ten 8.3
+  // (vd "V300_case-esp-2432s208_no-" + ".GCO") de nguoi dung biet do la file in duoc.
+  char ext[10] = "";
+  if (!isdir && f->name[0] && f->sfn[0] && !strchr(nm, '.') && strlen(nm) >= 24u) {
+    const char *dot = strrchr(f->sfn, '.');
+    if (dot) snprintf(ext, sizeof(ext), "%s", dot);
+  }
+  snprintf(b, n, "%s%s%s", isdir ? "[D] " : "", nm, ext);
 }
 
 // Khoa/mo 1 nut theo kieu "khong bam duoc": LV_STATE_DISABLED KHONG chi de to mo -
@@ -168,18 +240,19 @@ static void files_nav_mark(void) {
   files_btn_enable(fl_next, (uint8_t)(s_pg + 1) < np);
 }
 
-// To lai tung dong cua TRANG dang xem: dong nao ngoai danh sach -> AN; dong DANG CHON -> nen
-// COL_ACCENT + chu dam (giong dong dang chon cua roller cu), con lai -> nen nut / chu thuong.
+// To lai tung dong cua TRANG dang xem (theo VIEW: da an thu muc he thong + da sap xep): dong nao
+// ngoai danh sach -> AN; dong DANG CHON -> nen COL_ACCENT + chu dam, con lai -> nen nut / chu thuong.
 static void files_rows_mark(void) {
-  const uint8_t n = files_count();
+  const uint8_t n = files_view_count();
   for (uint8_t i = 0; i < FILES_ROWS; i++) {
     lv_obj_t *r = fl_row[i];
     if (!r) continue;                              // trang FILE da bi thu hoi
-    const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
-    if (idx >= n) { lv_obj_add_flag(r, LV_OBJ_FLAG_HIDDEN); continue; }
+    const uint8_t pos = (uint8_t)(s_pg * FILES_ROWS + i);
+    if (pos >= n) { lv_obj_add_flag(r, LV_OBJ_FLAG_HIDDEN); continue; }
     lv_obj_clear_flag(r, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *l = lv_obj_get_child(r, 0);
     if (!l) continue;
+    const uint8_t idx = files_view_model(pos);
     char b[CYDLCD_FILE_NAME_LEN + 6];
     files_row_text(idx, b, sizeof(b));
     set_text(l, b);                                // set_text() tu bo qua khi chu khong doi
@@ -189,8 +262,9 @@ static void files_rows_mark(void) {
   }
 }
 
-// Ve lai danh sach tu dau: GIU LUA CHON THEO TEN (danh sach vua doi), dua con tro ve trang chua
-// dong dang chon, khoa/mo 2 nut PREV/NEXT theo trang. Goi khi trang vua tao lai hoac danh sach DOI.
+// Ve lai danh sach tu dau: GIU LUA CHON THEO TEN (danh sach vua doi), dung lai VIEW (loc + sap xep),
+// dua con tro ve trang chua dong dang chon, khoa/mo 2 nut PREV/NEXT. Goi khi trang vua tao lai hoac
+// danh sach DOI.
 static void files_rows_reload(void) {
   if (!fl_rows) return;                            // trang FILE da bi thu hoi -> khong co dong nao
   const uint8_t n = files_count();
@@ -204,7 +278,16 @@ static void files_rows_reload(void) {
   }
   if (!n) s_sel = 0;
   else if (s_sel >= n) s_sel = (uint8_t)(n - 1);
-  s_pg = (uint8_t)(s_sel / FILES_ROWS);
+
+  files_view_build();                              // loc thu muc he thong + sap xep theo TEN
+
+  // Dua con tro ve TRANG chua dong dang chon (theo VI TRI trong view, khong phai chi so that).
+  uint8_t pos = files_view_pos(s_sel);
+  if (pos == 0xFFU) {                              // muc dang chon bi an / khong con -> chon muc dau view
+    s_sel = files_view_count() ? files_view_model(0) : 0;
+    pos = 0;
+  }
+  s_pg = (uint8_t)(pos / FILES_ROWS);
 
   if (n) {
     strncpy(s_sel_name, cydlcd.files[s_sel].name, sizeof(s_sel_name) - 1);
@@ -231,12 +314,12 @@ static void files_page_move(const int8_t dir) {
   s_pg = (uint8_t)p;
   files_rows_mark();
   files_nav_mark();
-  WIFILOG("FILES: trang %u/%u (dong dang chon %u/%u)\n", (unsigned)(s_pg + 1), (unsigned)np,
-          (unsigned)(s_sel + 1), (unsigned)files_count());
+  WIFILOG("FILES: trang %u/%u (chon #%u <<%s>>)\n", (unsigned)(s_pg + 1), (unsigned)np,
+          (unsigned)s_sel, s_sel_name);
 }
 
-// Lay file dang CHON (dong da to sang). Tra NULL khi danh sach rong / chi so ngoai pham vi.
-// DUNG CHUNG cho PRINT / DIR / XOA FILE -> moi lenh tac dong DUNG dong nguoi dung da cham.
+// Lay file dang CHON (chi so THAT trong cydlcd.files[] - dong da to sang). Tra NULL khi danh sach
+// rong / chi so ngoai pham vi. DUNG CHUNG cho PRINT / DIR / XOA -> moi lenh tac dong DUNG dong da cham.
 static const cydlcd_file_t *files_selected(void) {
   const uint8_t n = files_count();
   if (!n || s_sel >= n) return NULL;
@@ -246,7 +329,9 @@ static const cydlcd_file_t *files_selected(void) {
 // Cham 1 dong: CHI CHON (to sang) - KHONG in, KHONG vao thu muc (theo yeu cau: chi nut PRINT moi in).
 static void cb_files_row(lv_event_t *e) {
   const uint8_t i = (uint8_t)(intptr_t)lv_event_get_user_data(e);
-  const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
+  const uint8_t pos = (uint8_t)(s_pg * FILES_ROWS + i);
+  if (pos >= files_view_count()) return;
+  const uint8_t idx = files_view_model(pos);
   if (idx >= files_count() || idx == s_sel) return;
   s_sel = idx;
   strncpy(s_sel_name, cydlcd.files[idx].name, sizeof(s_sel_name) - 1);
@@ -260,21 +345,57 @@ static void cb_files_row(lv_event_t *e) {
 static void cb_files_prev(lv_event_t *e) { (void)e; files_page_move(-1); }
 static void cb_files_next(lv_event_t *e) { (void)e; files_page_move(+1); }
 
+// Ten dung de NHAN DIEN file (phan mo rong): UU TIEN ten 8.3 (sfn) vi ten dai (LFN) co the bi Marlin
+// CAT mat phan mo rong (SdFat chi giu 26 ky tu - xem cydlcd_file_t). Rong ca hai -> tra "".
+static const char *files_id_name(const cydlcd_file_t *f) {
+  if (!f) return "";
+  return f->sfn[0] ? f->sfn : f->name;
+}
+
+// Ten file co phai G-CODE khong (theo phan MO RONG, khong phan biet hoa/thuong).
+// VI SAO CAN: the nay co ca file khac (.stl/.step/.txt...) - bam PRINT vao chung thi Marlin mo file
+// roi doc tung dong nhu G-code: khong in duoc gi, nguoi dung chi thay "bam PRINT ma khong in".
+// Nay nut PRINT bi KHOA voi file khong phai G-code + co ghi chu.
+static bool files_is_gcode(const cydlcd_file_t *f) {
+  const char *name = files_id_name(f);
+  const char *dot = strrchr(name, '.');
+  if (!dot) return false;                       // khong co phan mo rong -> khong coi la G-code
+  return strcasecmp(dot, ".gcode") == 0 || strcasecmp(dot, ".gco") == 0
+      || strcasecmp(dot, ".gc")    == 0 || strcasecmp(dot, ".g")   == 0;
+}
+
 static void files_do(const bool force_dir) {
   // The SD DUNG CHUNG: dang nhan file qua WiFi thi MAN HINH CYD dang giu bus SPI -> khong duoc gui lenh
   // lam Marlin doc the (M23/M24). Xem sd_host_busy().
   if (sd_host_busy()) { files_note("Dang nhan file qua WiFi - cho xong", true); return; }
   const cydlcd_file_t *f = files_selected();
-  if (!f || !f->name[0]) return;
+  if (!f) { files_note("Chua chon muc nao", true); return; }
+  if (!f->name[0] && !f->sfn[0]) { files_note("Muc khong co ten - khong mo duoc", true); return; }
   if (force_dir || (f->flags & 0x01U)) {
-    cydlcd_link_request_dir(f->name);            // vao thu muc
+    // Vao thu muc cung gui bang TEN 8.3 (nhu M23): Marlin changeDir(name) so ten voi ten THAT tren the,
+    // ma ten dai da bi cat thi khong bao gio khop.
+    WIFILOG("FILES: DIR -> xin liet ke thu muc <<%s>> (8.3 \"%s\")\n", f->name, f->sfn);
+    cydlcd_link_request_dir(files_id_name(f));
+    return;
   }
-  else {
-    char cmd[CYDLCD_FILE_NAME_LEN + 6];
-    snprintf(cmd, sizeof(cmd), "M23 %s", f->name);
-    cydlcd_link_send_gcode(cmd);
-    cydlcd_link_send_gcode("M24");               // chon file roi in luon
+  // DANG IN (hoac TAM DUNG): khong mo file khac de in. `M24` tren ban in dang chay chi la TIEP TUC
+  // (khong doi file), con `M23` se dong file dang in -> ban in hong. Nut PRINT cung da bi khoa
+  // (xem files_actions_mark) - day la lop chan thu 2 cho duong encoder/tay cham lot qua.
+  if (files_sd_busy()) { files_note("Dang in - dung STOP truoc khi in file khac", true); return; }
+  if (!files_is_gcode(f)) {
+    WIFILOG("FILES: TU CHOI in <<%s>> (8.3 \"%s\"): khong phai file G-code\n", f->name, f->sfn);
+    files_note("Khong phai file G-code (.gcode/.gco)", true);
+    return;
   }
+  // GUI LENH BANG TEN 8.3: `M23 <ten dai>` KHONG mo duoc file khi ten dai > 26 ky tu (SdFat cat ten ->
+  // khong khop voi ten that tren the). Ten 8.3 (<= 12 ky tu) thi luon khop.
+  const char *open = files_id_name(f);
+  char cmd[CYDLCD_FILE_NAME_LEN + 6];
+  snprintf(cmd, sizeof(cmd), "M23 %s", open);
+  WIFILOG("FILES: IN <<%s>> -> gui \"%s\" + \"M24\" (ten 8.3 = \"%s\")\n", f->name, cmd, f->sfn);
+  cydlcd_link_send_gcode(cmd);
+  cydlcd_link_send_gcode("M24");                 // chon file roi in luon
+  files_note("da gui lenh IN", true);            // phan hoi NGAY: truoc day bam PRINT khong thay gi
 }
 
 static void cb_files_print(lv_event_t *e) { (void)e; files_do(false); }
@@ -291,10 +412,6 @@ static void cb_files_dir(lv_event_t *e)   { (void)e; files_do(true); }
 //  M22 bang IS_SD_PRINTING(), con M21 = card.mount() thi KHONG chan: no dong `root` + init lai
 //  driver SD -> file dang in bi mat. Truong hop nay chi XIN LAI DANH SACH (nhu REFRESH cu).
 // ---------------------------------------------------------------------------
-static bool files_sd_busy(void) {
-  return (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
-}
-
 void files_init_sd(void) {
   // The SD DUNG CHUNG: dang nhan file qua WiFi thi TUYET DOI khong xin danh sach / M22-M21
   // (Marlin se doc the trong luc MAN HINH CYD dang clock SPI -> hong du lieu). Cho phien upload xong.
@@ -428,6 +545,20 @@ void files_job_task(void) {
   do_action((int)A_REQ_FILES);           // xin lai danh sach -> page_files_update() ve lai cac dong
 }
 
+// Khoa/mo 2 nut TAC DONG (PRINT / XOA) theo trang thai THUC TE cua may + muc dang chon.
+//   - DANG IN hoac TAM DUNG tu the SD -> khoa CA HAI: mo file khac de in giua ban in la vo nghia
+//     (`M23` dong file dang in -> hong ban in) va xoa file cung bi Marlin tu choi/tai hai;
+//   - muc dang chon KHONG phai file G-code (vd .stl/.step) hoac la THU MUC -> khoa PRINT (bam vao
+//     chi to ra la khong in duoc gi), nhung VAN cho XOA.
+// Goi o nhip cham 400 ms (xem page_files_update) - files_btn_enable() tu bo qua khi trang thai khong doi.
+static void files_actions_mark(void) {
+  const bool busy = files_sd_busy();
+  const cydlcd_file_t *f = files_selected();
+  const bool printable = !busy && f && (f->name[0] || f->sfn[0]) && !(f->flags & 0x01U) && files_is_gcode(f);
+  files_btn_enable(fl_print, printable);
+  if (s_fl_job != FLJOB_DELETE) files_btn_enable(fl_del, !busy);   // dang xoa thi files_del_lock giu khoa
+}
+
 void page_files_create(lv_obj_t *p) {
   fl_info = mk_label_w(p, "SD: -", COL_TXT, PAGE_INN_W);
 
@@ -462,9 +593,9 @@ void page_files_create(lv_obj_t *p) {
   mk_spacer(p, 0, 0, 1);
 
   lv_obj_t *r1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, FILES_BTN_H, 0, GAP);
-  mk_btn_grow(r1, "PRINT",   FILES_BTN_H, cb_files_print, NULL);
+  fl_print = mk_btn_grow(r1, "PRINT",   FILES_BTN_H, cb_files_print, NULL);   // khoa khi dang in (files_actions_mark)
   mk_btn_grow(r1, "DIR",     FILES_BTN_H, cb_files_dir, NULL);
-  mk_btn_grow(r1, "UP",      FILES_BTN_H, cb_action, (void *)(intptr_t)A_REQ_UP);
+  fl_up = mk_btn_grow(r1, "UP", FILES_BTN_H, cb_action, (void *)(intptr_t)A_REQ_UP);
   // REFRESH = init lai the SD (M22/M21) ROI MOI xin danh sach - xem cb_files_refresh()
   mk_btn_grow(r1, "REFRESH", FILES_BTN_H, cb_files_refresh, NULL);
 
@@ -493,7 +624,7 @@ void page_files_update(void) {
     files_rows_reload();                // danh sach DOI -> giu lua chon theo ten roi ve lai cac dong
   }
 
-  const uint8_t n  = files_count();
+  const uint8_t n  = files_view_count();     // so muc HIEN THI (da an thu muc he thong + da sap xep)
   const uint8_t np = files_npages();
   // Dong info: uu tien trang thai viec cham (init the / dang xoa) va ghi chu ngan, roi moi den so file.
   // So trang chi hien khi danh sach co nhieu hon 1 trang (man gon thi khong them chu thua).
@@ -502,7 +633,7 @@ void page_files_update(void) {
   // Ten dai hon o -> fl_info tu cuon vong (mk_label_w), khong bi cat cut.
   char b[96], sel[CYDLCD_FILE_NAME_LEN + 6];
   sel[0] = '\0';
-  if (n) files_row_text(s_sel, sel, sizeof(sel));      // "[D] ten" hoac "(khong ten)"
+  if (files_selected()) files_row_text(s_sel, sel, sizeof(sel));   // "[D] ten" hoac "(khong ten)"
   const char *sn = sel[0] ? " >" : "";
   if (np > 1)
     snprintf(b, sizeof(b), "SD: %u file%s T%u/%u%s%s", (unsigned)n,
@@ -519,6 +650,8 @@ void page_files_update(void) {
   // PREV/NEXT: nut nao khong con gi de lat thi KHOA THAT SU (xem files_btn_enable) - khong de nguoi
   // dung bam mai ma khong hieu vi sao khong co gi xay ra. Chi ghi khi trang thai doi.
   files_nav_mark();
+  // PRINT / XOA theo trang thai MAY (dang in -> khoa) va theo muc dang chon (khong phai G-code -> khoa PRINT).
+  files_actions_mark();
 }
 
 // Huy man FILE SD (xem quy uoc o ui_lvgl_int.h): dat NULL cac con tro widget va XOA CACHE danh sach
@@ -532,7 +665,9 @@ void page_files_update(void) {
 void page_files_destroy(void) {
   fl_info = NULL;
   fl_rows = NULL;
-  fl_del  = NULL;
+  fl_print = NULL;
+  fl_up    = NULL;
+  fl_del   = NULL;
   fl_prev = NULL;
   fl_next = NULL;
   for (uint8_t i = 0; i < FILES_ROWS; i++) fl_row[i] = NULL;
@@ -556,10 +691,13 @@ static void files_test_click(lv_obj_t *b, const char *name) {
 // Lenh chan doan `UI TAP <gi>` tren COM7:
 //   <so 0..4> : ban CHAM vao dong thu <so> CUA TRANG dang xem (kiem tra chon dung dong + to sang);
 //   P / N     : ban cham vao nut PREV / NEXT (kiem tra lat trang);
+//   I         : ban cham vao nut PRINT (kiem tra duong IN: co gui M23+M24 khong);
 //   D         : ban cham vao nut XOA (kiem tra dong nao bi coi la gi); hop xac nhan (neu mo) TU DONG
-//               dong sau 4 s -> khong de hop modal nam tren man.
-//   K         : bam nut OK cua hop XAC NHAN dang mo (2 lan = chay lenh xoa that - xem boxes_test_ok);
-//   C         : DEM MUC CON cua thu muc dang chon (KHONG xoa gi) - de biet truoc thu muc co RONG khong.
+//               dong sau 8 s -> khong de hop modal nam tren man.
+//   K         : bam nut OK cua hop PROMPT/XAC NHAN dang mo (2 lan = chay lenh xoa that);
+//   C         : DEM MUC CON cua thu muc dang chon (KHONG xoa gi) - de biet truoc thu muc co RONG khong;
+//   L         : liet ke GOC the bang chinh FATFS cua MAN HINH (ten DAY DU, khong bi cat nhu truong
+//               32 byte cua giao thuc) - de doi chieu ten hien tren man voi ten THAT tren the.
 //   (khong tham so): chi in trang thai (giong `UI BOX`).
 void files_test_cmd(const char *arg) {
   if (!fl_rows) { Serial.println("[UI] FILES: trang chua duoc tao (mo truoc bang 'UI FILE SD')"); return; }
@@ -570,6 +708,14 @@ void files_test_cmd(const char *arg) {
   if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');   // khong can ctype.h
   if (c == 'P') { files_page_move(-1); page_files_dump(); return; }
   if (c == 'N') { files_page_move(+1); page_files_dump(); return; }
+  if (c == 'I') { files_test_click(fl_print, "PRINT"); page_files_dump(); return; }
+  if (c == 'U') { files_test_click(fl_up, "UP"); page_files_dump(); return; }
+  if (c == 'L') {                                        // liet ke 1 thu muc bang FATFS cua man hinh
+    const char *path = arg + 1;                          // `UI TAP L` = goc the, `UI TAP L /BTUP` = 1 thu muc
+    while (*path == ' ') path++;
+    cyd_sd_log_dir(*path ? path : "/");
+    return;
+  }
   if (c == 'D') {
     files_test_click(fl_del, "XOA");
     ui_confirm_autoclose(8000);          // vo hai khi khong co hop nao duoc mo
@@ -591,7 +737,7 @@ void files_test_cmd(const char *arg) {
 
   const int i = atoi(arg);
   if (i < 0 || i >= (int)FILES_ROWS) {
-    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P (trang truoc) | N (trang sau) | D (nut XOA) | K (OK hop xac nhan) | C (dem muc con)\n",
+    Serial.printf("[UI] FILES: dung 'UI TAP <dong 0..%u>' | P/N (lat trang) | I (PRINT) | D (nut XOA) | K (OK hop thoai) | C (dem muc con) | L (liet ke goc the)\n",
                   (unsigned)(FILES_ROWS - 1));
     return;
   }
@@ -610,22 +756,36 @@ void files_test_cmd(const char *arg) {
 void page_files_dump(void) {
   if (!fl_rows) { Serial.println("[UI] FILES: trang chua duoc tao"); return; }
   const cydlcd_file_t *f = files_selected();
-  Serial.printf("[UI] FILES: %u file | trang %u/%u | chon #%u <<%s>> (s_sel_name=\"%s\") | PREV=%s NEXT=%s\n",
-                (unsigned)files_count(), (unsigned)(s_pg + 1), (unsigned)files_npages(),
+  Serial.printf("[UI] FILES: %u/%u muc hien thi (Marlin gui %u) | trang %u/%u | chon #%u <<%s>> (s_sel_name=\"%s\") | PREV=%s NEXT=%s | PRINT=%s XOA=%s%s\n",
+                (unsigned)files_view_count(), (unsigned)files_count(), (unsigned)files_count(),
+                (unsigned)(s_pg + 1), (unsigned)files_npages(),
                 (unsigned)s_sel, f ? f->name : "", s_sel_name,
                 (fl_prev && lv_obj_has_state(fl_prev, LV_STATE_DISABLED)) ? "khoa" : "mo",
-                (fl_next && lv_obj_has_state(fl_next, LV_STATE_DISABLED)) ? "khoa" : "mo");
+                (fl_next && lv_obj_has_state(fl_next, LV_STATE_DISABLED)) ? "khoa" : "mo",
+                (fl_print && lv_obj_has_state(fl_print, LV_STATE_DISABLED)) ? "khoa" : "mo",
+                (fl_del && lv_obj_has_state(fl_del, LV_STATE_DISABLED)) ? "khoa" : "mo",
+                files_sd_busy() ? " | DANG IN/tam dung" : "");
   for (uint8_t i = 0; i < FILES_ROWS; i++) {
     lv_obj_t *r = fl_row[i];
     if (!r) continue;
     lv_obj_t *l = lv_obj_get_child(r, 0);
     const char *txt = l ? lv_label_get_text(l) : "";
     const bool hidden = lv_obj_has_flag(r, LV_OBJ_FLAG_HIDDEN);
-    const uint8_t idx = (uint8_t)(s_pg * FILES_ROWS + i);
+    const uint8_t pos = (uint8_t)(s_pg * FILES_ROWS + i);
+    const uint8_t idx = files_view_model(pos);
     const bool lit = (lv_obj_get_style_bg_color(r, 0).full == COL_ACCENT.full);   // dang to sang?
-    Serial.printf("[UI]   dong %u -> file #%u%s%s%s : \"%s\"\n", (unsigned)i, (unsigned)idx,
-                  (idx == s_sel) ? " [CHON]" : "", lit ? " [NEN SANG]" : "",
-                  hidden ? " [AN]" : "", txt);
+    Serial.printf("[UI]   dong %u -> vi tri %u / muc #%u%s%s%s : \"%s\" (8.3 \"%s\")\n", (unsigned)i,
+                  (unsigned)pos, (unsigned)idx, (idx == s_sel) ? " [CHON]" : "",
+                  lit ? " [NEN SANG]" : "", hidden ? " [AN]" : "", txt,
+                  (pos < files_view_count()) ? cydlcd.files[idx].sfn : "");
+  }
+  // Liet ke muc BI AN (thu muc he thong) de doi chieu: chung CO trong danh sach Marlin gui xuong
+  // nhung khong hien tren man hinh.
+  for (uint8_t i = 0; i < files_count(); i++) {
+    if (!cydlcd_hidden_dir(cydlcd.files[i].name, cydlcd.files[i].flags) &&
+        !cydlcd_hidden_dir(cydlcd.files[i].sfn,  cydlcd.files[i].flags)) continue;
+    Serial.printf("[UI]   (an) muc #%u <<%s>> (8.3 \"%s\") - thu muc he thong, van co trong danh sach Marlin\n",
+                  (unsigned)i, cydlcd.files[i].name, cydlcd.files[i].sfn);
   }
 }
 

@@ -266,6 +266,27 @@ static uint8_t str_at(const uint8_t *p, const uint8_t len, const uint8_t off, ch
   return (uint8_t)(n + 1);
 }
 
+// Ten THU MUC HE THONG (danh sach o CYDLCD_HIDE_DIRS, ngan cach dau phay; khong phan biet hoa/thuong).
+// Chi xet THU MUC, khong xet FILE (file ten "BTUP" van hien binh thuong).
+//   cydlcd_tmp = thu muc file tam cua MAN HINH (cyd_sd.cpp tu tao khi nhan file qua WiFi);
+//   BTUP       = thu muc cu cua duong upload qua BLUETOOTH (da xoa khoi firmware 2026-10-14).
+// LUU Y: day chi la "co phai muc he thong" - danh sach Marlin gui xuong VAN GIU NGUYEN DU
+// (cydlcd.files[] + cydlcd.n_files), chi MAN HINH an khi hien (ui_page_files.cpp: files_view_build()).
+bool cydlcd_hidden_dir(const char *name, const uint8_t flags) {
+  if (!(flags & 0x01U) || !name || !name[0]) return false;
+  const char *list = CYDLCD_HIDE_DIRS;
+  while (*list) {
+    while (*list == ',' || *list == ' ') list++;
+    if (!*list) break;
+    const char *comma = strchr(list, ',');
+    const size_t len = comma ? (size_t)(comma - list) : strlen(list);
+    if (strlen(name) == len && strncasecmp(name, list, len) == 0) return true;
+    if (!comma) break;
+    list = comma + 1;
+  }
+  return false;
+}
+
 static void handle_frame() {
   const uint8_t *p = s_rx.payload;
   const uint8_t  n = s_rx.len;
@@ -418,8 +439,17 @@ static void handle_frame() {
         else {
           if (cydlcd.files_done) { cydlcd.files_done = false; cydlcd.n_files = 0; }   // bat dau danh sach moi
           if (cydlcd.n_files < CYDLCD_MAX_FILES) {
-            cydlcd.files[cydlcd.n_files].flags = p[0];
-            str_at(p, n, 5, cydlcd.files[cydlcd.n_files].name, CYDLCD_FILE_NAME_LEN);
+            cydlcd_file_t *f = &cydlcd.files[cydlcd.n_files];
+            f->flags = p[0];
+            const uint8_t used = str_at(p, n, 5, f->name, CYDLCD_FILE_NAME_LEN);
+            // Proto >= 4: Marlin gui them 1 str = TEN 8.3 (shortFilename) ngay SAU `name`.
+            // VI SAO: ten dai (LFN) bi SdFat cat o 26 ky tu -> `M23 <ten dai>` khong khop duoc ten that
+            // tren the (bam PRINT khong in duoc). Ten 8.3 thi luon khop -> man hinh gui lenh bang sfn.
+            // Doc kieu "neu con byte thi doc" -> frame cua Marlin ban cu (proto 3) van doc duoc.
+            f->sfn[0] = '\0';
+            if ((uint8_t)(5 + used) < n) str_at(p, n, (uint8_t)(5 + used), f->sfn, sizeof(f->sfn));
+            // GIU NGUYEN CA DANH SACH Marlin gui (ke ca thu muc he thong): day la du lieu Marlin dung
+            // de in/xoa nen phai du va dung chi so; MAN HINH tu an khi hien (xem cydlcd_hidden_dir).
             cydlcd.n_files++;
           }
         }

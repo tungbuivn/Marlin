@@ -39,7 +39,7 @@
 
 #include <stdint.h>
 
-#define CYDLCD_PROTO_VERSION     3     // 2: HELLO them str version; them F_ENDSTOPS + REQ_ENDSTOPS/DFU
+#define CYDLCD_PROTO_VERSION     4     // 2: HELLO them str version; 3: SD qua UART; 4: F_FILES them ten 8.3
                                       // 3: them F_SDREQ/F_SDDATA (Marlin lay sector the SD qua UART)
 #define CYDLCD_SYNC0             0xA5
 #define CYDLCD_SYNC1             0x5A
@@ -71,7 +71,12 @@ enum cydlcd_frame_t : uint8_t {
   CYDLCD_F_MESSAGE   = 0x06,   // u8 severity, str text
   CYDLCD_F_FANS      = 0x07,   // u8 n, n * (u8 idx, i16 pct)
   CYDLCD_F_MESH      = 0x08,   // u8 ny, u8 row, u8 nx, nx * i16 z_um   (gui tung hang mot)
-  CYDLCD_F_FILES     = 0x09,   // u8 flags, u32 size, str name  (1 file/frame; flags=0xFF & name rong = het danh sach)
+  CYDLCD_F_FILES     = 0x09,   // u8 flags, u32 size, str name[, str sfn]  (1 file/frame; flags=0xFF &
+                               //   name rong = het danh sach). [proto >= 4] them str sfn = TEN 8.3
+                               //   (shortFilename): ten DAI co the bi SdFat CAT (LONG_FILENAME_LENGTH
+                               //   = 27 byte -> ten > 26 ky tu mat phan mo rong va `M23 <ten dai>` KHONG
+                               //   mo duoc file), nen man hinh gui `M23 <sfn>` moi in duoc. Doc kieu
+                               //   "neu con byte thi doc" -> panel/Marlin ban cu van chay binh thuong.
   CYDLCD_F_EVENT     = 0x0A,   // u8 event, u16 v1, u16 v2, str text (v1/v2 tuy event, vd TONE: freq/duration)
   CYDLCD_F_SETTING   = 0x0B,   // u16 id, i32 value
   CYDLCD_F_PROMPT    = 0x0C,   // u8 prompt_id, u8 type, str text
