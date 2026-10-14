@@ -96,10 +96,13 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_MAXACCEL_PRINT,   "Accel print",   1000, 0 },
   { CYDLCD_SET_MAXACCEL_RETRACT, "Accel retract", 1000, 0 },
   { CYDLCD_SET_MAXACCEL_TRAVEL,  "Accel travel",  1000, 0 },
-  { CYDLCD_SET_TMC_CURRENT_X,    "TMC I X mA",    1000, 0 },
-  { CYDLCD_SET_TMC_CURRENT_Y,    "TMC I Y mA",    1000, 0 },
-  { CYDLCD_SET_TMC_CURRENT_Z,    "TMC I Z mA",    1000, 0 },
-  { CYDLCD_SET_TMC_CURRENT_E,    "TMC I E mA",    1000, 0 }
+  // LUU Y (sua 2026-10-15): dong dien TMC Marlin gui RAW bang mA (cydlcd_serial.cpp:
+  // `push_setting(CYDLCD_SET_TMC_CURRENT_X, (int32_t)stepperX.val_mA)`), KHONG nhan he so -> scale phai la 1.
+  // Truoc day de 1000 nen 600 mA hien thanh "1" (600/1000 = 0.6 -> lam tron 1) - nguoi dung nhin nham.
+  { CYDLCD_SET_TMC_CURRENT_X,    "TMC I X mA",       1, 0 },
+  { CYDLCD_SET_TMC_CURRENT_Y,    "TMC I Y mA",       1, 0 },
+  { CYDLCD_SET_TMC_CURRENT_Z,    "TMC I Z mA",       1, 0 },
+  { CYDLCD_SET_TMC_CURRENT_E,    "TMC I E mA",       1, 0 }
 };
 #define SET_NROWS ((uint8_t)(sizeof(SET_ROWS) / sizeof(SET_ROWS[0])))
 
