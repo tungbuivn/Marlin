@@ -46,6 +46,10 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_FAN_PCT_E0,    "Fan E0 %",       100, 0 },
   { CYDLCD_SET_TARGET_TEMP_E0,"Target E0 C",    100, 0 },
   { CYDLCD_SET_TARGET_TEMP_BED,"Target bed C",  100, 0 },
+  // FADE HEIGHT (M420 Z, mm): chieu cao ma ban in chuyen dan tu "bu mesh" sang "khong bu mesh".
+  // YEU CAU 2026-10-15: "trong setting chua co fade height". Chi hien khi ban build Marlin co
+  // ENABLE_LEVELING_FADE_HEIGHT (Marlin day gia tri xuong; khong co thi dong nay tu bi loc khoi bang).
+  { CYDLCD_SET_FADE_HEIGHT,   "Fade height mm", 1000, 1 },
   // PREHEAT presets (MAN HINH CYD tu luu trong NVS - xem khoi o tren): do C / do C / 0..255
   { CYDLCD_PRE_ID_BASE + 1, "PLA nozzle C",     100, 0 },
   { CYDLCD_PRE_ID_BASE + 2, "PLA bed C",        100, 0 },
@@ -244,6 +248,11 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     snprintf(cmd, sizeof(cmd), "M104 S%s", v);
   else if (id == CYDLCD_SET_TARGET_TEMP_BED)
     snprintf(cmd, sizeof(cmd), "M140 S%s", v);
+  else if (id == CYDLCD_SET_FADE_HEIGHT)
+    // M420 Z<mm> = chieu cao fade cua bed leveling (planner.z_fade_height). 0 = tat fade.
+    // Luu y: lenh nay nam TRUOC cac nhanh se_axis_char() o tren trong chuoi if/else -> khong dung nhau
+    // (CYDLCD_SET_FADE_HEIGHT = 42, ngoai moi khoang [first, first+n) cua cac nhom truc).
+    snprintf(cmd, sizeof(cmd), "M420 Z%s", v);
   else if (id == CYDLCD_SET_FAN_PCT_E0) {
     // % -> 0..255 (lam tron). raw o day da nhan 100 (CYDLCD_PCT_SCALE)
     int32_t s = (raw * 255 + 5000) / 10000;
@@ -548,6 +557,27 @@ void page_settings_update(void) {
   // o man JOG): focus va "dang chon" la 2 trang thai doc lap, ov_marks() chi ghi khi mau doi.
   // Chay ca khi lop phu dang AN: ov_step_btn[] khong doi, khong ton gi them.
   ov_marks();
+}
+
+// CHAN DOAN (lenh `UI SET` tren COM8): in cac dong cua bang SETTINGS kem gia tri RAW + gia tri da format.
+// VI SAO CAN: bang nam tren LCD, khong doc nguoc duoc tu PC - day la cach DUY NHAT kiem tra "Marlin co day
+// thong so nay khong / man hinh dang hien gi" (vd khi moi them dong "Fade height mm").
+void page_settings_dump(void) {
+  preheat_inject();                       // 9 dong preheat do man hinh CYD tu quan ly
+  // PHAI dung lai danh sach truoc khi in: `se_idx/se_n` chi duoc dien khi mo trang SETTINGS hoac khi so
+  // thong so doi -> neu nguoi dung chua mo trang thi mang con rong (lan dau chay da in ra "0/49 dong").
+  settings_build_list();
+  Serial.printf("[UI] SETTINGS: %u/%u dong CO gia tri (tong bang %u, Marlin da gui %u thong so)\n",
+                (unsigned)se_n, (unsigned)SET_NROWS, (unsigned)SET_NROWS, (unsigned)cydlcd.n_settings);
+  char a[20];
+  for (uint8_t k = 0; k < se_n; k++) {
+    const uint8_t i = se_idx[k];
+    const int32_t raw = cydlcd_setting(SET_ROWS[i].id, INT32_MIN);
+    if (raw == INT32_MIN) snprintf(a, sizeof(a), "(khong co)");
+    else                  fmt_scaled(a, sizeof(a), raw, SET_ROWS[i].scale, SET_ROWS[i].dec);
+    Serial.printf("[UI]   id %2u  %-18s = %-12s (raw %ld)\n", (unsigned)SET_ROWS[i].id, SET_ROWS[i].name,
+                  a, (long)raw);
+  }
 }
 
 // Huy man SETTINGS (xem quy uoc o ui_lvgl_int.h): dat NULL bang + dong info. Container trang do

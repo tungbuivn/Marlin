@@ -74,6 +74,10 @@ void ui_lvgl_dump_temps(void);
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.
 void ui_lvgl_dump_busy(void);
 
+// CHAN DOAN bang SETTINGS (lenh `UI SET` tren COM8): in tung dong (id, ten, gia tri format, raw) - de kiem
+// tra tu PC xem Marlin co day thong so nao va man hinh dang hien gi (bang nam tren LCD, khong doc nguoc duoc).
+void page_settings_dump(void);
+
 // CHAN DOAN THONG BAO trang /status (lenh `UI NOTIFY [ms] <text>` tren COM8, ms=0 -> giu mai):
 // day 1 thong bao vao kho cua trang /status (KHONG hien hop tren LCD) de kiem tra tu PC; khong tham so ->
 // in thong bao dang luu + thoi gian con lai; text rong ("UI NOTIFY 0") -> xoa thong bao dang luu.

@@ -495,6 +495,11 @@ namespace {
     #if HAS_FILAMENT_SENSOR
       push_setting(CYDLCD_SET_RUNOUT_EN, runout.enabled ? 1 : 0);
     #endif
+    // Chieu cao FADE cua bed leveling (M420 Z<mm>) - de man SETTINGS co dong "Fade height" (2026-10-15:
+    // nguoi dung bao "trong setting chua co fade height"). Chi co khi ENABLE_LEVELING_FADE_HEIGHT.
+    #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+      push_setting(CYDLCD_SET_FADE_HEIGHT, scaled(planner.z_fade_height, CYDLCD_VAL_SCALE));
+    #endif
     // GHI CHU (2026-10-14): KHONG gui preheat presets tu day. Ban nay khong co menu MarlinUI 12864
     // nen `HAS_PREHEAT = 0` => `M145` khong duoc bien dich va bang preheat khong nam trong
     // `settings_t`. Bat lai thi `settings_t` doi kich thuoc -> version/CRC EEPROM doi -> Marlin nap

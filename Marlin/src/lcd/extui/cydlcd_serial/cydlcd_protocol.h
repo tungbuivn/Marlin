@@ -264,7 +264,9 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_TMC_CURRENT_Y,       // mA
   CYDLCD_SET_TMC_CURRENT_Z,       // mA
   CYDLCD_SET_TMC_CURRENT_E,       // mA (E0)
-  CYDLCD_SET_RUNOUT_EN            // 1 = bat cam bien het filament (runout.enabled)
+  CYDLCD_SET_RUNOUT_EN,           // 1 = bat cam bien het filament (runout.enabled)
+  CYDLCD_SET_FADE_HEIGHT          // mm (planner.z_fade_height: chieu cao bu mesh - M420 Z,
+                                  //     chi co khi ENABLE_LEVELING_FADE_HEIGHT; 0 = tat fade)
   // GHI CHU: 3 preset preheat (PLA/PETG/ABS) KHONG nam o day vi ban nay khong co M145/HAS_PREHEAT.
   // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_lvgl.cpp khoi "PREHEAT presets").
 };
