@@ -506,20 +506,25 @@ void cb_action(lv_event_t *e);
 // ---------------------------------------------------------------------------
 /** Man STATUS: 3 o nhiet/quat + hang XYZ + FR/FL + nut SD/SETTINGS + thoi gian + tien do. */
 void page_status_create(lv_obj_t *p);
+/** Cap nhat so lieu man STATUS: 3 o nhiet/quat, XYZ, FR/FL, thoi gian, %, dong trang thai. */
 void page_status_update(void);
 /** Man MENU: danh sach muc (menu doc kieu Marlin) + dong "Calibrate touch" tren board co touch. */
 void page_menu_create(lv_obj_t *p);
+/** Cap nhat nhan cac muc MENU (mo/lam mo nut theo trang thai may + link). */
 void page_menu_update(void);
 /** Man TEMP: +/- nhiet dau in/ban in, hang FAN, 3 nut preset preheat, tuning MPC/PID + COOLDOWN. */
 void page_temp_create(lv_obj_t *p);
+/** Cap nhat nhiet hien tai/target, gia tri FAN va 3 nut preset cua man TEMP. */
 void page_temp_update(void);
 /** Ve lai nhan 3 nut preset PLA/PETG/ABS theo kho preheat (ui_preheat_set goi sau khi sua preset). */
 void tp_pre_sync(void);
 /** Man FEED/FLOW: +/- M220/M221 + RESET 100% (2 o FR/FL tren STATUS mo vao day). */
 void page_rate_create(lv_obj_t *p);
+/** Cap nhat 2 nhan FR/FL theo M220/M221 cua Marlin. */
 void page_rate_update(void);
 /** Man JOG: chon truc + cac buoc nhich + HOME/M84 + G28 tung truc + lop phu sua M851 Z. */
 void page_jog_create(lv_obj_t *p);
+/** Cap nhat toa do 3 truc tren man JOG (chua home -> '?') + to nut truc dang chon. */
 void page_jog_update(void);
 /** Nap 3 preset preheat tu NVS luc khoi dong (ui_lvgl_begin). */
 void preheat_load(void);
@@ -532,6 +537,7 @@ void preheat_inject(void);
 // ---------------------------------------------------------------------------
 /** Man FILE SD: dong info + roller danh sach file + PRINT / DIR / XOA FILE. */
 void page_files_create(lv_obj_t *p);
+/** Cap nhat dong info + roller danh sach file (chi dung lai roller khi danh sach DOI). */
 void page_files_update(void);
 /**
  * Nha + init lai the SD roi moi xin danh sach file: gui M22 (nha the) + M21 (mount lai) xuong Marlin,
@@ -551,6 +557,7 @@ void files_job_task(void);
 // ---------------------------------------------------------------------------
 /** Man SETTINGS: bang thong so (SET_ROWS) + UP/DOWN/SAVE EEPROM + dong info. */
 void page_settings_create(lv_obj_t *p);
+/** Cap nhat bang thong so (chi ve lai khi Marlin gui gia tri moi), sau khi bom preset preheat. */
 void page_settings_update(void);
 /** Dong lop phu SUA so (ov_*). show_page() goi TRUOC khi thu hoi trang vi lop phu thuoc lv_scr_act. */
 void ov_hide(void);
@@ -562,18 +569,23 @@ void ov_open_id(const uint16_t id);
 // ---------------------------------------------------------------------------
 /** Man BED MESH: luoi bed mesh dung het be rong + 2 hang nut UBL (G29). */
 void page_mesh_create(lv_obj_t *p);
+/** Cap nhat luoi bed mesh tu frame Marlin (dung lai bang khi so cot/hang DOI). */
 void page_mesh_update(void);
 /** Man CUSTOM: G34 / Init SD / M119 endstop / M412 filament / reboot DFU. */
 void page_custom_create(lv_obj_t *p);
+/** Cap nhat trang CUSTOM: to lai nut M412 theo trang thai cam bien filament. */
 void page_custom_update(void);
 /** Man ENDSTOP: 6 o trang thai kieu M119 (frame CYDLCD_F_ENDSTOPS). */
 void page_endstop_create(lv_obj_t *p);
+/** Cap nhat 6 o trang thai endstop tu frame CYDLCD_F_ENDSTOPS. */
 void page_endstop_update(void);
 /** Man INFO: 11 dong thong tin THAT (firmware, board, font, WiFi, protocol, link, SD, he thong). */
 void page_info_create(lv_obj_t *p);
+/** Dung lai 11 dong thong tin cua man INFO tu du lieu Marlin / cua man hinh. */
 void page_info_update(void);
 /** Man WIFI: trang thai + quet mang + nhap mat khau + ket noi/ngat/quen cau hinh (NVS). */
 void page_wifi_create(lv_obj_t *p);
+/** Cap nhat trang thai quet mang + ket noi WiFi (SSID/IP/RSSI) tren man WIFI. */
 void page_wifi_update(void);
 /**
  * Don moi thu CUA TRANG WIFI khi roi trang: dong ban phim nhap mat khau + lop phu "DANG QUET..."
@@ -583,6 +595,7 @@ void page_wifi_update(void);
 void wifi_page_leave(void);
 /** Man TRAMMING: dieu khien Bed Tramming Wizard qua link ASCII (4 so 4 goc + 4 nut lenh). */
 void page_tbt_create(lv_obj_t *p);
+/** Cap nhat man TRAMMING tu dong 'TBT ...' cua Marlin (4 goc, huong dan van, mode). */
 void page_tbt_update(void);
 
 // ---------------------------------------------------------------------------

@@ -130,7 +130,7 @@ static void cb_wifi_pass(lv_event_t *e) {
 // Khong co ban phim trong cau hinh LVGL cua env nay -> nut MAT KHAU khong lam gi (van bam duoc,
 // khong crash); mat khau nhap qua console COM7 / dung mang da luu trong NVS.
 static void cb_wifi_pass(lv_event_t *e) { (void)e; }
-#endif
+#endif  // LV_USE_KEYBOARD && LV_USE_TEXTAREA
 
 // Do danh sach mang vao roller. Dinh dang 1 dong: "-58dBm <ssid>" (RSSI TRUOC de lay SSID = phan
 // sau dau cach DAU TIEN - SSID co the chua dau cach nen khong the cat tu cuoi).

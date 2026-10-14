@@ -75,8 +75,7 @@ uint8_t link_state_now(void) {
 // "Focusable" = CO TRONG GROUP, chu KHONG phai co LV_OBJ_FLAG_CLICK_FOCUSABLE: lv_group_focus_obj()
 // chi doi hoi vat nam trong group (no duyet danh sach obj_ll cua group - lv_group.c:235), va co
 // vat duoc them vao group ma khong co co do (vd bang SETTINGS: `lv_group_add_obj(s_group, me_table)`).
-static lv_obj_t *find_focus_in_band(lv_obj_t *root, lv_coord_t band_lo, lv_coord_t band_hi)
-{
+static lv_obj_t *find_focus_in_band(lv_obj_t *root, lv_coord_t band_lo, lv_coord_t band_hi) {
   const uint32_t n = lv_obj_get_child_cnt(root);
   for (uint32_t i = 0; i < n; i++) {
     lv_obj_t *c = lv_obj_get_child(root, i);

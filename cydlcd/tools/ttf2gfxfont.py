@@ -519,7 +519,7 @@ def main():
         out.append(" *   - bitmap 1 bit/pixel, MOI HANG CANH DAU BYTE (stride = ceil(width/8)), bit cao truoc")
         out.append(" *")
         out.append(" *  !! LVGL 8.4 KHONG doc duoc truc tiep dinh dang nay: no dao cac hang thanh MOT chuoi")
-        out.append(" *     bit LIEN TUC, khong dem padding theo hang (lv_draw_sw_letter.c: `col_bit += ")
+        out.append(" *     bit LIEN TUC, khong dem padding theo hang (lv_draw_sw_letter.c: `col_bit +=")
         out.append(" *     col_bit_row_ofs;` = 0 voi hang day du; kiem chung: montserrat_14 glyph '!' 3x10")
         out.append(" *     bpp4 chiem 15 byte = ceil(3*10*4/8), khong phai 20).")
         out.append(" *     Kiem chung lai: tools/probe_lvgl_font_bitmap_layout.py va")

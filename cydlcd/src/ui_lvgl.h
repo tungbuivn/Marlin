@@ -10,6 +10,9 @@
  * nen main.cpp cu van build duoc ma khong keo theo LVGL.
  *
  * Man hinh (xem ui_page_*.cpp): STATUS / MENU / FEED-FLOW / TEMP / JOG / FILES / SETTINGS / MESH /
+ * CUSTOM / TRAMMING / INFO / ENDSTOP / WIFI. Cac phan dung chung nam o ui_widgets.cpp (helper),
+ * ui_chrome.cpp (tieu de + thanh day + icon trang thai), ui_boxes.cpp (hop thoai) va
+ * ui_preheat.cpp (kho preset preheat).
  */
 #pragma once
 

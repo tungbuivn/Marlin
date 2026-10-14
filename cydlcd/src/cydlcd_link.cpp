@@ -116,7 +116,7 @@ void cydlcd_link_ping() {
   cydlcd_tx_begin(&s_tx, CYDLCD_F_PING);
   cydlcd_tx_u8(&s_tx, ++s_tx.seq);
   send_frame(cydlcd_tx_finish(&s_tx));
-  
+
 }
 
 void cydlcd_link_send_gcode(const char *line) {
