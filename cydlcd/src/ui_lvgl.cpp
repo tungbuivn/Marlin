@@ -699,9 +699,26 @@ void ui_lvgl_dump_layout(void) {
   Serial.printf("[UI] trang %u '%s' | vung noi dung %dx%d | thanh day %s\n",
                 (unsigned)s_page_act, PG_TITLE[s_page_act], (int)PAGE_INN_W, (int)PAGE_INN_H,
                 bot_shown() ? "HIEN (noi dung tran)" : "an (noi dung gon)");
-  if (!pg) { Serial.println("[UI] (trang chua duoc tao)"); return; }
-  const uint32_t n = lv_obj_get_child_cnt(pg);
-  for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(pg, i), 1);
+  if (pg) {
+    const uint32_t n = lv_obj_get_child_cnt(pg);
+    for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(pg, i), 1);
+  }
+  else Serial.println("[UI] (trang chua duoc tao)");
+
+  // LOP PHU / HOP THOAI nam tren `lv_layer_top()` (msgbox, lop phu SUA, ban phim WiFi...).
+  // In luon de kiem tra vi tri: hop thong bao PHAI o GIUA man hinh (khong phai goc tren-trai).
+  lv_obj_t *top = lv_layer_top();
+  const uint32_t nt = top ? lv_obj_get_child_cnt(top) : 0;
+  Serial.printf("[UI] lop tren (hop thoai): %u vat | man hinh %dx%d\n",
+                (unsigned)nt, (int)UI_LCD_HOR_RES, (int)UI_LCD_VER_RES);
+  for (uint32_t i = 0; i < nt; i++) dump_obj(lv_obj_get_child(top, i), 1);
+}
+
+// Mo 1 hop thoai XAC NHAN de kiem tra bo cuc (lenh `UI TESTBOX` tren COM7). Action 0xFF khong
+// tuong ung A_* nao -> bam OK/CANCEL deu khong lam gi (xem do_action(): default: break).
+void ui_lvgl_test_dialog(void) {
+  ui_confirm("KIEM TRA", "Hop thoai nay phai nam GIUA man hinh", 0xFF, 1);
+  ui_confirm_autoclose(6000);      // tu dong dong sau 6 s (khong de hop modal nam tren man)
 }
 
 #endif  // CYDLCD_USE_LVGL

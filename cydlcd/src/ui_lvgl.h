@@ -48,6 +48,10 @@ uint8_t ui_lvgl_page_count(void);
 // Dung de kiem tra mot man co bi tran, nut co nam sat day khong, roller cao bao nhieu px.
 void ui_lvgl_dump_layout(void);
 
+// Mo 1 hop thoai XAC NHAN rong (action khong lam gi) de KIEM TRA BO CUC hop thoai tu PC:
+// hop thong bao phai nam GIUA man hinh. Dung voi lenh `UI TESTBOX` tren COM7.
+void ui_lvgl_test_dialog(void);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.

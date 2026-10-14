@@ -472,6 +472,8 @@ void build_chrome(void);
 // ---------------------------------------------------------------------------
 /** Hop XAC NHAN dung chung: OK moi chay lenh; steps = 2 -> phai bam OK 2 lan. */
 void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);
+/** Tu dong dong hop XAC NHAN sau `ms` mili giay (0 = tat) - dung cho hop TEST tu console. */
+void ui_confirm_autoclose(const uint32_t ms);
 /** Tra focus ve vat dau tien cua man dang mo (sau khi dong hop thoai). */
 void refocus_page(void);
 /** Cap nhat prompt cua Marlin + thong bao + hop "tune xong" (goi moi vong ui_lvgl_task). */

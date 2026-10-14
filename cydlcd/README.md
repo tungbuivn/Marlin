@@ -1704,7 +1704,8 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
 | 🆕 `UI ?` (hoac `UI`) | in danh sach 13 man + so thu tu (khong mo man nao) |
 | 🆕 `UI <ten man>` | **mo** 1 man theo ten, vd `UI FILE SD`, `UI TRAMMING` — de tai hien loi UI tu PC |
-| 🆕 `UI BOX` | in **bo cuc** man dang mo: toa do + kich thuoc tung vat con truc tiep, noi dung `lv_roller` (danh sach file) va trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong |
+| 🆕 `UI BOX` | in **bo cuc** man dang mo + **lop tren (hop thoai)**: toa do/kich thuoc tung vat **theo cay** (de quy 2 muc, thay ca nhan nam trong khung/nut), noi dung `lv_roller` (danh sach file), trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong, **hop thoai co o giua man hinh khong** |
+| 🆕 `UI TESTBOX` | mo 1 **hop thoai XAC NHAN rong** (tu dong dong sau 6 s, bam OK/CANCEL khong lam gi) de kiem tra bo cuc hop thoai: doc `UI BOX` phan "lop tren" — hop PHAI co tam = tam man hinh (vd `x=60 y=82 200x76` ⇒ tam 160,120 = giua 320×240) |
 
 ⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang
 Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen tiep nen khong bi lan.

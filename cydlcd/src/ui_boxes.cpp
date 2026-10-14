@@ -49,6 +49,15 @@ static lv_color_t sev_color(uint8_t sev) {
 static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_col,
                           const char *const *btns) {
   lv_obj_t *box = lv_msgbox_create(NULL, title, txt, (const char **)btns, false);
+
+  // CANH GIUA MAN HINH (nguoi dung bao 2026-10-15: "cac dialog thong bao dang o goc trai tren").
+  // VI SAO: lv_msgbox_create(NULL,...) tao hop trong 1 "backdrop" phu kin lv_layer_top(), NHUNG
+  // backdrop do KHONG co layout canh giua (lv_msgbox.c: lv_msgbox_backdrop_class chi dat
+  // width/height_def = 100%) -> mac dinh hop nam o (0,0) = goc TREN-TRAI. Phai tu canh giua.
+  // max_width: thong bao dai (vd loi cua Marlin) khong tran ra ngoai man hinh.
+  lv_obj_set_style_max_width(box, UI_LCD_HOR_RES - 12, 0);
+  lv_obj_align(box, LV_ALIGN_CENTER, 0, 0);
+
   lv_obj_set_style_bg_color(box, COL_BAR, 0);
   lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(box, 1, 0);
@@ -108,6 +117,7 @@ static void cb_pid_value(lv_event_t *e) {
 static lv_obj_t *s_cf_box;
 static uint8_t   s_cf_action = 0;
 static uint8_t   s_cf_steps  = 1;
+static uint32_t  s_cf_autoclose_ms = 0;      // >0: tu dong dong hop XAC NHAN sau moc nay
 
 static void cb_confirm_value(lv_event_t *e) {
   lv_obj_t *box = lv_event_get_target(e);
@@ -130,8 +140,15 @@ void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t step
   box_close(&s_cf_box);
   s_cf_action = action;
   s_cf_steps  = steps ? steps : 1;
+  s_cf_autoclose_ms = 0;                       // hop XAC NHAN binh thuong: cho nguoi dung bam
   s_cf_box = box_make(title, txt, COL_WARN, btns);
   lv_obj_add_event_cb(s_cf_box, cb_confirm_value, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+// Tu dong dong hop XAC NHAN sau `ms` mili giay (0 = tat). Dung cho hop TEST mo tu console
+// (`UI TESTBOX`) - de khong de 1 hop modal nam tren man hinh khi khong ai bam.
+void ui_confirm_autoclose(const uint32_t ms) {
+  s_cf_autoclose_ms = ms ? lv_tick_get() + ms : 0;
 }
 
 void boxes_update(void) {
@@ -150,6 +167,14 @@ void boxes_update(void) {
     }
   }
   else box_close(&s_prompt_box);
+
+  // Hop XAC NHAN co hen gio tu dong dong (chi hop TEST tu console dat hen gio - xem ui_confirm_autoclose)
+  if (s_cf_box && s_cf_autoclose_ms && lv_tick_elaps(s_cf_autoclose_ms) < 0x80000000UL
+      && (int32_t)(lv_tick_get() - s_cf_autoclose_ms) >= 0) {
+    s_cf_autoclose_ms = 0;
+    box_close(&s_cf_box);
+    refocus_page();
+  }
 
   // ---- thong bao moi (cydlcd.message_ms doi) ----
   if (!s_prompt_box && cydlcd.message[0] && cydlcd.message_ms != s_msg_seen_ms) {
