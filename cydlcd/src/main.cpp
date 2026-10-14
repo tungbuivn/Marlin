@@ -323,6 +323,8 @@
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
+            // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
+            else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
             // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).
             else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
             // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de

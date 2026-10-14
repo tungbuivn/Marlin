@@ -237,6 +237,10 @@ static const set_row_t *se_find(const uint16_t id) {
 static void se_fmt_id(char *b, size_t n, const uint16_t id, const int32_t raw) {
   const set_row_t *r = se_find(id);
   uint8_t dec = r ? r->dec : 2;
+  // YEU CAU NGUOI DUNG 2026-10-15 ("phan gia tri va buoc trong setting can hien thi 2 chu so sau dau cham
+  // thap phan"): gia tri GUI XUONG Marlin dung cung so chu so thap phan nhu man hinh hien -> it nhat 2.
+  // (Dong nao can chinh xac hon - MPC R/A/F/H: 4 so le - thi GIU 4, khong lam mat do chinh xac.)
+  if (dec < 2) dec = 2;
   // Dang SUA dong nay va buoc dang chon MIN HON so thap phan cua dong -> hien du so thap phan theo buoc,
   // neu khong nguoi dung bam 0.01 ma man hinh van lam tron (xem OV_STEP_DEC).
   if (r && ov_open && id == SET_ROWS[ov_i].id && OV_STEP_DEC[ov_step_k] > dec)
@@ -378,10 +382,14 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
 // "font tieng Viet" o dau file. Hai chuoi o day la "Gia tri: <v>" va "Buoc <buoc>".
 static void ov_refresh(void) {
   char a[16], b[40];
-  fmt_scaled(a, sizeof(a), ov_raw, SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
+  // YEU CAU NGUOI DUNG 2026-10-15: "phan gia tri va buoc trong setting can hien thi 2 chu so sau dau cham
+  // thap phan" -> CA HAI dong ("Gia tri:" va "Buoc") dung it nhat 2 so le; dong nao chi tiet hon (MPC 4 so)
+  // thi giu nguyen so do (khong lam mat do chinh xac khi sua R/A/F/H).
+  const uint8_t dec_v = (SET_ROWS[ov_i].dec > 2) ? SET_ROWS[ov_i].dec : 2;
+  fmt_scaled(a, sizeof(a), ov_raw, SET_ROWS[ov_i].scale, dec_v);
   snprintf(b, sizeof(b), "Gi\xC3\xA1 tr\xE1\xBB\x8B: %s", a);     // "Gia tri: <v>" (co dau)
   set_text(ov_val, b);
-  fmt_scaled(a, sizeof(a), ov_step(ov_i), SET_ROWS[ov_i].scale, SET_ROWS[ov_i].dec);
+  fmt_scaled(a, sizeof(a), ov_step(ov_i), SET_ROWS[ov_i].scale, dec_v);
   snprintf(b, sizeof(b), "B\xC6\xB0\xE1\xBB\x9B\x63 %s", a);      // "Buoc <buoc>" (co dau)
   set_text(ov_hint, b);
 }
@@ -618,6 +626,25 @@ void page_settings_update(void) {
   // o man JOG): focus va "dang chon" la 2 trang thai doc lap, ov_marks() chi ghi khi mau doi.
   // Chay ca khi lop phu dang AN: ov_step_btn[] khong doi, khong ton gi them.
   ov_marks();
+}
+
+// CHAN DOAN (lenh `UI EDIT <id>` tren COM8): mo lop phu SUA cho dong co id do Y NHU VUA CHAM VAO DONG, roi
+// IN RA "Gia tri:" / "Buoc" dang hien. VI SAO CAN: khong the cham bang tay tu PC; lenh nay di DUNG duong mo
+// lop phu (khong tu gui M-code) nen kiem tra duoc dinh dang so tu xa.
+// Vi du: `UI EDIT 42` (Fade height), `UI EDIT 12` (Max accel X - dong dec=0 de kiem tra "2 so le").
+void settings_test_edit(const char *arg) {
+  int id = -1;
+  if (arg && *arg) sscanf(arg, "%d", &id);
+  if (id <= 0) { Serial.println("[UI] dung: UI EDIT <id>  (xem id bang lenh 'UI SET')"); return; }
+  const set_row_t *r = se_find((uint16_t)id);
+  if (!r) { Serial.printf("[UI] EDIT: id %d khong co trong bang SETTINGS\n", id); return; }
+  ov_open_id((uint16_t)id);
+  if (!ov_open) { Serial.printf("[UI] EDIT: id %d chua co gia tri tu Marlin -> khong mo duoc\n", id); return; }
+  Serial.printf("[UI] EDIT id %u (%s): \"%s\" | \"%s\" | buoc muc %u\n",
+                (unsigned)SET_ROWS[ov_i].id, SET_ROWS[ov_i].name,
+                ov_val  ? lv_label_get_text(ov_val)  : "",
+                ov_hint ? lv_label_get_text(ov_hint) : "",
+                (unsigned)ov_step_k);
 }
 
 // CHAN DOAN (lenh `UI SET` tren COM8): in cac dong cua bang SETTINGS kem gia tri RAW + gia tri da format.

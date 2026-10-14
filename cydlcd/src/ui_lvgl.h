@@ -78,6 +78,10 @@ void ui_lvgl_dump_busy(void);
 // (khong tu gui M421) - de kiem tra hop sua / nut OK-HUY tu PC khi khong cham duoc man hinh.
 void mesh_test_cell(const char *arg);
 
+// CHAN DOAN bang SETTINGS (lenh `UI EDIT <id>` tren COM8): mo lop phu SUA cho dong co id do Y NHU VUA CHAM
+// va in ra "Gia tri:" / "Buoc" dang hien (kiem tra dinh dang so tu PC). Xem id bang lenh `UI SET`.
+void settings_test_edit(const char *arg);
+
 // CHAN DOAN bang SETTINGS (lenh `UI SET` tren COM8): in tung dong (id, ten, gia tri format, raw) - de kiem
 // tra tu PC xem Marlin co day thong so nao va man hinh dang hien gi (bang nam tren LCD, khong doc nguoc duoc).
 void page_settings_dump(void);
