@@ -69,6 +69,11 @@ void ui_lvgl_test_preheat(const char *arg);
 // ma `temp_lookup()` dang dung de HIEN THI. Dung khi "nhiet hien thi khong dung".
 void ui_lvgl_dump_temps(void);
 
+// CHAN DOAN dai mau nhiet do: in bang mau ma icon + so cua man STATUS se dung tai tung nhiet do
+// (lenh `UI GRAD` tren COM7) - hotend 10..250 va bed 0..60, kem chi so % vi tri trong dai. Tra loi
+// "khi nhiet do tang dan thi mau co chuyen dan sang do khong" ma KHONG phai dot nong may.
+void ui_lvgl_test_grad(void);
+
 // CHAN DOAN trang thai may: in `st`/`fl`/file dang in/tien do + **co cho nhan file upload khong**
 // (lenh `UI BUSY` tren COM7, cung in kem trong `UI BOX`). Tra loi "lam sao biet may dang in?":
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.

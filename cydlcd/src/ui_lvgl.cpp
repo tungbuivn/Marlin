@@ -763,6 +763,45 @@ void ui_lvgl_dump_temps(void) {
   Serial.printf(" | BED %d/%d  (scale /100)\n", (int)c, (int)t);
 }
 
+// CHAN DOAN: bang MAU cua dai nhiet do (man STATUS dung cho ca icon lan 2 con so) - lenh `UI GRAD` tren COM7.
+// VI SAO CAN: "khi nhiet do tang dan thi mau co chuyen dan sang do khong?" - khong the tra loi bang mat thuong
+// neu khong dot nong may (va dot nong thi phai xin phep), nen in thang mau ra console: console doc duoc,
+// con man hinh chi co 1 khung mau tai 1 nhiet do. Moc dau/cuoi lay tu MR_TEMP_*_MIN/MAX (ui_lvgl_int.h) -
+// dung CHUNG hang so voi man STATUS nen bang nay luon khop voi cai dang hien.
+void ui_lvgl_test_grad(void) {
+  int16_t c = 0, t = 0, hot_c = 0, bed_c = 0;
+  temp_lookup(CYDLCD_TEMP_E0,  &c, &t);
+  hot_c = c;                            // giu lai truoc khi goi lan 2 (temp_lookup ghi de ca cap cur/tgt)
+  temp_lookup(CYDLCD_TEMP_BED, &c, &t);
+  bed_c = c;
+  // temp_lookup() tra ve don vi 1/100 do C -> chia 100 cho khop dai mau (xem chu thich o page_status_update()).
+  const int16_t hotd = (int16_t)(hot_c / 100), bedd = (int16_t)(bed_c / 100);
+  Serial.printf("[UI] GRAD hotend %d..%d | bed %d..%d (moc giua = MR_WARM #%06lX)\n",
+                MR_TEMP_HOT_MIN, MR_TEMP_HOT_MAX, MR_TEMP_BED_MIN, MR_TEMP_BED_MAX,
+                (unsigned long)lv_color_to32(MR_WARM));
+  Serial.printf("[UI] GRAD dang HIEN THI: hotend %d.%02d do C -> #%06lX | bed %d.%02d do C -> #%06lX\n",
+                (int)(hot_c / 100), (int)(hot_c % 100),
+                (unsigned long)lv_color_to32(temp_ramp(hotd, MR_TEMP_HOT_MIN, MR_TEMP_HOT_MAX, MR_HOTEND)),
+                (int)(bed_c / 100), (int)(bed_c % 100),
+                (unsigned long)lv_color_to32(temp_ramp(bedd, MR_TEMP_BED_MIN, MR_TEMP_BED_MAX, MR_BEDHOT)));
+  // Bang quet: in ca % vi tri trong dai de doi chieu voi cong thuc, khong chi mau.
+  static const int16_t hot[] = { 10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 260 };
+  Serial.print("[UI] GRAD hotend:");
+  for (uint8_t i = 0; i < sizeof(hot) / sizeof(hot[0]); i++) {
+    const int32_t u = (hot[i] - MR_TEMP_HOT_MIN) * 100 / (MR_TEMP_HOT_MAX - MR_TEMP_HOT_MIN);
+    Serial.printf(" %dC(%ld%%)=#%06lX", (int)hot[i], (long)(u < 0 ? 0 : (u > 100 ? 100 : u)),
+                  (unsigned long)lv_color_to32(temp_ramp(hot[i], MR_TEMP_HOT_MIN, MR_TEMP_HOT_MAX, MR_HOTEND)));
+  }
+  static const int16_t bed[] = { 0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70 };
+  Serial.print("\n[UI] GRAD bed   :");
+  for (uint8_t i = 0; i < sizeof(bed) / sizeof(bed[0]); i++) {
+    const int32_t u = (bed[i] - MR_TEMP_BED_MIN) * 100 / (MR_TEMP_BED_MAX - MR_TEMP_BED_MIN);
+    Serial.printf(" %dC(%ld%%)=#%06lX", (int)bed[i], (long)(u < 0 ? 0 : (u > 100 ? 100 : u)),
+                  (unsigned long)lv_color_to32(temp_ramp(bed[i], MR_TEMP_BED_MIN, MR_TEMP_BED_MAX, MR_BEDHOT)));
+  }
+  Serial.println();
+}
+
 // CHAN DOAN: MAY DANG LAM GI + co cho nhan file upload khong - lenh `UI BUSY` tren COM7 (cung in kem
 // trong `UI BOX`). Tra loi cau hoi "lam sao biet may in dang in?": xem `st` (trang thai Marlin bao),
 // `file`/`prog` (dang in file nao) va `IN TU THE SD` (co THAT SU in tu the hay khong).

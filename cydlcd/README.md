@@ -2029,6 +2029,32 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
 
+## Dai mau nhiet do cua man STATUS (2026-10-15)
+
+Tra loi cau hoi *"khi nhiệt độ tăng dần thì màu của icon hotend và bed có chuyển dần sang đỏ không?"* — **có**,
+và từ bản này màu bám **NHIỆT ĐỘ THỰC** chứ không còn chia theo **target**.
+
+* **Trước đây** (`temp_grad()`): màu = `cur / tgt`. Hệ quả: **cùng 50 °C** mà target 250 thì **XANH**, target 60
+  thì **ĐỎ** ⇒ màu nói *"đã đạt bao nhiêu % của target"*, không nói *"đang nóng bao nhiêu"*; và target nhỏ
+  (bàn in 60) thì đỏ ngay ở 60 °C.
+* **Bây giờ** (`temp_ramp()`, `src/ui_page_status.cpp`): 3 mốc **XANH (`MR_COLD`) → VÀNG (`MR_WARM`) → màu NÓNG**,
+  chạy theo **nhiệt độ đo được**. Trộn thẳng xanh→đỏ sẽ đi qua màu **xám hồng** (trông như bị *nhạt màu* chứ không
+  như *nóng lên*) nên chèn mốc vàng ở giữa cho ra cảm giác nóng dần rõ ràng.
+* **Hai đầu dải** (ý người dùng: *"min max hot-end là 10-250; bed 0-60"*): **mốc TRÊN lấy đúng ý** (250 °C đầu in,
+  60 °C bàn in). **Mốc DƯỚI kéo lên 25 °C** (`MR_TEMP_AMB`) — **vì sao**: 10 và 0 đều **thấp hơn nhiệt độ phòng**
+  (~29–31 °C) nên không bao giờ đạt được, và nặng hơn là bàn in **nguội 28,8 °C** với dải `0-60` đã ở **48 %** ⇒
+  màu **VÀNG** dù heater **TẮT**, nhìn như đang nóng. Lấy 25 °C làm mốc đầu thì bàn in nguội ≈ 11 % ⇒ **vẫn XANH**.
+* **Màu KHÔNG còn phụ thuộc "có target hay không"**: icon ĐẶC/VIỀN đã nói *có đang cấp nguồn hay không*, nên màu
+  để nói *đang nóng bao nhiêu* ⇒ lúc heater tắt mà còn 180 °C thì icon là **VIỀN nhưng màu NÓNG** (đúng thực tế).
+* Màu này dùng cho **cả icon lẫn 2 con số** trong ô. Đầu nóng: `MR_HOTEND #FF8A80` (đỏ nhạt, tương phản 6,7:1 —
+  Marlin TFT dùng `COLOR_SCARLET #FF2020` nhưng trên nền xanh đậm chỉ ~4,4:1, chữ nhỏ khó đọc); bàn in:
+  `MR_BEDHOT #FFB74D` (cam).
+* ⚠️ **Đơn vị**: `temp_lookup()` trả về **°C×100** (vd `3102` = 31,02 °C) còn `temp_ramp()` tính bằng **°C** ⇒
+  **phải chia 100** trước khi gọi. Bản đầu quên chia nên `3102 > 250` ⇒ đầu in ở nhiệt độ phòng hiện **ĐỎ ngay**
+  (đã sửa; `UI GRAD` in ra màu *đang hiển thị* nên bắt được lỗi này).
+* **Kiểm tra không cần đốt nóng**: `UI GRAD` in bảng màu của cả dải + màu **đang hiển thị** thật (xem bảng lệnh
+  console). Bảng in ra dùng **đúng hàm và hằng số** của màn STATUS nên luôn khớp với cái đang vẽ.
+
 ## Font chu (cap nhat: chi con font TU SINH)
 UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co the ep tu ngoai:
 `-DUI_MONO_FONT=0` de thu che do 0 ma khong phai sua file):
@@ -2161,6 +2187,7 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `UI TESTBOX` | mo 1 **hop thoai XAC NHAN rong** (tu dong dong sau 6 s, bam OK/CANCEL khong lam gi) de kiem tra bo cuc hop thoai: doc `UI BOX` phan "lop tren" — hop PHAI co tam = tam man hinh (vd `x=60 y=82 200x76` ⇒ tam 160,120 = giua 320×240) |
 | 🆕 `UI BUSY` | in **máy đang làm gì** + **có cho nhận file upload không**: `[UI] MAY: st=<mã> (<tên>) fl=0x.. file="<file đang in>" prog=<%> | IN TU THE SD=0/1 TAM DUNG=0/1` rồi `[UI] upload: cho nhan file \| BI CHAN (...)`. Trả lời *"làm sao biết máy đang in?"* — upload **chỉ** bị chặn khi đang in / tạm dừng bản in **từ thẻ SD** (HOME/PROBE/G35 không tính). Tự in kèm trong `UI BOX` |
 | 🆕 `UI TEMPS` | in **cả 2 nguồn nhiệt độ** mà màn hình đang có để đối chiếu: **PUSH** = frame `CYDLCD_F_TEMPS` (`id=1` đầu in, `id=0` bàn in; `cur/tgt` đơn vị °C×100) và **TRAM** = 4 token nhiệt độ cuối dòng `TBT ...`, kèm dòng "đang HIỂN THỊ" = đúng giá trị `temp_lookup()` dùng để vẽ. Dùng khi *"nhiệt hiển thị không đúng"* (đã dùng để tìm ra lỗi target bàn in luôn 0). Tự in kèm trong `UI BOX` |
+| 🆕 `UI GRAD` | in **bảng màu của dải nhiệt độ** mà màn STATUS dùng cho **cả icon lẫn 2 con số**: dòng đầu in 2 đầu dải (`hotend 25..250`, `bed 25..60`, mốc giữa `MR_WARM`), dòng 2 in **màu ĐANG HIỂN THỊ** thật (kèm °C của cả đầu in và bàn in), rồi 2 dòng quét `25C(0%)=#00E6FF … 250C(100%)=#FF8983` / `30C(14%)=#41DEC5 … 60C(100%)=#FFB64A` (kèm **% vị trí trong dải**). Trả lời *"nhiệt độ tăng dần thì màu có chuyển dần sang đỏ không?"* **mà KHÔNG phải đốt nóng máy**, và bắt được lỗi **sai đơn vị** (°C so với °C×100) — xem mục **"Dai mau nhiet do cua man STATUS"** |
 | 🆕 `UI PRE <0\|1\|2>` | **bấm nút preset preheat** PLA/PETG/ABS của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
 | 🆕 `UI TAP <0..4>` · `P\|N` · `I` · `D` · `K` · `C` · `L [đường dẫn]` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (mở `UI FILE SD` trước), `P`/`N` = **PREV/NEXT**, `I` = **PRINT** (kiểm tra đường in: có gửi `M23`+`M24` không), `D` = **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì**), `K` = **bấm OK** hộp thoại đang mở (**mọi màn**; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật), `L` = **liệt kê thư mục bằng FATFS của chính màn hình** (tên ĐẦY ĐỦ, không bị SdFat cắt 27 ký tự; `UI TAP L /BTUP` để xem 1 thư mục). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_files_print`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA`/`PRINT` đúng dòng, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách (kèm `PRINT=`/`XOA=` khoá hay mở) |
 

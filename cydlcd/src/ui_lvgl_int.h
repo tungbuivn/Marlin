@@ -190,6 +190,8 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 // ===========================================================================
 #define MR_BG      lv_color_hex(0x1E156E)   // COLOR_BACKGROUND
 #define MR_COLD    lv_color_hex(0x00E5FF)   // Material 3 dark cyan A400 (12.07 -> 9.84:1, do choi hon)
+#define MR_WARM    lv_color_hex(0xFFD54F)   // Material 3 dark amber 300: MOC GIUA cua dai mau nhiet do
+                                            // (xanh -> vang -> do). Xem temp_ramp() o ui_page_status.cpp.
 #define MR_HOTEND  lv_color_hex(0xFF8A80)   // Material 3 dark red A100: 3.95 -> 6.70:1 (truoc la chu thuong < 4.5)
 #define MR_BEDHOT  lv_color_hex(0xFFB74D)   // Material 3 dark amber 300: 6.49 -> 8.74:1
 #define MR_AXIS    lv_color_hex(0xFFFFFF)   // COLOR_AXIS_HOMED / COLOR_CONTROL_ENABLED
@@ -425,6 +427,24 @@ lv_obj_t *mk_icon(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const lv_img_dsc
                   lv_color_t col);
 /** Doi mau icon (Marlin doi mau bitmap theo nhiet do / trang thai). */
 void icon_color(lv_obj_t *im, const lv_color_t col);
+
+// ---- Dai mau theo NHIET DO TUYET DOI (man STATUS: icon + so cua dau in / ban in) ----------------
+// YEU CAU NGUOI DUNG 2026-10-15: "min max hot-end la 10-250; bed 0-60" -> MOC TREN lay dung y (250 / 60).
+// MOC DUOI thi KHONG lay 10 / 0 ma keo len MR_TEMP_AMB = 25 do C, VI SAO:
+//   - 10 va 0 deu THAP HON nhiet do phong (~29-31 do C trong phong nay) nen khong bao gio dat duoc -> lay lam
+//     moc dau thi ca mot doan dai (0..25) khong bao gio dung toi, phan dai con lai bi nen lai.
+//   - Nang hon: ban in NGUOI luc nghi = 28.8 do C, voi dai 0-60 thi da o 48% -> mau VANG du heater dang TAT,
+//     nhin nhu dang nong. Lay 25 lam moc dau thi ban in nguoi = ~11% -> VAN XANH, dung thuc te.
+//   => 2 dau thanh: hotend 25..250 do C, bed 25..60 do C (moc giua MR_WARM).
+// Xem temp_ramp() o ui_page_status.cpp (co ca phan VI SAO khong con chia theo target).
+#define MR_TEMP_AMB      25
+#define MR_TEMP_HOT_MIN  MR_TEMP_AMB
+#define MR_TEMP_HOT_MAX  250
+#define MR_TEMP_BED_MIN  MR_TEMP_AMB
+#define MR_TEMP_BED_MAX  60
+/** Mau cho 1 nhiet do trong dai [tmin,tmax]: MR_COLD -> MR_WARM -> hot.
+ *  DON VI: CA 3 tham so nhiet do deu la DO C (khong phai 1/100 do C nhu temp_lookup() tra ve) - nho chia 100. */
+lv_color_t temp_ramp(int16_t cur, int16_t tmin, int16_t tmax, lv_color_t hot);
 /** Nhan 1 dong, can PHAI trong be rong w (Marlin can so theo toa do x phai). */
 lv_obj_t *mk_label_right(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w,
                          const char *txt, lv_color_t col);

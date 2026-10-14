@@ -174,16 +174,24 @@ void page_status_create(lv_obj_t *p) {
   status_icons_create(p, sd_icon);
 }
 
-// Mau theo TI LE nhiet do hien tai / target: XANH (nguoi) -> DO (toi target).
-// VI SAO (yeu cau nguoi dung 2026-10-15: "mau cung thay doi dan tu xanh den do"): ban cu chi doi mau khi
-// qua 50 do C (2 muc MR_COLD / MR_HOTEND) -> khong thay "dan dan". Nay noi suy theo cur/tgt:
-//   tgt <= 0 (khong cap nguon) -> xanh (MR_COLD); cur/tgt = 1 (hoac vuot) -> mau NONG.
+// Mau theo NHIET DO TUYET DOI (khong con chia theo target).
+// YEU CAU NGUOI DUNG 2026-10-15: "khi nhiet do tang dan thi mau cua icon hotend va bed co chuyen dan sang do
+// khong? min max hot-end la 10-250; bed 0-60" -> MOC TREN lay dung y (250 / 60), MOC DUOI keo len nhiet do
+// phong MR_TEMP_AMB (xem chu thich o ui_lvgl_int.h: 0/10 thap hon nhiet do phong nen ban in nguoi 28.8 do C
+// da o 48% dai = mau VANG du heater TAT).
+// VI SAO KHONG dung cur/tgt nua: ban cu chia theo TARGET nen CUNG 1 nhiet do (vd 50 do C) se XANH khi target
+// 250 nhung DO khi target 60 -> mau khong noi len "dang nong bao nhieu", va target nho (bed 60) thi do ngay
+// o 60 do C. Nay mau bam NHIET DO THUC; con "dang cap nguon hay khong" da co icon DAC (co target) / VIEN
+// (khong target) lo, nen khong can nhet them vao mau.
+// Do thi 3 moc XANH -> VANG (giua dai) -> mau NONG: tron truc tiep xanh->do se di qua mau xam hoi (nhu bi
+// "nhat mau") chu khong giong "nong len"; chen moc vang o giua cho ra cam giac nong dan ro rang.
 // lv_color_mix(c1, c2, mix): mix = 255 -> c1, mix = 0 -> c2.
-static lv_color_t temp_grad(const int16_t cur, const int16_t tgt, const lv_color_t hot) {
-  if (tgt <= 0) return MR_COLD;
-  int32_t r = (int32_t)cur * 255 / (int32_t)tgt;
-  if (r < 0) r = 0; else if (r > 255) r = 255;
-  return lv_color_mix(hot, MR_COLD, (uint8_t)r);
+lv_color_t temp_ramp(const int16_t cur, const int16_t tmin, const int16_t tmax, const lv_color_t hot) {
+  if (cur <= tmin) return MR_COLD;
+  if (cur >= tmax) return hot;
+  const int32_t u = (int32_t)(cur - tmin) * 255 / (int32_t)(tmax - tmin);   // 0..254: vi tri trong dai
+  if (u <= 127) return lv_color_mix(MR_WARM, MR_COLD, (uint8_t)(u * 2));    // nua dau: xanh ... vang
+  return lv_color_mix(hot, MR_WARM, (uint8_t)((u - 127) * 2));              // nua sau: vang ... NONG
 }
 
 void page_status_update(void) {
@@ -201,7 +209,9 @@ void page_status_update(void) {
   //   - hotend: co target -> icon DAC (ui_icon_hotend), khong target -> chi VIEN (ui_icon_hotend_line).
   //     Ban VIEN duoc SINH THEM trong tools/make_lvgl_icons.py (bitmap goc cua Marlin la hinh dac).
   //   - bed: co target -> ui_icon_bed_heated (dia + khoi), khong -> ui_icon_bed (chi dia).
-  //   - mau: noi suy xanh -> do theo cur/tgt (temp_grad()).
+  //   - mau: dai mau XANH -> VANG -> DO chay theo NHIET DO THUC (temp_ramp()), moc lay tu MR_TEMP_*_MIN/MAX
+  //     (hotend 10-250, bed 0-60). Mau KHONG con phu thuoc "co target hay khong" -> luc nguoi di (heater tat
+  //     nhung con 180 do C) icon la VIEN nhung van mau NONG, dung voi thuc te.
   for (uint8_t i = 0; i < ST_CELLS; i++) {
     lv_color_t col = MR_COLD;
     if (i == 2) {                                     // quat: icon theo toc do, chi 1 dong "%"
@@ -217,7 +227,13 @@ void page_status_update(void) {
       const bool powered = (tgt > 0);
       if (i == 0) lv_img_set_src(st_icon[i], powered ? &ui_icon_hotend : &ui_icon_hotend_line);
       else        lv_img_set_src(st_icon[i], powered ? &ui_icon_bed_heated : &ui_icon_bed);
-      col = temp_grad(cur, tgt, (i == 0) ? MR_HOTEND : MR_BEDHOT);
+      //   - mau: dai mau theo NHIET DO TUYET DOI (temp_ramp()), moc dau/cuoi lay tu MR_TEMP_*_MIN/MAX.
+      // LUU Y DON VI: `cur` cua temp_lookup() la 1/100 do C (vd 3102 = 31.02 do C - xem `scale /100` o
+      // UI TEMPS) con dai mau tinh bang DO C -> PHAI chia truoc, khong thi 3102 > 250 = luon mau NONG
+      // (loi nay da tung xay ra: dau in o nhiet do phong hien DO ngay).
+      const int16_t deg = (int16_t)(cur / 100);
+      col = (i == 0) ? temp_ramp(deg, MR_TEMP_HOT_MIN, MR_TEMP_HOT_MAX, MR_HOTEND)
+                     : temp_ramp(deg, MR_TEMP_BED_MIN, MR_TEMP_BED_MAX, MR_BEDHOT);
       fmt_scaled(a1, sizeof(a1), cur, 100, 0);
       fmt_scaled(a2, sizeof(a2), tgt, 100, 0);
       set_text(st_cur[i], a1);

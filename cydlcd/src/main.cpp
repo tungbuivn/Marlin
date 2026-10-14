@@ -321,6 +321,9 @@
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
             else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
+            // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
+            // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
+            else if (strcasecmp(a3, "GRAD") == 0)    ui_lvgl_test_grad();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
             // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
