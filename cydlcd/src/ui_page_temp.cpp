@@ -19,6 +19,7 @@
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp (tp_pre_sync)
+#include <Arduino.h>                // Serial.printf (WIFILOG - log chan doan nut preheat)
 
 #if CYDLCD_USE_LVGL
 
@@ -114,6 +115,14 @@ static void cb_temp_preheat(lv_event_t *e) {
   if (!ui_preheat_get(k, &noz, &bed, &fan)) return;
 
   char cmd[20];
+  // LOG NGAY truoc khi gui (chan doan "bam preheat ma ban in khong doi nhiet do can dat"):
+  // in ra DUNG 3 lenh se gui + so frame dang cho/bi bo o hang doi TX cua man hinh. Neu log co
+  // "M140 S60" ma nhan BED tren man hinh van la 0 thi loi nam o phia Marlin (lenh khong duoc chay);
+  // neu log KHONG co M140 thi loi o phia man hinh.
+  WIFILOG("[PRE] bam %s: gui \"M104 S%u\" + \"M140 S%u\"%s (hang doi TX cho=%u, da bo=%lu)\n",
+          ui_preheat_label(k), (unsigned)noz, (unsigned)bed,
+          fan ? " + \"M106 S...\"" : "", (unsigned)cydlcd_link_tx_pending(),
+          (unsigned long)cydlcd_link_tx_dropped());
   snprintf(cmd, sizeof(cmd), "M104 S%u", (unsigned)noz);
   cydlcd_link_send_gcode(cmd);
   snprintf(cmd, sizeof(cmd), "M140 S%u", (unsigned)bed);
@@ -167,6 +176,18 @@ void page_temp_create(lv_obj_t *p) {
   mk_btn_grow(rt, "SAVE EEPROM", TP_TUNE_H, cb_action, (void *)(intptr_t)A_SAVE);
 
   // Tong chieu cao: 16 + 30*3 + 28 + 26 + 28 + 6*GAP = 200 <= PAGE_INN_H (206)
+}
+
+// CHAN DOAN (lenh `UI PRE <k>` tren COM7): ban su kien CHAM vao nut preset PLA/PETG/ABS (k = 0/1/2)
+// o man NHIET DO - di DUNG duong su kien that (cb_temp_preheat) nen kiem tra duoc tu PC ma khong can
+// cham tay vao man hinh. Dung de doi chieu: log "[PRE] bam ..." (man hinh gui gi) voi so target hien
+// tren man (Marlin nhan duoc gi).
+void temp_test_preheat(const uint8_t k) {
+  if (k >= CYDLCD_PRE_COUNT || !tp_pre_btn[k]) {
+    Serial.println("[UI] TEMP: chua co nut preset (mo man 'UI NHIET DO' truoc)");
+    return;
+  }
+  lv_event_send(tp_pre_btn[k], LV_EVENT_CLICKED, NULL);
 }
 
 void page_temp_update(void) {

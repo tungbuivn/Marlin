@@ -530,6 +530,11 @@ void page_temp_create(lv_obj_t *p);
 void page_temp_update(void);
 /** Ve lai nhan 3 nut preset PLA/PETG/ABS theo kho preheat (ui_preheat_set goi sau khi sua preset). */
 void tp_pre_sync(void);
+/**
+ * CHAN DOAN: ban su kien CHAM vao nut preset thu `k` (0=PLA, 1=PETG, 2=ABS) cua man TEMP - lenh
+ * `UI PRE <k>` tren COM7. Di dung duong su kien that (cb_temp_preheat) de kiem tra tu PC.
+ */
+void temp_test_preheat(const uint8_t k);
 /** Man FEED/FLOW: +/- M220/M221 + RESET 100% (2 o FR/FL tren STATUS mo vao day). */
 void page_rate_create(lv_obj_t *p);
 /** Cap nhat 2 nhan FR/FL theo M220/M221 cua Marlin. */

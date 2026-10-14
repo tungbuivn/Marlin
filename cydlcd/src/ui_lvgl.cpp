@@ -709,6 +709,9 @@ void ui_lvgl_dump_layout(void) {
   // Man FILE: in them DONG DANG CHON (chi so + ten) - de doi chieu voi dong vua cham (`UI TAP <i>`).
   if (s_page_act == PG_FILES) page_files_dump();
 
+  // Doi chieu 2 NGUON nhiet do (PUSH frame TEMPS vs dong TRAM "TBT ..."): xem ui_lvgl_dump_temps().
+  ui_lvgl_dump_temps();
+
   // Hop nao dang mo (prompt cua Marlin / XAC NHAN / THONG BAO / PID) + noi dung cua no.
   boxes_dump();
 
@@ -726,6 +729,40 @@ void ui_lvgl_dump_layout(void) {
 void ui_lvgl_test_dialog(void) {
   ui_confirm("KIEM TRA", "Hop thoai nay phai nam GIUA man hinh", 0xFF, 1);
   ui_confirm_autoclose(6000);      // tu dong dong sau 6 s (khong de hop modal nam tren man)
+}
+
+// CHAN DOAN: in CA HAI nguon nhiet do ma man hinh dang co, de doi chieu - lenh `UI TEMPS` tren COM7
+// (va tu dong in kem trong `UI BOX`).
+//   PUSH : frame CYDLCD_F_TEMPS tu Marlin (che do PUSH - dang dung) - nhiet do THUC + target THUC;
+//   TRAM : 4 token nhiet do o CUOI dong "TBT ..." (che do TRAM, gui ~5 Hz).
+// VI SAO CAN: `temp_lookup()` (ui_widgets.cpp) UU TIEN nguon TRAM khi `tbt.ever` = true, nen neu dong
+// TBT mang gia tri cu/0 thi man hinh se hien SAI (vd target ban in luon 0) du frame PUSH dung.
+void ui_lvgl_dump_temps(void) {
+  Serial.printf("[UI] PUSH: %u muc", (unsigned)cydlcd.n_temps);
+  for (uint8_t i = 0; i < cydlcd.n_temps; i++)
+    Serial.printf(" | id=%u cur=%d tgt=%d", (unsigned)cydlcd.temps[i].id,
+                  (int)cydlcd.temps[i].cur, (int)cydlcd.temps[i].tgt);
+  Serial.println();
+  Serial.printf("[UI] TRAM: ever=%u linked=%u | E0 %d/%d | BED %d/%d\n",
+                (unsigned)tbt.ever, (unsigned)tbt.linked,
+                (int)tbt.st.t_e0, (int)tbt.st.t_e0_tgt, (int)tbt.st.t_bed, (int)tbt.st.t_bed_tgt);
+  int16_t c = 0, t = 0;
+  temp_lookup(CYDLCD_TEMP_E0,  &c, &t);
+  Serial.printf("[UI] dang HIEN THI (temp_lookup): NOZZLE %d/%d", (int)c, (int)t);
+  temp_lookup(CYDLCD_TEMP_BED, &c, &t);
+  Serial.printf(" | BED %d/%d  (scale /100)\n", (int)c, (int)t);
+}
+
+// CHAN DOAN: bam nut preset preheat (PLA/PETG/ABS) cua man TEMP tu console (`UI PRE <k>` tren COM7).
+void ui_lvgl_test_preheat(const char *arg) {
+  int k = -1;
+  if (arg && *arg) sscanf(arg, "%d", &k);
+  if (k < 0 || k >= (int)CYDLCD_PRE_COUNT) {
+    Serial.println("[UI] dung: UI PRE <0=PLA|1=PETG|2=ABS>  (mo man 'UI NHIET DO' truoc)");
+    return;
+  }
+  Serial.printf("[UI] bam nut preheat %s\n", ui_preheat_label((uint8_t)k));
+  temp_test_preheat((uint8_t)k);
 }
 
 // CHAN DOAN: ban su kien CHAM vao man FILE (lenh `UI TAP <gi>` tren COM7). Chi co y nghia khi man

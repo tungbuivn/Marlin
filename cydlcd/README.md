@@ -559,6 +559,21 @@ TRAMMING trên màn hình CYD **dùng được độc lập**, không cần mở
 > (`u8` ký tự `P/D/M/R/B/Q`) → `tramming_report_cmd()` phía Marlin. Nhờ vậy **không mất** wizard khi
 > đổi giao thức. Code chế độ TRAM cũ **vẫn nằm trong repo** (bật lại bằng `set_cydlcd_mode.ps1 -Mode off`
 > + `#define CYDLCD_TBT_LINK`), màn hình CYD tự nhận cả 2 đường (`cydlcd.linked` → gửi frame; ngược lại → ASCII thô).
+>
+> 🐞 **LỖI ĐÃ SỬA 2026-10-15 — "nút preheat không cập nhật nhiệt độ bàn in cần đạt"**: 4 token nhiệt độ
+> ở **cuối** dòng TBT (`... t_e0 t_bed t_e0_tgt t_bed_tgt\n`) — token **cuối cùng dính liền `\n`** — mà
+> `tbt_next_tok()` chỉ coi `' '`/`'\t'`/`'\r'` là dấu phân cách ⇒ token cuối là `"6000\n"` ⇒
+> `tbt_tok_uint()` gặp `\n` trả `-1` ⇒ `tbt_status_parse()` **`break`** ⇒ **`t_bed_tgt` LUÔN = 0**.
+> Vì `temp_lookup()` (ui_widgets.cpp) **ưu tiên nguồn TRAM khi `tbt.ever`**, màn hình hiện
+> `BED <nhiệt> / 0 C` dù Marlin **đã** đặt target 60 (frame PUSH báo `tgt=6000`).
+> **Sửa 2 chỗ** (đo trên máy thật bằng `UI TEMPS`): (1) `tbt_next_tok()` thêm `'\n'` vào bộ dấu phân
+> cách — **ở CẢ HAI bản** `cydlcd/src/tbt_protocol.h` + `Marlin/src/feature/tbt_protocol.h`;
+> (2) `temp_lookup()` **ưu tiên frame PUSH** (`cydlcd.temps[]`) và chỉ lùi về dòng TBT khi không có
+> (chế độ TRAM) ⇒ nguồn hiển thị luôn là nguồn đầy đủ/cập nhật nhất. Thêm test hồi quy
+> (`cydlcd/tools/test_cydlcd_link.cpp`: `p.t_e0/t_bed/t_e0_tgt/t_bed_tgt` phải bằng đúng giá trị đã
+> format — chạy khi có `g++`).
+> Đo trước/sau trên máy thật: trước `PUSH id=0 tgt=0 | TRAM BED 5393/0`; sau khi bấm `PLA` →
+> `PUSH ... id=0 tgt=6000 | TRAM BED 5322/6000 | HIỂN THỊ BED 5322/6000` (= **53.2 / 60 C**) ✓.
 
 **Chỉ báo link — chính sách hiển thị (2026-10-13, theo yêu cầu: gộp về header):**
 | Chỗ hiển thị | Nội dung | Ghi chú |
@@ -1774,6 +1789,8 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `UI <ten man>` | **mo** 1 man theo ten, vd `UI FILE SD`, `UI TRAMMING` — de tai hien loi UI tu PC |
 | 🆕 `UI BOX` | in **bo cuc** man dang mo + **lop tren (hop thoai)**: toa do/kich thuoc tung vat **theo cay** (de quy 2 muc, thay ca nhan nam trong khung/nut), noi dung `lv_roller` (danh sach file), trang thai thanh day. Man hinh CYD **khong co framebuffer doc nguoc** (driver ve thang ra SPI) nen day la cach **duy nhat** kiem tra bo cuc tu PC — vd kiem tra nut co nam sat day khong, roller cao bao nhieu px, danh sach file co muc la khong, **hop thoai co o giua man hinh khong**. 🆕 Khi dang o man **FILE SD** in them **dong dang chon** (chi so + ten + dong nao dang to nen), va in them **hop nao dang mo** (PROMPT cua Marlin / XAC NHAN / THONG BAO / PID + chu cua no) |
 | 🆕 `UI TESTBOX` | mo 1 **hop thoai XAC NHAN rong** (tu dong dong sau 6 s, bam OK/CANCEL khong lam gi) de kiem tra bo cuc hop thoai: doc `UI BOX` phan "lop tren" — hop PHAI co tam = tam man hinh (vd `x=60 y=82 200x76` ⇒ tam 160,120 = giua 320×240) |
+| 🆕 `UI TEMPS` | in **cả 2 nguồn nhiệt độ** mà màn hình đang có để đối chiếu: **PUSH** = frame `CYDLCD_F_TEMPS` (`id=1` đầu in, `id=0` bàn in; `cur/tgt` đơn vị °C×100) và **TRAM** = 4 token nhiệt độ cuối dòng `TBT ...`, kèm dòng "đang HIỂN THỊ" = đúng giá trị `temp_lookup()` dùng để vẽ. Dùng khi *"nhiệt hiển thị không đúng"* (đã dùng để tìm ra lỗi target bàn in luôn 0). Tự in kèm trong `UI BOX` |
+| 🆕 `UI PRE <0\|1\|2>` | **bấm nút preset preheat** PLA/PETG/ABS của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
 | 🆕 `UI TAP <0..4>` · `P\|N` · `I` · `D` · `K` · `C` · `L [đường dẫn]` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (mở `UI FILE SD` trước), `P`/`N` = **PREV/NEXT**, `I` = **PRINT** (kiểm tra đường in: có gửi `M23`+`M24` không), `D` = **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì**), `K` = **bấm OK** hộp thoại đang mở (**mọi màn**; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật), `L` = **liệt kê thư mục bằng FATFS của chính màn hình** (tên ĐẦY ĐỦ, không bị SdFat cắt 27 ký tự; `UI TAP L /BTUP` để xem 1 thư mục). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_files_print`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA`/`PRINT` đúng dòng, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách (kèm `PRINT=`/`XOA=` khoá hay mở) |
 
 ⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang

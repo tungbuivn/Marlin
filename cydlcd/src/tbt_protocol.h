@@ -190,12 +190,19 @@ static inline int tbt_status_format(char *buf, const int len, const tbt_status_t
 // Parser (MAN HINH CYD dung de doc dong TRAM; host test cung dung)
 // ---------------------------------------------------------------------------
 // Token ke tiep (bo qua khoang trang). Tra ve NULL khi het dong.
+// !!! `\n` PHAI nam trong bo dau phan cach !!!
+//   Dong TBT ket thuc bang "... t_e0 t_bed t_e0_tgt t_bed_tgt\n" (xem tbt_status_format) -> token
+//   CUOI CUNG dinh lien ky tu '\n'. Ban cu chi coi ' '/'\t'/'\r' la dau phan cach nen token cuoi la
+//   "6000\n" -> tbt_tok_uint() gap '\n' -> tra -1 -> tbt_status_parse() `break` -> **t_bed_tgt luon
+//   = 0**. Trieu chung da gap tren may that (2026-10-15): man hinh hien "BED <nhiet> / 0 C" du
+//   Marlin DA dat target 60 (frame PUSH bao tgt=6000) - chi rieng TARGET BAN IN bi mat, cac field
+//   khac (va 3 token nhiet do dau) van dung vi chung duoc ngan bang dau cach.
 static inline const char *tbt_next_tok(const char **p, int *tlen) {
   const char *s = *p;
-  while (*s == ' ' || *s == '\t' || *s == '\r') s++;
+  while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
   if (!*s) { *p = s; *tlen = 0; return NULL; }
   const char *e = s;
-  while (*e && *e != ' ' && *e != '\t' && *e != '\r') e++;
+  while (*e && *e != ' ' && *e != '\t' && *e != '\r' && *e != '\n') e++;
   *tlen = (int)(e - s);
   *p = e;
   return s;

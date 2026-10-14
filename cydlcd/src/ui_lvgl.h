@@ -59,6 +59,16 @@ void ui_lvgl_test_dialog(void);
 // do co duoc chon + to sang khong, dang chon file nao, va xoa file/thu muc rong co chay khong.
 void ui_lvgl_test_tap(const char *arg);
 
+// CHAN DOAN man NHIET DO: ban su kien CHAM vao nut preset preheat thu `arg` (0=PLA, 1=PETG, 2=ABS) -
+// lenh `UI PRE <k>` tren COM7. Di dung duong su kien that (cb_temp_preheat) nen kiem tra duoc tu PC:
+// nut nay gui `M104 S<nozzle>` + `M140 S<bed>` theo preset luu trong NVS cua man hinh.
+void ui_lvgl_test_preheat(const char *arg);
+
+// CHAN DOAN nhiet do: in CA HAI nguon ma man hinh dang co de doi chieu - lenh `UI TEMPS` tren COM7
+// (PUSH = frame CYDLCD_F_TEMPS tu Marlin; TRAM = 4 token nhiet do cuoi dong "TBT ..."), kem gia tri
+// ma `temp_lookup()` dang dung de HIEN THI. Dung khi "nhiet hien thi khong dung".
+void ui_lvgl_dump_temps(void);
+
 // ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
 // 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
 // Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.

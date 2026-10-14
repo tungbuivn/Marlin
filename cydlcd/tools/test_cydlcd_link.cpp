@@ -265,6 +265,7 @@ int main() {
     st.d[3] = 1.5f;   st.ok[3] = 1;
     st.active = 1; st.all_dat = 0;
     strcpy(st.hint, "CCW:0.021");
+    st.t_e0 = 21050; st.t_bed = 6000; st.t_e0_tgt = 21000; st.t_bed_tgt = 6000;   // xem CHECK nhiet do o duoi
 
     char line[160];
     const int n = tbt_status_format(line, sizeof(line), &st);
@@ -280,6 +281,13 @@ int main() {
     CHECK(!p.ok[2] && p.ok[3], "TBT parse: goc chua probe = '---.---'");
     CHECK(p.active == 1 && p.all_dat == 0, "TBT parse: active/all_dat");
     CHECK(strcmp(p.hint, "CCW:0.021") == 0, "TBT parse: hint");
+
+    // 4 token NHIET DO (do C * 100) o CUOI dong: token cuoi dinh lien '\n' -> PHAI doc duoc ca
+    // target BAN IN. Day la test hoi quy cho loi 2026-10-15: bo tach token cu (chi coi ' '/'\t'/'\r'
+    // la dau phan cach) an nham '\n' vao token cuoi => t_bed_tgt LUON = 0 => man hinh CYD hien
+    // "BED <nhiet> / 0 C" du Marlin da dat target 60.
+    CHECK(p.t_e0 == 21050 && p.t_bed == 6000 && p.t_e0_tgt == 21000 && p.t_bed_tgt == 6000,
+          "TBT parse: 4 token nhiet do (ke ca t_bed_tgt dinh '\\n')");
 
     // Dong theo dinh dang TOI THIEU (thieu 3 field mo rong) van phai doc duoc
     tbt_status_t m;

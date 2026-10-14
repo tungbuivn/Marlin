@@ -77,15 +77,18 @@ const char *state_name(uint8_t st) {
 
 void temp_lookup(const uint8_t id, int16_t *cur, int16_t *tgt) {
   *cur = 0; *tgt = 0;
-  // Che do TRAM (CYDLCD_TBT_LINK): KHONG co frame PUSH nang -> nhiet do duoc gui kem trong dong
-  // "TBT ..." (4 token cuoi, 2026-10-13, xem tbt_protocol.h). cydlcd.temps[] se rong nen phai
-  // lay tu day, neu khong moi o nhiet deu hien 0.
+  // UU TIEN frame PUSH (CYDLCD_F_TEMPS) khi `cydlcd.temps[]` CO muc cho id nay: day la du lieu day
+  // du nhat, cap nhat lien tuc khi co link PUSH. Chi khi khong co (che do TRAM: khong co frame TEMPS)
+  // moi lay tu 4 token nhiet do o cuoi dong "TBT ..." (xem tbt_protocol.h).
+  // VI SAO PHAI UU TIEN PUSH (2026-10-15): nguon TRAM chi ~5 Hz va la duong DU PHONG; da gap that:
+  // bo tach token cua dong TBT an nham ky tu '\n' o token CUOI -> target BAN IN luon 0, nen man hinh
+  // hien "BED <nhiet> / 0 C" du frame PUSH da bao target 60 dung.
+  for (uint8_t i = 0; i < cydlcd.n_temps; i++)
+    if (cydlcd.temps[i].id == id) { *cur = cydlcd.temps[i].cur; *tgt = cydlcd.temps[i].tgt; return; }
   if (tbt.ever) {
     if (id == CYDLCD_TEMP_E0)  { *cur = tbt.st.t_e0;  *tgt = tbt.st.t_e0_tgt;  return; }
     if (id == CYDLCD_TEMP_BED) { *cur = tbt.st.t_bed; *tgt = tbt.st.t_bed_tgt; return; }
   }
-  for (uint8_t i = 0; i < cydlcd.n_temps; i++)
-    if (cydlcd.temps[i].id == id) { *cur = cydlcd.temps[i].cur; *tgt = cydlcd.temps[i].tgt; return; }
 }
 
 // ===========================================================================

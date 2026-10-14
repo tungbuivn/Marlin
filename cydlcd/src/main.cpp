@@ -287,9 +287,12 @@
             // phu/hop thoai) - man hinh CYD khong co framebuffer doc nguoc nen day la cach DUY NHAT
             // kiem tra bo cuc tu PC. `UI TESTBOX` = mo 1 hop thoai rong de kiem tra canh giua.
             // `UI TAP <dong>` = ban su kien CHAM vao 1 dong cua man FILE (kiem tra duong chon file).
+            // `UI PRE <k>` = bam nut preset preheat PLA/PETG/ABS cua man NHIET DO.
             if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strcasecmp(a3, "TESTBOX") == 0) ui_lvgl_test_dialog();
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
+            else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
+            else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
             else                                     ui_lvgl_show_page_name(a3);
           } else
 #endif
