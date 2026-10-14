@@ -325,7 +325,8 @@ void menu_move() {
   void tramming_worst_toggle();     // lcd/menu/menu_tramming.cpp
 
   // Doi goc "lech nhat" cua Tramming Wizard: MAX (goc cao nhat) <-> MIN (goc thap nhat).
-  // Ham tren da luu EEPROM (nho cho cac lan sau); o day chi bao them tren dong trang thai.
+  // CHI TRONG PHIEN: KHONG luu EEPROM (mo lai may -> ve mac dinh MAX); o day chi bao them
+  // tren dong trang thai.
   static void _tramming_worst_toggled() {
     tramming_worst_toggle();
     ui.set_status(tramming_worst_max ? F("TRAMMING WORST = MAX") : F("TRAMMING WORST = MIN"));

@@ -25,7 +25,8 @@
  *   3. Man hinh hien do lech 4 goc + 3 nut (2026-10-12: BO PREV / NEXT / HOME+PROBE):
  *        PROBE     : probe LAI ngay tai goc dang dung, KHONG home lai -> hien con phai van bao
  *                    nhieu mm + huong van CW/CCW cho goc do
- *        MAX<->MIN : doi chien luoc (moc Z-MIN <-> Z-MAX), luu EEPROM, di ngay toi goc lech nhat
+ *        MAX<->MIN : doi chien luoc (moc Z-MIN <-> Z-MAX), CHI TRONG PHIEN (khong luu EEPROM),
+ *                    di ngay toi goc lech nhat
  *        DONE      : TU DI toi goc CAN CHINH ke tiep (bo qua goc MOC va cac goc da DAT) roi probe
  *                    luon goc do; khi KHONG con goc nao -> tu HOME lai Z + probe lai CA 4 GOC
  *                    (vong moi, moc moi)
@@ -47,7 +48,6 @@
 
 #include "../module/motion.h"
 #include "../module/probe.h"
-#include "../module/settings.h"
 #include "../gcode/queue.h"
 
 #if ENABLED(BLTOUCH)
@@ -174,12 +174,12 @@ void goto_worst() {
   do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
 }
 
-// Doi goc "lech nhat" giua MAX (goc cao nhat) va MIN (goc thap nhat) + LUU NGAY vao EEPROM
-// de nho cho cac lan sau (dung khi vit cua goc dang chinh da het hanh trinh, khong van
-// tiep duoc nua thi chuyen sang chinh goc nguoc lai).
+// Doi goc "lech nhat" giua MAX (goc cao nhat) va MIN (goc thap nhat) - CHI CO TAC DUNG TRONG
+// PHIEN LAM VIEC: KHONG ghi EEPROM (theo yeu cau), nen moi lan mo may lai luon la mac dinh MAX
+// (`tramming_worst_max = true` o tramming.cpp). Dung khi vit cua goc dang chinh da het hanh
+// trinh, khong van tiep duoc nua thi chuyen sang chinh goc nguoc lai.
 static void worst_toggle() {
   tramming_worst_max = !tramming_worst_max;
-  settings.save();
 }
 
 // PROBE: CHI probe goc dang dung. KHONG probe tam ban, KHONG home lai.
@@ -311,8 +311,8 @@ void probe_here() {
   if (!need_adjust(worst_index)) state = TR_AUTO;
 }
 
-// MAX<->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) + luu EEPROM, roi DI NGAY toi goc lech nhat
-// cua che do moi VA PROBE luon goc do.
+// MAX<->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) - CHI TRONG PHIEN, khong luu EEPROM - roi
+// DI NGAY toi goc lech nhat cua che do moi VA PROBE luon goc do.
 void toggle_minmax() {
   if (!active) return;
   busy = true;
@@ -420,7 +420,8 @@ void step() {
 
 // ---------------------------------------------------------------------------
 // Diem vao cu cho lcd/menu/menu_motion.cpp ("WORST POINT = MAX"):
-// chi doi chien luoc + luu EEPROM (KHONG di chuyen nozzle nhu nut MAX<->MIN trong wizard).
+// chi doi chien luoc trong phien (KHONG luu EEPROM, KHONG di chuyen nozzle nhu nut MAX<->MIN
+// trong wizard).
 // ---------------------------------------------------------------------------
 void tramming_worst_toggle() { tbt_run::worst_toggle(); }
 

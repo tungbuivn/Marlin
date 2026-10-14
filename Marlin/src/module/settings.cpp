@@ -876,20 +876,17 @@ void MarlinSettings::postprocess() {
                     mesh_num_y = TERN(MESH_BED_LEVELING, GRID_MAX_POINTS_Y, 3);
 
       // O nho dau tien cua khoi MBL (z_offset) - khi MESH_BED_LEVELING TAT thi o nay khong
-      // dung cho gi. TAN DUNG no de luu "goc lech nhat = MAX/MIN" cua Tramming Wizard
-      // (tramming_worst_max, xem src/feature/tramming.h):
+      // dung cho gi. Truoc day TAN DUNG no de luu "goc lech nhat = MAX/MIN" cua Tramming
+      // Wizard; NAY KHONG LUU NUA (tuy chon theo PHIEN, mac dinh MAX moi lan mo may - xem
+      // tramming_worst_max o src/feature/tramming.h):
       //   - kich thuoc SettingsData KHONG doi -> EEPROM_VERSION va CRC khong doi
-      //     => du lieu EEPROM dang co (M851 Z0.70, mesh UBL, M203/M201/M906...) KHONG bi xoa
-      //   - 0.0f = MAX (goc cao nhat) | 1.0f = MIN (goc thap nhat)
-      //   - EEPROM cu (o nay = 0.0f) => MAX = dung bang gia tri mac dinh cua firmware
+      //     => du lieu EEPROM dang co (M851 Z0.75, mesh UBL, M203/M201/M906...) KHONG bi xoa
+      //   - van GHI o nay (hang so 0.0f) de khong doi bo cuc; gia tri ghi ra KHONG con y nghia
       #if ENABLED(MESH_BED_LEVELING)
         EEPROM_WRITE(bedlevel.z_offset);
       #else
-        #if ENABLED(ASSISTED_TRAMMING)
-          dummyf = tramming_worst_max ? 0.0f : 1.0f;
-        #endif
-        EEPROM_WRITE(dummyf);
-        dummyf = 0;   // cac o dummy con lai (mesh MBL 3x3) phai giu nguyen 0
+        EEPROM_WRITE(dummyf);     // dummyf = 0 (dat o tren): o trong cua khoi MBL, ghi hang so
+        dummyf = 0;               // cac o dummy con lai (mesh MBL 3x3) phai giu nguyen 0
       #endif
 
       EEPROM_WRITE(mesh_num_x);
@@ -1828,15 +1825,13 @@ void MarlinSettings::postprocess() {
       //
       {
         uint8_t mesh_num_x, mesh_num_y;
+        // O dummy dau tien cua khoi MBL: PHAI doc de con tro EEPROM di qua dung o nay, nhung
+        // KHONG dung gia tri doc duoc nua. Truoc day o nay luu "worst = MAX/MIN" cua Tramming
+        // Wizard; nay do la tuy chon THEO PHIEN nen moi lan mo may luon la MAX (mac dinh
+        // `tramming_worst_max = true` o tramming.cpp; xem phan save() phia tren).
         EEPROM_READ(dummyf);
         EEPROM_READ_ALWAYS(mesh_num_x);
         EEPROM_READ_ALWAYS(mesh_num_y);
-
-        // Khi MESH_BED_LEVELING TAT, o z_offset cua MBL duoc dung de luu "worst = MAX/MIN"
-        // cua Tramming Wizard (xem phan save() phia tren): 0.0f = MAX, 1.0f = MIN.
-        #if DISABLED(MESH_BED_LEVELING) && ENABLED(ASSISTED_TRAMMING)
-          if (!validating) tramming_worst_max = (dummyf < 0.5f);
-        #endif
 
         #if ENABLED(MESH_BED_LEVELING)
           if (!validating) bedlevel.z_offset = dummyf;
@@ -3691,11 +3686,12 @@ void MarlinSettings::reset() {
     TERN_(HAS_BED_PROBE, gcode.M851_report(forReplay));
 
     //
-    // Assisted Tramming: diem "lech nhat" = MAX / MIN (luu trong o dummy cua khoi MBL)
+    // Assisted Tramming: diem "lech nhat" = MAX / MIN (CHI TRONG PHIEN - khong luu EEPROM)
     //
     #if ENABLED(ASSISTED_TRAMMING)
       CONFIG_ECHO_START();
-      SERIAL_ECHOLNPGM("; Tramming worst point: ", tramming_worst_max ? "MAX (cao nhat)" : "MIN (thap nhat)");
+      SERIAL_ECHOLNPGM("; Tramming worst point (RAM, mac dinh MAX moi lan mo may): ",
+                       tramming_worst_max ? "MAX (cao nhat)" : "MIN (thap nhat)");
     #endif
 
     //

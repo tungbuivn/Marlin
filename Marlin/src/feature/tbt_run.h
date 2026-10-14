@@ -86,7 +86,7 @@ namespace tbt_run {
   void step();                         // 1 buoc cua may trang thai (giu nguyen thu tu cu)
   void probe_here();                   // PROBE: probe lai goc dang dung
   void done();                         // DONE: goc nay xong -> goc ke tiep / home+probe lai
-  void toggle_minmax();                // doi chien luoc MAX <-> MIN (+ luu EEPROM) roi di goc lech nhat
+  void toggle_minmax();                // doi chien luoc MAX <-> MIN (chi trong phien) roi di goc lech nhat
   void restart();                      // home lai Z + probe lai CA 4 GOC (moc moi)
   void goto_worst();                   // di nozzle toi goc lech nhat
 
@@ -94,7 +94,8 @@ namespace tbt_run {
 
 // ---------------------------------------------------------------------------
 // Diem vao CU (giu nguyen ten de lcd/menu/menu_motion.cpp khong phai sua):
-//   "WORST POINT = MAX" trong menu Motion -> doi chien luoc MAX <-> MIN + luu EEPROM.
+//   "WORST POINT = MAX" trong menu Motion -> doi chien luoc MAX <-> MIN (chi trong phien,
+//   KHONG luu EEPROM: mo lai may -> ve mac dinh MAX).
 //   (Chi doi chien luoc, KHONG di chuyen nozzle - khac nut MAX<->MIN trong wizard.)
 // ---------------------------------------------------------------------------
 void tramming_worst_toggle();

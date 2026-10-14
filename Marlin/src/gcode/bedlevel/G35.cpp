@@ -115,7 +115,8 @@ void GcodeSuite::G35() {
   //     -> KHONG can probe them tam ban (vua mat ~10s, vua cong sai so cua lan do do vao ca 4 so).
   //
   //  2. MOC DE VAN VIT = Z-MIN hoac Z-MAX cua cac goc da do (khong phai Z-home, cung KHONG phai
-  //     trung binh). Chon theo che do "goc lech nhat" dang luu trong EEPROM:
+  //     trung binh). Chon theo che do "goc lech nhat" dang dat trong PHIEN (khong luu EEPROM,
+  //     mac dinh MAX moi lan mo may):
   //         tramming_worst_max = true  (che do MAX - mac dinh) -> MOC = Z-MIN (goc THAP nhat)
   //             delta[i] = chieu_cao[i] - Z_MIN  >= 0  -> phai HA xuong (van CCW)
   //         tramming_worst_max = false (che do MIN)            -> MOC = Z-MAX (goc CAO nhat)

@@ -1752,6 +1752,24 @@
     #define SD_FIRMWARE_UPDATE_ACTIVE_VALUE   0xF0
     #define SD_FIRMWARE_UPDATE_INACTIVE_VALUE 0xFF
   #endif
+  /**
+   * !!! KHONG THE CAP NHAT FIRMWARE TU THE SD TRONG CAU HINH CUA MAY NAY !!!
+   *
+   * 1) Chinh Marlin: `SD_FIRMWARE_UPDATE` chi danh cho ATmega2560 -> SanityCheck.h:3929 bao
+   *    `#error "SD_FIRMWARE_UPDATE requires an ATmega2560-based (Arduino Mega) board."`
+   *    => bat len la KHONG BUILD DUOC (khong phai "chay sai").
+   * 2) Duong nap tu the cua BOOTLOADER MKS (dat mks_monster8.bin/.cur o goc the roi reset):
+   *    bootloader phai TU DOC the SPI tren mainboard - nhung the SD nay nam o KHE CUA MAN HINH CYD
+   *    (xem CYDLCD_SD_OVER_UART duoi day; mainboard khong con SPI the, da bat NO_SD_DETECT).
+   *    Duong duy nhat toi the la UART + giao thuc cua MAN HINH (cyd_usart/SD-over-UART), ma
+   *    BOOTLOADER KHONG CO driver/giao thuc do => no "khong thay the" => khong co file de nap.
+   * 3) Marlin cung khong nap ho duoc: `M997` (STM32_DFU_REBOOT) chi nhay vao ROM DFU qua USB,
+   *    khong doc/copy tu the.
+   *
+   * => Chua test that, nhung theo thiet ke thi KHA NANG CAO LA FAIL: dung trong cay vao duong nay.
+   *    Nap Marlin bang USB DFU (`M997` -> dfu-util, xem README.md muc 11.6) hoac ST-Link.
+   *    (Firmware MAN HINH CYD nap rieng qua COM7 bang esptool/pio - khong lien quan Marlin.)
+   */
 
   /**
    * Enable this option if you have more than ~3K of unused flash space.
@@ -1807,6 +1825,9 @@
    * log ra the), M30 (xoa file), POWER_LOSS_RECOVERY... chay duoc. Neu CHI muon doc cho an toan thi
    * bo comment o CYDLCD_SD_READONLY duoi day.
    * CANH BAO: moi thao tac the cua Marlin gio phu thuoc UART + man hinh CYD con song.
+   * KHONG THE NAP FIRMWARE TU THE SD: bootloader (MKS/STM32) khong co driver cyd_usart nen no
+   * khong doc duoc the o khe man hinh; Marlin SD_FIRMWARE_UPDATE thi chi danh cho ATmega2560.
+   * Chi tiet + cach nap dung: README.md muc 11.6 va cydlcd/README.md muc 12.7.
    * Xem them: src/sd/cydlcd_sd_uart.*, src/lcd/extui/cydlcd_serial/, cydlcd/README.md muc 12.
    */
   #define CYDLCD_SD_OVER_UART

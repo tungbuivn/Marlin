@@ -38,7 +38,8 @@ constexpr xy_pos_t tramming_points[] = TRAMMING_POINT_XY;
 // Doi khi vit cua goc MAX (hoac MIN) da het hanh trinh, van mai khong duoc nua -> doi sang
 // goc nguoc lai: "thay vi dieu chinh max thi dieu chinh min".
 //
-// Bien nay duoc luu trong EEPROM (settings.cpp) nen nho duoc qua cac lan khoi dong.
+// Bien nay la tuy chon THEO PHIEN: KHONG luu EEPROM (xem tbt_run.cpp: worst_toggle), nen moi
+// lan khoi dong lai ve mac dinh MAX.
 //
 extern bool tramming_worst_max;
 
