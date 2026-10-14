@@ -1756,6 +1756,17 @@ khởi động lại**, cuối cùng phải reset board Marlin.
 `st=0 IDLE` trong ~4 s, `SD r` ĐỨNG YÊN (đã ngừng feed file), nhiệt độ target về 0, Marlin trả lời `M27`
 "Not SD printing" / `M114` bình thường, màn hình KHÔNG restart, link `PUSH=1` vẫn sống.**
 
+**Và đã kiểm ĐÚNG trường hợp "hàng đợi Marlin ĐẦY, không nhận thêm data" (2026-10-15):**
+dùng `cydlcd/tools/test_stop_full_queue.ps1` — bằng chứng đo được, hàng đợi đầy vì bản in đứng ở `M190`
+(PSU tắt) nên **`SD r` ĐỨNG YÊN giữa file 370 KB** (Marlin hết chỗ nên ngừng nạp lệnh từ file):
+
+| Trong lúc hàng đợi ĐẦY | Kết quả đo |
+|---|---|
+| Lệnh **thường** từ panel (`M220 S42`) | **BỊ BỎ** sau trần 2 s → mở trang FEED/FLOW thấy nhãn vẫn `100%` ✓ |
+| Lệnh **critical** (`M108` + `M524`, đúng đường nút STOP) | **CHẠY NGAY**: `st=1` → `st=3` → **`st=0`** ✓ |
+| Sau khi hủy, lệnh thường lại | **chạy bình thường**: nhãn FR trên STATUS = **`42%`** ✓ (hàng đợi đã trống) |
+| Màn hình / link | **không restart**, `link PUSH=1` suốt quá trình ✓ |
+
 ⚠️ Lưu ý: nếu bàn **không nóng được** (PSU tắt/lỗi) thì bản in sẽ đứng ở `M190` — đây là hành vi đúng của
 Marlin (chờ đủ nhiệt mới in); muốn thoát thì bấm `STOP` (đã sửa) hoặc gửi `M108`.
 
