@@ -95,7 +95,10 @@ static void me_box_hide(void) {
 static void me_box_show(void) {
   if (!me_box) return;
   me_box_refresh();
-  if (me_mask) lv_obj_clear_flag(me_mask, LV_OBJ_FLAG_HIDDEN);
+  // Day len truoc cho chac (loi "dialog bi tut ra phia sau" o lop phu SUA cua SETTINGS - xem ui_page_settings.cpp:
+  // ov_create). Hop nay la con cua TRANG va duoc tao SAU bang nen binh thuong da o tren; van goi de an toan.
+  if (me_mask) { lv_obj_move_foreground(me_mask); lv_obj_clear_flag(me_mask, LV_OBJ_FLAG_HIDDEN); }
+  lv_obj_move_foreground(me_box);
   lv_obj_clear_flag(me_box, LV_OBJ_FLAG_HIDDEN);
   if (s_group && me_box) lv_group_focus_obj(me_step_btn[me_step_k]);
 }

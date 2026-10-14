@@ -446,7 +446,13 @@ static void cb_se_ov_step(lv_event_t *e) {
 }
 
 static void ov_create(void) {
-  lv_obj_t *scr = lv_scr_act();
+  // !!! DAT TREN `lv_layer_top()`, KHONG PHAI `lv_scr_act()` !!!
+  // LOI THAT (nguoi dung bao 2026-10-15: "co ve dialog bi tut ra phia sau, khong nhin thay gi"): container
+  // cua trang duoc TAO LAI moi lan mo trang (`mk_page(lv_scr_act())`, ui_lvgl.cpp:328) va LVGL ve cac con
+  // theo THU TU TAO -> neu lop phu nam tren `lv_scr_act()` thi tu lan mo SETTINGS thu 2 tro di no bi trang
+  // (tao sau) CHE MAT. `lv_layer_top()` luon nam TREN moi vat cua screen (cung cho voi hop thoai msgbox -
+  // xem ui_boxes.cpp) nen lop phu khong bao gio bi che nua. Toa do dung y nhu cu (layer_top cung 320x240).
+  lv_obj_t *scr = lv_layer_top();
 
   // Nen mo: nuot moi lan cham ra NGOAI khung (khong cho roi xuong bang ben duoi)
   ov_bd = lv_obj_create(scr);
@@ -524,6 +530,14 @@ static void ov_open_edit(const uint8_t i) {
   ov_refresh();
   ov_open = true;
   ov_rep  = false;
+  // !!! DAY LOP PHU LEN TRUOC KHI HIEN !!!
+  // LOI THAT (nguoi dung bao 2026-10-15: "co ve dialog bi tut ra phia sau, khong nhin thay gi"):
+  // `ov_bd`/`ov_box` la con cua `lv_scr_act()` va chi duoc TAO MOT LAN, con container cua trang
+  // (`mk_page(lv_scr_act())`, ui_lvgl.cpp:328) duoc TAO LAI moi lan mo trang. LVGL ve cac con theo THU TU
+  // TAO -> vat tao sau nam TREN => tu lan mo SETTINGS thu 2 tro di (hoac sau khi doi trang) dialog bi trang
+  // CHE MAT. `lv_obj_move_foreground()` dua 2 vat nay xuong CUOI danh sach con cua screen => luon ve tren cung.
+  if (ov_bd)  lv_obj_move_foreground(ov_bd);
+  if (ov_box) lv_obj_move_foreground(ov_box);
   lv_obj_clear_flag(ov_bd, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(ov_box, LV_OBJ_FLAG_HIDDEN);
   lv_obj_update_layout(ov_box);           // ep tinh layout/flex ngay (khong doi vong refresh)
