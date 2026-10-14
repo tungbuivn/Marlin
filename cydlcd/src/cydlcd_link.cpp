@@ -30,9 +30,81 @@ static uint16_t    s_err_seen = 0;
 // ---------------------------------------------------------------------------
 // Gui frame (frame cua MAN HINH CYD rat ngan: PING 7 byte, GCODE/RQUEST < 40 byte)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+//  HANG DOI TX: khong bao gio CHAN vong lap khi ghi ra Marlin.
+//
+//  VI SAO: CYDLCD_MARLIN_SERIAL.write(buf, n) la ham CHAN - no doi cho den khi TX ring (64 byte)
+//  trong. Neu Marlin tam thoi KHONG doc UART (dang ban trong mot vong cho, hang doi day, hoac
+//  firmware treo) thi write() treo VO HAN -> vong lap man hinh DUNG -> watchdog chan doan
+//  (cyd_diag_task: >=15 s thi esp_restart) khoi dong lai man hinh. Trieu chung nguoi dung thay:
+//  "bam STOP de huy ban in thi LCD RESTART" (gap that 2026-10-15, luc Marlin dang in + cho nong
+//  ban in nen hang doi day, moi lenh tu COM7/UART deu bi Marlin tra "busy: processing").
+//
+//  CACH LAM: chi ghi THANG khi (a) hang doi RONG va (b) TX ring du cho CA FRAME (khong cat frame
+//  giua duong). Con lai thi COPY frame vao hang doi nho roi trai dan o nhip sau (cydlcd_link_tx_task).
+//  Hang doi day -> BO frame + dem lai (xem s_tx_drop) - bo con hon treo vong lap.
+// ---------------------------------------------------------------------------
+#define CYDLCD_TXQ_FRAMES 4
+static uint8_t  s_txq[CYDLCD_TXQ_FRAMES][CYDLCD_MAX_FRAME];
+static uint8_t  s_txq_len[CYDLCD_TXQ_FRAMES];
+static uint8_t  s_txq_head = 0, s_txq_n = 0;
+static uint32_t s_tx_drop = 0;                  // so frame bi bo khi hang doi day (chan doan)
+
 static void send_frame(const uint8_t total) {
-  if (total) CYDLCD_MARLIN_SERIAL.write(s_tx.buf, total);
+  if (!total) return;
+  if (!s_txq_n && (int)CYDLCD_MARLIN_SERIAL.availableForWrite() >= (int)total) {
+    CYDLCD_MARLIN_SERIAL.write(s_tx.buf, total);       // du cho -> gui thang (khong cho)
+    return;
+  }
+  if (s_txq_n >= CYDLCD_TXQ_FRAMES) { s_tx_drop++; return; }
+  const uint8_t i = (uint8_t)((s_txq_head + s_txq_n) % CYDLCD_TXQ_FRAMES);
+  memcpy(s_txq[i], s_tx.buf, total);                   // PHAI copy: s_tx.buf dung lai ngay sau day
+  s_txq_len[i] = total;
+  s_txq_n++;
 }
+
+// Trai hang doi TX. Goi moi vong lap (cydlcd_link_task) - khi Marlin doc lai thi hang doi tat ngay.
+void cydlcd_link_tx_task(void) {
+  while (s_txq_n) {
+    const uint8_t l = s_txq_len[s_txq_head];
+    if ((int)CYDLCD_MARLIN_SERIAL.availableForWrite() < (int)l) break;
+    CYDLCD_MARLIN_SERIAL.write(s_txq[s_txq_head], l);
+    s_txq_head = (uint8_t)((s_txq_head + 1) % CYDLCD_TXQ_FRAMES);
+    s_txq_n--;
+  }
+}
+
+// So frame da bi bo vi hang doi TX day (chan doan: `TXQ?` o main.cpp).
+uint32_t cydlcd_link_tx_dropped(void) { return s_tx_drop; }
+// So frame dang cho trong hang doi TX (0 = da gui het).
+uint8_t cydlcd_link_tx_pending(void) { return s_txq_n; }
+
+// Gui frame BAT BUOC (du lieu the SD / SDACK): CHO cho TX ring toi da timeout_ms, KHONG BAO GIO bo
+// frame. VI SAO RIENG DUONG THE SD: Marlin doc 1 sector 512 B = 4 frame; mat DUY NHAT 1 frame la
+// hong ca sector (Marlin bao "SD read error" va dung ban in). Nguoc lai, frame trang thai/PING thi
+// BO DUOC (nhip sau gui lai) nen di qua hang doi khong-chan o tren.
+// PHAI day HET hang doi truoc khi ghi truc tiep de khong dao THU TU frame.
+static bool send_frame_wait(const uint8_t total, const uint32_t timeout_ms) {
+  if (!total) return true;
+  const uint32_t t0 = cydlcd_millis();
+  while (s_txq_n) {
+    cydlcd_link_tx_task();
+    if (s_txq_n && (cydlcd_millis() - t0) > timeout_ms) return false;
+  }
+  uint8_t sent = 0;
+  while (sent < total) {
+    const int room = CYDLCD_MARLIN_SERIAL.availableForWrite();
+    if (room > 0) {
+      uint8_t k = (uint8_t)(total - sent);
+      if (k > (uint8_t)room) k = (uint8_t)room;
+      CYDLCD_MARLIN_SERIAL.write(s_tx.buf + sent, k);
+      sent = (uint8_t)(sent + k);
+    }
+    else if ((cydlcd_millis() - t0) > timeout_ms) return false;   // tran: coi nhu mat frame
+  }
+  return true;
+}
+#define CYDLCD_SD_TX_WAIT_MS 250u       // 1 frame ~136 B @250000 baud mat ~5 ms -> 250 ms la rong rai
 
 #if CYDLCD_SD_UART
 // ---------------------------------------------------------------------------
@@ -70,10 +142,10 @@ void cydlcd_link_send_sd_data(const uint8_t status, const uint32_t sector, const
     }
     else {
       cydlcd_tx_u8(&s_tx, 0);
-      send_frame(cydlcd_tx_finish(&s_tx));
+      send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
       return;                                  // loi -> chi 1 frame
     }
-    send_frame(cydlcd_tx_finish(&s_tx));
+    send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
   }
 }
 
@@ -81,7 +153,8 @@ void cydlcd_link_send_sd_ack(const uint8_t status, const uint32_t sector) {
   cydlcd_tx_begin(&s_tx, CYDLCD_F_SDACK);
   cydlcd_tx_u8(&s_tx, status);
   cydlcd_tx_u32(&s_tx, sector);
-  send_frame(cydlcd_tx_finish(&s_tx));
+  // SDACK cung la frame BAT BUOC: Marlin cho ack nay moi coi lenh GHI xong -> khong duoc bo.
+  send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
 }
 
 // Nhan 1 manh du lieu cua lenh GHI. Du 4 manh -> ghi xuong the + tra SDACK.
@@ -509,4 +582,8 @@ void cydlcd_link_task() {
     cydlcd_link_request(CYDLCD_REQ_FULL);
     cydlcd_link_request(CYDLCD_REQ_FILES);
   }
+
+  // Trai hang doi TX (frame chua gui duoc vi TX ring day). Goi o CUOI: cac frame sinh ra o tren
+  // (PING / REQUEST) van duoc trai ngay trong vong lap nay neu con cho.
+  cydlcd_link_tx_task();
 }

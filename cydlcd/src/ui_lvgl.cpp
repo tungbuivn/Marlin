@@ -201,6 +201,28 @@ static void create_page(uint8_t p);          // forward
 // (A_REQ_FILES / A_INITSD). files_delete_now() / ov_open_id() cung o file rieng - xem ui_lvgl_int.h.
 
 
+// DUNG IN (M524): GUI LAI nhieu lan cho toi khi Marlin thoi trang thai in.
+// VI SAO: khi hang doi lenh cua Marlin DAY (vd ban in dang `M190` cho nong ban), moi dong tu
+// UART deu bi Marlin tra "busy: processing" va BO DI -> gui M524 DUNG 1 LAN la khong du (gap that
+// 2026-10-15: bam STOP khong dung duoc ban in). M524 la lenh idempotent (huy in tren the) nen
+// gui lai la vo hai; dung lai ngay khi trang thai khong con la "dang in / tam dung".
+static uint8_t s_stop_try = 0;               // so lan con gui lai (0 = khong cho gi)
+#define STOP_RETRY_TIMES 15                  // 15 x 400 ms = ~6 s
+
+static void stop_request(void) { s_stop_try = STOP_RETRY_TIMES; }
+
+static void stop_retry_task(void) {
+  if (!s_stop_try) return;
+  const bool printing = (cydlcd.state == CYDLCD_ST_PRINTING) || (cydlcd.state == CYDLCD_ST_PAUSED);
+  if (!printing) { s_stop_try = 0; return; }  // Marlin da dung -> xong
+  // M108 TRUOC: thoat vong CHO NONG (M109/M190). Neu ban in dang cho ban nong ma khong nong duoc
+  // (vd PSU tat) thi M524 mot minh KHONG du. Phia Marlin (cydlcd_serial.cpp) xu ly NGAY 2 lenh nay
+  // khong qua hang doi, nen chung khong bi Marlin bo khi hang doi day.
+  cydlcd_link_send_gcode("M108");
+  cydlcd_link_send_gcode("M524");
+  s_stop_try--;
+}
+
 void cb_action(lv_event_t *e) {
   do_action((int)(intptr_t)lv_event_get_user_data(e));
 }
@@ -226,7 +248,7 @@ void do_action(const int a) {
     case A_PAUSE:         cydlcd_link_send_gcode("M25"); break;
     case A_RESUME:        cydlcd_link_send_gcode("M24"); break;
     case A_STOP:          ui_confirm("DUNG IN", "Dung han ban in? (M524)", (uint8_t)A_STOP_NOW, 1); break;
-    case A_STOP_NOW:      cydlcd_link_send_gcode("M524"); break;
+    case A_STOP_NOW:      stop_request(); break;                   // gui lai M524 toi khi dung (xem stop_retry_task)
     case A_COOLDOWN:      cydlcd_link_send_gcode("M104 S0"); cydlcd_link_send_gcode("M140 S0"); break;
     case A_SAVE:          cydlcd_link_request((uint8_t)CYDLCD_REQ_SAVE_SETTINGS); break;
     case A_INITSD:        cydlcd_link_send_gcode2("M22", "M21"); break;   // nha the SD roi init lai
@@ -580,6 +602,7 @@ void ui_lvgl_task(void) {
     // Icon WiFi (header + man STATUS) + chu dBm canh no va mau icon THE (man STATUS): nhip CHAM
     // (~400 ms), chi ghi style/chu khi trang thai (hoac so dBm) DOI. Nam ngoai switch(s_page_act)
     // vi icon thuoc dong tieu de / man STATUS.
+    stop_retry_task();          // dang cho DUNG IN -> gui lai M524 (xem stop_request)
     wifi_icon_mark();
     wifi_rssi_mark();
     status_sd_icon_mark();
@@ -632,43 +655,53 @@ void ui_lvgl_show_page_name(const char *name) {
   Serial.printf("[UI] khong co trang '%s' (go 'UI ?' de xem danh sach)\n", name);
 }
 
-// In BO CUC (toa do + kich thuoc) cac vat con TRUC TIEP cua trang dang mo + trang thai thanh day.
+// In 1 vat + cac con cua no (de quy toi DO sau 2 - du de thay nhan NAM TRONG khung/nut, vd
+// nhan FR/FL trong o cua man FEED/FLOW hay 3 o nhiet cua STATUS).
+static void dump_obj(lv_obj_t *o, const uint8_t depth) {
+  if (!o) return;
+  char ind[8];
+  uint8_t k = 0;
+  for (; k < depth && k < 6; k++) ind[k] = ' ';
+  ind[k] = '\0';
+
+  const bool is_label  = lv_obj_check_type(o, &lv_label_class);
+  const bool is_roller = lv_obj_check_type(o, &lv_roller_class);
+  const char *cls = is_label                                ? "label"
+                  : lv_obj_check_type(o, &lv_btn_class)     ? "btn"
+                  : is_roller                               ? "roller"
+                  : lv_obj_check_type(o, &lv_table_class)   ? "table"
+                  : lv_obj_check_type(o, &lv_bar_class)     ? "bar"
+                                                            : "obj";
+  const char *txt = is_label  ? lv_label_get_text(o)
+                  : is_roller ? lv_roller_get_options(o)
+                              : "";
+  Serial.printf("[UI] %s%-6s x=%d y=%d %dx%d%s%s%s\n", ind, cls,
+                (int)lv_obj_get_x(o), (int)lv_obj_get_y(o),
+                (int)lv_obj_get_width(o), (int)lv_obj_get_height(o),
+                lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN) ? " [AN]" : "",
+                (!is_roller && txt[0]) ? " : " : "", is_roller ? "" : txt);
+  // Roller: in NGUYEN chuoi lua chon (moi dong 1 muc) - de kiem tra danh sach file man FILE SD
+  // (co lan muc "." / ".." cua FAT khong, dong dau co rong khong).
+  if (is_roller && txt[0]) Serial.printf("[UI] %slua chon: <<%s>>\n", ind, txt);
+
+  if (depth >= 2) return;
+  const uint32_t n = lv_obj_get_child_cnt(o);
+  for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(o, i), (uint8_t)(depth + 1));
+}
+
+// In BO CUC (toa do + kich thuoc) cac vat cua trang dang mo + trang thai thanh day.
 // VI SAO CO: man hinh CYD khong co framebuffer doc nguoc (driver ve thang ra SPI - xem
 // tft_ili9341.h) nen khong the "chup anh" man hinh tu PC. Khi can kiem tra mot man co bi tran,
-// nut co nam sat day khong, hay roller cao bao nhieu dong thi doc bang `UI BOX` tren COM7.
+// nut co nam sat day khong, roller cao bao nhieu dong, hay NHAN nao dang hien chu gi thi doc
+// bang `UI BOX` tren COM7 (in theo cay, thut le theo do sau).
 void ui_lvgl_dump_layout(void) {
   lv_obj_t *pg = s_page[s_page_act];
   Serial.printf("[UI] trang %u '%s' | vung noi dung %dx%d | thanh day %s\n",
                 (unsigned)s_page_act, PG_TITLE[s_page_act], (int)PAGE_INN_W, (int)PAGE_INN_H,
                 bot_shown() ? "HIEN (noi dung tran)" : "an (noi dung gon)");
   if (!pg) { Serial.println("[UI] (trang chua duoc tao)"); return; }
-
   const uint32_t n = lv_obj_get_child_cnt(pg);
-  for (uint32_t i = 0; i < n; i++) {
-    lv_obj_t *c = lv_obj_get_child(pg, i);
-    if (!c) continue;
-    const bool hidden = lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN);
-    // Ten lop vat: lv_label / lv_btn / lv_roller / lv_obj ... (lv_obj_get_class khong co API ten)
-    const char *cls = lv_obj_check_type(c, &lv_label_class)  ? "label"
-                    : lv_obj_check_type(c, &lv_btn_class)    ? "btn"
-                    : lv_obj_check_type(c, &lv_roller_class) ? "roller"
-                    : lv_obj_check_type(c, &lv_table_class)  ? "table"
-                    : lv_obj_check_type(c, &lv_bar_class)    ? "bar"
-                                                             : "obj";
-    const char *txt = lv_obj_check_type(c, &lv_label_class)  ? lv_label_get_text(c)
-                    : lv_obj_check_type(c, &lv_roller_class) ? lv_roller_get_options(c)
-                                                             : "";
-    const bool is_roller = lv_obj_check_type(c, &lv_roller_class);
-    Serial.printf("[UI]  #%u %-6s x=%d y=%d %dx%d%s%s%s\n",
-                  (unsigned)i, cls,
-                  (int)lv_obj_get_x(c), (int)lv_obj_get_y(c),
-                  (int)lv_obj_get_width(c), (int)lv_obj_get_height(c),
-                  hidden ? " [AN]" : "",
-                  (!is_roller && txt[0]) ? " : " : "", is_roller ? "" : txt);
-    // Roller: in NGUYEN chuoi lua chon (moi dong 1 muc) - de kiem tra danh sach file man FILE SD
-    // (co lan muc "." / ".." cua FAT khong, dong dau co rong khong).
-    if (is_roller && txt[0]) Serial.printf("[UI]      lua chon: <<%s>>\n", txt);
-  }
+  for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(pg, i), 1);
 }
 
 #endif  // CYDLCD_USE_LVGL

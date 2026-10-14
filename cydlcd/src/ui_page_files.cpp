@@ -308,8 +308,12 @@ void page_files_create(lv_obj_t *p) {
   lv_obj_set_style_bg_opa(fl_roller, LV_OPA_COVER, LV_PART_SELECTED);
   lv_obj_add_flag(fl_roller, LV_OBJ_FLAG_CLICK_FOCUSABLE);
   if (s_group) lv_group_add_obj(s_group, fl_roller);
-  // Voi encoder: bam lan 1 = vao che do edit (xoay chon file), bam lan 2 = in file dang chon
-  lv_obj_add_event_cb(fl_roller, cb_files_print, LV_EVENT_CLICKED, NULL);
+  // CHAM/QUAY CHI DE CHON FILE - KHONG tu in (theo yeu cau 2026-10-15).
+  // VI SAO BO: truoc day roller co `LV_EVENT_CLICKED -> cb_files_print` (hop ly voi encoder kieu cu
+  // "bam lan 2 = in"), nhung tren man CAM UNG thi chi CHAM VAO danh sach la may in luon (gap that:
+  // nguoi dung chi dinh keo danh sach da kich hoat ban in). Nay chi nut `PRINT` moi gui M23+M24;
+  // voi encoder: quay = chon file, bam nut = vao che do chon (LVGL tu xu ly), roi bam `PRINT`.
+  // (Ham cb_files_print() van dung cho nut PRINT.)
 
   // 3 hang nut: 4 nut tren (PRINT/DIR/UP/REFRESH) + 3 nut duoi (PAUSE/RESUME/STOP)
   // + 1 hang rieng cho XOA FILE (viec khong hoan tac duoc -> de rieng, de bam nham)

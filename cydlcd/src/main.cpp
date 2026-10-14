@@ -145,6 +145,9 @@
     static uint32_t fwd_next = 0;
     if (s_forward_pending[0] && millis() >= fwd_next) {
       fwd_next = millis() + 500;
+      // Log 1 dong: de biet lenh go tu COM7 CO duoc gui sang Marlin hay khong (chan doan
+      // "go lenh tren console ma may khong chay" - xem cydlcd/README.md bang lenh console).
+      Serial.printf("[FWD] -> Marlin: %s\n", s_forward_pending);
       cydlcd_link_send_gcode(s_forward_pending);
       s_forward_pending[0] = '\0';
     }

@@ -426,7 +426,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100` |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
-| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): `PRINT`/bấm file → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15):** roller **6 dòng** (96 px, trước 4 dòng/64 px) và **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)` — nhờ vậy phần trên dành trọn cho danh sách file (kiểm bằng `UI BOX`: nút ở y=124/152/180, đáy 206 = đáy vùng nội dung). **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
+| **FILES** | `lv_roller` danh sách từ SD (Marlin đẩy xuống): **chạm/quay CHỈ ĐỂ CHỌN file — chỉ nút `PRINT` mới in** (trước đây chạm vào danh sách là in luôn: hợp với encoder nhưng trên màn cảm ứng thì rất dễ in nhầm); `PRINT` → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15):** roller **6 dòng** (96 px, trước 4 dòng/64 px) và **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)` — nhờ vậy phần trên dành trọn cho danh sách file (kiểm bằng `UI BOX`: nút ở y=124/152/180, đáy 206 = đáy vùng nội dung). **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
 | **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS` |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
@@ -1721,7 +1721,44 @@ Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen t
   hinh doi sang XANH** → **keo ngon tay sat goc roi NHAC TAY** (luc **mat cam ung** moi chot toa do,
   lay cuc tri min/max). Chi tiet + cho luu (NVS namespace `cydtouch`) o **§5.5**.
 
-### Bang "kiem tra nhanh sau khi nap"
+### DỪNG IN (nút STOP) và vì sao lệnh "critical" phải đi đường riêng (2026-10-15)
+
+**Hiện tượng đã gặp thật:** đang in mà bấm `STOP` thì **không dừng được**, bấm vài lần thì **màn hình CYD tự
+khởi động lại**, cuối cùng phải reset board Marlin.
+
+**Chuỗi nhân quả (đo được từ log COM7/COM4):**
+1. File in có `M190 S70` (chờ bàn nóng) trong start G-code. Nếu bàn **không nóng được** (PSU tắt, lỗi nhiệt),
+   `thermalManager.wait_for_bed()` chờ **mãi mãi** — và trong lúc đó `loop()` của Marlin **không hề chạy**.
+2. Marlin vẫn đọc tiếp file và **nhồi đầy hàng đợi lệnh**; mọi lệnh gửi tới bị Marlin trả `busy: processing`
+   (`GcodeSuite::host_keepalive()`, `gcode.cpp:1212`).
+3. Chỗ **từ chối thật sự** là `queue.enqueue_one_now(cmd)` = `while (!enqueue_one(cmd)) idle();`
+   (`gcode/queue.cpp`): hàng đợi không bao giờ trống ⇒ Marlin **block vĩnh viễn ngay trong hàm nhận frame** ⇒
+   **ngừng gửi frame trạng thái** (panel mất link, hiện trạng thái CŨ) và **STOP không tới được**.
+4. Panel gửi `M524` khi Marlin không đọc UART ⇒ hàm ghi của panel **chờ mãi** ⇒ vòng lặp panel đứng ⇒
+   **watchdog chẩn đoán restart panel** — đúng cái người dùng thấy là "hủy là LCD restart".
+
+**Cách sửa (2 phía):**
+* **Marlin** (`lcd/extui/cydlcd_serial/cydlcd_serial.cpp`, nhánh `CYDLCD_F_GCODE`): **lệnh critical chạy NGAY,
+  không qua hàng đợi** — `M108` (thoát vòng chờ nóng: `wait_for_heatup = false`), `M524` (hủy in: đặt cờ abort
+  + `queue.clear()`), `M410` (quickstop). Lệnh **thường** thì chờ hàng đợi nhưng **CÓ TRẦN 2 s** rồi bỏ + đếm
+  lại (`s_cmd_drop`) — **không bao giờ block vô hạn**.
+* **`gcode/sd/M524.cpp`** (bản sửa theo yêu cầu): M524 nay **ngừng feed nội dung file** (`IS_SD_PRINTING()` =
+  false) và **xoá hàng đợi** ⇒ coi như file đã đọc xong, các lệnh đã nạp từ file không chạy tiếp; đồng thời
+  `wait_for_heatup = false` để thoát vòng chờ nóng.
+* **Panel** (`cydlcd_link.cpp`): ghi ra Marlin **không bao giờ chặn cứng** — frame vào **hàng đợi TX 4 khe**
+  và trải dần (`cydlcd_link_tx_task()`), chỉ **frame dữ liệu thẻ SD / SDACK** mới chờ (có trần 250 ms) vì mất 1
+  frame là hỏng cả sector. `ui_lvgl.cpp`: nút STOP gửi `M108` + `M524` và **gửi lại mỗi 400 ms tối đa 6 s**
+  cho tới khi Marlin thôi trạng thái in.
+
+**Đã kiểm trên máy thật (qua console COM7 = đúng đường của nút bấm):**
+`M21` → mount OK; `M23 BODY10~1.GCO` + `M24` → `st=1` (đang in, `SD r=15`); `M108` + `M524` → **`st=1` →
+`st=0 IDLE` trong ~4 s, `SD r` ĐỨNG YÊN (đã ngừng feed file), nhiệt độ target về 0, Marlin trả lời `M27`
+"Not SD printing" / `M114` bình thường, màn hình KHÔNG restart, link `PUSH=1` vẫn sống.**
+
+⚠️ Lưu ý: nếu bàn **không nóng được** (PSU tắt/lỗi) thì bản in sẽ đứng ở `M190` — đây là hành vi đúng của
+Marlin (chờ đủ nhiệt mới in); muốn thoát thì bấm `STOP` (đã sửa) hoặc gửi `M108`.
+
+### Bảng "kiem tra nhanh sau khi nap"
 
 | # | Kiem tra | Cach xem | Dat |
 |---|---|---|---|

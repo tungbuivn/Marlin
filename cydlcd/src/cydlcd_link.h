@@ -95,6 +95,12 @@ void cydlcd_link_begin(const uint32_t baud);
 void cydlcd_link_task();                                  // goi lien tuc trong loop()
 bool cydlcd_link_connected();
 
+// Hang doi TX (xem cydlcd_link.cpp): frame duoc gui NGAY khi TX ring du cho, con lai xep hang doi
+// va trai dan o day. Nho vay KHONG BAO GIO chan vong lap du Marlin tam thoi khong doc UART.
+void     cydlcd_link_tx_task();                           // trai hang doi (goi trong cydlcd_link_task)
+uint32_t cydlcd_link_tx_dropped();                        // so frame bi bo (hang doi day) - chan doan
+uint8_t  cydlcd_link_tx_pending();                        // so frame dang cho trong hang doi
+
 void cydlcd_link_ping();
 void cydlcd_link_send_gcode(const char *line);            // 1 dong, khong can '\n'
 void cydlcd_link_send_gcode2(const char *a, const char *b); // 2 dong lien tiep

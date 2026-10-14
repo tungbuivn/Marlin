@@ -15,6 +15,7 @@
 #include "cydlcd_serial.h"
 #include "../ui_api.h"
 #include "../../../gcode/queue.h"
+#include "../../../gcode/gcode.h"                       // GcodeSuite::M524() (huy in - xu ly ngay)
 #if ENABLED(ASSISTED_TRAMMING_WIZARD)
   #include "../../../feature/tbt_report.h"   // dong "TBT ..." + 6 lenh (dung chung cydlcd_tbt_link)
   #include "../../../feature/tbt_run.h"      // may trang thai Bed Tramming Wizard
@@ -22,7 +23,8 @@
 #if ENABLED(SDSUPPORT)
   #include "../../../sd/cardreader.h"
 #endif
-#include "../../../MarlinCore.h"                    // printer_busy()
+#include "../../../MarlinCore.h"                    // printer_busy() / wait_for_heatup
+#include "../../../module/motion.h"                  // quickstop_stepper() (M410 xu ly ngay)
 #include "../../../module/planner.h"                // planner.settings / finish_and_disable()
 #include "../../../module/temperature.h"            // thermalManager.disable_all_heaters()
 #if HAS_TRINAMIC_CONFIG
@@ -121,6 +123,7 @@ namespace {
     bool     s_sd_busy = false;        // dang cho sector -> hoan cac frame mang LENH lai
     bool     s_sd_present = false;     // cydlcd bao co the (tu lan cydlcd_serial_sd_init)
     volatile uint8_t s_wr_status = 0xFF;   // ket qua lenh GHI (CYDLCD_F_SDACK): 0xFF = chua co
+    uint16_t s_cmd_drop = 0;               // so lenh thuong bi BO vi hang doi day qua 2 s (chan doan)
     volatile uint32_t s_wr_sector = 0;
 
     // Ghi THANG ra UART, khong qua hang doi TX: chi dung cho yeu cau SD (5 byte). Co tran thoi gian
@@ -757,7 +760,59 @@ namespace {
           cmd[n++] = (c == '\r' || c == '\n') ? ' ' : c;
         }
         cmd[n] = '\0';
-        if (n) queue.enqueue_one_now(cmd);
+        // ---------------------------------------------------------------------------
+        // LENH TU MAN HINH: CRITICAL chay NGAY, thuong thi vao hang doi CO TRAN (2026-10-15).
+        //
+        // CHO TU CHOI THAT SU (khong phai dong "busy: processing" - dong do chi la thong bao dinh
+        // ky cua GcodeSuite::host_keepalive(), gcode.cpp:1212):
+        //     `queue.enqueue_one_now(cmd)` == `while (!enqueue_one(cmd)) idle();` (queue.cpp)
+        //   -> khi hang doi DAY va KHONG BAO GIO trong (vd ban in dang cho `M190 S70` ma ban khong
+        //      nong duoc vi PSU tat) thi Marlin BLOCK VINH VIEN ngay trong ham nhan frame:
+        //      khong con gui frame trang thai (man hinh mat link, hien trang thai CU) va bam STOP
+        //      cung khong huy duoc ban in. Gap that 2026-10-15, phai reset board.
+        //
+        // CACH XU LY (theo yeu cau: "lenh critical thi chay luon"):
+        //   - CRITICAL (M108 thoat vong cho nong, M524 huy ban in) -> chay NGAY, khong qua hang doi;
+        //   - lenh thuong -> doi cho hang doi nhung CO TRAN (2 s), het tran thi BO + dem lai
+        //     (s_cmd_drop) + bao ra COM4, KHONG BAO GIO block vo han.
+        // ---------------------------------------------------------------------------
+        if (n) {
+          // M108: thoat vong cho nong (M109/M190/M303) - giong GcodeSuite::M108()/e_parser.h:215.
+          if (strcasecmp(cmd, "M108") == 0) {
+            wait_for_heatup = false;
+            TERN_(HAS_RESUME_CONTINUE, wait_for_user = false);
+            SERIAL_ECHOLNPGM("PANEL: M108 (thoat vong cho nong) - xu ly NGAY");
+          }
+          // M524: huy ban in - cung hanh vi nhu GcodeSuite::M524() cua ban nay (gcode/sd/M524.cpp):
+          //   1) `wait_for_heatup = false` -> thoat vong cho nong (neu khong thi `loop()` khong chay
+          //      nen co abort khong bao gio duoc xu ly);
+          //   2) co abort -> IS_SD_PRINTING() = false -> NGUNG FEED noi dung file (coi nhu doc xong);
+          //   3) xoa hang doi -> cac lenh da nap tu file khong chay tiep.
+          else if (strcasecmp(cmd, "M524") == 0) {
+            wait_for_heatup = false;
+            TERN_(HAS_RESUME_CONTINUE, wait_for_user = false);
+            card.flag.abort_sd_printing = true;
+            queue.clear();
+            SERIAL_ECHOLNPGM("PANEL: M524 (huy ban in) - xu ly NGAY, khong qua hang doi");
+          }
+          // M410: quickstop (dung moi chuyen dong dang xep) - cung la lenh "critical" cho an toan.
+          else if (strcasecmp(cmd, "M410") == 0) {
+            queue.clear();
+            quickstop_stepper();
+            SERIAL_ECHOLNPGM("PANEL: M410 (quickstop) - xu ly NGAY");
+          }
+          else {
+            const millis_t t0 = millis();
+            while (!queue.enqueue_one(cmd)) {
+              if (ELAPSED(millis(), t0 + 2000)) {     // TRAN 2 s: khong bao gio block vo han
+                s_cmd_drop++;
+                SERIAL_ECHOLNPGM("PANEL: hang doi day qua 2s -> BO lenh [", cmd, "]");
+                break;
+              }
+              idle();
+            }
+          }
+        }
         break;
       }
       case CYDLCD_F_REQUEST:
