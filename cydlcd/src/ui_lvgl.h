@@ -74,6 +74,10 @@ void ui_lvgl_dump_temps(void);
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.
 void ui_lvgl_dump_busy(void);
 
+// CHAN DOAN trang BED MESH (lenh `UI MCELL <cot> <hang>` tren COM8): mo hop sua o do Y NHU VUA CHAM vao o
+// (khong tu gui M421) - de kiem tra hop sua / nut OK-HUY tu PC khi khong cham duoc man hinh.
+void mesh_test_cell(const char *arg);
+
 // CHAN DOAN bang SETTINGS (lenh `UI SET` tren COM8): in tung dong (id, ten, gia tri format, raw) - de kiem
 // tra tu PC xem Marlin co day thong so nao va man hinh dang hien gi (bang nam tren LCD, khong doc nguoc duoc).
 void page_settings_dump(void);

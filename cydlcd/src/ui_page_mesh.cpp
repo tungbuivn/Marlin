@@ -106,26 +106,43 @@ static void cb_mesh_cell(lv_event_t *e) {
   if (!me_edit || !me_table) return;
   uint16_t r = 0, c = 0;
   lv_table_get_selected_cell(me_table, &r, &c);
+  // LOG MOI lan cham 1 o (ke ca khi EDIT dang TAT) - de chan doan "cham o khong thay gi" tu COM8:
+  // neu KHONG thay dong nay thi cu cham KHONG toi duoc bang (bi vat khac an), con co dong nay ma hop khong
+  // mo thi loi o phia hop/lop phu.
+  WIFILOG("[UI] MESH: cham o %u,%u (EDIT=%d)\n", (unsigned)c, (unsigned)r, (int)me_edit);
   if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return;
   me_c = (uint8_t)c;
   me_r = (uint8_t)r;
   me_raw = cydlcd.mesh[c][r];
-  WIFILOG("[UI] MESH EDIT: cham o %u,%u (dang %ld um) -> mo hop sua\n",
-          (unsigned)me_c, (unsigned)me_r, (long)me_raw);
   me_box_show();
 }
 
-// Toggle EDIT: bat -> to nen (fill) + hien 4 nut dieu huong; tat -> ve nhu cu.
-static void cb_mesh_edit_toggle(lv_event_t *e) {
-  (void)e;
-  me_edit = !me_edit;
+// Ap trang thai `me_edit` len giao dien: nut EDIT (fill mau), 4 nut dieu huong (hien/an), cuon cua bang.
+// Tach rieng de CA nut bam tren man hinh LAN lenh chan doan `UI MCELL` deu dung chung 1 duong.
+static void mesh_edit_apply(void) {
   if (me_edit_btn) lv_obj_set_style_bg_color(me_edit_btn, me_edit ? COL_ACCENT : COL_BTN, 0);
   for (uint8_t k = 0; k < 4; k++)
     if (me_nav[k]) {
       if (me_edit) lv_obj_clear_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);
       else         lv_obj_add_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);
     }
+  // !!! TAT CUON CUA BANG KHI EDIT !!!
+  // VI SAO: lv_table chi gui LV_EVENT_VALUE_CHANGED o LV_EVENT_RELEASED khi `lv_indev_get_scroll_obj()==NULL`
+  // (lv_table.c:587-593). Khi bang CON cuon duoc (flag SCROLLABLE) thi mot cu cham hoi xe dich cung bi coi
+  // la KEO -> khong co su kien -> "cham 1 o khong thay gi" (loi nguoi dung bao 2026-10-15). O che do EDIT,
+  // viec dich vung nhin da co 4 nut < ^ v >, nen tat cuon de moi cu cham la 1 lan CHON O.
+  if (me_table) {
+    if (me_edit) lv_obj_clear_flag(me_table, LV_OBJ_FLAG_SCROLLABLE);
+    else         lv_obj_add_flag(me_table, LV_OBJ_FLAG_SCROLLABLE);
+  }
   if (!me_edit) me_box_hide();
+}
+
+// Toggle EDIT: bat -> to nen (fill) + hien 4 nut dieu huong; tat -> ve nhu cu.
+static void cb_mesh_edit_toggle(lv_event_t *e) {
+  (void)e;
+  me_edit = !me_edit;
+  mesh_edit_apply();
   WIFILOG("[UI] MESH EDIT: %s\n", me_edit ? "BAT (cham o de sua, 4 nut dieu huong hien ra)"
                                           : "TAT (xem luoi binh thuong)");
 }
@@ -268,6 +285,13 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_border_width(me_layer, 0, 0);
   lv_obj_set_style_pad_all(me_layer, 0, 0);
   lv_obj_clear_flag(me_layer, LV_OBJ_FLAG_SCROLLABLE);   // khong de lop nay cuon/an su kien cua bang
+  // !!! KHONG duoc CLICKABLE !!!
+  // VI SAO (loi that 2026-10-15: "chua edit duoc mesh, click 1 cell khong thay gi"): lop nay co KICH THUOC
+  // BANG CA BANG va duoc tao SAU bang nen nam TREN bang; mac dinh `lv_obj_create()` la CLICKABLE -> moi cu
+  // cham vao bang deu bi lop nay an truoc, bang khong bao gio nhan duoc LV_EVENT_VALUE_CHANGED. Bo co nay di
+  // thi chi cac NUT con (EDIT / 4 nut dieu huong) moi chan su kien, phan con lai roi xuong bang.
+  lv_obj_clear_flag(me_layer, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(me_table, LV_OBJ_FLAG_CLICKABLE);      // chac chan bang nhan duoc cham
 
   me_edit_btn = mk_btn(me_layer, "EDIT", ME_EDIT_W, ME_EDIT_H, cb_mesh_edit_toggle, NULL);
   lv_obj_set_pos(me_edit_btn, MESH_TABLE_W - ME_EDIT_W - 2, 2);
@@ -377,6 +401,30 @@ void page_mesh_update(void) {
     if (me_btn_on)  lv_obj_set_style_bg_color(me_btn_on,  cydlcd.mesh_on  ? COL_OK   : COL_BTN, 0);
     if (me_btn_off) lv_obj_set_style_bg_color(me_btn_off, cydlcd.mesh_on  ? COL_BTN  : COL_WARN, 0);
   }
+}
+
+// CHAN DOAN (lenh `UI MCELL <cot> <hang>` tren COM8): mo hop sua cho 1 o Y NHU VUA CHAM VAO O DO.
+// VI SAO CAN: khong the "cham" bang tay tu PC; lenh nay di dung duong mo hop (khong tu gui M421) nen kiem tra
+// duoc hop sua + nut OK/HUY tu xa. Vi du: `UI MCELL 3 3` -> hop sua o cot 3 hang 3.
+void mesh_test_cell(const char *arg) {
+  int c = -1, r = -1;
+  if (arg && *arg) sscanf(arg, "%d %d", &c, &r);
+  if (c < 0 || r < 0 || c >= (int)cydlcd.mesh_nx || r >= (int)cydlcd.mesh_ny) {
+    Serial.printf("[UI] dung: UI MCELL <cot> <hang>  (luoi hien tai %ux%u)\n",
+                  (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny);
+    return;
+  }
+  if (!me_edit) {
+    // Tu BAT EDIT de kiem tra duoc hop sua tu PC (nut EDIT tren man hinh lam y het).
+    me_edit = true;
+    mesh_edit_apply();
+    Serial.println("[UI] MCELL: EDIT dang TAT -> da tu BAT de test hop sua");
+  }
+  me_c = (uint8_t)c;
+  me_r = (uint8_t)r;
+  me_raw = cydlcd.mesh[c][r];
+  Serial.printf("[UI] MCELL: mo hop sua o %d,%d (dang %ld um)\n", c, r, (long)me_raw);
+  me_box_show();
 }
 
 // Huy man BED MESH (xem quy uoc o ui_lvgl_int.h): dat NULL bang/nhan va QUEN kich thuoc luoi da ve.
