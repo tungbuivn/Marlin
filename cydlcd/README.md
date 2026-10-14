@@ -1736,13 +1736,45 @@ lại trong `Configuration_adv.h`. `SDCARD_READONLY` **đã bỏ**; nếu chỉ 
 `M30 TESTLOG.GCO` → “File deleted” và `M20` không còn file ⇒ **ghi/đọc/xoá đều đi qua màn hình CYD**.
 
 **Đồng bộ FATFS ↔ ghi thô** (2 chiều, đã cài trong `cyd_sd.cpp`):
-* `cyd_sd_raw_write()`: nếu màn hình CYD đang mở file upload → `s_file.flush()`; nếu màn hình CYD vừa ghi qua FATFS
-  (`s_fatfs_written`) → `fatfs_sync()` (unmount + mount lại) để đẩy hết cache xuống thẻ trước khi
-  Marlin ghi đè. Sau khi Marlin ghi thô → đặt `s_fatfs_stale`.
+* `cyd_sd_raw_write()`: nếu màn hình CYD đang mở file upload → **TỪ CHỐI** (`s_file`); nếu màn hình CYD vừa
+  ghi qua FATFS (`s_fatfs_written`) → `fatfs_sync()` (unmount + mount lại) để đẩy hết cache xuống thẻ trước
+  khi Marlin ghi đè. Sau khi Marlin ghi thô → đặt `s_fatfs_stale`.
 * Trước mọi thao tác FATFS của màn hình CYD (`temp_open`, `delete`) mà `s_fatfs_stale` → `fatfs_sync()` để đọc
   lại FAT/dir mới. Nếu không làm bước này, cache cũ của FATFS sẽ ghi đè lên thay đổi của Marlin.
 * **Đừng vừa upload WiFi vừa để Marlin ghi thẻ** (2 người ghi 1 FAT) — màn hình CYD có flush nhưng vẫn nên tránh;
   upload đã tự bị chặn khi Marlin đang in.
+
+#### 12.5.1 “Trong lúc upload mà Marlin gửi M21/M22 thì có bị block không?” (2026-10-15)
+
+**Không bị block (không treo/deadlock) — nhưng có 2 chiều khác nhau, và bản cũ có 1 lỗi thật:**
+
+**Chiều A — Marlin → màn hình (Marlin tự mount/nhả thẻ, người dùng bấm trên LCD/console):**
+* Marlin **không có driver thẻ riêng**: `M21`/`M22` của Marlin chỉ đổi thành các yêu cầu **sector thô** gửi
+  qua UART xuống màn hình (`cydclcd_serial_sd_read/write`).
+* Trong lúc màn hình đang có phiên ghi thẻ (`s_file`/`s_busy`), `cyd_sd_raw_read()`/`cyd_sd_raw_write()`
+  **từ chối** và trả lời `ERR` → mount của Marlin **thất bại** (có chủ ý: đang giữ FAT thì không cho ai khác
+  đọc/ghi để không phá cache FAT và không đè lên file đang ghi).
+* Marlin chờ tối đa `CYDLCD_SD_TIMEOUT_MS` (1 s) mỗi sector và **nuôi watchdog trong lúc chờ**
+  (`hal.watchdog_refresh()`) ⇒ **không reset, không treo**; Marlin chỉ coi thao tác đó lỗi và thử lại sau.
+* Trong ~20–30 s **nhận** dữ liệu WiFi, vòng lặp chính của màn hình còn bị `server.handleClient()` chặn nên
+  màn hình **không trả lời được frame nào** ⇒ Marlin chỉ thấy *timeout* (1 s/sector). Vì vậy (sửa 2026-10-15):
+  `cydlcd_serial_sd_read()` **không còn coi timeout là “mất thẻ”** — trước đây `s_sd_present = (err == ERR)`
+  nên mỗi lần timeout lại báo “không có thẻ”. Nay: chỉ `NOCARD` (màn hình báo rõ) mới xoá cờ có-thẻ, `ERR`
+  giữ nguyên “có thẻ nhưng lỗi”, timeout **giữ nguyên trạng thái cũ**; `cydlcd_serial_sd_init()` cũng chỉ đặt
+  `true` khi đọc được.
+* Trong lúc **chốt phiên** (merge/đổi tên) màn hình *có* nuôi UART ⇒ Marlin nhận được câu trả lời `ERR` rõ
+  ràng (không phải timeout).
+
+**Chiều B — màn hình → Marlin (cuối mỗi phiên upload, `notify_media_changed()` gửi `M22`+`M21`):**
+* 🔴 **LỖI THẬT đã sửa (2026-10-15)**: `cyd_sd_finish_upload()` gọi `notify_media_changed()` (bảo Marlin
+  “mount lại đi”, rồi nuôi UART ~800 ms để Marlin mount + xin lại danh sách file) **trong khi `s_busy` vẫn
+  còn `true`** ⇒ màn hình **vừa bảo mount lại vừa từ chối mọi sector** Marlin đọc để mount ⇒ Marlin mount
+  lỗi / danh sách file rỗng (log cũ có đúng dòng `refused rd/wr=1/0` ngay sau `DONE`).
+  Nay xoá `s_busy` (và `s_part`) **TRƯỚC** khi gọi `notify_media_changed()` — lúc đó file đã đóng + đổi tên
+  xong nên không còn gì phải bảo vệ. **Đo lại: upload xong không còn lần `refused` nào** (`refused rd/wr=0/0`)
+  và Marlin mount lại + lấy danh sách file bình thường.
+* Đây là khác biệt bản chất với chiều A: `M22`/`M21` do **màn hình** gửi là *lệnh* cho Marlin, còn `M21`/`M22`
+  do **Marlin** gửi chỉ là *yêu cầu sector* — cùng tên lệnh nhưng đi ngược chiều nhau, không đụng nhau.
 
 **P2 — số đo thật**: file 1.172.890 B toàn dòng chú thích (Marlin đọc hết tốc lực, không chạy lệnh nào)
 được đọc xong trong **~90–105 s ⇒ ~11–13 KB/s** (trần lý thuyết của link 250 000 baud là ~23 KB/s; phần

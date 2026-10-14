@@ -1247,6 +1247,18 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
     }
   }
   ui_lock(false);
+  // ---------------------------------------------------------------------------
+  // !!! KET THUC PHIEN GHI **TRUOC** KHI BAO MARLIN MOUNT LAI !!!
+  // LOI THAT (tu cau hoi nguoi dung 2026-10-15: "neu trong luc upload ma Marlin gui M21/M22 thi co bi block
+  // khong?"): `notify_media_changed()` gui M22+M21 roi NUOI UART ~800 ms de Marlin mount lai + xin lai danh
+  // sach file. Trong khoang do Marlin DOC SECTOR (mount = doc boot sector/FAT), nhung lop chan chong ghi de
+  // (`cyd_sd_raw_read/write` tra false khi `s_file || s_busy`) van dang bat vi `s_busy` chi duoc xoa o CUOI
+  // ham => man hinh VUA BAO "mount lai di" VUA TU CHOI moi sector => Marlin mount loi / khong lay duoc danh
+  // sach file (log cu co dong `refused rd/wr=1/0` ngay sau DONE). Nay xoa `s_busy` TRUOC khi bao.
+  // An toan: luc nay file da dong + da doi ten xong, khong con gi phai bao ve.
+  // ---------------------------------------------------------------------------
+  s_busy = false;
+  s_part = 0;
   #if CYDLCD_SD_SHARED
     sd_release_to_marlin(ok);             // tra bus (+ M22/M21 + xin lai danh sach neu OK)
   #else

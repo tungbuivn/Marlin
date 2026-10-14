@@ -953,8 +953,17 @@ namespace ExtUI {
       s_sd_busy = busy_prev;
       s_sd_dst = nullptr;
       if (!s_sd_done || s_sd_err) {
-        s_sd_present = (s_sd_err == CYDLCD_SD_ST_ERR);   // ERR = co the nhung loi; NOCARD = khong the
-        return false;
+        // PHAN BIET 3 TRUONG HOP (sua 2026-10-15 tu cau hoi "trong luc upload ma Marlin gui M21/M22 thi co
+        // bi block khong?"):
+        //   NOCARD  = man hinh bao KHONG co the      -> mat the THAT SU (rut the) => s_sd_present = false
+        //   ERR     = co the nhung loi doc/man hinh dang ban ghi the => the VAN CON => giu true
+        //   TIMEOUT = khong co tra loi (man hinh bi `server.handleClient()` chan suot phien upload WiFi
+        //             ~20-30 s) => KHONG duoc ket luan la mat the!
+        // Truoc day dong nay dat `s_sd_present = (s_sd_err == CYDLCD_SD_ST_ERR)` nen moi lan timeout lai
+        // bao "khong co the" -> Marlin tuong vua bi rut the trong luc upload.
+        if (s_sd_err == CYDLCD_SD_ST_NOCARD) s_sd_present = false;
+        else if (s_sd_err == CYDLCD_SD_ST_ERR) s_sd_present = true;
+        return false;                                    // (timeout: giu nguyen trang thai cu)
       }
       return true;
     }
@@ -1004,9 +1013,12 @@ namespace ExtUI {
 
     bool cydlcd_serial_sd_init() {
       // Hoi man hinh CYD bang 1 lan doc sector 0 (boot sector / BPB). Tra loi duoc = co the + UART song.
+      // LUU Y (2026-10-15): khi man hinh DANG ban ghi file upload thi lan doc nay se TIMEOUT (vong lap ben
+      // do bi chan) -> KHONG duoc coi la "mat the" (xem cydlcd_serial_sd_read): chi dat true khi doc duoc,
+      // con mat the that su thi man hinh da bao NOCARD ro rang.
       static uint8_t tmp[CYDLCD_SD_SECTOR];
       const bool ok = cydlcd_serial_sd_read(0, tmp, CYDLCD_SD_TIMEOUT_MS);
-      s_sd_present = ok;
+      if (ok) s_sd_present = true;
       return ok;
     }
 
