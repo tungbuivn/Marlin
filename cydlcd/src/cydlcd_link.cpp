@@ -22,6 +22,9 @@ static cydlcd_tx_t  s_tx;
 static uint32_t    s_next_ping_ms = 0;
 static uint8_t     s_hello_count = 0;           // so lan nhan HELLO (>= 2 = Marlin da restart - xem handle_frame)
 static bool        s_want_full = true;         // xin FULL ngay khi lien ket duoc
+// RESYNC "co link nhung chua tung nhan HELLO" (xem cydlcd_link_task): dem so lan da xin lai + moc thoi gian.
+static uint8_t     s_nohello_req = 0;
+static uint32_t    s_nohello_ms = 0;
 // Anh cua bo dem loi 16-bit trong cydlcd_protocol.h (cydlcd_rx_t.errors) o lan doc truoc, de biet
 // "VUA co loi moi" ma khong phai sua cydlcd_protocol.h (file do phai giu byte-identical voi ban
 // Marlin). Chi so sanh KHAC NHAU, khong cong don: bo dem 16-bit co the tran ve 0 sau 65 536 loi
@@ -625,6 +628,28 @@ void cydlcd_link_task() {
     cydlcd_link_request(CYDLCD_REQ_FULL);
     cydlcd_link_request(CYDLCD_REQ_FILES);
   }
+
+  // ---------------------------------------------------------------------------
+  // RESYNC KHI "CO LINK NHUNG CHUA TUNG NHAN HELLO" - loi that 2026-10-15 (nguoi dung: "bed mesh mat het
+  // du lieu roi, vao thay trang").
+  // VI SAO: nap firmware PANEL TRUOC roi moi nap Marlin -> luc Marlin khoi dong va gui HELLO thi panel dang
+  // ban (hoac vua boot) nen BO LO. Sau do frame STATUS den deu -> `linked = true` NGAY => nhanh
+  // `s_want_full` (chi bat khi MAT link) khong chay => panel khong bao gio biet `hello_flags` (co SD/mesh/
+  // probe) => trang BED MESH bao "khong ho tro" VA **khong xin lai luoi** (luoi 0x0) du Marlin van giu
+  // nguyen mesh trong EEPROM/slot (do lai bang `M420 V`: 7x7 gia tri that, slot 0).
+  // Nay: co link ma `hello_flags` = 0 thi xin lai FULL (HELLO + STATUS + SETTINGS...) toi da 5 lan moi lan
+  // noi link; mat link thi RESET bo dem de lan sau noi lai con thu lai.
+  // ---------------------------------------------------------------------------
+  if (cydlcd.linked && !cydlcd.hello_flags) {
+    if (!s_nohello_req) { s_nohello_req = 1; s_nohello_ms = now; }
+    else if (s_nohello_req <= 5 && (uint32_t)(now - s_nohello_ms) >= 2000u) {
+      s_nohello_ms = now;
+      SDLOG("[UP] co link nhung CHUA co HELLO -> xin lai FULL (lan %u/5)\n", (unsigned)s_nohello_req);
+      cydlcd_link_request((uint8_t)CYDLCD_REQ_FULL);
+      s_nohello_req++;
+    }
+  }
+  else if (!cydlcd.linked) s_nohello_req = 0;
 
   // Trai hang doi TX (frame chua gui duoc vi TX ring day). Goi o CUOI: cac frame sinh ra o tren
   // (PING / REQUEST) van duoc trai ngay trong vong lap nay neu con cho.

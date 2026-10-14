@@ -10,6 +10,7 @@
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
+#include <Arduino.h>                // Serial.printf (log chan doan WIFILOG ben duoi)
 
 #if CYDLCD_USE_LVGL
 
@@ -61,6 +62,13 @@ static void mesh_draw_cb(lv_event_t *e) {
 }
 
 void page_mesh_create(lv_obj_t *p) {
+  // XIN LAI LUOI moi khi mo trang neu chua co du lieu (yeu cau tu loi 2026-10-15: nguoi dung vao trang
+  // BED MESH thay TRANG). Luoi chi duoc Marlin day khi co HELLO / khi do mesh; neu panel lo mat HELLO thi
+  // `mesh_nx = 0` -> truoc day trang chi bao "khong ho tro" va KHONG BAO GIO xin lai. Nay xin ngay.
+  if (!cydlcd.mesh_nx) {
+    cydlcd_link_request((uint8_t)CYDLCD_REQ_MESH);
+    WIFILOG("[UI] MESH: chua co luoi -> xin lai tu Marlin (CYDLCD_REQ_MESH)\n");
+  }
   if (!(cydlcd.hello_flags & CYDLCD_HAS_MESH)) {
     mk_spacer(p, 1, 30, 0);                      // day chu thich xuong giua vung noi dung
     me_note = mk_label_w(p, "khong ho tro (CYDLCD_HAS_MESH=0)", COL_WARN, PAGE_INN_W);
