@@ -1024,14 +1024,45 @@ void cyd_sd_temp_abort(void) {
 }
 
 // Kich thuoc THAT cua 1 file tren the: MO LAI bang FILE_READ roi doc `size()` (khong tin bo dem RAM).
-// 0 = khong mo duoc (hoac file 0 byte - khong bao gio dung cho file .gcode hop le).
-static uint32_t file_size_on_card(const char *path) {
+// Tra ve:
+//   >= 1 : mo duoc, day la size that
+//   0    : KHONG MO DUOC (the loi/dang dut) HOAC file 0 byte -> `*opened` phan biet hai truong hop nay
+// VI SAO phai phan biet: khi the "dut" vai giay thi `SD.open()` that bai -> neu coi la "size = 0" thi se ket
+// luan SAI la file thieu byte roi XOA mot file vua ghi dung (da tung xay ra kieu loi nay o buoc doi ten).
+// Co THU LAI vai lan (backoff) de cho the hoi.
+static uint32_t file_size_on_card(const char *path, bool *opened = nullptr) {
+  if (opened) *opened = false;
   if (!s_sd_ready || !path || !path[0]) return 0;
-  File f = SD.open(path, FILE_READ);
-  if (!f) return 0;
-  const uint32_t n = (uint32_t)f.size();
-  f.close();
-  return n;
+  static const uint16_t rback[] = { 100, 200, 400, 800, 1500 };   // ~3 s
+  for (uint8_t i = 0; i <= (uint8_t)(sizeof(rback) / sizeof(rback[0])); i++) {
+    File f = SD.open(path, FILE_READ);
+    if (f) {
+      const uint32_t n = (uint32_t)f.size();
+      f.close();
+      if (opened) *opened = true;
+      return n;
+    }
+    if (i >= (uint8_t)(sizeof(rback) / sizeof(rback[0]))) break;
+    ELOG("[UP] mo lai %s de kiem tra size THAT BAI - cho %u ms roi thu lai\n", path, (unsigned)rback[i]);
+    delay(rback[i]);
+    yield();
+  }
+  return 0;
+}
+
+// Doi ten file tren the, CO THU LAI KIEN NHAN (the co the "dut" vai giay roi tu hoi - do that 2026-10-15:
+// 1/3 lan upload 4,5 MB bi loi ngay o buoc doi ten, ngay sau do log 1 Hz bao free=0KB, sd=0).
+static bool rename_with_retry(const char *src, const char *dst) {
+  static const uint16_t rback[] = { 100, 200, 300, 500, 800, 1000, 1500, 2000, 2000 };  // ~8,4 s
+  const uint8_t n_back = (uint8_t)(sizeof(rback) / sizeof(rback[0]));
+  for (uint8_t i = 0;; i++) {
+    if (SD.rename(src, dst)) return true;
+    if (i >= n_back) return false;
+    ELOG("[UP] doi ten %s -> %s THAT BAI - cho %u ms roi THU LAI lan %u/%u\n",
+         src, dst, (unsigned)rback[i], (unsigned)(i + 1), (unsigned)n_back);
+    delay(rback[i]);
+    yield();
+  }
 }
 
 // ===========================================================================
@@ -1113,12 +1144,13 @@ static bool merge_parts(const uint32_t expect, char *err, const size_t errn) {
   if (!ok) { if (err && errn) snprintf(err, errn, "%s", s_err); return false; }
   // ---- KIEM TRA SIZE SAU KHI MERGE (yeu cau nguoi dung 2026-10-15: "them doan kiem tra file size sau khi
   // merge, neu khong dung thi loi"): mo lai file ghep va doc size THAT tren the, khong tin bo dem RAM.
-  const uint32_t oncard = file_size_on_card(dst);
-  ELOG("[UP] GHEP: kiem tra size file ghep tren the = %lu B (bo dem %lu B / can %lu B)\n",
-       (unsigned long)oncard, (unsigned long)got, (unsigned long)expect);
-  if (oncard != expect) {
-    ok = false;
-    snprintf(s_err, sizeof(s_err), "file ghep tren the sai size (%lu B / can %lu B)",
+  bool opened = false;
+  const uint32_t oncard = file_size_on_card(dst, &opened);
+  ELOG("[UP] GHEP: kiem tra size file ghep tren the = %lu B (bo dem %lu B / can %lu B, mo lai duoc=%d)\n",
+       (unsigned long)oncard, (unsigned long)got, (unsigned long)expect, (int)opened);
+  if (!opened || oncard != expect) {
+    snprintf(s_err, sizeof(s_err), "%s (%lu B / can %lu B)",
+             opened ? "file ghep tren the sai size" : "khong mo lai duoc file ghep de kiem tra size",
              (unsigned long)oncard, (unsigned long)expect);
     ELOG("[UP] GHEP LOI: %s\n", s_err);
     if (err && errn) snprintf(err, errn, "%s", s_err);
@@ -1185,14 +1217,17 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
     char dst[72];
     snprintf(dst, sizeof(dst), "/%s", s_name);
     if (SD.exists(dst)) SD.remove(dst);   // FATFS rename KHONG ghi de -> xoa ban cu truoc
-    ok = SD.rename(s_tmp, dst);
+    ok = rename_with_retry(s_tmp, dst);   // co thu lai kien nhan (the co the "dut" vai giay)
     if (ok) {
       // ---- KIEM TRA SIZE THAT SAU KHI DOI TEN (file trong GOC THE): sai size => XOA, bao loi. ----
       // Khong bao gio de mot file .gcode sai/cut nam trong goc the (nguoi dung co the chon in -> hong in).
-      const uint32_t oncard = file_size_on_card(dst);
-      if (oncard != expect) {
+      // Phan biet RO "khong mo lai duoc" (the dang loi) voi "sai size" de khong xoa nham file dung.
+      bool opened = false;
+      const uint32_t oncard = file_size_on_card(dst, &opened);
+      if (!opened || oncard != expect) {
         ok = false;
-        snprintf(s_err, sizeof(s_err), "file tren the sai size (%lu B / can %lu B) - da xoa, gui lai",
+        snprintf(s_err, sizeof(s_err), "%s (%lu B / can %lu B) - da xoa, gui lai",
+                 opened ? "file tren the sai size" : "khong mo lai duoc file tren the de kiem tra size",
                  (unsigned long)oncard, (unsigned long)expect);
         ELOG("[UP] %s -> XOA %s\n", s_err, dst);
         SD.remove(dst);
@@ -1327,7 +1362,9 @@ void cyd_sd_task(void) {
   // ---------------------------------------------------------------------------
   if (s_sd_ready && (uint32_t)(now - s_cleanup_ms) >= CYDLCD_SD_CLEANUP_MS) {
     s_cleanup_ms = now;
-    clean_dir("dinh ky 30 phut", true, CYDLCD_SD_CLEANUP_MS / 1000u);
+    char why[40];
+    snprintf(why, sizeof(why), "dinh ky moi %lu phut", (unsigned long)(CYDLCD_SD_CLEANUP_MS / 60000u));
+    clean_dir(why, true, CYDLCD_SD_CLEANUP_MS / 1000u);
   }
   if (s_sd_ready) {
     if (now - s_sd_check_ms < CYDLCD_SD_CHECK_MS) return;

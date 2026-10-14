@@ -1031,6 +1031,30 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > (= 2 × 160 B header)** và **từ chối công bố** (`size khong khop (the co 1184637 B / can 1184317 B)`) —
 > tức lớp chốt size đã hoạt động đúng trước cả khi tìm ra lỗi ở script test.
 
+> **VÒNG SỬA 2026-10-15 (c) — ĐO ĐỘ ỔN ĐỊNH: 4/4 LẦN THÀNH CÔNG, PHỤC HỒI KHÔNG MOUNT LẠI THẺ.**
+> Chạy **4 lần liên tiếp** upload `V300_bot.gcode` **4 563 245 B** (20 MHz) — **4/4 thành công**:
+> ```text
+> lan 1: sach
+> lan 2: [UP] the ghi thieu (0/16384 B, da ghi 704512 B) - cho 20 ms roi THU LAI lan 1/9
+>        [UP] PHUC HOI (KHONG mount lai the): dong + mo lai file part o che do GHI TIEP (can 704512 B)
+>        [UP] PHUC HOI OK: mo lai duoc ..._001.tmp (704512 B), ghi tiep
+>        [UP] the ghi thieu (0/16384 B, da ghi 704512 B) - cho 50 ms roi THU LAI lan 2/9
+>        -> DONG PART #1: 4563245 B ; da doi ten ... -> /V300_bot.gcode (kiem tra lai = 4563245 B)
+> lan 3: sach
+> lan 4: dut o 999424 B -> PHUC HOI OK -> xong (4563245 B)
+> ```
+> ⇒ Thẻ **vẫn "đứt" ~50% số lần** như trước (đúng như log `free=0KB`/`sd=0` đã chỉ ra — vấn đề phần cứng
+> thẻ/khe thẻ), nhưng **panel tự phục hồi và upload vẫn hoàn tất**: không mount lại thẻ, không mất dữ liệu,
+> không cần người dùng gửi lại. Tốc độ 4 lần: 21,9 / 20,9 / 21,5 / 24,3 s (183–213 KB/s).
+> * Thêm **thử lại bước ĐỔI TÊN** (backoff 100→2000 ms, ~8,4 s): lần chạy trước đó 1/3 lần hỏng **ngay ở
+>   `SD.rename()`** (log ngay sau: `free=0KB`, `sd=0`) — nay đổi tên cũng kiên nhẫn như bước ghi.
+> * Kiểm tra size sau merge/đổi tên phân biệt **"không mở lại được"** (thẻ đang lỗi) với **"sai size"** —
+>   tránh xoá nhầm một file vừa ghi đúng chỉ vì `SD.open()` thất bại tạm thời.
+> * Bộ **dọn rác định kỳ đã chạy thật** (test với chu kỳ 40 s): `don /cydlcd_tmp (dinh ky moi 0 phut): xoa 0
+>   file .tmp (0 KB), giu lai 0 file con moi`; dọn lúc khởi động cũng đã xoá 1 file `.tmp` 4 417 KB còn lại
+>   của phiên bị lỗi trước đó. Chu kỳ thật đã trả về **30 phút** (`CYDLCD_SD_CLEANUP_MS`).
+> * `UI TAP L` sau 4 lần: gốc thẻ có `V300_bot.gcode 4563245 B` (đúng size), `/cydlcd_tmp` rỗng.
+
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
   `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,
