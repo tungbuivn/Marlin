@@ -383,6 +383,20 @@
   // phien upload). Xem cyd_sd_task()/clean_dir().
   #define CYDLCD_SD_CLEANUP_MS (30u * 60u * 1000u)
 #endif
+// ---------------------------------------------------------------------------
+// BAO MAT TEN FILE (yeu cau nguoi dung 2026-10-15: "ten file tren server can fix bao mat, chi cho phep
+// a-z0-9._"): whitelist ky tu cho ten file gui qua WEB (upload + xoa).
+//   Co ban LUON cho phep: a-z, A-Z, 0-9, '.', '_'
+//     - giu A-Z vi the dang co ten chu HOA (Body11.gcode, SoftSPI.txt, V300_bot.gcode...);
+//   `CYDLCD_NAME_ALLOW_EXTRA` = ky tu THEM ngoai co ban:
+//     - mac dinh "-" vi cac file dang co tren the dung dau gach (V300_case-esp-2432s208_no-text.gcode);
+//     - MUON CHAT DUNG nhu yeu cau (chi a-z0-9._) thi doi thanh "" (mot dong duy nhat o day).
+// Ngoai whitelist, ten con bi chan: rong, > 64 ky tu, bat dau bang '.', chua "..", va bi bo het duong dan.
+// LUU Y: day la lop chan o BIEN GIOI WEB. Duong xoa cua man FILES tren LCD (ten lay tu danh sach cua
+// Marlin) khong bi gioi han nay, neu khong se khong xoa duoc cac file ten la nhu "V300_[a]_xy_...gc".
+#ifndef CYDLCD_NAME_ALLOW_EXTRA
+  #define CYDLCD_NAME_ALLOW_EXTRA "-"
+#endif
 // Cho phep nhan file khi Marlin dang in? 0 = tu choi (an toan: 2 nguoi ghi 1 FAT).
 #ifndef CYDLCD_HTTP_ALLOW_WHILE_PRINTING
   #define CYDLCD_HTTP_ALLOW_WHILE_PRINTING 0

@@ -75,6 +75,18 @@ int cyd_sd_dir_count(const char *name);
  */
 bool cyd_sd_delete_dir(const char *name, bool *not_empty);
 /**
+ * BAO MAT TEN FILE cho cac endpoint WEB (upload + xoa). Whitelist: a-z A-Z 0-9 '.' '_' + cac ky tu trong
+ * `CYDLCD_NAME_ALLOW_EXTRA` (mac dinh "-"); dong thoi chan: ten rong, > 64 ky tu, bat dau bang '.', chua
+ * "..". Tra ve NULL neu ten HOP LE, hoac chuoi ly do (ASCII, de tra JSON) neu KHONG hop le.
+ */
+const char *cyd_sd_name_check(const char *name);
+/**
+ * LAM SACH ten file truoc khi kiem tra: bo phan duong dan (lay sau dau '/' cuoi cung), doi moi ky tu ngoai
+ * whitelist thanh '_', gioi han do dai, va THEM ".gco" khi ten khong co duoi nao. Dung cho ten khach gui len
+ * (field `name` cua multipart hoac ten file cua trinh duyet).
+ */
+void cyd_sd_name_clean(const char *in, char *out, size_t n);
+/**
  * DUYET GOC THE cho TRANG WEB cua man hinh (net_upload_http.cpp): lay muc thu `idx` (0..) o goc the.
  * Ghi ten (KHONG co dau '/') vao `name` (toi da `name_n` byte), kich thuoc vao *size, thu muc vao *isdir.
  * Tra ve false khi het muc / loi / chua co the. CAC MUC HE THONG (CYDLCD_HIDE_DIRS: cydlcd_tmp, BTUP)

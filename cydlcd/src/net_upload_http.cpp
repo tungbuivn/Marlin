@@ -335,7 +335,24 @@ void handle_upload_stream(void) {
       char nm[40];
       unquote(nm, sizeof(nm), server.arg("name").c_str());
       if (nm[0] == '\0') unquote(nm, sizeof(nm), up.filename.c_str());
-      snprintf(s_file, sizeof(s_file), "%s", nm);
+      // ---------------------------------------------------------------------------
+      // BAO MAT: LAM SACH ten khach gui len (bo phan duong dan "../", doi ky tu la thanh '_', them ".gco"
+      // neu chua co duoi) ROI moi KIEM TRA LAI bang whitelist `cyd_sd_name_check()`. Ten sau khi lam sach
+      // luon hop le (do cung mot dinh nghia ky tu), nhung van kiem tra de chan truong hop bat ngo.
+      // ---------------------------------------------------------------------------
+      char nm_ok[40];
+      cyd_sd_name_clean(nm, nm_ok, sizeof(nm_ok));
+      const char *bad = cyd_sd_name_check(nm_ok);
+      if (bad) {
+        s_http_state = HS_ERR;
+        snprintf(s_msg, sizeof(s_msg), "ten file khong hop le: %s", bad);
+        HLOG("[HTTP] TU CHOI /upload: ten \"%s\" -> \"%s\": %s\n", nm, nm_ok, bad);
+        s_file[0] = '\0';
+        return;                                    // moi goi WRITE sau do bi bo qua
+      }
+      if (strcmp(nm, nm_ok) != 0)
+        HLOG("[HTTP] CANH BAO bao mat: ten khach gui \"%s\" -> lam sach thanh \"%s\"\n", nm, nm_ok);
+      snprintf(s_file, sizeof(s_file), "%s", nm_ok);
       HLOG("[HTTP] PHAN FILE #%u: \"%s\" tu %s (khach khai bao: %lu B)\n",
            (unsigned)s_parts, s_file, s_client, (unsigned long)s_declared);
       if (s_parts > 1) {
@@ -346,7 +363,7 @@ void handle_upload_stream(void) {
       s_http_state = HS_RECV;
       s_last_activity_ms = millis();
       snprintf(s_msg, sizeof(s_msg), "dang nhan file");
-      if (!cyd_sd_temp_open(nm, s_parts == 1 ? s_declared : 0, s_parts)) {
+      if (!cyd_sd_temp_open(nm_ok, s_parts == 1 ? s_declared : 0, s_parts)) {
         s_http_state = HS_ERR;
         snprintf(s_msg, sizeof(s_msg), "khong mo duoc file tam (the TF?)");
         HLOG("[HTTP] LOI: %s\n", s_msg);
@@ -560,9 +577,16 @@ void handle_delete(void) {
 #endif
   char nm[64];
   unquote(nm, sizeof(nm), server.arg("name").c_str());
-  // Chi cho xoa o GOC the: khong duong dan, khong "..", khong rong.
-  if (!nm[0] || strchr(nm, '/') || strchr(nm, '\\') || strstr(nm, "..")) {
-    send_json(400, "{\"status\":\"Error\",\"message\":\"ten file khong hop le\"}");
+  // ---------------------------------------------------------------------------
+  // BAO MAT TEN FILE (yeu cau nguoi dung 2026-10-15): ten file den tu client la du lieu KHONG dang tin.
+  // Whitelist o `cyd_sd_name_check()`: chi a-z A-Z 0-9 '.' '_' (+ CYDLCD_NAME_ALLOW_EXTRA, mac dinh '-'),
+  // khong rong, khong > 64 ky tu, khong bat dau bang '.', khong chua "..". Xem cyd_sd.cpp/cydlcd_config.h.
+  // ---------------------------------------------------------------------------
+  const char *bad = cyd_sd_name_check(nm);
+  if (bad) {
+    snprintf(js, sizeof(js), "{\"status\":\"Error\",\"message\":\"ten file khong hop le: %s\"}", bad);
+    HLOG("[HTTP] TU CHOI /delete \"%s\": %s\n", nm, bad);
+    send_json(400, js);
     return;
   }
   if (!cyd_sd_ready()) {

@@ -15,7 +15,54 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 #include "cyd_sd.h"
+
+// ===========================================================================
+// BAO MAT TEN FILE (whitelist) - dung chung cho CA 2 nhanh build (co/khong WiFi upload)
+// Xem cyd_sd.h + CYDLCD_NAME_ALLOW_EXTRA (cydlcd_config.h). VI SAO: ten file den tu client (field `name`
+// cua multipart / query `name` cua /delete) la DU LIEU NGUOI NGOAI -> khong duoc tin. Chi cho phep dung
+// tap ky tu an toan, bo het duong dan, chan '.', '..' va ten qua dai => khong the thoat ra ngoai goc the,
+// khong the tao ten la de gay roi cho FATFS/log/JSON.
+// ===========================================================================
+static bool name_char_ok(const char c) {
+  if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return true;
+  if (c == '.' || c == '_') return true;
+  for (const char *p = CYDLCD_NAME_ALLOW_EXTRA; p && *p; p++)
+    if (*p == c) return true;
+  return false;
+}
+
+const char *cyd_sd_name_check(const char *name) {
+  if (!name || !name[0]) return "ten rong";
+  const size_t n = strlen(name);
+  if (n > 64u) return "ten qua dai (toi da 64 ky tu)";
+  if (name[0] == '.') return "ten khong duoc bat dau bang '.'";
+  if (strstr(name, "..")) return "ten khong duoc chua '..'";
+  for (size_t i = 0; i < n; i++)
+    if (!name_char_ok(name[i]))
+      return "ten co ky tu khong hop le (chi cho phep a-z A-Z 0-9 . _ va cac ky tu trong "
+             "CYDLCD_NAME_ALLOW_EXTRA)";
+  return nullptr;
+}
+
+void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
+  if (!out || cap == 0) return;
+  size_t o = 0;
+  const char *slash = in ? strrchr(in, '/') : nullptr;   // bo phan duong dan (chong "../")
+  const char *src = slash ? slash + 1 : (in ? in : "");
+  for (size_t i = 0; src[i] != '\0' && o + 1u < cap; i++) {
+    const char c = src[i];
+    out[o++] = name_char_ok(c) ? c : '_';
+  }
+  out[o] = '\0';
+  if (o == 0) snprintf(out, cap, "upload.gco");
+  if (strchr(out, '.') == nullptr) {                     // chua co duoi nao -> them ".gco"
+    const size_t l = strlen(out);
+    if (l + 4u < cap) strcat(out, ".gco");
+  }
+}
 
 #if CYDLCD_WIFI_UPLOAD
 
@@ -121,25 +168,12 @@ bool printer_busy(void) {
   return (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
 }
 
-// Ten file an toan (bo duong dan, ky tu la, gioi han do dai + duoi .gco)
+// Ten file an toan (bo duong dan, ky tu la, gioi han do dai + duoi .gco).
+// VI SAO goi `cyd_sd_name_clean()`: de TAP KY TU CHO PHEP chi co MOT dinh nghia duy nhat
+// (`name_char_ok()` + CYDLCD_NAME_ALLOW_EXTRA) - khong the co chuyen lop bao mat web va lop lam sach ten
+// hieu khac nhau (truoc day noi nay liet ke tay 'a-z A-Z 0-9 . _ -').
 void sanitize_name(const char *in, char *out, const size_t cap) {
-  size_t o = 0;
-  const char *slash = strrchr(in ? in : "", '/');
-  const char *src = slash ? slash + 1 : (in ? in : "");
-  for (size_t i = 0; src[i] != '\0' && o + 1u < cap; i++) {
-    const char c = src[i];
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-        c == '.' || c == '_' || c == '-')
-      out[o++] = c;
-    else
-      out[o++] = '_';
-  }
-  out[o] = '\0';
-  if (o == 0) snprintf(out, cap, "upload.gco");
-  // Chi THEM ".gco" khi ten CHUA co duoi nao. Truoc day ham chi so sanh 4 ky tu cuoi voi ".gco"
-  // nen "V300_Part3_proj.gcode" (duoi .gcode hop le, Marlin in duoc) bi thanh
-  // "...gcode.gco" (do that 2026-10-14: file tren the SD bi sai ten).
-  if (strrchr(out, '.') == nullptr) strncat(out, ".gco", cap - strlen(out) - 1u);
+  cyd_sd_name_clean(in, out, cap);
 }
 
 // ===========================================================================

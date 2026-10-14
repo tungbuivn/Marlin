@@ -1076,6 +1076,25 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 >   `apiFetch()` nối vào **một chuỗi Promise** (`apiQ`) nên request sau chỉ bắt đầu khi request trước **xong**.
 >   Thêm nữa, `/files` **chỉ được gọi SAU khi `/status` kết thúc** (`poll(true)` → khi state `done`/`error`
 >   mới `loadFiles()`), và **chỉ có 1 luồng `/status`** chạy tại một thời điểm (cờ `pollRun`).
+> * 🔒 **BẢO MẬT TÊN FILE** (yêu cầu người dùng: *“tên file trên server cần fix bảo mật, chỉ cho phép
+>   a-z0-9._”*): tên đến từ client (field `name` của multipart **hoặc** query `name=…` của `/delete`) là dữ
+>   liệu **không đáng tin** ⇒ đi qua 2 lớp trong `cyd_sd.cpp`:
+>   1. `cyd_sd_name_clean()` — bỏ hết phần đường dẫn (lấy sau dấu `/` cuối), đổi **mọi ký tự ngoài whitelist
+>      thành `_`**, giới hạn độ dài, thêm `.gco` nếu chưa có đuôi;
+>   2. `cyd_sd_name_check()` — **từ chối** nếu tên không rỗng/≤ 64 ký tự/không bắt đầu bằng `.`/không chứa
+>      `..`/và mọi ký tự thuộc whitelist.
+>   Whitelist = `a-z A-Z 0-9 . _` + `CYDLCD_NAME_ALLOW_EXTRA` (**mặc định `-`** vì thẻ đang có
+>   `V300_case-esp-2432s208_no-text.gcode`; **muốn chặt đúng “chỉ a-z0-9._” thì đổi macro này thành `""`** —
+>   một dòng ở `cydlcd_config.h`). Tập ký tự cho phép nay chỉ có **một định nghĩa** (`name_char_ok()`) dùng
+>   chung cho cả lớp làm sạch và lớp kiểm tra.
+>   *Lưu ý*: đây là lớp chặn ở **biên giới web**; nút XOA trên màn FILES (tên lấy từ danh sách của Marlin)
+>   **không** bị giới hạn này, nếu không sẽ không xoá được các tên lạ như `V300_[a]_xy_…gc`.
+>   **Đo trên máy thật**: `POST /delete` với `../cydlcd_tmp/x.tmp`, `a/b.gcode`, `evil;rm -rf.gcode`,
+>   `.hidden`, `co dau cach.gcode`, `V300_[a]_xy.gc` ⇒ **HTTP 400** (kèm lý do); tên hợp lệ ⇒ qua được tới
+>   bước “không thấy file” (500). Upload **thô qua socket** (bỏ qua script) với `name="../evil2.gcode"` +
+>   `filename="../../hack.gcode"` ⇒ panel ghi ra **`/evil2.gcode`** (mất hết đường dẫn, không thoát khỏi gốc
+>   thẻ) và log `CANH BAO bao mat: ten khach gui "…" -> lam sach thanh "…"` (log thật cũng bắt được lượt của
+>   người dùng: `V300_[a]_xy_joint_cable_bridge_3hole.gc` → `V300__a__xy_joint_cable_bridge_3hole.gc`).
 > * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
 >   đồng ở §9.21. Cả hai đều cần token như `/upload`.
 > * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
