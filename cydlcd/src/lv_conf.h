@@ -43,9 +43,13 @@
 #define LV_INDEV_DEF_READ_PERIOD  20
 
 /* ---------------------------------------------------------------------------
- * Font: chi 1 font 14px (du cho 240x320), tat het font khac cho nhe flash.
+ * Font: 14px la MAC DINH (du cho 240x320), tat het font khac cho nhe flash.
+ * 2026-10-15: BẬT THEM Montserrat 16 cho HANG X/Y/Z cua man STATUS (yeu cau nguoi dung: "font X,Y,Z o trang
+ * status to hon 1 chut"). O XYZ cao 24 px, chu 16 px co line_height 19 + le tren 3 = 22 <= 24 nen VAN VUA
+ * (chu 18 px line_height 22 -> 25 > 24 la tran, nen 16 la muc to nhat giu nguyen bo cuc).
  * -------------------------------------------------------------------------*/
 #define LV_FONT_MONTSERRAT_14   1
+#define LV_FONT_MONTSERRAT_16   1
 #define LV_FONT_DEFAULT         &lv_font_montserrat_14
 
 /* ---------------------------------------------------------------------------

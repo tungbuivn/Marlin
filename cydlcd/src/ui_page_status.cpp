@@ -105,6 +105,11 @@ void page_status_create(lv_obj_t *p) {
     lv_obj_set_pos(n, MR_XYZ_LX(i), MR_XYZ_TY);
     st_axis_val[i] = mk_label_right(xyz_hit, MR_XYZ_LX(i), MR_XYZ_TY, MR_XYZ_VW(i),
                                     "-", MR_AXIS);
+    // FONT TO HON cho hang X/Y/Z (yeu cau nguoi dung 2026-10-15: "font X,Y,Z o trang status to hon 1 chut").
+    // Dung Montserrat 16 (lv_conf.h: LV_FONT_MONTSERRAT_16): line_height 19 px + le tren MR_XYZ_TY=3 = 22
+    // <= o 24 px => van vua, khong phai doi bo cuc. Ap cho CA nhan truc (X/Y/Z) LAN gia tri so.
+    lv_obj_set_style_text_font(n, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(st_axis_val[i], &lv_font_montserrat_16, 0);
   }
 
   // ---- FR (54,136,68,32) va FL (192,136,68,32): icon 32x32 + gia tri o x=32,y=6 ----
