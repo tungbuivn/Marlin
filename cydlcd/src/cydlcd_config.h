@@ -377,6 +377,12 @@
 #ifndef CYDLCD_SD_RETRY_MS
   #define CYDLCD_SD_RETRY_MS 2500u    // nhip thu mount lai khi dang mat the
 #endif
+#ifndef CYDLCD_SD_CLEANUP_MS
+  // Nhip DON FILE TAM dinh ky (yeu cau nguoi dung 2026-10-15): 30 phut/lan, xoa file .tmp trong
+  // /cydlcd_tmp cu hon 30 phut (rac cua lan gui bi loi/ngat/reboot). Chi chay khi dang ranh (khong co
+  // phien upload). Xem cyd_sd_task()/clean_dir().
+  #define CYDLCD_SD_CLEANUP_MS (30u * 60u * 1000u)
+#endif
 // Cho phep nhan file khi Marlin dang in? 0 = tu choi (an toan: 2 nguoi ghi 1 FAT).
 #ifndef CYDLCD_HTTP_ALLOW_WHILE_PRINTING
   #define CYDLCD_HTTP_ALLOW_WHILE_PRINTING 0
@@ -401,7 +407,10 @@
 #define CYDLCD_SD_MISO  19
 #define CYDLCD_SD_MOSI  23
 #define CYDLCD_SD_CS     5
-#define CYDLCD_SD_HZ     4000000      // 4 MHz: GHI dai qua WiFi bi loi o 20 MHz VA 10 MHz tren the nay
+#define CYDLCD_SD_HZ     20000000     // 20 MHz = MAX (theo yeu cau nguoi dung 2026-10-15: "spi clock de max
+                                      // di"): ghi 4,5 MB chi mat ~5-8 s thay vi ~30 s o 4 MHz -> CUA SO
+                                      // RUI RO ngan hon nhieu (loi the giua phien ~1/2 lan o 4 MHz).
+                                      // `sd_mount()` van tu ha 20 -> 10 -> 4 MHz neu the khong chiu duoc.
                                       // (loi that 2026-10-15: `SD.write()` tra ve thieu sau ~1,7-2 MB, moi
                                       //  lan ghi 1436 B mat 50-170 ms; cung the do CO lan ghi tron 4,3 MB
                                       //  => the/khe the bi margin, khong hong han). 4 MHz = cham hon

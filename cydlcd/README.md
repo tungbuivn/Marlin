@@ -963,6 +963,74 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 >   `state=done written=4523980`; `UI TAP L` xác nhận trên thẻ `V300_bot_2.gcode 4523980 B` (gốc thẻ 8 mục,
 >   `cydlcd_tmp` rỗng — không còn file `.tmp` rác). RSSI −43…−57, `heapmin=113076 B`.
 
+> **VÒNG SỬA 2026-10-15 (b) — KIẾN TRÚC PART + size khai báo + SPI max + dọn rác 30 phút.**
+> (Theo đúng đề xuất/yêu cầu của người dùng: *"mỗi lần nhận được part thì open và close part đó luôn, try
+> catch để close file, đặt tên các part là xxxx_001, xxxx_002… rồi khi done thì merge lại… chỉ cần một biến
+> cộng dồn file size, nếu bằng số lượng user khai báo lúc đầu thì là done"*, *"không bao giờ mount lại sdcard,
+> spi clock để max đi"*, *"file rác do bị abort/lỗi thì dọn dẹp định kỳ 30 phút 1 lần, file tạm quá 30 phút
+> thì xóa"*, *"thêm đoạn kiểm tra file size sau khi merge, nếu không đúng thì lỗi"*.)
+>
+> **Lỗi thật đã tái hiện được (không phải do nhiều part):** upload lại `V300_bot_2.gcode` 4,5 MB thì chết ở
+> **3 809 280 B** = đúng **930 lần ghi 4096 B** rồi `File.write()` trả về **0** mãi. Log 1 Hz ngay sau đó:
+> `free=0KB` (⇒ `f_getfree()` **lỗi**), `sd=0` (thẻ **mất kết nối**), rồi vài giây sau `sd=1 free=15 GB`
+> trở lại ⇒ **thẻ/card "đứt" tạm thời rồi TỰ HỒI**, không phải do ai unmount giữa đường (trong lúc nhận file,
+> vòng lặp chính bị `handleClient()` chặn hoàn toàn nên *không ai khác chạm được thẻ*). Lỗi nằm ở tầng driver
+> thẻ (SPI/card), xác suất ~1/2 lần với file 4,5 MB.
+>
+> **Kiến trúc ghi mới (mỗi part = 1 file riêng, đóng ngay):**
+> * `cyd_sd_temp_open(name, size_hint, part)` → mỗi phần file ghi vào `/cydlcd_tmp/<ten>_NNN.tmp`
+>   (`_001`, `_002`, …). Part #1 = **phiên mới** (dọn part/`.tmp` cũ của cùng tên, kiểm tra chỗ trống bằng
+>   **size khách khai báo**).
+> * `UPLOAD_FILE_END` → `cyd_sd_temp_close()` **ĐÓNG NGAY** part đó (flush hết đệm rồi `close()`): dữ liệu
+>   part đã xong **nằm chắc trên thẻ**, part sau lỗi/ngắt không làm mất part trước.
+>   *ESP32 Arduino tắt exception (`-fno-exceptions`) nên "try/catch" ở đây = **mọi đường thoát đều gọi hàm
+>   đóng***: hết part, hết request, lỗi ghi, client ngắt, và cả trường hợp mở part mới mà part cũ chưa đóng.
+> * Hết request: **1 part ⇒ đổi tên thẳng** `_001.tmp → /<ten>` (**không copy**, không tốn thêm thời gian);
+>   **≥2 part ⇒ MERGE** tuần tự `_001 + _002 + …` vào `<ten>.tmp` (đọc 16 KB/lần, xoá từng part sau khi
+>   copy xong, dùng chính đường ghi có đệm + phục hồi), rồi mới đổi tên vào gốc thẻ.
+> * **Biến cộng dồn + size khách khai báo**: client gửi thêm field text **`size=<số byte>`** (script và trang
+>   web đều gửi; trang web: `fd.append('size', f.size)`). Màn hình chốt **DONE khi tổng byte ghi xuống thẻ ==
+>   size khai báo** (không khai báo thì lấy số byte nhận từ mạng).
+> * **3 lớp kiểm tra size** (yêu cầu *"thêm đoạn kiểm tra file size sau khi merge"*):
+>   1. từng part: `đọc được == size FAT báo`;
+>   2. sau merge: **mở lại file ghép đọc size thật trên thẻ** == size khai báo;
+>   3. sau khi đổi tên: **mở lại `/<ten>` đọc size thật** == size khai báo; **sai ⇒ XOÁ file và báo lỗi**
+>      (không bao giờ để file `.gcode` cut/sai nằm trong gốc thẻ — chọn in là hỏng bản in).
+> * **KHÔNG BAO GIỜ MOUNT LẠI THẺ**: bỏ hẳn `SD.end()`/`SD.begin()` khỏi đường phục hồi. Khi thẻ ghi lỗi:
+>   **chờ đợi kiên nhẫn** (backoff 20→2000 ms, tổng ~7,4 s) + **đóng/mở lại file ở `FILE_APPEND`** (chỉ đọc
+>   lại dir entry của chính file đó, không đụng volume) rồi ghi tiếp; chỉ bỏ phiên khi thật sự hết cách.
+>   (Đường mount lại duy nhất còn lại là khi **Marlin vừa ghi sector thô** — lúc đó cache FATFS của màn hình
+>   *bắt buộc* phải đọc lại, nếu không sẽ ghi đè dữ liệu của Marlin.)
+> * **SPI clock = MAX 20 MHz** (`CYDLCD_SD_HZ`, trước là 4 MHz) + **đệm ghi 16 KB** (32 sector/lần thay vì
+>   4 KB) ⇒ giảm 4 lần số phép ghi (276 lần cho 4,5 MB thay vì 1104) và rút ngắn cửa sổ rủi ro.
+>   `sd_mount()` vẫn tự hạ 20 → 10 → 4 MHz nếu thẻ không chịu được.
+> * **Dọn file rác định kỳ 30 phút** (`CYDLCD_SD_CLEANUP_MS`, chạy trong `cyd_sd_task()` khi **đang rảnh**):
+>   quét `/cydlcd_tmp`, xoá file `.tmp` **cũ hơn 30 phút** theo `File::getLastWrite()` (đồng hồ chưa được đặt
+>   nên sau khi reboot `now < mtime` ⇒ coi là rác của lần chạy trước và xoá). Vẫn giữ dọn lúc khởi động và
+>   dọn trước mỗi phiên mới; **mọi đường lỗi/abort đều xoá part + `.tmp` ngay**.
+> * Lỗi ghi báo **tách bạch 2 nguyên nhân**: `file tam khong mo (phien bi ngat?)` (lỗi logic) vs
+>   `the ghi thieu (0/16384 B)` (lỗi thẻ) — và `/status` không còn hiện số liệu **CŨ** của phiên trước
+>   (`written_bytes` lấy của phiên đang chạy; đầu phiên đã xoá `s_result`/`s_written`).
+>
+> **Đo lại trên máy thật (sau khi sửa):**
+> ```text
+> # 1 part (4 523 980 B): MO PART #1 -> ..._001.tmp ; DONG PART #1: 4523980 B
+> [HTTP] HET REQUEST (OK): parts=1 chunks=3151 da nhan 4523980 B, tren the 4523980 B -> doi ten/GHEP
+> [UP] da doi ten ..._001.tmp -> /V300_bot_2.gcode (4523980 B, kiem tra lai tren the = 4523980 B)
+> # 3 part (63 472 B, gui co chu dich de test merge):
+> [UP] MO PART #1/#2/#3 -> ..._001/_002/_003.tmp ; DONG PART #1/#2/#3: 21158 / 21158 / 21156 B
+> [UP] GHEP 3 part -> .../SPLIT3_TEST.gcode.tmp
+> [UP] GHEP part #1: doc duoc 21158 B / size tren the 21158 B        (… #2, #3 tuong tu)
+> [UP] GHEP: kiem tra size file ghep tren the = 63472 B (bo dem 63472 B / can 63472 B)
+> [UP] GHEP XONG: 63472 B -> ... ; [UP] da doi ten ... -> /SPLIT3_TEST.gcode (63472 B, kiem tra lai = 63472 B)
+> ```
+> `/status`: `state=done parts=3 parts_done=3 declared=63472 written_bytes=63472 result=DONE 63472`;
+> `UI TAP L`: gốc thẻ có **`SPLIT3_TEST.gcode 63472 B`** + `V300_bot_2.gcode 4523980 B`, `/cydlcd_tmp` rỗng.
+> Tốc độ upload 4,5 MB: **21,7 s (203,9 KB/s)** ở 20 MHz (trước 28,9 s ở 4 MHz); heap thấp nhất ~95 KB.
+> *Ghi chú test*: bản test đầu tiên của script chia part bị **ghi header 2 lần** ⇒ panel nhận dư **320 B
+> (= 2 × 160 B header)** và **từ chối công bố** (`size khong khop (the co 1184637 B / can 1184317 B)`) —
+> tức lớp chốt size đã hoạt động đúng trước cả khi tìm ra lỗi ở script test.
+
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,
   `CYDLCD_HTTP_MAX_BYTES` 256 MB, `CYDLCD_HTTP_ALLOW_WHILE_PRINTING` 0,
@@ -972,8 +1040,8 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
   | Endpoint | Trả về |
   |---|---|
   | `GET /` | HTML (chứa chuỗi `TBT-CYDLCD`): chọn file + nút Gửi + thanh tiến độ + poll `/status` |
-  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes`, `total_bytes`, `written_bytes`, `parts` (số PHẦN FILE của request), `chunks` (số chunk WRITE), `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
-  | `POST /upload?token=…` | `multipart/form-data`: field text `name="name"` (tên đích, **đặt TRƯỚC** phần file) + phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…,"parts":N}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF). **Nhiều phần file trong cùng request được chấp nhận**: phần #≥2 ghi TIẾP vào cùng file tạm (không xoá/mở lại) — xem vòng sửa 2026-10-15 ở §9.21 |
+  | `GET /status` | JSON: `"cydlcd":"TBT"`, `"device":"TBT-CYDLCD"`, `state` (`idle\|receiving\|writing\|done\|error`), `rx_bytes` (byte nhận từ mạng), `total_bytes` (tổng byte các part), `written_bytes` (byte ĐÃ GHI xuống thẻ của phiên đang chạy / phiên vừa xong), `parts` (số PHẦN FILE của request), `parts_done` (số part đã đóng), `chunks`, `declared` (size khách khai báo), `file`, `result`, `message`, `sd`, `wifi`, `ip`, `heap` — **trả được cả khi chưa có phiên** (`state=idle`) |
+  | `POST /upload?token=…` | `multipart/form-data`: các field text `name="name"` (tên đích) + `name="size"` (**tổng số byte**, đặt TRƯỚC phần file) rồi phần file `name="file"` `filename="<tên>"` → `200 {"status":"Ok",…,"parts":N}` / `{"status":"Error","message":"…"}` (`401` sai token, `409` Marlin đang in, `400/500` lỗi thẻ TF / size không khớp). **Nhiều phần file trong cùng request được chấp nhận**: mỗi phần là một file riêng `_001/_002/…` đóng ngay, hết request thì **đổi tên thẳng** (1 phần) hoặc **GHEP lại** (≥2 phần) rồi kiểm tra size thật trên thẻ — xem vòng sửa 2026-10-15 (b) ở §9.21 |
 
 * **Token**: query `?token=` **hoặc** header `X-CYDLCD-Token` (`CYDLCD_HTTP_TOKEN ""` = tắt kiểm, không khuyến nghị).
 * **Trả lời ngay** sau khi nhận đủ file; bước **ghi vào thẻ** (`cyd_sd_finish_upload()`) chạy ở nhịp sau của

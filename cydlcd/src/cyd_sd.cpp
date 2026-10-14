@@ -52,14 +52,26 @@ bool     s_sd_ready = false;
 bool     s_sd_was   = false;
 uint32_t s_sd_check_ms = 0, s_sd_retry_ms = 0;
 bool     s_sd_retry_req = false;
+uint32_t s_cleanup_ms = 0;             // moc lan don file tam dinh ky (CYDLCD_SD_CLEANUP_MS)
 File     s_file;
-char     s_tmp[64] = "";
-uint32_t s_got = 0;                    // byte da ghi vao file tam
+char     s_tmp[72] = "";               // file DANG mo (1 PART, hoac file .tmp luc merge/doi ten)
+uint32_t s_got = 0;                    // TONG byte da ghi vao the cua CA PHIEN (cong don qua cac part)
+// ---- Kien truc PART (theo de xuat nguoi dung 2026-10-15) ----
+// Moi phan file (UPLOAD_FILE_START..UPLOAD_FILE_END) duoc ghi vao MOT FILE RIENG roi DONG NGAY:
+//   /cydlcd_tmp/<ten>_001.tmp, _002.tmp, ...
+// Xong het request thi: 1 part -> doi ten thang thanh /<ten> (KHONG copy); >=2 part -> MERGE lai roi moi
+// doi ten. VI SAO: du lieu cua part da xong nam CHAC tren the (da close) nen part sau loi/ngat khong lam
+// mat part truoc; va khong con chuyen "mo lai file tam lam xoa du lieu da nhan".
+uint32_t s_cur_bytes = 0;              // byte da ghi vao DUNG file dang mo (s_tmp)
+uint8_t  s_part = 0;                   // so thu tu PART dang mo (1..)
+uint8_t  s_parts_done = 0;             // so PART da DONG (da nam tren the)
 // Dem ghi (write-back) cho upload: gom du CYDLCD_SD_WBUF byte roi moi ghi xuong the (xem sd_wbuf_flush).
 // CAP PHAT DONG (khong phai mang static): RAM tinh (dram0) cua ESP32 da kin - mang 4 KB static lam
-// linker bao "region dram0_0_seg overflowed by 304 bytes". Heap luc upload con ~135 KB nen cap phat
-// 4 KB khi mo file tam va tra lai khi dong/bo phien la hoan toan on.
-#define CYDLCD_SD_WBUF 4096
+// linker bao "region dram0_0_seg overflowed by 304 bytes". Heap luc upload con ~130 KB nen cap phat
+// khi mo file part va tra lai khi dong/bo phien la hoan toan on.
+// 16 KB (32 sector/lan) thay vi 4 KB: moi phep ghi la 1 lan "co hoi" loi the/SPI -> giam so phep ghi 4 lan
+// (4,5 MB: 276 lan thay vi 1104 lan) ma van can sector.
+#define CYDLCD_SD_WBUF 16384
 static uint8_t *s_wbuf = nullptr;
 static uint16_t s_wbuf_n = 0;
 // CHAN DOAN phien upload (2026-10-15) - de tra loi "co phai do multiple part dan den open/close file
@@ -68,6 +80,7 @@ static uint16_t s_opens = 0;          // so lan mo file tam tu luc khoi dong
 static uint8_t  s_sess_opens = 0;     // so lan mo trong PHIEN dang chay (>=2 = bi mo lai giua phien!)
 static uint32_t s_t0_ms = 0;          // moc bat dau phien (tinh KB/s)
 static uint32_t s_log_mb = 0;         // da bao tien do den moc MB nao
+static uint8_t  s_recover_ok = 0, s_recover_fail = 0;  // so lan PHUC HOI the thanh cong / that bai
 char     s_err[64] = "";               // ly do loi cua phien dang chay
 uint32_t s_heap_min = 0xFFFFFFFFu;
 uint32_t s_written = 0;                 // byte da ghi vao the (phien gan nhat)
@@ -321,6 +334,7 @@ bool s_fatfs_written = false;
 // Bo dem phuc vu Marlin (de KIEM CHUNG driver SD qua UART: doc bao nhieu sector, bao nhieu loi)
 uint32_t s_raw_rd = 0, s_raw_rd_err = 0, s_raw_wr = 0, s_raw_wr_err = 0;
 uint32_t s_raw_rd_refused = 0;          // so lan TU CHOI doc tho vi dang nhan/ghi upload (xem cyd_sd_raw_read)
+uint32_t s_raw_wr_refused = 0;          // so lan TU CHOI ghi tho vi dang nhan/ghi upload (xem cyd_sd_raw_write)
 
 void fatfs_sync(void) {
   if (!s_sd_ready) return;
@@ -391,8 +405,12 @@ void sd_release_to_marlin(const bool reinit_marlin) {
 }
 #endif  // CYDLCD_SD_SHARED
 
-// Xoa moi file *.tmp trong /cydlcd_tmp (don file mo coi sau reset / mat dien / loi)
-uint16_t clean_dir(const char *why, const bool verbose) {
+// Xoa cac file *.tmp trong /cydlcd_tmp (don file mo coi sau reset / mat dien / loi).
+// `min_age_s` > 0: CHI xoa file "gia" hon nguon do (dung cho phien don dinh ky 30 phut - theo yeu cau
+// nguoi dung). Tuoi lay tu `File::getLastWrite()` (FAT). Dong ho cua ESP32 chua duoc dat (boot = 1970)
+// nhung FAT cung duoc ghi bang chinh dong ho do -> hieu so van dung trong cung lan cap dien; sau khi
+// reboot thi `now < mtime` -> coi nhu file CU (rac cua lan chay truoc) va xoa.
+uint16_t clean_dir(const char *why, const bool verbose, const uint32_t min_age_s = 0) {
   if (!s_sd_ready) return 0;
   if (!SD.exists(CYDLCD_UPLOAD_TMP_DIR)) {
     SD.mkdir(CYDLCD_UPLOAD_TMP_DIR);
@@ -403,26 +421,31 @@ uint16_t clean_dir(const char *why, const bool verbose) {
     if (dir) dir.close();
     return 0;
   }
-  uint16_t n = 0;
+  uint16_t n = 0, kept = 0;
   uint64_t freed = 0;
+  const time_t nowt = time(nullptr);
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
     const bool   isdir = f.isDirectory();
     const size_t sz    = f.size();
+    const time_t mt    = f.getLastWrite();   // phai doc TRUOC khi close
     const String nm    = f.name();          // ESP32 core: ten DAY DU dang "/cydlcd_tmp/x.tmp"
     char path[64];
     if (nm.length() && nm[0] == '/') snprintf(path, sizeof(path), "%s", nm.c_str());
     else                             snprintf(path, sizeof(path), "%s/%s", CYDLCD_UPLOAD_TMP_DIR, nm.c_str());
     f.close();                              // dong TRUOC khi xoa (an toan tren FATFS)
     const size_t ln = strlen(path);
-    if (!isdir && ln > 4u && strcmp(path + ln - 4u, ".tmp") == 0) {
-      if (SD.remove(path)) { n++; freed += sz; }
-      else ELOG("[UP] CANH BAO: khong xoa duoc file tam %s\n", path);
+    if (isdir || ln <= 4u || strcmp(path + ln - 4u, ".tmp") != 0) continue;
+    if (min_age_s) {
+      const bool old = (mt <= 0) || (nowt < mt) || ((uint32_t)(nowt - mt) >= min_age_s);
+      if (!old) { kept++; continue; }        // con moi -> de lai (co the dang la phien dang chay)
     }
+    if (SD.remove(path)) { n++; freed += sz; }
+    else ELOG("[UP] CANH BAO: khong xoa duoc file tam %s\n", path);
   }
   dir.close();
-  if (n || verbose)
-    ELOG("[UP] don %s (%s): xoa %u file .tmp (%lu KB)\n", CYDLCD_UPLOAD_TMP_DIR, why, (unsigned)n,
-         (unsigned long)(freed / 1024ull));
+  if (n || kept || verbose)
+    ELOG("[UP] don %s (%s): xoa %u file .tmp (%lu KB), giu lai %u file con moi\n",
+         CYDLCD_UPLOAD_TMP_DIR, why, (unsigned)n, (unsigned long)(freed / 1024ull), (unsigned)kept);
   return n;
 }
 
@@ -490,10 +513,25 @@ bool cyd_sd_raw_read(const uint32_t sector, uint8_t *dst) {
 bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !src) return false;
+  // DANG CO PHIEN GHI THE CUA MAN HINH (nhan upload / dang chot phien) -> TU CHOI ghi tho.
+  // VI SAO: FATFS cua man hinh dang giu cache rieng (FAT/dir/FSInfo); Marlin ghi THANG sector se lam
+  // cache do LECH va co the de len chinh file vua nhan hoac file dang doi ten.
+  // Truong hop that: `cyd_sd_finish_upload()` CHAY O VONG LAP CHINH (co nuoi UART) nen trong luc DOI TEN
+  // file tam -> /<ten> van co the nhan duoc frame ghi sector cua Marlin; truoc day nhanh do goi
+  // `fatfs_sync()` = `SD.end()` + mount lai NGAY GIUA luc doi ten.
+  // Marlin coi la loi ghi the (nhu loi doc da bi tu choi tu truoc) va se doc lai sau khi phien xong
+  // (cuoi phien man hinh gui M22+M21 -> Marlin mount lai). Ghi tho tu Marlin chi xay ra voi M28/M29/M30
+  // va POWER_LOSS_RECOVERY - deu khong cap thiet trong luc nhan file tu WiFi.
+  if (s_file || s_busy) {
+    s_raw_wr_refused++;
+    if (s_raw_wr_refused == 1 || (s_raw_wr_refused % 64u) == 0)
+      ELOG("[UP] TU CHOI ghi RAW sector %lu: dang co phien ghi the cua man hinh (lan %lu)\n",
+           (unsigned long)sector, (unsigned long)s_raw_wr_refused);
+    return false;
+  }
   // DONG BO TRUOC KHI GHI THO: Marlin ghi thang len the (FAT/dir), con FATFS cua man hinh CYD co cache
   // rieng -> phai day het du lieu dang cho xuong the truoc, neu khong cache cu se de len.
-  if (s_file) s_file.flush();                    // dang nhan upload: day file + FAT xuong the
-  else if (s_fatfs_written) { fatfs_sync(); if (!s_sd_ready) return false; }
+  if (s_fatfs_written) { fatfs_sync(); if (!s_sd_ready) return false; }
   const bool ok = SD.writeRAW((uint8_t *)src, sector);   // core ESP32: sd_write_raw() (SD.h/SD.cpp)
   if (ok) { s_raw_wr++; s_fatfs_stale = true; }   // FATFS cua cydlcd gio co the LECH -> mount lai truoc
   else    { s_raw_wr_err++; ELOG("[UP] ghi RAW sector %lu THAT BAI\n", (unsigned long)sector); }
@@ -597,6 +635,7 @@ const char *cyd_sd_last_result(void) { return s_result; }
 uint32_t    cyd_sd_last_written(void) { return s_written; }
 const char *cyd_sd_temp_path(void) { return s_tmp; }
 uint32_t    cyd_sd_temp_bytes(void) { return s_got; }
+uint8_t     cyd_sd_temp_parts_done(void) { return s_parts_done; }
 const char *cyd_sd_temp_err(void) { return s_err; }
 
 // CHAN DOAN: liet ke GOC the bang FATFS cua man hinh (`UI TAP L` tren COM7).
@@ -634,24 +673,52 @@ void cyd_sd_log_dir(const char *path) {
 }
 
 // ===========================================================================
-// API: ghi file tam
+// API: ghi file tam (KIEN TRUC PART: moi part 1 file rieng, dong ngay khi het part)
 // ===========================================================================
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const bool same_request) {
+// Duong dan file cua PART thu `k` (1..255): /cydlcd_tmp/<ten>_001.tmp ...
+static void part_path(char *dst, const size_t n, const uint8_t k) {
+  snprintf(dst, n, "%s/%s_%03u.tmp", CYDLCD_UPLOAD_TMP_DIR, s_name, (unsigned)k);
+}
+
+// Duong dan file tam GOC (dich cua buoc MERGE / nguon cua buoc doi ten).
+static void merged_path(char *dst, const size_t n) {
+  snprintf(dst, n, "%s/%s.tmp", CYDLCD_UPLOAD_TMP_DIR, s_name);
+}
+
+// Xoa file part (1..maxk) + file .tmp cua phien hien tai (dung khi loi/bi bo phien / don phien moi).
+static uint16_t parts_remove_all(const uint8_t maxk) {
+  uint16_t n = 0;
+  char p[72];
+  for (uint8_t k = 1; k <= maxk; k++) {
+    part_path(p, sizeof(p), k);
+    if (SD.exists(p) && SD.remove(p)) n++;
+  }
+  merged_path(p, sizeof(p));
+  if (SD.exists(p) && SD.remove(p)) n++;
+  return n;
+}
+
+// So part toi da can quet de don (part da dong + part dang mo + 1 du phong). Tran 255.
+static uint8_t parts_scan_max(void) {
+  const uint8_t last = s_parts_done > s_part ? s_parts_done : s_part;
+  return (uint8_t)(last < 1 ? 1 : (last + 1u > 250u ? 255u : last + 1u));
+}
+
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part) {
   s_err[0] = '\0';
   s_result[0] = '\0';
-  // PHAN FILE thu >=2 trong CUNG 1 request multipart: KHONG duoc coi la phien moi.
-  // VI SAO (cau hoi nguoi dung 2026-10-15: "co phai do multiple part dan den open close file khac?"):
-  // WebServer cua ESP32 goi UPLOAD_FILE_START cho MOI PHAN FILE (Parsing.cpp:423-433). Ban cu mo lai
-  // file tam o day -> `if (SD.exists(s_tmp)) SD.remove(s_tmp)` XOA SACH du lieu da nhan cua phan truoc
-  // => file tren the bi hut/lech kich thuoc. Nay chi ghi TIEP vao file dang mo (cung TEN dich; khac ten
-  // thi van la phien moi nhu thuong).
-  char nm_new[40];
-  sanitize_name(name, nm_new, sizeof(nm_new));
-  if (same_request && s_file && strcmp(nm_new, s_name) == 0) {
-    s_sess_opens++;
-    ELOG("[UP] PHAN tiep theo (lan mo thu %u trong request) -> GHI TIEP vao %s (da co %lu B, dem %u B)\n",
-         (unsigned)s_sess_opens, s_tmp, (unsigned long)s_got, (unsigned)s_wbuf_n);
-    return true;
+  const bool first = (part <= 1u);
+  if (first) {
+    // PART #1 = PHIEN MOI. Doi ten dich + don sach part/.tmp cu cua lan gui truoc (neu co).
+    sanitize_name(name, s_name, sizeof(s_name));
+    s_result[0] = '\0';
+    s_written = 0;
+    s_got = 0;
+    s_parts_done = 0;
+  } else if (s_file) {
+    // An toan: part truoc phai duoc DONG o UPLOAD_FILE_END; neu khong (client gui chong) thi dong ngay.
+    ELOG("[UP] CANH BAO: part truoc CHUA dong - dong ngay truoc khi mo part #%u\n", (unsigned)part);
+    cyd_sd_temp_close();
   }
   // Chua in TU THE SD moi duoc ghi the (2 ben cung dung 1 FAT) - lop chan thu 2 sau net_upload_http.
   // LUU Y: `printer_busy()` chi xet co IN TU THE SD, khong xet HOMING/LEVELING/G35 (khong dung the).
@@ -700,40 +767,45 @@ bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const bool same_requ
 #endif
   if (!sd_mount(true)) { snprintf(s_err, sizeof(s_err), "the TF cydlcd loi"); return false; }
 #if CYDLCD_SD_SHARED || CYDLCD_SD_UART
-  // Don file mo coi ngay khi VUA gianh duoc bus (MUX) / ngay truoc phien moi (UART).
-  if (!s_file) clean_dir("truoc phien moi", true);
+  // Don file mo coi ngay khi VUA gianh duoc bus (MUX) / ngay trước PHIEN MOI (UART).
+  if (first && !s_file) clean_dir("truoc phien moi", true);
 #endif
   // Don file mo coi TRUOC khi mo file moi (chi 1 lan/lan mo - re)
   if (s_file) s_file.close();
   const uint64_t total = SD.totalBytes(), used = SD.usedBytes();
   const uint64_t freeb = (total > used) ? (total - used) : 0;
-  ELOG("[UP] the TF: con %lu KB / tong %lu KB (file moi: %lu B)\n",
-       (unsigned long)(freeb / 1024ull), (unsigned long)(total / 1024ull),
-       (unsigned long)size_hint);
-  if (size_hint && ((uint64_t)size_hint + (256ull * 1024ull) > freeb)) {
-    snprintf(s_err, sizeof(s_err), "the TF cydlcd het cho (%lu KB trong)",
-             (unsigned long)(freeb / 1024ull));
-    return false;
+  if (size_hint) {
+    ELOG("[UP] the TF: con %lu KB / tong %lu KB (khach khai bao file moi: %lu B)\n",
+         (unsigned long)(freeb / 1024ull), (unsigned long)(total / 1024ull),
+         (unsigned long)size_hint);
+    if ((uint64_t)size_hint + (256ull * 1024ull) > freeb) {
+      snprintf(s_err, sizeof(s_err), "the TF cydlcd het cho (%lu KB trong)",
+               (unsigned long)(freeb / 1024ull));
+      return false;
+    }
   }
-  snprintf(s_name, sizeof(s_name), "%s", nm_new);   // (da sanitize o tren - xem nhanh "PHAN tiep theo")
   if (!SD.exists(CYDLCD_UPLOAD_TMP_DIR)) SD.mkdir(CYDLCD_UPLOAD_TMP_DIR);
-  snprintf(s_tmp, sizeof(s_tmp), "%s/%s.tmp", CYDLCD_UPLOAD_TMP_DIR, s_name);
+  if (first) parts_remove_all(9);         // bo rac cua lan gui truoc (quet 9 part dau + file .tmp)
+  s_part = part;
+  part_path(s_tmp, sizeof(s_tmp), part);
   if (SD.exists(s_tmp)) SD.remove(s_tmp);
   s_file = SD.open(s_tmp, FILE_WRITE);
   if (!s_file) {
-    snprintf(s_err, sizeof(s_err), "khong tao duoc file tam");
+    snprintf(s_err, sizeof(s_err), "khong tao duoc file part %u", (unsigned)part);
     s_tmp[0] = '\0';
     return false;
   }
-  s_got = 0;
-  s_wbuf_n = 0;                           // dem ghi: bat dau phien moi voi dem RONG
+  s_cur_bytes = 0;                        // dem lai tu dau cho FILE PART nay
+  s_wbuf_n = 0;                           // dem ghi: bat dau part moi voi dem RONG
   s_opens++;
-  s_sess_opens = 1;
+  s_sess_opens++;
   s_t0_ms = millis();
   s_log_mb = 0;
-  ELOG("[UP] MO file tam lan %u (phien moi, lan mo thu %u) heap=%lu B heapmin=%lu B\n",
-       (unsigned)s_opens, (unsigned)s_sess_opens,
-       (unsigned long)ESP.getFreeHeap(), (unsigned long)s_heap_min);
+  s_recover_ok = 0;
+  s_recover_fail = 0;
+  ELOG("[UP] MO PART #%u -> %s (phien mo lan %u, da dong %u part / %lu B, heap=%lu B)\n",
+       (unsigned)part, s_tmp, (unsigned)s_opens, (unsigned)s_parts_done,
+       (unsigned long)s_got, (unsigned long)ESP.getFreeHeap());
   ELOG("[UP] ghi vao %s (ten dich: %s)\n", s_tmp, s_name);
   // KHONG goi M22/M21 o day (theo yeu cau nguoi dung 2026-10-15: "khong mount lai sdcard, vi sdcard
   // luon dinh vao lcd roi"): the KHONG BAO GIO doi chu -> khong can nha/mount lai the cua Marlin de
@@ -763,20 +835,73 @@ static void up_progress_log(void) {
        (unsigned long)ESP.getFreeHeap(), (unsigned long)s_heap_min);
 }
 
-// Ghi het buffer xuong the. Tra ve so byte da ghi THANH CONG (co thu lai vai lan khi the "khung").
+// ---------------------------------------------------------------------------
+//  PHUC HOI KHI THE GHI LOI GIUA PHIEN (ghi duoc 0 byte).
+//  VI SAO (loi nguoi dung bao 2026-10-15, upload bang TRINH DUYET qua trang web cua man hinh):
+//    "cydlcd: error | nhan 1744896/4563245 B | ket qua: the ghi thieu (0/4096 B)"
+//  Do lai tren may that: ghi duoc 930 lan 4096 B (3 809 280 B) roi `s_file.write()` tra ve 0 mai. Log 1 Hz
+//  cua panel sau do cho thay: `free=0KB` (f_getfree LOI), `sd=0` (the MAT KET NOI), roi `sd=1 free=15 GB`
+//  tro lai sau vai giay => THE/CARD bi "dut" tam thoi roi TU HOI, khong phai do ai unmount.
+//  Trong luc nhan upload, vong lap chinh bi `server.handleClient()` chan HOAN TOAN nen khong ai khac cham
+//  duoc the -> loi nam o TANG DRIVER the (SPI/card).
+//
+//  !!! KHONG MOUNT LAI THE !!! (yeu cau nguoi dung 2026-10-15: "khong bao gio mount lai sdcard")
+//  Chi DONG file dang mo roi MO LAI o che do GHI TIEP (FILE_APPEND): `f_open` doc lai dir entry/FAT cua
+//  chinh file do -> go duoc file handle bi FATFS vo hieu hoa, KHONG dung den volume (khong SD.end/SD.begin).
+//
+//  AN TOAN: CHI tiep tuc khi kich thuoc file tren the SAU khi mo lai == dung so byte da ghi nhan
+//  (`expect`). Neu thieu byte (du lieu da mat) thi file se bi LECH giua duong -> PHAI bo phien: KHONG bao
+//  gio de mot file .gcode cut/lech nam trong goc the (in ra la hong ban in).
+// ---------------------------------------------------------------------------
+static bool sd_recover_part(const uint32_t expect) {
+  if (s_tmp[0] == '\0' || !s_sd_ready) return false;
+  ELOG("[UP] PHUC HOI (KHONG mount lai the): dong + mo lai file part o che do GHI TIEP (can %lu B)\n",
+       (unsigned long)expect);
+  if (s_file) s_file.close();
+  s_file = SD.open(s_tmp, FILE_APPEND);
+  if (!s_file) {
+    ELOG("[UP] PHUC HOI THAT BAI: khong mo lai duoc %s (the dang dut?)\n", s_tmp);
+    s_recover_fail++;
+    return false;
+  }
+  const uint32_t oncard = (uint32_t)s_file.size();
+  if (oncard != expect) {
+    ELOG("[UP] PHUC HOI KHONG AN TOAN: file tren the %lu B KHAC %lu B da ghi -> BO PHIEN "
+         "(khong de file cut trong goc the)\n",
+         (unsigned long)oncard, (unsigned long)expect);
+    s_recover_fail++;
+    return false;
+  }
+  ELOG("[UP] PHUC HOI OK: mo lai duoc %s (%lu B), ghi tiep\n", s_tmp, (unsigned long)oncard);
+  s_recover_ok++;
+  return true;
+}
+
+// Ghi het buffer xuong the. Tra ve so byte da ghi THANH CONG.
+// KIEN NHAN KHI THE "DUT": bang cho tang dan (tong ~7,4 s) thay vi bo phien ngay - do that cho thay the
+// mat ket noi vai giay roi TU HOI (sd=1 lai), nen cho doi re hon nhieu so voi bat nguoi dung gui lai 4,5 MB.
 static size_t sd_wbuf_flush(void) {
   if (!s_wbuf_n || !s_wbuf) { s_wbuf_n = 0; return 0; }
   if (!s_file) { s_wbuf_n = 0; return 0; }
   const uint16_t want = s_wbuf_n;
   size_t done = 0;
-  uint8_t tries = 0;
+  uint8_t try_i = 0, rec = 0;
+  static const uint16_t backoff[] = { 20, 50, 100, 200, 500, 1000, 1500, 2000, 2000 };
+  const uint8_t n_back = (uint8_t)(sizeof(backoff) / sizeof(backoff[0]));
   while (done < want) {
     const size_t w = s_file.write(s_wbuf + done, want - done);
     done += w;
     if (done >= want) break;
-    if (++tries > 5) break;
-    ELOG("[UP] ghi thieu (%u/%u B) - THU LAI lan %u\n", (unsigned)done, (unsigned)want, (unsigned)tries);
-    delay(30);
+    if (try_i >= n_back) break;
+    const uint16_t ms = backoff[try_i++];
+    // Lan thu 2 va 5: DONG + MO LAI file part (KHONG mount lai the) de go file handle bi FATFS vo hieu.
+    if ((try_i == 2u || try_i == 5u) && rec < 2u) {
+      if (sd_recover_part(s_cur_bytes + (uint32_t)done)) rec++;
+    }
+    ELOG("[UP] the ghi thieu (%u/%u B, da ghi %lu B) - cho %u ms roi THU LAI lan %u/%u\n",
+         (unsigned)done, (unsigned)want, (unsigned long)(s_got + done), (unsigned)ms,
+         (unsigned)try_i, (unsigned)n_back);
+    delay(ms);
     yield();
   }
   s_wbuf_n = 0;
@@ -804,10 +929,13 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
       const size_t w0 = s_file.write(d, n);
       if (w0 != n) {
         snprintf(s_err, sizeof(s_err), "the ghi thieu (ghi truc tiep)");
+        snprintf(s_result, sizeof(s_result), "ERR %s", s_err);
+        s_written = s_got;
         if (s_file) s_file.close();
         return w0;
       }
       s_got += (uint32_t)w0;
+      s_cur_bytes += (uint32_t)w0;
       up_progress_log();
       return w0;
     }
@@ -823,16 +951,24 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
     if (s_wbuf_n == CYDLCD_SD_WBUF) {
       const size_t w = sd_wbuf_flush();
       if (w != (size_t)CYDLCD_SD_WBUF) {
-        ELOG("[UP] GHI LOI: buffer %u B chi ghi duoc %u B (da ghi %lu B, heap=%lu, heapmin=%lu)\n",
+        ELOG("[UP] GHI LOI: buffer %u B chi ghi duoc %u B (da ghi %lu B, heap=%lu, heapmin=%lu, "
+             "phuc hoi ok/loi=%u/%u, raw rd=%lu wr=%lu refused=%lu/%lu)\n",
              (unsigned)CYDLCD_SD_WBUF, (unsigned)w, (unsigned long)s_got,
-             (unsigned long)ESP.getFreeHeap(), (unsigned long)s_heap_min);
+             (unsigned long)ESP.getFreeHeap(), (unsigned long)s_heap_min,
+             (unsigned)s_recover_ok, (unsigned)s_recover_fail,
+             (unsigned long)s_raw_rd, (unsigned long)s_raw_wr,
+             (unsigned long)s_raw_rd_refused, (unsigned long)s_raw_wr_refused);
         snprintf(s_err, sizeof(s_err), "the ghi thieu (%u/%u B)",
                  (unsigned)w, (unsigned)CYDLCD_SD_WBUF);
+        snprintf(s_result, sizeof(s_result), "ERR %s", s_err);   // UI/`/status` bao dung phien dang loi
+        s_written = s_got;                    // KHONG de UI hien so lieu CU (phien truoc da thanh cong)
         if (s_file) s_file.close();
         s_got += (uint32_t)w;                   // van tinh phan da ghi duoc
+        s_cur_bytes += (uint32_t)w;
         return (copied - (size_t)CYDLCD_SD_WBUF + w);
       }
       s_got += (uint32_t)w;
+      s_cur_bytes += (uint32_t)w;
       heap_min_track();
       up_progress_log();
     }
@@ -840,39 +976,162 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
   return copied;
 }
 
+// DONG PART dang mo: day het dem ghi xuong the + flush + close NGAY (theo yeu cau nguoi dung: "moi lan
+// nhan duoc part thi open va close part do luon"). Idempotent: goi luc khong mo file thi khong lam gi.
+// (ESP32 Arduino tat exception (-fno-exceptions) nen "try/catch" o day = MOI duong thoat deu goi ham nay:
+//  het part, het request, loi ghi, bi ngat, va ca khi mo part moi ma part cu chua dong.)
 uint32_t cyd_sd_temp_close(void) {
-  // PHAI day het dem ghi xuong the TRUOC khi dong file (neu khong mat phan cuoi).
+  if (!s_file && !s_wbuf) return s_got;             // da dong roi -> khong lam gi
   const size_t flushed = sd_wbuf_flush();
   s_got += (uint32_t)flushed;
+  s_cur_bytes += (uint32_t)flushed;
   if (s_file) {
     s_file.flush();
     s_file.close();
   }
   if (s_wbuf) { free(s_wbuf); s_wbuf = nullptr; }   // tra dem ghi 4 KB lai cho heap
-  ELOG("[UP] DONG file tam %s: %lu B, %u lan mo trong phien\n",
-       s_tmp, (unsigned long)s_got, (unsigned)s_sess_opens);
+  const uint32_t partsz = s_cur_bytes;
+  if (partsz || s_part) s_parts_done = (uint8_t)(s_parts_done < s_part ? s_part : s_parts_done);
+  ELOG("[UP] DONG PART #%u %s: %lu B (tong ca phien %lu B, da dong %u part)\n",
+       (unsigned)s_part, s_tmp, (unsigned long)partsz, (unsigned long)s_got, (unsigned)s_parts_done);
+  s_cur_bytes = 0;
+  s_tmp[0] = '\0';
 #if CYDLCD_SD_UART
   s_fatfs_written = true;    // P3: cydlcd vua ghi qua FATFS -> truoc khi cho Marlin ghi tho phai flush
 #endif
   return s_got;
 }
 
+// BO PHIEN: dong file dang mo (neu con) + XOA MOI file part/.tmp cua phien.
 void cyd_sd_temp_abort(void) {
   const uint16_t left = s_wbuf_n;         // byte con trong dem (chua xuong the) - de bao trong log
   s_wbuf_n = 0;                           // bo dem ghi (khong day phan con lai xuong the)
   if (s_wbuf) { free(s_wbuf); s_wbuf = nullptr; }
   if (s_file) s_file.close();
-  if (s_tmp[0] && s_sd_ready) {
-    if (SD.exists(s_tmp)) SD.remove(s_tmp);
-    ELOG("[UP] da xoa file tam %s (bo phien: da ghi %lu B, %u lan mo, %u B con trong dem)\n",
-         s_tmp, (unsigned long)s_got, (unsigned)s_sess_opens, (unsigned)left);
-  }
+  uint16_t removed = 0;
+  if (s_sd_ready) removed = parts_remove_all(parts_scan_max());
+  ELOG("[UP] BO PHIEN: da xoa %u file part/.tmp (da ghi %lu B, %u part da dong, %u B con trong dem)\n",
+       (unsigned)removed, (unsigned long)s_got, (unsigned)s_parts_done, (unsigned)left);
   s_tmp[0] = '\0';
   s_got = 0;
+  s_cur_bytes = 0;
+  s_parts_done = 0;
+  s_part = 0;
 #if CYDLCD_SD_SHARED
   // Phien bi bo -> PHAI tra bus SPI the cho Marlin (khong thi Marlin mat the vinh vien).
   sd_release_to_marlin(false);
 #endif
+}
+
+// Kich thuoc THAT cua 1 file tren the: MO LAI bang FILE_READ roi doc `size()` (khong tin bo dem RAM).
+// 0 = khong mo duoc (hoac file 0 byte - khong bao gio dung cho file .gcode hop le).
+static uint32_t file_size_on_card(const char *path) {
+  if (!s_sd_ready || !path || !path[0]) return 0;
+  File f = SD.open(path, FILE_READ);
+  if (!f) return 0;
+  const uint32_t n = (uint32_t)f.size();
+  f.close();
+  return n;
+}
+
+// ===========================================================================
+// MERGE cac PART thanh 1 file: /cydlcd_tmp/<ten>_001.tmp + _002.tmp ... -> /cydlcd_tmp/<ten>.tmp
+//   - CHI can khi phien co >=2 part (client gui file thanh nhieu phan). 1 part thi KHONG copy: doi ten
+//     thang file part -> /<ten> (khong ton them ~30 s doc+ghi lai ca file).
+//   - Doc tung part theo thu tu, ghi qua CHINH duong ghi cua upload (cyd_sd_temp_write -> dem 4 KB + co
+//     phuc hoi khi the loi) nen toc do/tinh on dinh giong luc nhan file.
+//   - Xoa tung part NGAY sau khi copy xong (thieu dung luong; part sau van con nguyen neu loi giua duong).
+//   - Kiem tra tong byte == so byte da nhan; lech => tra false (KHONG doi ten vao goc the).
+// ===========================================================================
+static bool merge_parts(const uint32_t expect, char *err, const size_t errn) {
+  if (err && errn) err[0] = '\0';
+  if (s_parts_done < 2u) return false;
+  if (!s_sd_ready) { if (err && errn) snprintf(err, errn, "mat the truoc khi ghep part"); return false; }
+  uint8_t *rb = (uint8_t *)malloc(CYDLCD_SD_WBUF);
+  if (!rb) { if (err && errn) snprintf(err, errn, "khong du RAM de ghep part"); return false; }
+  // Mo file dich (ten .tmp - sau do finish_upload doi ten vao goc the)
+  char dst[72];
+  merged_path(dst, sizeof(dst));
+  if (SD.exists(dst)) SD.remove(dst);
+  s_file = SD.open(dst, FILE_WRITE);
+  if (!s_file) {
+    free(rb);
+    if (err && errn) snprintf(err, errn, "khong tao duoc file ghep");
+    return false;
+  }
+  snprintf(s_tmp, sizeof(s_tmp), "%s", dst);
+  s_got = 0;
+  s_cur_bytes = 0;
+  s_wbuf_n = 0;
+  s_t0_ms = millis();
+  s_log_mb = 0;
+  bool ok = true;
+  ELOG("[UP] GHEP %u part -> %s\n", (unsigned)s_parts_done, dst);
+  for (uint8_t k = 1; k <= s_parts_done && ok; k++) {
+    char src[72];
+    part_path(src, sizeof(src), k);
+    File in = SD.open(src, FILE_READ);
+    if (!in) {
+      ok = false;
+      snprintf(s_err, sizeof(s_err), "khong mo duoc part #%u", (unsigned)k);
+      ELOG("[UP] GHEP LOI: khong mo duoc %s\n", src);
+      break;
+    }
+    const uint32_t psz_card = (uint32_t)in.size();   // size ma FAT bao cho part nay
+    uint32_t psz = 0;
+    while (true) {
+      const int r = in.read(rb, CYDLCD_SD_WBUF);
+      if (r <= 0) break;
+      if (cyd_sd_temp_write(rb, (size_t)r) != (size_t)r) {
+        ok = false;
+        snprintf(s_err, sizeof(s_err), "ghep part #%u loi khi ghi the", (unsigned)k);
+        break;
+      }
+      psz += (uint32_t)r;
+    }
+    in.close();
+    ELOG("[UP] GHEP part #%u: doc duoc %lu B / size tren the %lu B%s\n",
+         (unsigned)k, (unsigned long)psz, (unsigned long)psz_card, ok ? "" : " (LOI)");
+    // KIEM TRA SIZE TUNG PART: doc duoc phai dung bang size ma FAT bao (lech = part bi cut/loi).
+    if (ok && psz != psz_card) {
+      ok = false;
+      snprintf(s_err, sizeof(s_err), "part #%u tren the %lu B nhung doc duoc %lu B",
+               (unsigned)k, (unsigned long)psz_card, (unsigned long)psz);
+    }
+    if (ok && SD.remove(src)) ELOG("[UP] da xoa part %s sau khi ghep\n", src);
+  }
+  // DONG file ghep: KHONG dung `cyd_sd_temp_close()` (ham do danh cho PART: no xoa `s_tmp` va cap nhat
+  // `s_parts_done` -> sau khi ghep xong thi buoc DOI TEN ngay sau day mat duong dan, do that 2026-10-15:
+  // "ERR khong co file tam tren the" du file ghep da ghi xong).
+  const size_t flushed = sd_wbuf_flush();
+  s_got += (uint32_t)flushed;
+  if (s_file) { s_file.flush(); s_file.close(); }
+  if (s_wbuf) { free(s_wbuf); s_wbuf = nullptr; }
+  const uint32_t got = s_got;
+  snprintf(s_tmp, sizeof(s_tmp), "%s", dst);      // giu duong dan file ghep cho buoc doi ten
+  free(rb);
+  if (!ok) { if (err && errn) snprintf(err, errn, "%s", s_err); return false; }
+  // ---- KIEM TRA SIZE SAU KHI MERGE (yeu cau nguoi dung 2026-10-15: "them doan kiem tra file size sau khi
+  // merge, neu khong dung thi loi"): mo lai file ghep va doc size THAT tren the, khong tin bo dem RAM.
+  const uint32_t oncard = file_size_on_card(dst);
+  ELOG("[UP] GHEP: kiem tra size file ghep tren the = %lu B (bo dem %lu B / can %lu B)\n",
+       (unsigned long)oncard, (unsigned long)got, (unsigned long)expect);
+  if (oncard != expect) {
+    ok = false;
+    snprintf(s_err, sizeof(s_err), "file ghep tren the sai size (%lu B / can %lu B)",
+             (unsigned long)oncard, (unsigned long)expect);
+    ELOG("[UP] GHEP LOI: %s\n", s_err);
+    if (err && errn) snprintf(err, errn, "%s", s_err);
+    return false;
+  }
+  if (got != expect) {
+    snprintf(s_err, sizeof(s_err), "ghep part ra %lu B, can %lu B", (unsigned long)got, (unsigned long)expect);
+    ELOG("[UP] GHEP LOI: %s\n", s_err);
+    if (err && errn) snprintf(err, errn, "%s", s_err);
+    return false;
+  }
+  ELOG("[UP] GHEP XONG: %lu B -> %s\n", (unsigned long)got, s_tmp);
+  return true;
 }
 
 // ===========================================================================
@@ -885,7 +1144,9 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   s_written = 0;
   s_err[0] = '\0';
   if (name && name[0]) snprintf(s_name, sizeof(s_name), "%s", name);
-  if (s_tmp[0] == '\0') snprintf(s_tmp, sizeof(s_tmp), "%s/%s.tmp", CYDLCD_UPLOAD_TMP_DIR, s_name);
+  // Duong dan nguon de doi ten: 1 part -> chinh file part; >=2 part -> file .tmp sau khi GHEP.
+  if (s_parts_done <= 1u && s_tmp[0] == '\0') part_path(s_tmp, sizeof(s_tmp), 1);
+  else if (s_parts_done > 1u) merged_path(s_tmp, sizeof(s_tmp));
 
   // -------------------------------------------------------------------------
   // CHE DO "THE CUA MAN HINH" (khong dung mang): file tam /cydlcd_tmp/<ten>.tmp da duoc ghi vao the
@@ -899,19 +1160,51 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   ui_lock(true);                          //   bam IN / mo FILES trong luc ghi)
   ov_set("DANG GHI VAO THE SD...", s_name, true);
   bool ok = false;
+  const uint32_t expect = size ? size : s_got;     // so byte PHAI co (khach da gui / da nhan duoc)
+  if (s_parts_done > 1u) {
+    // Nhieu part (client gui file thanh nhieu phan): GHEP lai thanh 1 file truoc khi doi ten.
+    ov_set("DANG GHEP CAC PART...", s_name, true);
+    if (!merge_parts(expect, s_err, sizeof(s_err))) {
+      ELOG("[UP] GHEP THAT BAI: %s -> xoa het part, KHONG doi ten\n", s_err[0] ? s_err : "?");
+      parts_remove_all(parts_scan_max());
+      s_tmp[0] = '\0';
+    }
+  }
   if (s_tmp[0] == '\0' || !s_sd_ready) {
-    snprintf(s_err, sizeof(s_err), "khong co file tam tren the");
+    if (!s_err[0]) snprintf(s_err, sizeof(s_err), "khong co file tam tren the");
+    parts_remove_all(parts_scan_max());     // don sach part/.tmp (khong de rac cho lan sau)
+  } else if (s_got != expect) {
+    // CHOT AN TOAN (cuoi cung): tong byte tren the PHAI bang so byte da nhan. Lech = file cut/lech ->
+    // XOA, KHONG doi ten (mot file .gcode cut ma lot vao goc the thi co the duoc chon in -> hong ban in).
+    snprintf(s_err, sizeof(s_err), "size khong khop (the co %lu B / can %lu B)",
+             (unsigned long)s_got, (unsigned long)expect);
+    ELOG("[UP] %s -> xoa file tam, KHONG doi ten\n", s_err);
+    parts_remove_all(parts_scan_max());
+    s_tmp[0] = '\0';
   } else {
     char dst[72];
     snprintf(dst, sizeof(dst), "/%s", s_name);
     if (SD.exists(dst)) SD.remove(dst);   // FATFS rename KHONG ghi de -> xoa ban cu truoc
     ok = SD.rename(s_tmp, dst);
     if (ok) {
-      ELOG("[UP] da doi ten %s -> %s (%lu B)\n", s_tmp, dst, (unsigned long)s_got);
-      s_tmp[0] = '\0';
-      s_written = s_got;
-      snprintf(s_result, sizeof(s_result), "DONE %lu", (unsigned long)s_got);
-      ov_set("DA GHI VAO THE SD", s_name, true);
+      // ---- KIEM TRA SIZE THAT SAU KHI DOI TEN (file trong GOC THE): sai size => XOA, bao loi. ----
+      // Khong bao gio de mot file .gcode sai/cut nam trong goc the (nguoi dung co the chon in -> hong in).
+      const uint32_t oncard = file_size_on_card(dst);
+      if (oncard != expect) {
+        ok = false;
+        snprintf(s_err, sizeof(s_err), "file tren the sai size (%lu B / can %lu B) - da xoa, gui lai",
+                 (unsigned long)oncard, (unsigned long)expect);
+        ELOG("[UP] %s -> XOA %s\n", s_err, dst);
+        SD.remove(dst);
+        s_tmp[0] = '\0';
+      } else {
+        ELOG("[UP] da doi ten %s -> %s (%lu B, kiem tra lai tren the = %lu B)\n",
+             s_tmp, dst, (unsigned long)s_got, (unsigned long)oncard);
+        s_tmp[0] = '\0';
+        s_written = s_got;
+        snprintf(s_result, sizeof(s_result), "DONE %lu", (unsigned long)s_got);
+        ov_set("DA GHI VAO THE SD", s_name, true);
+      }
     } else {
       snprintf(s_err, sizeof(s_err), "khong doi ten duoc file tren the");
       if (SD.exists(s_tmp)) SD.remove(s_tmp);   // don file tam ngay (con dang giu bus)
@@ -963,7 +1256,7 @@ bool cyd_sd_write_test(const uint32_t kb) {
   static uint8_t buf[1436];                       // dung bang kich thuoc chunk cua WebServer
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = (uint8_t)(i * 7u + 3u);
   ELOG("[UP] WTEST: ghi thu %lu KB bang duong upload (khong qua WiFi)\n", (unsigned long)(total / 1024u));
-  if (!cyd_sd_temp_open("WTEST.BIN", total)) {
+  if (!cyd_sd_temp_open("WTEST.BIN", total, 1)) {
     ELOG("[UP] WTEST: khong mo duoc file tam: %s\n", s_err);
     return false;
   }
@@ -1024,6 +1317,18 @@ void cyd_sd_task(void) {
   // ---------------------------------------------------------------------------
   if (s_file || s_busy) return;
   const uint32_t now = millis();
+  // ---------------------------------------------------------------------------
+  // DON FILE TAM DINH KY (30 phut/lan) - theo yeu cau nguoi dung 2026-10-15:
+  // "doi voi truong hop file rac do bi abort, loi thi cho chay dinh ky 1 lenh don dep moi 30 phut 1 lan,
+  //  thoi gian tao file tam qua 30 phut thi xoa".
+  // Chi chay khi KHONG co phien upload nao (`s_file`/`s_busy`, da `return` o tren) nen moi file .tmp con
+  // lai trong /cydlcd_tmp deu la rac cua lan gui bi loi/ngat/reboot truoc do; van kiem tra tuoi > 30 phut
+  // (clean_dir(..., 1800)) cho dung y nguoi dung.
+  // ---------------------------------------------------------------------------
+  if (s_sd_ready && (uint32_t)(now - s_cleanup_ms) >= CYDLCD_SD_CLEANUP_MS) {
+    s_cleanup_ms = now;
+    clean_dir("dinh ky 30 phut", true, CYDLCD_SD_CLEANUP_MS / 1000u);
+  }
   if (s_sd_ready) {
     if (now - s_sd_check_ms < CYDLCD_SD_CHECK_MS) return;
     s_sd_check_ms = now;
@@ -1063,12 +1368,12 @@ void cyd_sd_log(void) {
   //   st = cydlcd_state_t (0 idle, 1 printing, 2 paused, 3 homing, 4 leveling, 5 killed...),
   //   fl = cydlcd_status_flags_t (bit1 CYDLCD_SF_MEDIA, bit2 CYDLCD_SF_SD_PRINTING, bit3 PAUSED),
   //   r=%lu/%lu = so sector DOC thanh cong / loi, w=%lu/%lu = so sector GHI thanh cong / loi.
-  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\" | SD r=%lu/%lu w=%lu/%lu refused=%lu\n",
+  Serial.printf("[MRL] st=%u fl=0x%02X prog=%u%% file=\"%s\" | SD r=%lu/%lu w=%lu/%lu refused rd/wr=%lu/%lu\n",
                 (unsigned)cydlcd.state, (unsigned)cydlcd.flags, (unsigned)cydlcd.progress_pct,
                 cydlcd.prog.file,
                 (unsigned long)s_raw_rd, (unsigned long)s_raw_rd_err,
                 (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err,
-                (unsigned long)s_raw_rd_refused);
+                (unsigned long)s_raw_rd_refused, (unsigned long)s_raw_wr_refused);
 }
 
 #else   // ---- CYDLCD_WIFI_UPLOAD = 0: stub rong (moi env van link duoc) ----
@@ -1079,14 +1384,15 @@ void cyd_sd_log(void) {}
 bool cyd_sd_ready(void) { return false; }
 bool cyd_sd_mount_now(void) { return false; }
 void cyd_sd_retry(void) {}
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, bool same_request) {
-  (void)name; (void)size_hint; (void)same_request; return false;
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part) {
+  (void)name; (void)size_hint; (void)part; return false;
 }
 size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) { (void)d; (void)n; return 0; }
 uint32_t cyd_sd_temp_close(void) { return 0; }
 void cyd_sd_temp_abort(void) {}
 const char *cyd_sd_temp_path(void) { return ""; }
 uint32_t cyd_sd_temp_bytes(void) { return 0; }
+uint8_t cyd_sd_temp_parts_done(void) { return 0; }
 const char *cyd_sd_temp_err(void) { return ""; }
 bool cyd_sd_printer_busy(void) { return false; }
 bool cyd_sd_raw_read(uint32_t sector, uint8_t *dst) { (void)sector; (void)dst; return false; }

@@ -590,14 +590,20 @@ try {
 # POST multipart bang socket tho (duong DUY NHAT: POST /upload len man hinh CYD)
 # ---------------------------------------------------------------------------
 function New-MultipartParts {
-    # name="name" (ten file dich) dung TRUOC, roi phan file name="<FieldName>"; filename="<ten>".
+    # name="name" (ten file dich) + name="size" (TONG so byte) dung TRUOC, roi phan file
+    # name="<FieldName>"; filename="<ten>".
     # GIA TRI PHAI CO DAU " - xem phan giai thich o .DESCRIPTION.
-    param([string]$FieldName, [string]$SendName)
+    # VI SAO GUI `size`: man hinh doi chieu "tong byte da ghi xuong the == so byte KHAI BAO" moi coi la
+    # DONE (va kiem tra cho trong the ngay tu dau) - xem cyd_sd_temp_open()/handle_upload_done().
+    param([string]$FieldName, [string]$SendName, [long]$SendSize = 0)
     $boundary = '----TBT' + [Guid]::NewGuid().ToString('N')
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.Append('--').Append($boundary).Append("`r`n")
     [void]$sb.Append('Content-Disposition: form-data; name="name"').Append("`r`n`r`n")
     [void]$sb.Append($SendName).Append("`r`n")
+    [void]$sb.Append('--').Append($boundary).Append("`r`n")
+    [void]$sb.Append('Content-Disposition: form-data; name="size"').Append("`r`n`r`n")
+    [void]$sb.Append($SendSize).Append("`r`n")
     [void]$sb.Append('--').Append($boundary).Append("`r`n")
     [void]$sb.Append('Content-Disposition: form-data; name="').Append($FieldName).Append('"; filename="').Append($SendName).Append('"').Append("`r`n")
     [void]$sb.Append('Content-Type: application/octet-stream').Append("`r`n`r`n")
@@ -637,7 +643,7 @@ function Send-FileRaw {
             Start-Sleep -Milliseconds ([int](1500 * ($attempt - 1)))
         }
 
-        $parts = New-MultipartParts -FieldName $FieldName -SendName $SendName
+        $parts = New-MultipartParts -FieldName $FieldName -SendName $SendName -SendSize $total
         $contentLen = [int64]$parts.Head.Length + $total + [int64]$parts.Tail.Length
 
         $req = "POST {0} HTTP/1.1`r`n" +

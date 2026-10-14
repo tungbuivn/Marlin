@@ -36,16 +36,20 @@ bool cyd_sd_ready(void);        // cache - khong SPI, khong chan
 bool cyd_sd_mount_now(void);    // mount NGAY (chan ~20-100 ms) - dung khi nguoi dung vua cam the
 void cyd_sd_retry(void);        // xin mount lai o vong lap ke tiep (khong chan)
 
-// ---- Ghi file tam /cydlcd_tmp/<ten>.tmp (net_upload_http.cpp goi khi nhan duoc file) ----
+// ---- Ghi file tam theo KIEN TRUC PART (net_upload_http.cpp goi khi nhan duoc file) ----
 // `name` = ten file DICH (nhu Marlin se nhin thay tren the). Dong thoi gian: khong chan (chi FATFS).
-// `same_request` = true khi day la PHAN FILE thu >=2 cua CUNG mot request multipart: khi do KHONG duoc
-// mo lai file tam (mo lai = xoa sach du lieu da nhan) ma phai GHI TIEP vao file dang mo.
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, bool same_request = false);
+// `part` = so thu tu PHAN FILE (1..255): MOI part duoc ghi vao MOT FILE RIENG `/cydlcd_tmp/<ten>_NNN.tmp`
+//   va duoc DONG NGAY khi het part (`cyd_sd_temp_close`) -> du lieu da xong nam chac tren the, part sau
+//   loi/ngat khong lam mat part truoc. part = 1 = PHIEN MOI (don part/.tmp cu cua cung ten truoc).
+// `size_hint` = tong so byte khach KHAI BAO (neu biet) -> kiem tra cho trong truoc khi nhan.
+// Xong het request: `cyd_sd_finish_upload()` se doi ten thang (1 part) hoac GHEP cac part (>=2 part).
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part = 1);
 size_t cyd_sd_temp_write(const uint8_t *d, size_t n);
-uint32_t cyd_sd_temp_close(void);       // dong file, tra ve so byte da ghi
-void cyd_sd_temp_abort(void);           // dong + xoa file tam (khi loi / bi ngat)
-const char *cyd_sd_temp_path(void);     // duong dan file tam dang mo ("" neu khong co)
-uint32_t cyd_sd_temp_bytes(void);       // so byte da ghi vao file tam
+uint32_t cyd_sd_temp_close(void);       // DONG PART dang mo, tra ve TONG byte da ghi ca phien
+void cyd_sd_temp_abort(void);           // dong + xoa MOI file part/.tmp cua phien (khi loi / bi ngat)
+const char *cyd_sd_temp_path(void);     // duong dan file dang mo ("" neu khong co)
+uint32_t cyd_sd_temp_bytes(void);       // TONG byte da ghi ca phien (cong don qua cac part)
+uint8_t  cyd_sd_temp_parts_done(void);  // so PART da dong (da nam tren the)
 const char *cyd_sd_temp_err(void);      // ly do loi cua phien dang chay ("" neu khong co)
 bool cyd_sd_printer_busy(void);         // Marlin dang in? (de tu choi phien upload moi)
 
