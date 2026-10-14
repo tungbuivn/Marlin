@@ -1061,6 +1061,9 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > * Trang `GET /` thêm thẻ **“File trên thẻ SD”**: liệt kê tên + kích thước (B/KB/MB, thư mục ghi `[TM]`),
 >   nút **Làm mới**, mỗi dòng một nút **Xoá** (hỏi xác nhận trước khi xoá). Danh sách tự nạp khi mở trang và
 >   **tự nạp lại sau khi upload xong** hoặc sau mỗi lần xoá.
+> * **Ô token được điền sẵn `CYDLCD_HTTP_TOKEN`** (mặc định `TBT-3D-up`) khi trả trang: `handle_root()` copy
+>   trang từ PROGMEM ra `String` rồi thay placeholder `%%TOKEN%%` — không phải gõ tay nữa. Vẫn đổi được bằng
+>   `?token=...` (JS ghi đè giá trị trong ô nhập nếu URL có token).
 > * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
 >   đồng ở §9.21. Cả hai đều cần token như `/upload`.
 > * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
@@ -1085,7 +1088,10 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > POST /delete?name=KHONGCO.gcode       -> HTTP 500
 > GET  /files?token=…            -> count 9  (SPLIT3_TEST.gcode đã biến mất)
 > ```
-> Build panel: RAM 120 844 B, Flash **1 204 013 B**.
+> Sau đó (yêu cầu “chèn luôn giá trị token default vào input token”): `GET /` trả
+> `<input type="text" id="tok" … value="TBT-3D-up">` — kiểm tra bằng cách tải trang và tìm `%%TOKEN%%`
+> (không còn placeholder sót lại).
+> Build panel: RAM 120 844 B, Flash **1 204 013 B** (sau khi chèn token: **1 203 853 B**).
 
 * **Cờ**: `CYDLCD_WIFI_UPLOAD` (**mặc định 1 với CYD**), `CYDLCD_HTTP_PORT` 80, `CYDLCD_HTTP_TOKEN`
   (`TBT-3D-up`), `CYDLCD_HTTP_MDNS_NAME` (`TBTCYDLCD` ⇒ `http://TBTCYDLCD.local/`), `CYDLCD_HTTP_USE_MDNS` 1,

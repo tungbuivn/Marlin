@@ -66,7 +66,7 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 <h1>TBT-CYDLCD</h1>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
 <div class="card">
-  <input type="text" id="tok" placeholder="token (vd TBT-3D-up)">
+  <input type="text" id="tok" placeholder="token (vd TBT-3D-up)" value="%%TOKEN%%">
   <input type="file" id="f">
   <button id="go" onclick="send()">Gui file</button>
   <div id="bar"><i id="bi"></i></div>
@@ -196,9 +196,18 @@ void send_json(const int code, const char *body) {
 // GET /
 // ===========================================================================
 void handle_root(void) {
+  // Chen TOKEN MAC DINH (CYDLCD_HTTP_TOKEN) vao o nhap token ngay khi tra trang - nguoi dung khong phai
+  // go tay nua (yeu cau 2026-10-15: "chen luon gia tri token default vao input token"). Van doi duoc bang
+  // `?token=...` (JS o cuoi trang se ghi de gia tri trong o nhap).
+  // Trang nam trong FLASH (PROGMEM) nen phai COPY ra String (~4 KB heap, heap luc ranh ~135 KB) roi moi
+  // thay the duoc placeholder.
+  String page = FPSTR(HTML_PAGE);
+  page.replace("%%TOKEN%%", CYDLCD_HTTP_TOKEN);
   server.sendHeader("Cache-Control", "no-store");
-  server.send_P(200, "text/html", HTML_PAGE);
-  HLOG("[HTTP] GET / tu %s\n", server.client().remoteIP().toString().c_str());
+  server.send(200, "text/html", page);
+  HLOG("[HTTP] GET / tu %s (%u B, token mac dinh: %s)\n",
+       server.client().remoteIP().toString().c_str(), (unsigned)page.length(),
+       CYDLCD_HTTP_TOKEN[0] ? "co" : "KHONG");
 }
 
 // ===========================================================================
