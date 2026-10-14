@@ -87,23 +87,54 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 var q=new URLSearchParams(location.search); if(q.get('token')) document.getElementById('tok').value=q.get('token');
 var upBusy=false;                      // dang gui file -> khoa nut "Gui file"
 function log(t){document.getElementById('log').textContent=t;}
-// Nut "Gui file": CHI bat khi DA CHON FILE va KHONG dang gui (yeu cau nguoi dung 2026-10-15).
+// ---------------------------------------------------------------------------
+// HANG DOI REQUEST (yeu cau nguoi dung 2026-10-15: "request den status va files dang chay song song nen se
+// loi, cho status xong thi moi goi api files").
+// VI SAO: WebServer cua ESP32 chi phuc vu MOT request mot lan; trinh duyet mo 2 ket noi song song thi
+// request sau bi treo/timeout (nhat la trong luc dang upload - vong lap bi chan 20-30 s).
+// Cach lam: moi request noi vao mot chuoi Promise -> cai sau chi BAT DAU khi cai truoc XONG.
+// ---------------------------------------------------------------------------
+var apiQ=Promise.resolve();
+function apiFetch(url,opt){
+  var r=apiQ.catch(function(){}).then(function(){ return fetch(url,opt); })
+                            .then(function(res){ return res.json(); });
+  apiQ=r.catch(function(){});          // 1 request loi khong lam dut chuoi
+  return r;
+}
+// Nut "Gui file": CHI bat khi DA CHON FILE va KHONG dang gui.
 // CSS da co `button:disabled{opacity:.5}` va trinh duyet chan click khi nut bi disabled.
 function updGo(){
   var hasFile=document.getElementById('f').files.length>0;
   document.getElementById('go').disabled=(!hasFile || upBusy);
 }
 function fmtB(n){ if(n>=1048576) return (n/1048576).toFixed(2)+' MB'; if(n>=1024) return Math.round(n/1024)+' KB'; return n+' B'; }
-function poll(){fetch('/status').then(r=>r.json()).then(j=>{
-  document.getElementById('bi').style.width=(j.total_bytes?Math.round(j.rx_bytes*100/j.total_bytes):0)+'%';
-  log('cydlcd: '+j.state+' | nhan '+j.rx_bytes+'/'+j.total_bytes+' B | da day '+j.written_bytes+
-      ' B | '+j.file+'\nket qua: '+(j.result||'-')+' '+(j.message||''));
-  if(j.state=='writing'||j.state=='receiving') setTimeout(poll,700);
-});}
+// `reloadAtEnd`: sau khi phien upload KET THUC (done/error) thi moi nap lai danh sach file -> /files luon
+// chay SAU /status (khong con 2 request song song).
+// `pollRun`: CHI cho phep 1 luong /status chay tai mot thoi diem (neu dang chay thi bo qua loi goi moi) -
+// tranh 2 luong poll cung luc lam /files bi chen ngang.
+var pollErr=0, pollRun=false;
+function poll(reloadAtEnd){
+  if(pollRun) return;
+  pollRun=true; pollErr=0;
+  var step=function(){
+    apiFetch('/status').then(function(j){
+      pollErr=0;
+      document.getElementById('bi').style.width=(j.total_bytes?Math.round(j.rx_bytes*100/j.total_bytes):0)+'%';
+      log('cydlcd: '+j.state+' | nhan '+j.rx_bytes+'/'+j.total_bytes+' B | da day '+j.written_bytes+
+          ' B | '+j.file+'\nket qua: '+(j.result||'-')+' '+(j.message||''));
+      if(j.state=='writing'||j.state=='receiving') setTimeout(step,700);
+      else { pollRun=false; if(reloadAtEnd) loadFiles(); }   // XONG /status roi MOI goi /files
+    }).catch(function(){
+      if(++pollErr<=5) setTimeout(step,1500);               // thu lai vai lan roi thoi
+      else { pollRun=false; log('khong doc duoc /status (man hinh dang ban?) - bam Lam moi sau'); }
+    });
+  };
+  step();
+}
 function loadFiles(){
   var box=document.getElementById('flist'); box.textContent='dang doc...';
-  fetch('/files?token='+encodeURIComponent(document.getElementById('tok').value))
-   .then(r=>r.json()).then(function(j){
+  apiFetch('/files?token='+encodeURIComponent(document.getElementById('tok').value))
+   .then(function(j){
      box.textContent='';
      if(j.status!=='Ok'){ box.textContent='loi: '+(j.message||'?'); return; }
      if(!j.count){ box.textContent='(khong co file nao tren the / chua cam the)'; return; }
@@ -120,13 +151,12 @@ function loadFiles(){
    }).catch(function(){ box.textContent='loi ket noi toi cydlcd'; });
 }
 function delFile(n,isdir,row,btn){
-  // KHONG hoi xac nhan + KHONG goi lai /files sau khi xoa (yeu cau nguoi dung 2026-10-15):
-  // xoa xong thi GO LUON dong do khoi danh sach dang hien (nhanh, khong nhay trang).
+  // KHONG hoi xac nhan + KHONG goi lai /files sau khi xoa: xoa xong thi GO LUON dong do khoi danh sach.
   // Xoa LOI thi giu nguyen dong + tra nut lai de bam lai (server da bao ly do o o log).
   if(btn) btn.disabled=true;
   var tok=document.getElementById('tok').value;
-  fetch('/delete?token='+encodeURIComponent(tok)+'&name='+encodeURIComponent(n),{method:'POST'})
-   .then(r=>r.json()).then(function(j){
+  apiFetch('/delete?token='+encodeURIComponent(tok)+'&name='+encodeURIComponent(n),{method:'POST'})
+   .then(function(j){
      log('xoa '+(isdir?'thu muc ':'file ')+n+': '+(j.status==='Ok'?'XONG':'LOI')+' - '+(j.message||''));
      if(j.status==='Ok'){
        if(row && row.parentNode) row.parentNode.removeChild(row);
@@ -149,13 +179,14 @@ function send(){
   x.setRequestHeader('X-CYDLCD-Token',tok);
   x.upload.onprogress=function(e){document.getElementById('bi').style.width=
      (e.lengthComputable?Math.round(e.loaded*100/e.total):0)+'%';};
-  x.onload=function(){log('tra loi: '+x.responseText);upBusy=false;updGo();poll();loadFiles();};
+  // Gui xong -> poll(true): theo doi tiep cho den khi done/error ROI MOI nap lai danh sach file.
+  x.onload=function(){log('tra loi: '+x.responseText);upBusy=false;updGo();pollErr=0;poll(true);};
   x.onerror=function(){log('loi ket noi toi cydlcd');upBusy=false;updGo();};
   x.send(fd); log('dang gui '+f.name+' ('+f.size+' B)...');
   upBusy=true; updGo();                // KHOA nut ngay khi bat dau gui (tranh bam 2 lan)
 }
 updGo();
-loadFiles();
+poll(true);                            // doc trang thai truoc, xong moi nap danh sach file
 </script></body></html>)HTML";
 
 WebServer server(CYDLCD_HTTP_PORT);

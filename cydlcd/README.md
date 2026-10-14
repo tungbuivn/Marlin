@@ -1071,6 +1071,11 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 > * **Nút “Gửi file” chỉ bật khi đã chọn file** (`<button … disabled>` + `input[type=file] onchange="updGo()"`)
 >   và **bị khoá trong suốt lúc đang gửi** (`upBusy`, mở lại ở `x.onload`/`x.onerror`) ⇒ không bấm được khi
 >   chưa có file và không gửi trùng 2 lần.
+> * **KHÔNG gọi request song song** (lỗi gặp thật: `/status` và `/files` chạy cùng lúc thì WebServer ESP32
+>   — vốn chỉ phục vụ **1 request một lần** — làm request sau treo/timeout): mọi request đều đi qua
+>   `apiFetch()` nối vào **một chuỗi Promise** (`apiQ`) nên request sau chỉ bắt đầu khi request trước **xong**.
+>   Thêm nữa, `/files` **chỉ được gọi SAU khi `/status` kết thúc** (`poll(true)` → khi state `done`/`error`
+>   mới `loadFiles()`), và **chỉ có 1 luồng `/status`** chạy tại một thời điểm (cờ `pollRun`).
 > * Hai endpoint mới (đăng ký ở `net_upload_http_begin()`): `GET /files` và `POST /delete` — xem bảng hợp
 >   đồng ở §9.21. Cả hai đều cần token như `/upload`.
 > * Duyệt thẻ: `cyd_sd_root_entry(idx, …)` (mở lại thư mục gốc mỗi lần gọi, **ẩn mục hệ thống** theo
