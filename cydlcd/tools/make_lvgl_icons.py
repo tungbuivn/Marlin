@@ -128,24 +128,41 @@ def downsample(rows: list[list[int]], src_w: int, src_h: int, dst_w: int) -> lis
     return out
 
 
-def outline(rows: list[list[int]], w: int, h: int) -> list[list[int]]:
-    """VIEN (border) cua 1 hinh DAC: giu pixel co alpha > 0 ma co it nhat 1 trong 4 lang gieng alpha == 0
-    (hoac nam sat mep anh). Dung cho icon DAU IN khi CHUA cap nguon:
-    Marlin (man TFT/12864 cu) ve icon dau in DAC khi cap nguon cho hotend, va chi ve VIEN khi ngung cap
-    nguon (yeu cau nguoi dung 2026-10-15: "neu marlin cap nguon cho hot end thi co bieu fill dac icon...
-    den luc ngung cap nguon thi chi ve border ma khong fill"). Bitmap goc cua Marlin la hinh DAC nen phai
-    SINH them ban vien ngay o day (khong the lam bang LVGL: ALPHA_4BIT khong co net/outline).
-    """
+def erode(rows: list[list[int]], w: int, h: int) -> list[list[int]]:
+    """Bao (erode) 1 buoc: giu pixel co alpha>0 ma CA 4 lang gieng cung alpha>0 (khong nam sat mep)."""
     out = [[0] * w for _ in range(h)]
     for y in range(h):
         for x in range(w):
             if rows[y][x] == 0:
                 continue
+            keep = True
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 nx, ny = x + dx, y + dy
                 if nx < 0 or ny < 0 or nx >= w or ny >= h or rows[ny][nx] == 0:
-                    out[y][x] = rows[y][x]      # giu DUNG muc alpha goc de net vien net nhu ban dac
+                    keep = False
                     break
+            if keep:
+                out[y][x] = rows[y][x]
+    return out
+
+
+def outline(rows: list[list[int]], w: int, h: int, thick: int = 2) -> list[list[int]]:
+    """VIEN (border) cua 1 hinh DAC, day `thick` pixel: giu pixel nam trong hinh ma KHONG nam trong phan
+    hinh da bao (erode) `thick` lan. Dung cho icon DAU IN khi CHUA cap nguon:
+    Marlin (man TFT/12864 cu) ve icon dau in DAC khi cap nguon cho hotend, va chi ve VIEN khi ngung cap
+    nguon (yeu cau nguoi dung 2026-10-15: "neu marlin cap nguon cho hot end thi co bieu fill dac icon...
+    den luc ngung cap nguon thi chi ve border ma khong fill"). Bitmap goc cua Marlin la hinh DAC nen phai
+    SINH them ban vien ngay o day (khong the lam bang LVGL: ALPHA_4BIT khong co net/outline).
+    `thick = 2` theo yeu cau nguoi dung 2026-10-15 ("manh qua 2px di ban"): net 1 px nhin qua mong tren LCD.
+    """
+    inner = rows
+    for _ in range(thick):
+        inner = erode(inner, w, h)
+    out = [[0] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            if rows[y][x] and not inner[y][x]:
+                out[y][x] = rows[y][x]      # giu DUNG muc alpha goc de net vien net nhu ban dac
     return out
 
 
