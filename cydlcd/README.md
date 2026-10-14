@@ -364,16 +364,24 @@ AXIS_NOT_HOMED vàng, RATE_100 xanh lá, RATE_ALTERED vàng, PRINT_TIME aqua, PR
 |---|---|
 | 3 ô nhiệt + quạt (64×100) | x = **21 / 127 / 234**: **đầu in (E0)** · **bàn in (BED)** · **quạt (FAN)** — target ở y=8, **icon 64×64** ở y=18 (quạt y=10), nhiệt độ hiện tại ở y=72; đổi màu + đổi icon theo nhiệt độ/tốc độ |
 | Hàng **XYZ** | khung (4, 103, 312, 24); chưa home → hiện `?` màu vàng (`AXIS_NOT_HOMED`), khung đổi màu theo liên kết |
-| **FR / FL** | (70, 136) và (170, 136), **icon 32×32** + `%`; xanh lá khi đúng 100 %, vàng khi khác |
-| **SD / SETTINGS** | 2 nút **icon 64×64** ở (0, 130) và (256, 130) |
+| **FR / FL** + **icon WiFi** | hàng giữa, **y 136..167**. `FR` (54, 136, 68×32) · **icon WiFi 30×30** (128, 139) + **số dBm `-43`** (161, 143) · `FL` (192, 136, 68×32) — icon 32×32 + `%` ở x=32. **Icon WiFi to ĐÚNG BẰNG icon FR/FL** (font icon bản to 30 px) và nằm **giữa 2 ô tốc độ in/flow**; bấm icon → mở trang WIFI. Màu theo trạng thái: **xanh** = đã kết nối, **đỏ** = đang kết nối (`--`), **xám** = WiFi tắt (chu rỗng) |
+| **SD / SETTINGS** | 2 nút **icon 48×48** ở (0, 138) và (272, 138) — **đã thu nhỏ từ 64×64** của Marlin để nhường chỗ cho icon WiFi ở giữa (bitmap 48×48 **sinh sẵn** bằng `tools/make_lvgl_icons.py`, KHÔNG zoom lúc chạy — xem ghi chú bên dưới) |
 | Thời gian in | (96, 176, 128, 20) — `đã in / còn lại` |
 | Thanh tiến độ | (4, 198, 312, 9) + `%` ở (226, 176) |
 | Dòng trạng thái | (0, 216, 320, 20) — `STATE  tên file` hoặc `NO LINK` |
 
+> ⚠️ **Vì sao 2 ô thẻ/SETTINGS phải thu nhỏ, và vì sao KHÔNG dùng `lv_img_set_zoom()`:** hàng giữa của
+> Marlin là `[SD 64] [FR 80] [FL 80] [SET 64]` = **320 px kín**, khe giữa FR và FL chỉ **20 px** — không
+> đủ cho icon 30 px + số dBm. Phải nhường: 2 ô thẻ 64→**48** và 2 khối FR/FL 80→**68** (giá trị `100%`
+> = 4 ký tự × 8 px = 32 px vẫn vừa). Icon thẻ/SETTINGS của Marlin là **ALPHA_4BIT**, mà LVGL 8.4
+> **chỉ transform (zoom/xoay) được TRUE_COLOR\*/RGB565A8** (`lv_draw_sw_transform.c` đưa ALPHA_4BIT vào
+> `default:` ⇒ **không vẽ gì**) — nên nếu zoom thì 2 icon đó **biến mất**; cách đúng là **sinh sẵn bitmap
+> 48×48** (`tools/make_lvgl_icons.py`, mục `SMALL`, lọc trung bình theo diện tích).
+
 ### 5.2 Icon thật của Marlin (`src/ui_lvgl_icons.h`)
 
-Icon **không còn** là hình vẽ lại bằng LVGL: `cydlcd/src/ui_lvgl_icons.h` chứa **10 icon
-64×64 / 32×32 chuyển nguyên từ bitmap GREYSCALE4 của Marlin** (`Marlin/src/lcd/tft/images/*.cpp`)
+Icon **không còn** là hình vẽ lại bằng LVGL: `cydlcd/src/ui_lvgl_icons.h` chứa **12 icon
+64×64 / 48×48 / 32×32 chuyển nguyên từ bitmap GREYSCALE4 của Marlin** (`Marlin/src/lcd/tft/images/*.cpp`)
 sang `LV_IMG_CF_ALPHA_4BIT`, rồi **đổi màu lúc chạy** bằng `lv_obj_set_style_img_recolor()` +
 `recolor_opa = LV_OPA_COVER`.
 
@@ -382,23 +390,27 @@ sang `LV_IMG_CF_ALPHA_4BIT`, rồi **đổi màu lúc chạy** bằng `lv_obj_se
 | `hotend_64x64x4.cpp` | `ui_icon_hotend` | ô đầu in (STATUS) |
 | `heated_bed_64x64x4.cpp` | `ui_icon_bed`, `ui_icon_bed_heated` | ô bàn in — tắt / đang nung (target > 0) |
 | `fan_64x64x4.cpp`, `fan_slow_64x64x4.cpp`, `fan_fast_64x64x4.cpp` | `ui_icon_fan`, `ui_icon_fan_slow`, `ui_icon_fan_fast` | ô quạt — theo tốc độ (0 / <50 % / ≥50 %) |
-| `sd_64x64x4.cpp` | `ui_icon_sd` | nút SD |
-| `settings_64x64x4.cpp` | `ui_icon_settings` | nút SETTINGS |
+| `sd_64x64x4.cpp` | `ui_icon_sd` (+ `ui_icon_sd_48`) | nút SD (STATUS dùng bản **48×48** — xem §5.1) |
+| `settings_64x64x4.cpp` | `ui_icon_settings` (+ `ui_icon_settings_48`) | nút SETTINGS (STATUS dùng bản **48×48**) |
 | `feedrate_32x32x4.cpp`, `flowrate_32x32x4.cpp` | `ui_icon_feedrate`, `ui_icon_flowrate` | FR/FL trên STATUS + hàng FEED/FLOW |
 
 **Sinh lại icon** (chạy từ **thư mục gốc repo**):
 
 ```powershell
 python cydlcd/tools/make_lvgl_icons.py
-# -> Da ghi D:\Marlin\cydlcd\src\ui_lvgl_icons.h (10 icon, 17408 byte du lieu)
+# -> Da ghi D:\Marlin\cydlcd\src\ui_lvgl_icons.h (12 icon, 19712 byte du lieu)
 ```
 
 * Cần **Python 3** — script chỉ dùng `re` / `sys` / `pathlib`, **không cần Pillow** (khác
   `tools/make_font.py`), và cần **nguồn Marlin** có sẵn ở `Marlin/src/lcd/tft/images/`.
-* Kết quả ~**17,0 KB** dữ liệu icon, nằm trong flash của màn hình CYD.
+* Kết quả ~**19,3 KB** dữ liệu icon, nằm trong flash của màn hình CYD.
 * **KHÔNG sửa tay** `ui_lvgl_icons.h` — chạy lại script là **ghi đè**. Muốn thêm/bớt/đổi icon thì
-  sửa bảng `ICONS` trong `tools/make_lvgl_icons.py` (tên file `.cpp`, tên biến mảng, tên symbol
-  xuất ra, rộng, cao) rồi chạy lại.
+  sửa bảng `ICONS` (icon nguyên gốc) hoặc `SMALL` (bản thu nhỏ cho STATUS — khai báo thêm chiều rộng
+  đích; hiện dùng cho `sd`/`settings` → 48×48) trong `tools/make_lvgl_icons.py` rồi chạy lại.
+* Bản thu nhỏ dùng **lọc trung bình theo diện tích** (`downsample()`), KHÔNG phải nearest — để nét
+  icon mảnh (khe thẻ, răng bánh răng) không bị răng cưa. **Không dùng `lv_img_set_zoom()`** được:
+  LVGL 8.4 chỉ transform (zoom/xoay) được `TRUE_COLOR*`/`RGB565A8`, còn `ALPHA_4BIT` rơi vào
+  `default:` của `lv_draw_sw_transform.c` ⇒ **không vẽ gì** (icon biến mất).
 * Đầu file sinh ra có sẵn dòng cảnh báo `FILE NAY DUOC SINH TU DONG -- dung sua tay`.
 * Bảng đổi mức xám: `level ≤ 8` (nền + lớp bóng của Marlin) → **trong suốt**; `9…15` → alpha
   `(level−8)×15/7`, nên icon hiện **giống hệt bản Marlin** khi `recolor` = màu chính và nền =
@@ -565,10 +577,11 @@ Mọi chỗ hiển thị link đều đi qua **một hàm duy nhất** `link_ok(
 **Chẩn đoán không cần thiết bị gì thêm:** log USB của CYD (115200) in **mỗi giây** một dòng:
 
 ```
-[CYD] loop OK | link PUSH=0 TBT=1 state=0 rx=0 err=0 heap=... | TRAM dong=67 loi=0 byte=4221 cach-day=97ms
+[CYD] loop OK | t=8600 ms | link PUSH=0 TBT=1 rx=0 err=0 heap=140852 | TBT dong=67 loi=0 byte=4221 cach-day=97ms
 ```
 
-`byte` = **tổng số byte** nhận trên chân RX (đếm cả rác), `dong` = số dòng `TRAM` hợp lệ, `loi` = dòng sai khung, `cach-day` = ms từ dòng cuối. Link tốt ⇒ `dong` tăng ~**5/giây**, `loi=0`, `cach-day` < **2000 ms** (`TBT_LINK_TIMEOUT_MS`).
+`byte` = **tổng số byte** nhận trên chân RX (đếm cả rác), `dong` = số dòng `TBT` hợp lệ, `loi` = dòng sai khung, `cach-day` = ms từ dòng cuối. Link tốt ⇒ `dong` tăng ~**5/giây**, `loi=0`, `cach-day` < **2000 ms** (`TBT_LINK_TIMEOUT_MS`).
+⚠️ Phần sau dấu `|` (`TBT dong/loi/byte/cach-day`) **chỉ in ở chế độ TBT**; khi chưa từng nhận dòng nào thì `cach-day` = `millis()` (số rất lớn = "chưa bao giờ"). 4 bộ đếm này lấy từ `tbt.lines/tbt.errors/tbt.raw_bytes/tbt.last_rx_ms`, in ở `main.cpp` (năm 2026-10-14 chúng từng bị bỏ khỏi dòng log nhưng **vẫn được đếm** — đã in lại).
 
 **4 nút còn lại gửi đúng 1 ký tự xuống Marlin** (`tbt_protocol.h`): `P` = probe lại góc đang đứng ·
 `D` = góc này xong (đi góc cần chỉnh kế tiếp; hết góc → home Z + probe lại 4 góc) · `M` = đổi mốc
@@ -603,10 +616,10 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 |---|---|
 | Màn trắng / không có gì | dây SPI (SCK/MOSI/CS/DC/RST), chân BL, `TFT_ROTATION`; thử `TFT_SPI_SPEED` thấp hơn (12 MHz) nếu dây dài |
 | Header hiện `NO LINK` | **kiểu PUSH**: dây TX/RX có **chéo** không, GND chung chưa, baud 2 bên có trùng `250000`, Marlin đã bật `CYDLCD_SERIAL_UI` chưa (và đã tắt màn 12864 chưa), cờ `-DUSING_HW_SERIAL3 -DPIN_SERIAL3_*` có trong env chưa |
-| Màn **TRAMMING** hiện `NO LINK` | **kiểu TRAM**: Marlin đã thêm `#define CYDLCD_TBT_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `CYDLCD_TBT_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TRAM` nào. **Trước tiên hãy chắc chắn dây màn hình CYD đang ở `P3` (IO22+IO35) chứ KHÔNG phải `P5`/`P1` cạnh USB-C** — xem §2.1; và đọc log USB: `rx=0 err=0` = không có tín hiệu (sai cổng/chưa chung GND), `err>0` = sai baud |
-| **Thanh trên cùng ghi `NO LINK` nhưng dòng MENU ghi `san sang`** | **Bình thường ở chế độ TRAM** (trước 2026-10-13 là lỗi hiển thị, đã sửa): thanh trên từng chỉ xét `cydlcd.linked` (**giao thức PUSH**) nên ở chế độ TRAM luôn `NO LINK` dù link TRAM tốt. Nay thanh trên xét **cả hai** (`cydlcd.linked \|\| tram.linked`) ⇒ hiện `LINK OK`. Nếu vẫn `NO LINK` thật thì đọc log USB: `TRAM dong=` có tăng không, `cach-day` có < 2000 ms không |
-| Cần biết **màn hình CYD có nhận byte nào không** (không cần thiết bị gì thêm) | Log USB của CYD (`115200`) in mỗi giây: `link PUSH=<0/1> TRAM=<0/1> rx-active=<0/1> … \| TRAM dong=<số dòng hợp lệ> loi=<dòng lỗi> byte=<TỔNG byte nhận> cach-day=<ms>`. Đọc: `byte=0` + `rx-active=0` = **không có tín hiệu** ở chân RX (sai dây/cổng/chưa chung GND/board tắt) · `rx-active=1` mà `dong=0` = **có byte nhưng sai khung/baud** (tương ứng `LINK ERR`) · `dong` tăng ~**5/giây** = link tốt · `cach-day` khi rảnh phải **< 2000 ms**, khi wizard **đang bận** cho phép tới **20 s** (`TBT_LINK_BUSY_TIMEOUT_MS`) |
-| **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TRAM` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TBT_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TBT_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TBT_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
+| Màn **TRAMMING** hiện `NO LINK` | **kiểu TBT**: Marlin đã thêm `#define CYDLCD_TBT_LINK` chưa; dây nối **USART1 = PA9/PA10** (header MKS WiFi) đã **chéo TX↔RX** + **chung GND** chưa; baud 2 bên 250000; `git diff Marlin/Configuration.h` phải thấy đúng 1 dòng `CYDLCD_TBT_LINK`. Trong MENU, dòng `Tramming wizard` ghi `chua bat` = chưa nhận được dòng `TBT` nào. **Trước tiên hãy chắc chắn dây màn hình CYD đang ở `P3` (IO22+IO35) chứ KHÔNG phải `P5`/`P1` cạnh USB-C** — xem §2.1; và đọc log USB: `byte` đứng yên = không có tín hiệu (sai cổng/chưa chung GND), `loi>0` = sai baud |
+| **Thanh trên cùng ghi `NO LINK` nhưng dòng MENU ghi `san sang`** | **Bình thường ở chế độ TBT** (trước 2026-10-13 là lỗi hiển thị, đã sửa): thanh trên từng chỉ xét `cydlcd.linked` (**giao thức PUSH**) nên ở chế độ TBT luôn `NO LINK` dù link TBT tốt. Nay thanh trên xét **cả hai** (`cydlcd.linked \|\| tbt.linked`) ⇒ hiện `LINK OK`. Nếu vẫn `NO LINK` thật thì đọc log USB: `TBT dong=` có tăng không, `cach-day` có < 2000 ms không |
+| Cần biết **màn hình CYD có nhận byte nào không** (không cần thiết bị gì thêm) | Log USB của CYD (`115200`) in mỗi giây: `link PUSH=<0/1> TBT=<0/1> rx=<số frame> err=<số lỗi> heap=<B> \| TBT dong=<số dòng hợp lệ> loi=<dòng lỗi> byte=<TỔNG byte nhận> cach-day=<ms>`. Đọc: **cờ TBT=0** = link TBT chưa tính là "sống" · `byte` **đứng yên** = **không có tín hiệu** ở chân RX (sai dây/cổng/chưa chung GND/board tắt), còn `byte` **tăng** mà `dong=0` = **có byte nhưng sai khung/baud** (tương ứng `LINK ERR`) · `dong` tăng ~**5/giây** = link tốt · `cach-day` khi rảnh phải **< 2000 ms**, khi wizard **đang bận** cho phép tới **20 s** (`TBT_LINK_BUSY_TIMEOUT_MS`) |
+| **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TBT` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TBT_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TBT_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TBT_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
 | Màn **TRAMMING** hiện `PROBE`/`ERR` mãi | góc đó chưa probe được (đầu dò lỗi/ngoài tầm) → bấm `PROBE` lại; `ERR` = lần probe vừa rồi trả `NAN` |
 | Màn hình CYD không nhận nhiệt độ/vị trí | Marlin phải build ở **chế độ màn hình CYD** (`set_cydlcd_mode.ps1 -Mode status` để xem) — nếu còn `MKS_MINI_12864_V3` thì Marlin sẽ báo lỗi SanityCheck |
 | Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/cydlcd_config.h` |
@@ -1518,6 +1531,30 @@ bật hotend/bàn, không di chuyển trục nào**. Dùng được cho cả khi
 * `M22`/`M21` ×4 đều báo OK; `M20` **6/6**; `M20 L` ra `INFO.GCO 93200 INFO.GCO`; `M33` ra `/INFO.GCO`.
 * `M23` lặp lại **ngay sau `M22`** không in gì (thẻ đã bị nhả) — nhớ `M21` trước.
 
+### 12.7 ⛔ KHÔNG thể nạp firmware Marlin **từ thẻ SD** trong kiến trúc này (2026-10-14)
+
+> **Trạng thái: CHƯA TEST — nhưng theo thiết kế là FAIL. Đừng trông cậy vào đường này.**
+> Ghi ra đây để lần sau không mất thời gian thử: cả 3 đường “nạp từ thẻ” đều không đi được.
+
+| Đường nạp từ thẻ | Vì sao fail |
+|---|---|
+| **Marlin `SD_FIRMWARE_UPDATE`** (đọc file trên thẻ rồi tự ghi flash) | Tính năng này **chỉ dành cho ATmega2560**: `SanityCheck.h:3929` báo `#error "SD_FIRMWARE_UPDATE requires an ATmega2560-based (Arduino Mega) board."` ⇒ với STM32F407 **bật lên là không build được**, không phải “chạy sai”. Bản này để comment (`Configuration_adv.h:1749`) |
+| **Bootloader MKS nạp từ thẻ** (đặt `mks_monster8.bin`/`.cur` ở gốc thẻ rồi reset) | Bootloader phải **tự đọc thẻ SPI trên mainboard**, nhưng thẻ nay nằm ở **khe của màn hình CYD** (mainboard đã `NO_SD_DETECT`, không còn dùng SPI thẻ — khe thẻ trên board **để trống**; xem §12.3). Đường duy nhất tới thẻ đang dùng là **UART + giao thức của màn hình** (`cyd_usart` / SD-over-UART, §12.4) mà **bootloader KHÔNG có driver/giao thức đó** ⇒ nó “không thấy thẻ” ⇒ **không có file để nạp**. *(Ngoại lệ duy nhất, **CHƯA TEST**: **cắm thêm một thẻ vào khe trên mainboard** thì bootloader có thể đọc được — vì đó là SPI thẻ thật của board; nhưng Marlin ở cấu hình này **không dùng** khe đó, nên thẻ ấy chỉ dùng được cho việc nạp firmware, không dùng để in.)* |
+| **Marlin nạp hộ** (`M997` + file trên thẻ) | `M997` ở bản này (`STM32_DFU_REBOOT`) chỉ **nhảy vào ROM DFU qua USB** — không đọc/copy từ thẻ (`HAL.cpp:172-224`, `Marlin/src/gcode/control/M997.cpp`) |
+
+**Vì sao chắc chắn vướng (lý do kiến trúc)**: đọc thẻ trong cấu hình này cần **Marlin đang chạy**
+(để gửi `CYDLCD_F_SDREQ` xin từng sector) **và màn hình CYD đang chạy** (để trả sector). Lúc cần
+nạp firmware thì chính Marlin là thứ đang bị thay ⇒ **vòng lặp con gà–quả trứng**, bootloader không
+thể tham gia vào giao thức đó.
+
+**✅ Cách nạp đúng** (đã chạy thật):
+* **Marlin**: USB DFU — `M997` (hoặc nút **REBOOT DFU** trong trang CUSTOM / menu Advanced) rồi
+  `dfu-util -a 0 -s 0x0800C000:leave -D .pio\build\mks_monster8\mks_monster8.bin`
+  (chi tiết: **`README.md` gốc §11.6**), hoặc **ST-Link**.
+* **Màn hình CYD** (firmware riêng, không liên quan Marlin): nạp qua **COM7** —
+  `pio run -d cydlcd -e cydlcd_esp32 -t upload --upload-port COM7`.
+* ⚠️ Hai firmware **nạp riêng**; đổi giao thức (proto) thì phải nạp **cả 2** (§12.4).
+
 
 
 
@@ -1549,8 +1586,9 @@ UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co th
 - **`UI_MONO_FONT 0`**: chi Montserrat 14 mac dinh cua LVGL (du phong). **KHONG HIEN DUOC DAU tieng
   Viet** -> `vn_font()`/`vn_font_btn()` thanh no-op, 3 nhan co dau o lop phu SUA ("Gia tri" / "Buoc" /
   "Huy") se ra **O VUONG**. Muon co dau thi PHAI dung che do 4.
-- Font ICON (WiFi / the nho) dung rieng `gfx4_font_icons` (ban nho 14 px cho header) va
-  `gfx4_font_icons_big` (ban to 30 px cho man STATUS), cung sinh bang `tools/ttf2gfxfont.py`.
+- Font ICON (WiFi / the nho) dung rieng `gfx4_font_icons` (ban nho 14 px — icon WiFi o header) va
+  `gfx4_font_icons_big` (ban to 30 px — icon WiFi o man STATUS, to bang icon FR/FL 32x32), cung sinh
+  bang `tools/ttf2gfxfont.py`.
 - Cac font sinh bang `lv_font_conv` **DA XOA khoi repo** (che do 1 va 2 gan o cap man hinh / tung
   vat deu da thu tren may that va **MAT HET CHU**; che do 3 chua lam) — dung lai la vo ich.
 - `line_height` cua font mono la 17 (Montserrat 14 la 16): chieu cao moi man da duoc tinh theo 17 px
@@ -1618,11 +1656,13 @@ Log nam tren **Serial cua ESP32 (USB-UART = COM7 @ 115200)** va **chi in khi env
 `-DCYDLCD_CYD_DEBUG=1`** — hien dang **BAT** (`platformio.ini:133`; **nho bo co khi dung that**):
 
 ```
-[CYD] loop OK | link PUSH=<0/1> TRAM=<0/1> rx=<so frame> err=<so loi> heap=<byte>
+[CYD] loop OK | t=<ms> | link PUSH=<0/1> TBT=<0/1> rx=<so frame> err=<so loi> heap=<byte>
+             | TBT dong=<so dong hop le> loi=<so dong loi> byte=<TONG byte nhan> cach-day=<ms>
 ```
 
-(`src/main.cpp:56-58`, in **1 lan/giay**. Luc boot con in **reset reason** + free heap —
-`src/main.cpp:35-36, 41, 45`.)
+(`src/main.cpp`, in **1 lan/giay**. Luc boot con in **reset reason** + free heap + **vong lap truoc
+dung o chang nao / bao lau**; moi giay con in them dong `[CYD] chang: ...` (thoi gian tung chang cua
+vong lap truoc) va `[CYD] lvmem: used/tong B` (pool LVGL) — xem muc chan doan treo.)
 
 Doc bang:
 
