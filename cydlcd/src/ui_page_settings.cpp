@@ -70,16 +70,10 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_FILAMENT_VOL,  "Filament vol",       1, 0 },  // M200 S0/S1 (0 = tat bu bang the tich)
   { CYDLCD_SET_FC_LOAD,       "FC load mm",      1000, 1 },  // M603 L
   { CYDLCD_SET_FC_UNLOAD,     "FC unload mm",    1000, 1 },  // M603 U
-  // PREHEAT presets (MAN HINH CYD tu luu trong NVS - xem khoi o tren): do C / do C / 0..255
-  { CYDLCD_PRE_ID_BASE + 1, "PLA nozzle C",     100, 0 },
-  { CYDLCD_PRE_ID_BASE + 2, "PLA bed C",        100, 0 },
-  { CYDLCD_PRE_ID_BASE + 3, "PLA fan",            1, 0 },
-  { CYDLCD_PRE_ID_BASE + 4, "PETG nozzle C",    100, 0 },
-  { CYDLCD_PRE_ID_BASE + 5, "PETG bed C",       100, 0 },
-  { CYDLCD_PRE_ID_BASE + 6, "PETG fan",           1, 0 },
-  { CYDLCD_PRE_ID_BASE + 7, "ABS nozzle C",     100, 0 },
-  { CYDLCD_PRE_ID_BASE + 8, "ABS bed C",        100, 0 },
-  { CYDLCD_PRE_ID_BASE + 9, "ABS fan",            1, 0 },
+  // 2026-10-15: 9 dong PREHEAT (PLA/PETG/ABS x nozzle/bed/fan) DA BO khoi bang nay.
+  // YEU CAU NGUOI DUNG: "trong phan setting co menu preheat lap lai rat nhieu lan, gom vao 1 menu la
+  // preheat" -> preheat nay nam o CONFIGURATION > Preheat (danh sach vat lieu + HOP SUA 3-trong-1,
+  // xem ui_page_preheat.cpp). Nho vay bang nay bot 9 dong va khong con 3 nhom preheat lap lai.
   { CYDLCD_SET_STEPS_MM_X,    "Steps X",       1000, 2 },
   { CYDLCD_SET_STEPS_MM_Y,    "Steps Y",       1000, 2 },
   { CYDLCD_SET_STEPS_MM_Z,    "Steps Z",       1000, 2 },
@@ -401,31 +395,8 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     se_fmt_id(c, sizeof(c), CYDLCD_SET_PID_BED_KD, kd);
     snprintf(cmd, sizeof(cmd), "M304 P%s I%s D%s", a, b, c);
   }
-  else if (id > CYDLCD_PRE_ID_BASE && id <= (uint16_t)(CYDLCD_PRE_ID_BASE + CYDLCD_PRE_COUNT * 3)) {
-    // PREHEAT preset: KHONG gui M-code nao (Marlin khong co M145 trong build nay) - ghi vao NVS
-    // CUA MAN HINH CYD roi bom lai vao bang de bang + nut o man TEMP thay gia tri moi ngay.
-    // Gia tri doc/ghi qua API CONG KHAI (ui_preheat_get/ui_preheat_set): chi ui_preheat.cpp giu mang s_pre_*.
-    const uint8_t k   = (uint8_t)(id - CYDLCD_PRE_ID_BASE - 1);   // 0..8
-    const uint8_t pre = (uint8_t)(k / 3);                        // 0..2 (PLA/PETG/ABS)
-    const uint8_t fld = (uint8_t)(k % 3);                        // 0 hotend, 1 bed, 2 fan
-    uint16_t h = 0, b = 0;                                       // 2 truong kia giu nguyen gia tri cu
-    uint8_t  fan = 0;
-    ui_preheat_get(pre, &h, &b, &fan);
-    int32_t v = raw;
-    if (fld == 2) {
-      if (v < 0) v = 0; else if (v > PRE_F_MAX) v = PRE_F_MAX;
-      fan = (uint8_t)v;
-    } else {
-      const int32_t mx = (fld == 0) ? PRE_H_MAX : PRE_B_MAX;
-      v = v / 100;                                     // raw = do C * 100 (scale 100) -> do C
-      if (v < 0) v = 0; else if (v > mx) v = mx;
-      if (fld == 0) h = (uint16_t)v; else b = (uint16_t)v;
-    }
-    ui_preheat_set(pre, h, b, fan);                    // chan gia tri + luu NVS + bom lai bang + nhan nut TEMP
-    WIFILOG("[PRE] %s: nozzle=%u bed=%u fan=%u (da luu NVS)\n", ui_preheat_label(pre),
-            (unsigned)h, (unsigned)b, (unsigned)fan);
-    return true;
-  }
+  // (2026-10-15: nhanh "PREHEAT preset" o day DA BO cung voi 9 dong preheat cua bang - preheat nay
+  //  sua bang HOP SUA 3-trong-1 o CONFIGURATION > Preheat, xem ui_page_preheat.cpp.)
   else return false;      // id khac (Junction dev / Linear adv...) -> khong gui gi
 
   cydlcd_link_send_gcode(cmd);
@@ -699,9 +670,6 @@ void page_settings_create(lv_obj_t *p) {
 
 void page_settings_update(void) {
   char b[40], a[16];
-  // 9 dong preheat do MAN HINH CYD tu quan ly (khong phai Marlin) -> bom lai truoc khi dung danh sach,
-  // de sau M501/M502 (Marlin xoa bang) hay luc moi ket noi chung van con.
-  preheat_inject();
   if (!se_table || !se_info) return;      // trang da bi thu hoi (an toan: xem page_settings_destroy)
   // Neu so thong so nhan duoc doi (HELLO moi / bam lai) -> dung lai danh sach dong co gia tri
   static uint8_t last_n = 255;
@@ -755,7 +723,6 @@ void settings_test_edit(const char *arg) {
 // VI SAO CAN: bang nam tren LCD, khong doc nguoc duoc tu PC - day la cach DUY NHAT kiem tra "Marlin co day
 // thong so nay khong / man hinh dang hien gi" (vd khi moi them dong "Fade height mm").
 void page_settings_dump(void) {
-  preheat_inject();                       // 9 dong preheat do man hinh CYD tu quan ly
   // PHAI dung lai danh sach truoc khi in: `se_idx/se_n` chi duoc dien khi mo trang SETTINGS hoac khi so
   // thong so doi -> neu nguoi dung chua mo trang thi mang con rong (lan dau chay da in ra "0/49 dong").
   settings_build_list();

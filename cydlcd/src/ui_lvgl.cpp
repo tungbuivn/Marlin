@@ -267,7 +267,7 @@ void do_action(const int a) {
     case A_GOTO_RATE:     show_page(PG_RATE); break;
     case A_GOTO_STATUS:   show_page(PG_STATUS); break;   // nut HOME: ve thang man STATUS
     case A_GOTO_WIFI:     show_page(PG_WIFI); break;     // icon WiFi / muc MENU: mo trang WIFI
-    case A_GOTO_MPC:      show_page(PG_MPC);  break;     // nut "TUNING" o man NHIET DO -> trang TUNING (MPC)
+    case A_GOTO_MPC:      show_page(PG_MPC);  break;     // muc "Tuning (MPC/PID)" trong MENU -> trang TUNING
     case A_GOTO_ENDSTOP:  show_page(PG_ENDSTOP); break;
     case A_HOME:          cydlcd_link_send_gcode("G28"); break;
     case A_HOME_X:        cydlcd_link_send_gcode("G28 X"); break;
@@ -285,6 +285,8 @@ void do_action(const int a) {
     // Sau khi nap thi gia tri trong RAM doi -> xin Marlin gui lai bang thong so cho man hinh.
     case A_LOAD_SETTINGS: cydlcd_link_send_gcode("M501");
                           cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS); break;
+    // Mo BAN PHIM dat ten vat lieu moi (muc "+ Them vat lieu" trong menu CONFIGURATION > Preheat).
+    case A_PRE_ADD:       preheat_add_open(); break;
     case A_INITSD:        cydlcd_link_send_gcode2("M22", "M21"); break;   // nha the SD roi init lai
     case A_G34:           cydlcd_link_send_gcode("G34 Q99"); break;
     case A_REQ_FILES:     cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES); break;
@@ -334,8 +336,9 @@ void do_confirmed(const uint8_t act) {
     case A_REBOOT_DFU:
       cydlcd_link_request((uint8_t)CYDLCD_REQ_DFU);     // Marlin: STM32_DFU_REBOOT
       break;
-    case A_FILES_DELETE:
-      files_delete_now();                             // xoa file SD dang chon (M30) - man FILE
+    case A_FILES_DELETE:      files_delete_now();                             // xoa file SD dang chon (M30) - man FILE
+      break;
+    case A_PRE_DELETE:        preheat_delete_pending();   // xoa vat lieu preheat dang chon (nut "Xoa" - ui_page_preheat.cpp)
       break;
     case A_WIFI_FORGET:
       if (net_wifi_disconnect) net_wifi_disconnect(true);   // xoa cau hinh WiFi (quen NVS)
@@ -471,6 +474,11 @@ void show_page(uint8_t p) {
   // lop phu nam tren lv_scr_act nen neu con mo ma trang bi xoa thi no van nam de len trang moi
   // (xem page_settings_destroy).
   if (p != PG_SETTINGS && p != PG_SUBMENU) ov_hide();
+  // HOP SUA PREHEAT 3-trong-1 mo tu khoi "Preheat" cua menu CONFIGURATION (PG_SUBMENU) -> roi menu do
+  // thi dong luon; BAN PHIM dat ten vat lieu la lop phu TOAN MAN nen doi trang la phai don (giong cach
+  // man WIFI don ban phim mat khau - xem wifi_page_leave).
+  if (p != PG_SUBMENU) preheat_edit_hide();
+  if (prev != p) preheat_kb_hide();
 
   // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
   // con cua trang) va KHONG dung toi WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
@@ -587,10 +595,10 @@ void ui_lvgl_begin(void) {
   s_indev = indev;                        // + de KHOA/MO input khi quet WiFi (xem cb_wifi_scan)
 
   build_chrome();
-  // Kho preset preheat cua MAN HINH CYD (NVS) - doc 1 lan luc boot roi bom vao bang thong so de trang
-  // SETTINGS hien/sua duoc. Phai sau cydlcd_link_begin() (xem main.cpp) vi cydlcd.settings[] moi co.
+  // Kho preset preheat cua MAN HINH CYD (NVS "ph2"; ban cu "ph" duoc di tru mot lan) - doc 1 lan luc boot.
+  // Tu 2026-10-15 danh sach nay KHONG bom vao bang thong so nua (khong con 9 dong preheat o bang
+  // SETTINGS): no hien o CONFIGURATION > Preheat va sua bang hop 3-trong-1 (xem ui_page_preheat.cpp).
   preheat_load();
-  preheat_inject();
   show_page(PG_STATUS);
 
   s_tick_ms = s_upd_ms = s_slow_ms = ui_port_millis();
@@ -947,8 +955,9 @@ void ui_lvgl_test_hit(const char *arg) {
   const uint8_t page0 = s_page_act;
   // LOP PHU SUA dang mo: cac nut cua no nam tren lv_layer_top() (KHONG phai con cua trang) -> tim o do
   // truoc. Chi so: 0..3 = nut buoc 0.01/0.1/1/10, 4 = '-', 5 = '+', 6 = OK, 7 = Huy -> bam duoc CA
-  // duong sua + gui M-code tu PC (khong cham duoc vao LCD).
-  lv_obj_t *root = ov_is_open() ? lv_layer_top() : pg;
+  // duong sua + gui M-code tu PC (khong cham duoc vao LCD). HOP SUA PREHEAT 3-trong-1 cung vay:
+  // 0..2 = o NOZ/BED/FAN, 3..5 = muc buoc, 6 = '-', 7 = '+', 8 = OK, 9 = Huy, 10 = Xoa.
+  lv_obj_t *root = (ov_is_open() || preheat_edit_active()) ? lv_layer_top() : pg;
   uint16_t idx = (uint16_t)k;
   lv_obj_t *o = hit_nth(root, &idx);
   if (!o) {
@@ -1186,15 +1195,18 @@ void ui_lvgl_dump_busy(void) {
                 (cydlcd.hello_flags & CYDLCD_HAS_MESH) ? "co" : "khong");
 }
 
-// CHAN DOAN: bam nut preset preheat (PLA/PETG/ABS) cua man TEMP tu console (`UI PRE <k>` tren COM7).
+// CHAN DOAN: bam nut preheat cua man TEMP tu console. Tu 2026-10-15 lenh `UI PRE ...` duoc xu ly boi
+// preheat_test_cmd() (ui_page_preheat.cpp) vi preheat la DANH SACH dong (them/bot vat lieu); ham nay
+// giu lai cho tuong thich (khong con duoc goi tu main.cpp).
 void ui_lvgl_test_preheat(const char *arg) {
   int k = -1;
   if (arg && *arg) sscanf(arg, "%d", &k);
-  if (k < 0 || k >= (int)CYDLCD_PRE_COUNT) {
-    Serial.println("[UI] dung: UI PRE <0=PLA|1=PETG|2=ABS>  (mo man 'UI NHIET DO' truoc)");
+  if (k < 0 || k >= (int)ui_preheat_count()) {
+    Serial.printf("[UI] dunghoac: UI PRE <0..%u>  (mo man 'UI NHIET DO' truoc)\n",
+                  (unsigned)(ui_preheat_count() ? ui_preheat_count() - 1 : 0));
     return;
   }
-  Serial.printf("[UI] bam nut preheat %s\n", ui_preheat_label((uint8_t)k));
+  Serial.printf("[UI] bam nut preheat '%s'\n", ui_preheat_name((uint8_t)k));
   temp_test_preheat((uint8_t)k);
 }
 

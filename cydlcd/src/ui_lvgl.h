@@ -59,9 +59,10 @@ void ui_lvgl_test_dialog(void);
 // do co duoc chon + to sang khong, dang chon file nao, va xoa file/thu muc rong co chay khong.
 void ui_lvgl_test_tap(const char *arg);
 
-// CHAN DOAN man NHIET DO: ban su kien CHAM vao nut preset preheat thu `arg` (0=PLA, 1=PETG, 2=ABS) -
-// lenh `UI PRE <k>` tren COM7. Di dung duong su kien that (cb_temp_preheat) nen kiem tra duoc tu PC:
-// nut nay gui `M104 S<nozzle>` + `M140 S<bed>` theo preset luu trong NVS cua man hinh.
+// CHAN DOAN man NHIET DO: ban su kien CHAM vao nut preheat thu `arg` - di dung duong su kien that
+// (cb_temp_preheat) nen kiem tra duoc tu PC: nut nay gui `M104 S<nozzle>` + `M140 S<bed>` theo vat lieu
+// luu trong NVS cua man hinh. Tu 2026-10-15 lenh `UI PRE ...` duoc xu ly boi preheat_test_cmd() (danh
+// sach vat lieu dong); ham nay giu lai cho tuong thich, xem ui_page_preheat.cpp.
 void ui_lvgl_test_preheat(const char *arg);
 
 // CHAN DOAN nhiet do: in CA HAI nguon ma man hinh dang co de doi chieu - lenh `UI TEMPS` tren COM7
@@ -157,15 +158,32 @@ void ui_lvgl_test_back(void);
 // in thong bao dang luu + thoi gian con lai; text rong ("UI NOTIFY 0") -> xoa thong bao dang luu.
 void ui_lvgl_test_notify(const char *arg);
 
-// ---- PRESET PREHEAT (PLA/PETG/ABS) -----------------------------------------
-// 3 preset do CHINH MAN HINH CYD luu (NVS namespace "ph") vi ban Marlin nay khong co M145/HAS_PREHEAT.
-// Hien/sua duoc o trang SETTINGS (9 dong "PLA/PETG/ABS nozzle|bed|fan") va nut tren trang TEMP.
-//   i = 0..2 (PLA/PETG/ABS). Gia tri: nozzle/bed = do C, fan = 0..255 (0 = khong dong tới quat).
-//   ui_preheat_set() chan gia tri vao khoang hop le, ghi NVS va cap nhat bang thong so.
-// Tra false neu i ngoai khoang.
-bool ui_preheat_get(uint8_t i, uint16_t *nozzle, uint16_t *bed, uint8_t *fan);
+// ---- PRESET PREHEAT: DANH SACH VAT LIEU do NGUOI DUNG tu them/bot (2026-10-15) ---------------
+// Do CHINH MAN HINH CYD luu (NVS namespace "ph2"; ban cu 3 preset o "ph" duoc di tru mot lan) vi ban
+// Marlin nay khong co M145/HAS_PREHEAT. Sua o CONFIGURATION > Preheat (hop 3-trong-1: nozzle/bed/fan),
+// bam de preheat o trang NHIET DO (toi da CYDLCD_PRE_MAX = 6 vat lieu - tran cua trang do).
+// Cac gioi han nay nam o HEADER CONG KHAI vi ca main.cpp (lenh console `PRE ...`) cung dung.
+#define CYDLCD_PRE_MAX     6           // TRAN CUNG: 6 vat lieu (2 hang x 3 nut o trang NHIET DO)
+#define PRE_NAME_LEN       9           // ten vat lieu toi da 8 ky tu + '\0' ("PETG" = 4)
+#define PRE_H_MAX 300                  // nozzle 0..300 do C
+#define PRE_B_MAX 120                  // bed 0..120 do C
+#define PRE_F_MAX 255                  // fan 0..255 (gia tri M106 S...)
+#define CYDLCD_PRE_SEED   3            // so vat lieu MAC DINH lan dau (PLA/PETG/ABS)
+//   Gia tri: nozzle/bed = do C, fan = 0..255 (0 = KHONG dong toi quat).
+//   ui_preheat_set()/add()/rename() chan gia tri + ghi NVS + bao cac trang ve lai (ui_preheat_rev()).
+uint8_t     ui_preheat_count(void);                 // so vat lieu dang co (1..CYDLCD_PRE_MAX)
+uint32_t    ui_preheat_rev(void);                   // tang moi khi danh sach/gia tri doi
+const char *ui_preheat_name(uint8_t i);             // ten vat lieu ("" neu i sai)
+bool ui_preheat_get(uint8_t i, uint16_t *nozzle, uint16_t *bed, uint8_t *fan);   // false = i sai
 bool ui_preheat_set(uint8_t i, uint16_t nozzle, uint16_t bed, uint8_t fan);
-const char *ui_preheat_label(uint8_t i);      // "PLA" / "PETG" / "ABS" ("" neu i sai)
+bool ui_preheat_add(const char *name);              // ten rong -> "MAT n"; false = da du 6
+bool ui_preheat_remove(uint8_t i);                  // false = i sai / con 1 vat lieu (khong cho xoa het)
+bool ui_preheat_rename(uint8_t i, const char *name);
+
+// CHAN DOAN preheat (lenh `UI PRE ...` tren COM8, xem ui_page_preheat.cpp): khong tham so = in danh
+// sach vat lieu + trang thai 2 lop phu; `<k>` = bam nut preset thu k o man NHIET DO; `ADD <ten>` /
+// `DEL <i>` / `SET <i> <h> <b> <f>` / `NAME <i> <ten>` / `OPEN <i>` / `KB`.
+void preheat_test_cmd(const char *arg);
 
 // ---- Port phan cung (ui_lvgl_port.cpp) ----
 void     ui_port_display_init(void);        // init LCD (STM32: tft_ili9341, CYD: TFT_eSPI)

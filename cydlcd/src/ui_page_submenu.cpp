@@ -52,6 +52,10 @@
 #define SM_SUB 0     // arg = chi so NHOM con (mo tiep)
 #define SM_VAL 1     // arg = ID thong so (CYDLCD_SET_*) -> cham vao mo lop phu SUA
 #define SM_ACT 2     // arg = hanh dong A_* (do_action)
+// 2026-10-15: dong VAT LIEU PREHEAT (arg = chi so slot trong kho preheat). Khac SM_VAL: gia tri
+// khong nam trong bang SET_ROWS ma lay tu ui_preheat_*() (NVS "ph2"), va cham vao mo HOP SUA
+// 3-trong-1 (nozzle/bed/fan cung 1 hang) chu khong phai lop phu sua 1 so.
+#define SM_PRE 3
 
 // SM_PARENT_NONE (255 = nhom GOC) nam trong ui_lvgl_int.h vi do_action() cua ui_lvgl.cpp cung dung.
 
@@ -71,19 +75,20 @@ enum {
   SMG_FILAMENT,     //   Filament
   SMG_TUNE,         //   Tune (runtime)
   SMG_CTRLFAN,      // Controller Fan (ngang cap Advanced Settings)
-  SMG_PRE_PLA,      // Preheat PLA Settings
-  SMG_PRE_PETG,     // Preheat PETG Settings
-  SMG_PRE_ABS,      // Preheat ABS Settings
+  SMG_PREHEAT,      // Preheat (DANH SACH vat lieu do nguoi dung them/bot - toi da 6)
   SMG_COUNT
 };
 
 typedef struct { const char *name; uint8_t kind; uint16_t arg; } sm_item_t;
 typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint8_t n; } sm_group_t;
 
-// Cac macro cho bang duoi gon va khong the go sai thu tu tham so:
+// Cac macro cho bang duong gon va khong the go sai thu tu tham so:
 #define SM_S(txt, g)  { txt, SM_SUB, (uint16_t)(g) }
 #define SM_V(txt, id) { txt, SM_VAL, (uint16_t)(id) }
 #define SM_A(txt, a)  { txt, SM_ACT, (uint16_t)(a) }
+// Dong vat lieu preheat: `txt` chi la TEN TAM (hien luc moi tao trang, ngay sau do
+// page_submenu_update() ghi ten THAT tu kho preheat vao).
+#define SM_P(slot)    { "Vat lieu", SM_PRE, (uint16_t)(slot) }
 
 // ===========================================================================
 //  CAY MENU (thu tu dong y nhu menu Configuration cua 12864)
@@ -91,9 +96,9 @@ typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint
 static const sm_item_t SM_I_ROOT[] = {
   SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
   SM_S("Controller Fan",            SMG_CTRLFAN),
-  SM_S("Preheat PLA Settings",      SMG_PRE_PLA),
-  SM_S("Preheat PETG Settings",     SMG_PRE_PETG),
-  SM_S("Preheat ABS Settings",      SMG_PRE_ABS),
+  // 2026-10-15 (YEU CAU NGUOI DUNG: "gom vao 1 menu la preheat, cho phep them bot vat lieu"):
+  // 3 dong "Preheat PLA/PETG/ABS Settings" cu -> MOT dong "Preheat" (danh sach dong, toi da 6).
+  SM_S("Preheat",                   SMG_PREHEAT),
   SM_S("Advanced Settings",         SMG_ADV),
   SM_A("Store Settings (M500)",     A_SAVE),
   SM_A("Load Settings (M501)",      A_LOAD_SETTINGS),
@@ -222,21 +227,13 @@ static const sm_item_t SM_I_CTRLFAN[] = {
   SM_V("Idle Period (s)",           CYDLCD_SET_CTRLFAN_DURATION)     // M710 D
 };
 
-// 9 preset preheat do MAN HINH CYD luu trong NVS (id 0x40xx) - xem ui_preheat.cpp.
-static const sm_item_t SM_I_PRE_PLA[] = {
-  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 1),
-  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 2),
-  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 3)
-};
-static const sm_item_t SM_I_PRE_PETG[] = {
-  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 4),
-  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 5),
-  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 6)
-};
-static const sm_item_t SM_I_PRE_ABS[] = {
-  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 7),
-  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 8),
-  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 9)
+// PREHEAT: danh sach vat lieu do NGUOI DUNG them/bot (kho o ui_preheat.cpp, NVS "ph2").
+// 6 dong SM_P slot 0..5: dong nao co vat lieu (slot < ui_preheat_count()) thi hien, ten + "h/b/f" lay
+// tu kho (page_submenu_update ghi vao nhan), CHAM VAO = mo HOP SUA 3-trong-1 (xem ui_page_preheat.cpp) -
+// khong phai di qua menu con nua. Dong cuoi de THEM vat lieu (ban phim dat ten; da du 6 thi bao loi).
+static const sm_item_t SM_I_PREHEAT[] = {
+  SM_P(0), SM_P(1), SM_P(2), SM_P(3), SM_P(4), SM_P(5),
+  SM_A("+ Them vat lieu",           A_PRE_ADD)
 };
 
 #define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
@@ -257,9 +254,7 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
   [SMG_FILAMENT]  = { "FILAMENT",     SMG_ADV,        SM_I_FILAMENT,  SM_N(SM_I_FILAMENT) },
   [SMG_TUNE]      = { "TUNE",         SMG_ADV,        SM_I_TUNE,      SM_N(SM_I_TUNE) },
   [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
-  [SMG_PRE_PLA]   = { "PREHEAT PLA",  SMG_ROOT,       SM_I_PRE_PLA,   SM_N(SM_I_PRE_PLA) },
-  [SMG_PRE_PETG]  = { "PREHEAT PETG", SMG_ROOT,       SM_I_PRE_PETG,  SM_N(SM_I_PRE_PETG) },
-  [SMG_PRE_ABS]   = { "PREHEAT ABS",  SMG_ROOT,       SM_I_PRE_ABS,   SM_N(SM_I_PRE_ABS) }
+  [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) }
 };
 
 // ===========================================================================
@@ -272,6 +267,7 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
 // Cap phat bang malloc() (heap ESP32) chu KHONG bang lv_mem_alloc(): pool LVGL chi 48 KB va dang
 // dung cho widget cac trang (xem page_release o ui_lvgl.cpp) - mang con tro nay khong phai widget.
 typedef struct {
+  lv_obj_t *nm[SM_ROWS];       // nhan TEN dong (chi SM_PRE moi phai ghi lai: ten vat lieu la dong)
   lv_obj_t *val[SM_ROWS];      // nhan COT GIA TRI cua tung dong dang ve
   uint8_t   vis[SM_ROWS];      // chi so THAT trong SM_GROUPS[g].items[] cua dong dang ve
   uint8_t   n;                 // so dong dang ve
@@ -292,6 +288,7 @@ static bool sm_item_visible(const sm_item_t *it) {
   switch (it->kind) {
     case SM_SUB: return sm_group_visible((uint8_t)it->arg);
     case SM_VAL: return settings_has_value(it->arg);
+    case SM_PRE: return it->arg < ui_preheat_count();   // slot chua co vat lieu -> KHONG ve dong do
     default:     return true;      // SM_ACT: lenh luon chay duoc, khong phu thuoc du lieu Marlin
   }
 }
@@ -316,16 +313,14 @@ static void cb_sm_row(lv_event_t *e) {
   switch (it->kind) {
     case SM_SUB: submenu_open((uint8_t)it->arg); break;   // vao nhom con (dung lai noi dung trang nay)
     case SM_VAL: ov_open_id(it->arg); break;              // mo lop phu SUA cua dong thong so do
+    // Dong VAT LIEU PREHEAT: mo HOP SUA 3-trong-1 (nozzle/bed/fan cung 1 hang) - khong vao menu con.
+    case SM_PRE: preheat_edit_open((uint8_t)it->arg); break;
     case SM_ACT: do_action((int)it->arg); break;          // lenh M500/M501/M502/mo trang bang...
     default: break;
   }
 }
 
 void page_submenu_create(lv_obj_t *p) {
-  // 9 dong preheat do MAN HINH tu quan ly (khong phai Marlin) -> bom lai truoc khi loc dong,
-  // nho vay 3 nhom "Preheat ... Settings" luon co gia tri ke ca ngay sau khi moi ket noi.
-  preheat_inject();
-
   // Cac dong la o DAC lien nhau (giong danh sach menu cua Marlin / man MENU cua man hinh).
   lv_obj_set_style_pad_row(p, 0, 0);
 
@@ -345,8 +340,9 @@ void page_submenu_create(lv_obj_t *p) {
                          cb_sm_row, (void *)(intptr_t)s_sm->n);
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-    lv_obj_t *n = mk_label(r, it->name, MR_MENU);
-    lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
+    // Dong SM_PRE lay TEN tu kho preheat (khong phai it->name) -> giu con tro nhan de update ghi lai.
+    s_sm->nm[s_sm->n] = mk_label(r, it->name, MR_MENU);
+    lv_obj_align(s_sm->nm[s_sm->n], LV_ALIGN_LEFT_MID, 4, 0);
     // Cot phai: nhom con -> ">" (bao con nua), dong sua duoc -> gia tri (dien o page_submenu_update).
     s_sm->val[s_sm->n] = mk_label(r, it->kind == SM_SUB ? ">" : "", MR_MENUVAL);
     lv_obj_align(s_sm->val[s_sm->n], LV_ALIGN_RIGHT_MID, -4, 0);
@@ -361,28 +357,42 @@ void page_submenu_update(void) {
   if (!s_sm || s_sm->g >= SMG_COUNT) return;
 
   // So thong so Marlin gui DOI (moi ket noi lai / vua sua) -> co the co dong VUA hien duoc: dung lai
-  // noi dung de loc lai (giong trang SETTINGS).
+  // noi dung de loc lai (giong trang SETTINGS). Danh sach PREHEAT cung vay: them/bot vat lieu lam SO
+  // DONG doi -> so sanh ui_preheat_rev() (xem ui_preheat.cpp).
   //
   // !!! CHI dung lai khi trang DA HIEN (s_page_act == PG_SUBMENU) !!!
   // LOI THAT 2026-10-15 (panel panic "Guru Meditation ... LoadProhibited" ngay khi bam `UI CFG 0`):
   // page_submenu_create() goi ham nay o CUOI, ma luc do create_page() (tu show_page) CHUA dat
   // s_page_act = PG_SUBMENU -> page_rebuild() thay "trang KHONG mo" nen no THU HOI trang vua tao roi
   // return NGAY (khong tao lai, xem page_rebuild) => s_page[PG_SUBMENU] = NULL => create_page() goi
-  // tiep lv_obj_add_flag(NULL) -> panic. Lan tao dau da ve du dong theo `cydclcd.n_settings` hien tai
-  // nen bo qua o day la dung; cac lan sau (nhip 400 ms) s_page_act da la PG_SUBMENU -> dung lai binh thuong.
-  static uint8_t last_n = 255;
-  if (last_n != cydlcd.n_settings) {
+  // tiep lv_obj_add_flag(NULL) -> panic. Lan tao dau da ve du dong theo du lieu hien tai nen bo qua o
+  // day la dung; cac lan sau (nhip 400 ms) s_page_act da la PG_SUBMENU -> dung lai binh thuong.
+  static uint8_t  last_n = 255;
+  static uint32_t last_pre = 0;
+  if (last_n != cydlcd.n_settings || last_pre != ui_preheat_rev()) {
     last_n = cydlcd.n_settings;
+    last_pre = ui_preheat_rev();
     if (s_sm->n && s_page_act == PG_SUBMENU) { page_rebuild(PG_SUBMENU); return; }
   }
 
   const sm_group_t *G = &SM_GROUPS[s_sm->g];
-  char b[20];
+  char b[24];
   for (uint8_t k = 0; k < s_sm->n; k++) {
     const sm_item_t *it = &G->items[s_sm->vis[k]];
-    if (it->kind != SM_VAL || !s_sm->val[k]) continue;
-    // set_text() chi ghi khi chu DOI -> khong nhay, khong day SPI vo ich.
-    if (settings_fmt_cur(b, sizeof(b), it->arg)) set_text(s_sm->val[k], b);
+    if (it->kind == SM_VAL && s_sm->val[k]) {
+      // set_text() chi ghi khi chu DOI -> khong nhay, khong day SPI vo ich.
+      if (settings_fmt_cur(b, sizeof(b), it->arg)) set_text(s_sm->val[k], b);
+    }
+    else if (it->kind == SM_PRE) {
+      // Ten vat lieu o cot TRAI + "nozzle/bed/fan" o cot PHAI (ca 3 thuoc tinh tren 1 dong).
+      uint16_t h = 0, bed = 0;
+      uint8_t  f = 0;
+      if (ui_preheat_get((uint8_t)it->arg, &h, &bed, &f)) {
+        if (s_sm->nm[k]) set_text(s_sm->nm[k], ui_preheat_name((uint8_t)it->arg));
+        snprintf(b, sizeof(b), "%u/%u/%u", (unsigned)h, (unsigned)bed, (unsigned)f);
+        if (s_sm->val[k]) set_text(s_sm->val[k], b);
+      }
+    }
   }
 }
 
@@ -457,6 +467,20 @@ void submenu_dump(const char *arg) {
         const bool ok = settings_fmt_cur(b, sizeof(b), it->arg);
         Serial.printf("[UI] CFG     %-24s VAL id=%-3u = %s\n", it->name, (unsigned)it->arg,
                       ok ? b : "(khong co gia tri)");
+      }
+      else if (it->kind == SM_PRE) {
+        // Dong VAT LIEU PREHEAT: ten + 3 thuoc tinh tren cung 1 dong (giong cach hien tren LCD).
+        uint16_t h = 0, bed = 0;
+        uint8_t  f = 0;
+        const bool ok = ui_preheat_get((uint8_t)it->arg, &h, &bed, &f);
+        Serial.printf("[UI] CFG     %-24s PRE slot=%u = %s\n",
+                      ok ? ui_preheat_name((uint8_t)it->arg) : "(chua co vat lieu)",
+                      (unsigned)it->arg,
+                      ok ? b : "-");
+        if (ok) {
+          snprintf(b, sizeof(b), "%u/%u/%u", (unsigned)h, (unsigned)bed, (unsigned)f);
+          Serial.printf("[UI] CFG       -> nozzle/bed/fan = %s (sua: cham dong nay -> hop 3-trong-1)\n", b);
+        }
       }
       else Serial.printf("[UI] CFG     %-24s %s %u\n", it->name,
                          it->kind == SM_SUB ? "SUB ->" : "ACT", (unsigned)it->arg);

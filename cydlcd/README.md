@@ -433,10 +433,11 @@ python cydlcd/tools/make_lvgl_icons.py
 | **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
 
 > 🆕 **Cập nhật 2026-10-13 (UI LVGL sau khi chuyển sang PUSH):**
-> * **TEMP** có thêm **1 hàng preset PREHEAT** đúng như bản UI cũ (`ui.cpp`/`main.cpp`): **`PLA` · `PETG` ·
->   `ABS`** (mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`, thêm `M106 S<fan>` **chỉ khi** fan preset > 0)
->   và **`COOLDOWN`** (`M104 S0` + `M140 S0`). 🆕 **Từ 2026-10-14 ba preset này SỬA ĐƯỢC** (lưu NVS, xem **§9.22**):
->   mặc định `PLA 200/60/0` · `PETG 230/60/0` · `ABS 240/60/0`, nhãn trên nút hiện luôn số đang đặt.
+> * **TEMP** có **2 hàng nút PREHEAT** (tối đa **6 vật liệu**, mỗi nút gửi `M104 S<nozzle>` + `M140 S<bed>`,
+>   thêm `M106 S<fan>` **chỉ khi** fan > 0) + **`COOLDOWN`** (`M104 S0` + `M140 S0`). 🆕 **Từ 2026-10-15 danh
+>   sách vật liệu do người dùng tự thêm/bớt/sửa** (NVS `ph2`, xem **§9.22**): nút chỉ hiện **tên** vật liệu,
+>   bấm xong dòng đầu hiện `Profile: <tên> <nozzle>/<bed>`; **hàng nút `TUNING (MPC/PID)` đã bỏ** để lấy chỗ
+>   (trang TUNING vẫn mở được từ **MENU**).
 > * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
 >   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện lớp phủ có **4 nút bước
 >   `0.01` · `0.1` · `1` · `10`** (nút đang chọn được tô nổi) + `-` / `+` (giữ nút = nhảy nhanh) + `OK` /
@@ -1169,26 +1170,38 @@ còn lại: đường POST sang module WiFi rời và đường upload qua Bluet
 * **Test nhanh**: xem COM7 (`[UP] wifi=2 ssid="…" ip=192.168.x.y …`) hoặc gõ `WIFI?` / `WIFI SCAN` → trên PC mở
   `http://TBTCYDLCD.local/?token=TBT-3D-up` (hoặc `http://<ip>/`) → chọn file `.gco` → Gửi → theo dõi
   `state`/`written_bytes`; kiểm Marlin thấy file mới (M22/M21 đã gửi) và `/cydlcd_tmp` sạch file tạm.
-### 9.22 PRESET PREHEAT SỬA ĐƯỢC (NVS `ph`) — 2026-10-14
+### 9.22 PRESET PREHEAT: DANH SÁCH VẬT LIỆU do người dùng THÊM/BỚT (NVS `ph2`) — 2026-10-15
 
-**Vấn đề**: 3 nút `PLA`/`PETG`/`ABS` ở trang TEMP trước đây **cứng trong code** (`210/60`, `240/80`, `250/100`),
-muốn đổi phải sửa `ui_lvgl.cpp` rồi nạp lại cả firmware màn hình CYD.
+**Yêu cầu người dùng 2026-10-15:** *"trong phần setting có menu preheat lặp lại rất nhiều lần, gom vào 1
+menu là preheat, trong preheat cho phép user thêm bớt các loại vật liệu. Max là 6 vì trang temperature kín
+rồi, trong trang temperature bỏ nút turning để có chỗ render preheat… nếu có thể gộp 3 thuộc tính của
+preheat trên 1 dòng để điều chỉnh thì không cần vào menu con để sửa nữa"*.
 
-**Cách làm bây giờ** — preset là **dữ liệu của màn hình CYD**, không phải của Marlin:
+| | Trước 2026-10-15 | Nay |
+|---|---|---|
+| Cấu trúc | **3 preset cố định** PLA/PETG/ABS, hiện **3 nhóm** `Preheat … Settings` trong menu CONFIGURATION **và 9 dòng** ở bảng THONG SO (lặp lại 2 nơi) | **1 nhóm `Preheat`** trong CONFIGURATION: mỗi vật liệu **1 dòng** hiện `TÊN  nozzle/bed/fan`; bảng THONG SO **bỏ hẳn 9 dòng** preheat |
+| Thêm/bớt | không được | dòng `+ Thêm vật liệu` (bàn phím LVGL đặt tên, tối đa 8 ký tự) + nút `Xóa` trong hộp sửa (xác nhận **2 bước**); **tối đa `CYDLCD_PRE_MAX` = 6** (trang NHIỆT ĐỘ chỉ đủ 6 nút); **không cho xóa vật liệu cuối cùng** |
+| Sửa | vào menu con rồi sửa từng dòng (nozzle / bed / fan riêng) | **hộp 3-trong-1** (`ui_page_preheat.cpp`): 3 ô `NOZ`/`BED`/`FAN` **cùng 1 hàng** — chạm ô nào thì `-`/`+` chỉnh ô đó; 3 mức bước (nhiệt độ `1/5/10`, quạt `1/5/25`); `OK` · `Hủy` · `Xóa` |
+| Trang NHIỆT ĐỘ | 1 hàng 3 nút `PLA/PETG/ABS (kèm số)` + 1 hàng `TUNING (MPC/PID)` | **2 hàng × 3 nút** = tối đa 6 vật liệu (nút chỉ hiện **TÊN**, số hiện ở dòng `Profile:` sau khi bấm); **hàng `TUNING` đã bỏ** (trang TUNING vẫn mở được từ MENU) |
 
-| Việc | Ở đâu |
+| | |
 |---|---|
-| Kho giá trị | NVS `Preferences`, namespace **`"ph"`**, khoá `h0..h2` / `b0..b2` / `f0..f2` (nozzle / bed / fan) |
-| Mặc định khi NVS trống | `PRE_H_DEF` = 200/230/240 °C · `PRE_B_DEF` = 60/60/60 °C · `PRE_F_DEF` = 0 |
-| Trần (chặn giá trị rác) | `PRE_H_MAX 300` · `PRE_B_MAX 120` · `PRE_F_MAX 255` |
-| Sửa trên màn hình | **SETTINGS** → 9 dòng mới (`PLA nozzle` · `PLA bed` · `PLA fan` ×3 profile), id **`0x4001..0x4009`** |
-| Nhãn nút TEMP | `tp_pre_sync()` → nút hiện `PLA 215/65`, `PETG 300/0`… (đổi ngay sau khi sửa, không cần khởi động lại) |
-| Console COM7 | `PRE?` · `PRE <i 0..2> <nozzle> <bed> [fan]` |
+| Kho giá trị | NVS `Preferences`, namespace **`"ph2"`**: `n` (số vật liệu), `t<i>` (tên), `h<i>` / `b<i>` / `f<i>` (nozzle/bed/fan) |
+| **Di trú** | lần chạy đầu sau khi nâng cấp: nếu `"ph2"` chưa có → đọc **namespace cũ `"ph"`** (`h0..h2`/`b0..b2`/`f0..f2` = 3 preset PLA/PETG/ABS) rồi ghi sang `"ph2"` ⇒ **không mất giá trị đã đặt trước đó** |
+| Giới hạn | nozzle 0..300 °C · bed 0..120 °C · fan 0..255 (0 = **không** đụng tới quạt khi preheat) |
+| API | `ui_preheat_count/name/get/set/add/remove/rename/rev` (`ui_lvgl.h`) — mọi trang đọc/ghi qua đây, chỉ `ui_preheat.cpp` giữ mảng `s_pre[]` |
+| Vẽ lại | `ui_preheat_rev()` tăng mỗi lần đổi ⇒ menu CONFIGURATION và trang NHIỆT ĐỘ tự `page_rebuild()` khi số vật liệu đổi (thêm/bớt) |
+| Lệnh console | COM8: `UI PRE` (in danh sách) · `UI PRE ADD <tên>` · `UI PRE DEL <i>` · `UI PRE SET <i> <h> <b> <f>` · `UI PRE NAME <i> <tên>` · `UI PRE OPEN <i>` (mở hộp 3-trong-1) · `UI PRE KB` (mở bàn phím) · `UI PRE <k>` (bấm nút preheat thứ k ở trang NHIỆT ĐỘ); COM7: `PRE?` · `PRE <i> <h> <b> [fan]` · `PRE ADD/DEL/NAME` |
 
-* **Cơ chế "id riêng"**: Marlin **không bao giờ** gửi id `0x40xx` này. Màn hình CYD tự **bơm** 9 giá trị vào bảng
-  `cydlcd.settings[]` bằng `cydlcd_setting_set()` (`preheat_inject()`) trước khi dựng bảng, nên trang SETTINGS
-  **vẽ và sửa được như mọi dòng khác**. Khi bấm `OK`, `se_send_mcode()` thấy id `0x4001..0x4009` ⇒ **không gửi
-  M-code nào**, chỉ kẹp trần → lưu NVS → bơm lại (Marlin không hề biết tới các dòng này).
+
+**Bối cảnh (bản cũ 2026-10-14, đã thay bằng bảng ở trên):** 3 nút `PLA`/`PETG`/`ABS` ở trang TEMP trước
+đây **cứng trong code** (`210/60`, `240/80`, `250/100`); sau đó thành **3 preset sửa được** lưu NVS namespace
+`"ph"` và hiện ở **9 dòng của bảng SETTINGS** (id cục bộ `0x4001..0x4009`, màn hình tự bơm vào
+`cydlcd.settings[]` bằng `preheat_inject()`, `se_send_mcode()` thấy id đó thì **không gửi M-code** mà chỉ kẹp
+trần → lưu NVS). Từ **2026-10-15** thiết kế đó bị thay bằng **danh sách vật liệu động** ở trên:
+`preheat_inject()` + 9 dòng SETTINGS + nhánh `se_send_mcode()` cho `0x40xx` **đã xoá**, dữ liệu cũ được
+**di trú tự động** sang `"ph2"`.
+
 * **Vì sao KHÔNG đẩy sang Marlin/EEPROM**: build này **`HAS_PREHEAT = 0`** (không có `HAS_MARLINUI_MENU`) ⇒
   `M145` không được biên dịch và preset không nằm trong `settings_t`; bật lên sẽ **đổi kích thước `settings_t`
   ⇒ đổi version/CRC EEPROM ⇒ Marlin nạp lại mặc định**, mất `M851`/PID/`M92`/`M201`/`M203`/`M205`/`M906` + lưới UBL.
@@ -2096,7 +2109,8 @@ trong MENU mở **một bảng phẳng 76 dòng** phải cuộn; nay nó mở **
 CAU HINH
 ├─ Probe Z Offset                    M851 Z (mở lớp phủ sửa)
 ├─ Controller Fan >                  Idle Speed · Auto Mode · Active Speed · Idle Period      M710 I/A/S/D
-├─ Preheat PLA/PETG/ABS Settings >   Nozzle · Bed · Fan   (9 preset màn hình tự lưu ở NVS)
+├─ Preheat >                         Danh sách vật liệu: mỗi dòng `TÊN  nozzle/bed/fan` (chạm = hộp
+│                                    sửa 3-trong-1) + `+ Thêm vật liệu` (bàn phím đặt tên). TỐI ĐA 6
 ├─ Advanced Settings >
 │   ├─ Max Speed >        Max X/Y/Z/E Speed · Min Velocity (M205 S) · Min Travel Speed (M205 T)
 │   ├─ Acceleration >     Accel print/retract/travel (M204 P/R/T) · Max X/Y/Z/E Accel (M201)
@@ -2366,7 +2380,8 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | `WIFI?` | in trang thai WiFi + IP + RSSI + ssid da luu + heap |
 | `WIFI SCAN` / `WIFI ASYNC 0\|1\|2` | quet mang (khong chan, van bom link) / che do chan doan |
 | `WIFI CONNECT <ssid> <pass> [S]` · `WIFI OFF` · `WIFI FORGET` | ket noi (S = luu NVS) · tat · xoa cau hinh |
-| 🆕 `PRE?` | in 3 preset preheat (nozzle/bed/fan) — xem **§9.22** |
+| 🆕 `PRE?` | in **danh sách vật liệu preheat** (tên + nozzle/bed/fan) — xem **§9.22** |
+| 🆕 `PRE ADD <tên>` / `PRE DEL <i>` / `PRE NAME <i> <tên>` | thêm / xóa / đổi tên vật liệu preheat (tối đa 6) — **§9.22** |
 | 🆕 `PRE <i 0..2> <nozzle> <bed> [fan]` | dat + luu NVS preset (`0=PLA`, `1=PETG`, `2=ABS`); **khong gia nhiet** |
 | 🆕 `UI ?` (hoac `UI`) | in danh sach 13 man + so thu tu (khong mo man nao) |
 | 🆕 `UI <ten man>` | **mo** 1 man theo ten, vd `UI FILE SD`, `UI TRAMMING` — de tai hien loi UI tu PC |
@@ -2377,7 +2392,10 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `UI GRAD` | in **bảng màu của dải nhiệt độ** mà màn STATUS dùng cho **cả icon lẫn 2 con số**: dòng đầu in 2 đầu dải (`hotend 25..250`, `bed 25..60`, mốc giữa `MR_WARM`), dòng 2 in **màu ĐANG HIỂN THỊ** thật (kèm °C của cả đầu in và bàn in), rồi 2 dòng quét `25C(0%)=#00E6FF … 250C(100%)=#FF8983` / `30C(14%)=#41DEC5 … 60C(100%)=#FFB64A` (kèm **% vị trí trong dải**). Trả lời *"nhiệt độ tăng dần thì màu có chuyển dần sang đỏ không?"* **mà KHÔNG phải đốt nóng máy**, và bắt được lỗi **sai đơn vị** (°C so với °C×100) — xem mục **"Dai mau nhiet do cua man STATUS"** |
 | 🆕 `UI PERF` | **đo hiệu năng màn hình**, gọi 2 lần cách nhau N giây (lần 1 xoá bộ đếm, lần 2 đọc số của khoảng đó): `ui_lvgl_task` tb/max µs, `lv_timer_handler` tb/max, **SPI** (số lần flush + TỔNG SỐ PIXEL đã đẩy, % của 1 màn = 76 800 px), **cảm ứng** (µs/lần), `http` (wifi / thẻ TF / `handleClient` + số lần bỏ qua), `sd_task` (`sd_alive` / `clean_dir`), log 1 Hz, `lvmem` + heap. Dùng để biết **màn hình chậm là do VẼ, do SPI, do cảm ứng hay do vòng lặp bị chặn ở chỗ khác** — xem mục **"Vì sao màn hình chạy chậm"** |
 | 🆕 `UI RX` | in **2 CHIỀU của UART** để biết bên nào hỏng: `PONG co/CHUA BAO GIO` + **tuổi PONG** (bình thường < 1500 ms) + **số lần mất PONG**, rồi bảng **số frame đã nhận theo LOẠI** (`HELLO/STATUS/TEMPS/POS/MESH/FILES/SETTING/PONG…`), và vị trí + FR/FL + `n_settings`/cỡ lưới. Dùng khi *"bấm nút trên màn hình mà máy không chạy"*: **PONG = 0 / tuổi lớn ⇒ chiều MÀN HÌNH → MARLIN hỏng** (trong khi `STATUS/TEMPS` vẫn tăng = chiều xuống vẫn tốt) — đối chiếu với `PANEL DIAG` in ở COM4. Xem mục **"Chan doan link 2 chieu"** |
-| 🆕 `UI PRE <0\|1\|2>` | **bấm nút preset preheat** PLA/PETG/ABS của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
+| 🆕 `UI PRE` | in **danh sách vật liệu preheat** (số thứ tự + tên + nozzle/bed/fan) + trạng thái 2 lớp phủ preheat |
+| 🆕 `UI PRE ADD <tên>` · `DEL <i>` · `SET <i> <h> <b> <f>` · `NAME <i> <tên>` | **thêm / xóa / sửa / đổi tên** vật liệu preheat (NVS `ph2`, tối đa 6) — đường **duy nhất** để làm việc này từ PC, vì hộp sửa + bàn phím đặt tên nằm trên LCD |
+| 🆕 `UI PRE OPEN <i>` · `UI PRE KB` | **mở hộp sửa 3-trong-1** của vật liệu thứ i / **mở bàn phím** đặt tên (đi đúng callback thật) — phối với `UI HIT` để bấm `-`/`+`/`OK`/`Hủy`/`Xóa` (chỉ số khi lớp phủ này mở: `0..2` = ô NOZ/BED/FAN, `3..5` = mức bước, `6` = `-`, `7` = `+`, `8` = `OK`, `9` = `Hủy`, `10` = `Xóa`) |
+| 🆕 `UI PRE <k>` | **bấm nút preheat thứ k** của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
 | 🆕 `UI TAP <0..4>` · `P\|N` · `I` · `D` · `K` · `C` · `L [đường dẫn]` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (mở `UI FILE SD` trước), `P`/`N` = **PREV/NEXT**, `I` = **PRINT** (kiểm tra đường in: có gửi `M23`+`M24` không), `D` = **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì**), `K` = **bấm OK** hộp thoại đang mở (**mọi màn**; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật), `L` = **liệt kê thư mục bằng FATFS của chính màn hình** (tên ĐẦY ĐỦ, không bị SdFat cắt 27 ký tự; `UI TAP L /BTUP` để xem 1 thư mục). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_files_print`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA`/`PRINT` đúng dòng, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách (kèm `PRINT=`/`XOA=` khoá hay mở) |
 
 ⚠️ Do **thu tu so khop tien to** trong `main.cpp`, mot lenh la (vd `PRINT`) se bi coi la G-code va gui sang

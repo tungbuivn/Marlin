@@ -7,7 +7,7 @@
  *   - cb_temp_adj(): +/- 1/10 do C -> M104 S... / M140 S..., hang FAN -> M106 S0..255.
  *   - temp_row()/fan_row(): 1 hang cho 1 nhom (ten | -10 | -1 | gia tri | +1 | +10).
  *   - cb_temp_preheat()/tp_pre_sync(): 3 nut preset PLA/PETG/ABS. Gia tri lay tu KHO PRESET
- *     cua MAN HINH CYD (ui_preheat.cpp) qua API CONG KHAI ui_preheat_get()/ui_preheat_label()
+ *     cua MAN HINH CYD (ui_preheat.cpp) qua API CONG KHAI ui_preheat_count/name/get/rev()
  *     (khai bao trong ui_lvgl.h) - KHONG file nao khac duoc doc thang mang s_pre_*.
  *   - page_temp_create()/page_temp_update(): dung man + cap nhat nhiet/hang FAN.
  *
@@ -90,26 +90,27 @@ static void fan_row(lv_obj_t *p) {
   mk_btn(r, "MAX", TP_BTN_BIG, TP_ROW_H - 2, cb_temp_adj, TEMP_ADJ(2, +100));
 }
 
-// Preset preheat: gia tri lay tu KHO CUA MAN HINH CYD (NVS, sua duoc o trang SETTINGS - xem khoi "PREHEAT
-// presets" o phan SETTINGS). Mac dinh ban dau = Configuration.h (PLA 200/60 - PETG 230/60 - ABS 240/60).
+// Preset preheat: gia tri lay tu KHO CUA MAN HINH CYD (danh sach vat lieu do nguoi dung them/bot, NVS
+// "ph2" - xem ui_preheat.cpp); sua o CONFIGURATION > Preheat (hop 3-trong-1, ui_page_preheat.cpp).
 // KHONG gui M106 khi FAN = 0: Marlin khong dung FAN_SPEED cua preheat, gui M106 S0 se TAT quat ngoai y.
-#define TP_PRE_H    28                                 // nut preset cao 28 >= 26 (du de cham)
-#define TP_TUNE_H   28                                 // hang tuning (M306/M303/SAVE)
-#define TP_PRE_PLA  0
-#define TP_PRE_PETG 1
-#define TP_PRE_ABS  2
+//
+// 2026-10-15 (YEU CAU NGUOI DUNG: "max la 6 vi trang temperature kin roi, trong trang temperature bo
+// nut tuning de co cho render preheat"): 1 hang 3 nut co dinh -> 2 HANG x 3 NUT (toi da 6 vat lieu),
+// va BO hang nut "TUNING (MPC/PID)" (trang TUNING van mo duoc tu MENU - se tinh lai sau).
+#define TP_PRE_H       28                              // cao 1 hang nut preheat
+#define TP_PRE_PER_ROW 3                               // 3 nut moi hang (6 vat lieu = 2 hang)
 
-static char      s_profile[8] = "";                    // profile dang chon ("" = chua chon -> ---)
+static char      s_profile[16] = "";                   // profile dang chon ("PLA 200/60" - "" = chua chon)
 static lv_obj_t *tp_prof;                              // nhan DONG DAU: "Profile: <ten>"
-static lv_obj_t *tp_pre_btn[CYDLCD_PRE_COUNT];          // 3 nut PLA/PETG/ABS (nhan doi theo preset)
-static char      s_pre_txt[CYDLCD_PRE_COUNT][16];       // nhan dang hien (de chi ve khi doi)
+static lv_obj_t *tp_pre_btn[CYDLCD_PRE_MAX];           // toi da 6 nut preheat (NULL = chua ve)
+static char      s_pre_txt[CYDLCD_PRE_MAX][16];        // nhan dang hien (de chi ve khi doi)
 
 static void cb_temp_preheat(lv_event_t *e) {
   const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
-  if (k >= CYDLCD_PRE_COUNT) return;
+  if (k >= ui_preheat_count()) return;
 
   // Gia tri lay tu KHO PRESET cua MAN HINH CYD qua API cong khai (dinh nghia o ui_preheat.cpp):
-  // KHONG doc thang mang s_pre_* - chi ui_preheat.cpp duoc giu kho do.
+  // KHONG doc thang mang s_pre[] - chi ui_preheat.cpp duoc giu kho do.
   uint16_t noz = 0, bed = 0;
   uint8_t  fan = 0;
   if (!ui_preheat_get(k, &noz, &bed, &fan)) return;
@@ -120,7 +121,7 @@ static void cb_temp_preheat(lv_event_t *e) {
   // "M140 S60" ma nhan BED tren man hinh van la 0 thi loi nam o phia Marlin (lenh khong duoc chay);
   // neu log KHONG co M140 thi loi o phia man hinh.
   WIFILOG("[PRE] bam %s: gui \"M104 S%u\" + \"M140 S%u\"%s (hang doi TX cho=%u, da bo=%lu)\n",
-          ui_preheat_label(k), (unsigned)noz, (unsigned)bed,
+          ui_preheat_name(k), (unsigned)noz, (unsigned)bed,
           fan ? " + \"M106 S...\"" : "", (unsigned)cydlcd_link_tx_pending(),
           (unsigned long)cydlcd_link_tx_dropped());
   snprintf(cmd, sizeof(cmd), "M104 S%u", (unsigned)noz);
@@ -131,22 +132,23 @@ static void cb_temp_preheat(lv_event_t *e) {
     snprintf(cmd, sizeof(cmd), "M106 S%u", (unsigned)fan);
     cydlcd_link_send_gcode(cmd);
   }
-  // Nho profile dang chon -> hien o DONG DAU (khong luu NVS). KHONG hien hop/dialog nao.
-  snprintf(s_profile, sizeof(s_profile), "%s", ui_preheat_label(k));
+  // Nho profile dang chon (kem 2 so de biet da dat gi) -> hien o DONG DAU. KHONG luu NVS, KHONG hop.
+  snprintf(s_profile, sizeof(s_profile), "%s %u/%u", ui_preheat_name(k), (unsigned)noz, (unsigned)bed);
   // Target nhiet lay tu frame TEMPS/SETTING -> xin gui lai cho o nhiet khop ngay
   cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS);
 }
 
-// Doi nhan 3 nut theo preset hien co (chi ghi khi chuoi doi -> khong day SPI vo ich).
+// Doi nhan cac nut preheat theo danh sach vat lieu hien co (chi ghi khi chuoi doi -> khong day SPI
+// vo ich). Nhan nut = TEN vat lieu (khong kem so: nut chi rong 104 px, ten toi da 8 ky tu x 9 px = 72
+// px la vua; so nozzle/bed hien o dong "Profile:" sau khi bam va trong hop sua preheat).
 void tp_pre_sync(void) {
-  for (uint8_t k = 0; k < CYDLCD_PRE_COUNT; k++) {
-    uint16_t noz = 0, bed = 0;
-    ui_preheat_get(k, &noz, &bed, NULL);          // doc kho preheat qua API cong khai
-    char t[16];
-    snprintf(t, sizeof(t), "%s %u/%u", ui_preheat_label(k), (unsigned)noz, (unsigned)bed);
-    if (strcmp(t, s_pre_txt[k]) == 0) continue;
-    snprintf(s_pre_txt[k], sizeof(s_pre_txt[k]), "%s", t);
-    if (tp_pre_btn[k]) set_text(lv_obj_get_child(tp_pre_btn[k], 0), t);
+  for (uint8_t k = 0; k < CYDLCD_PRE_MAX; k++) {
+    if (!tp_pre_btn[k]) continue;                     // o trong (chua co vat lieu / chua ve)
+    const char *nm = ui_preheat_name(k);
+    if (!nm || !nm[0]) continue;
+    if (strcmp(nm, s_pre_txt[k]) == 0) continue;
+    snprintf(s_pre_txt[k], sizeof(s_pre_txt[k]), "%s", nm);
+    set_text(lv_obj_get_child(tp_pre_btn[k], 0), nm);
   }
 }
 
@@ -158,32 +160,38 @@ void page_temp_create(lv_obj_t *p) {
   temp_row(p, "BED",    1, &tp_bed);
   fan_row(p);
 
-  // 1 hang preset: PLA | PETG | ABS (moi nut gui M104 + M140 theo preset da luu, nhu menu preheat
-  // cua Marlin). Nhan nut duoc ve lai khi doi gia tri trong SETTINGS -> xem tp_pre_sync().
-  lv_obj_t *rp = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_PRE_H, 0, GAP);
-  tp_pre_btn[0] = mk_btn_grow(rp, "PLA",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PLA);
-  tp_pre_btn[1] = mk_btn_grow(rp, "PETG", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_PETG);
-  tp_pre_btn[2] = mk_btn_grow(rp, "ABS",  TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)TP_PRE_ABS);
-  for (uint8_t k = 0; k < CYDLCD_PRE_COUNT; k++) s_pre_txt[k][0] = '\0';   // buoc tp_pre_sync ve lai
+  // 2 hang nut preheat (moi hang 3 nut = toi da 6 vat lieu). So vat lieu co the DOI (them/bot o
+  // CONFIGURATION > Preheat) -> page_temp_update() thay ui_preheat_rev() doi thi DUNG LAI ca trang.
+  // Hang nao khong co vat lieu thi KHONG ve (trang ngan lai); o trong trong 1 hang thi dem 1 spacer
+  // de 2 nut con lai van chia deu be rong nhu cu.
+  const uint8_t nrow = (uint8_t)((ui_preheat_count() + TP_PRE_PER_ROW - 1) / TP_PRE_PER_ROW);
+  for (uint8_t row = 0; row < nrow; row++) {
+    lv_obj_t *rp = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, TP_PRE_H, 0, GAP);
+    for (uint8_t c = 0; c < TP_PRE_PER_ROW; c++) {
+      const uint8_t k = (uint8_t)(row * TP_PRE_PER_ROW + c);
+      if (k >= ui_preheat_count()) { mk_spacer(rp, 0, TP_PRE_H, 1); continue; }
+      tp_pre_btn[k] = mk_btn_grow(rp, "-", TP_PRE_H, cb_temp_preheat, (void *)(intptr_t)k);
+      s_pre_txt[k][0] = '\0';                    // buoc tp_pre_sync ve lai nhan
+    }
+  }
   tp_pre_sync();
 
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 26, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
-  // TUNING (MPC/PID): theo yeu cau nguoi dung 2026-10-15, cac nut tuning (M306 T / M303 / SAVE) da MOVE
-  // sang trang TUNING rieng (giong menu MPC cua Marlin 12864, co hien 6 tham so MPC) -> o day chi con 1 nut
-  // mo trang do (xem ui_page_mpc.cpp).
-  mk_btn(p, "TUNING (MPC/PID)", PAGE_INN_W, TP_TUNE_H, cb_action, (void *)(intptr_t)A_GOTO_MPC);
-
-  // Tong chieu cao: 16 + 30*3 + 28 + 26 + 28 + 6*GAP = 200 <= PAGE_INN_H (206)
+  // 2026-10-15: hang nut "TUNING (MPC/PID)" DA BO theo yeu cau nguoi dung ("bo nut turning de co cho
+  // render preheat, nut turning se tinh sau"). Trang TUNING van mo duoc tu MENU (muc "Tuning (MPC/PID)")
+  // va tu nut "TUNING" o... khong con: chi con duong MENU. Nut rieng se tinh sau.
+  //
+  // Tong chieu cao (6 vat lieu = 2 hang): 20 + 30*3 + 28*2 + 26 + 6*GAP = 204 <= PAGE_INN_H (206)
 }
 
-// CHAN DOAN (lenh `UI PRE <k>` tren COM7): ban su kien CHAM vao nut preset PLA/PETG/ABS (k = 0/1/2)
+// CHAN DOAN (lenh `UI PRE <k>` tren COM8): ban su kien CHAM vao nut preheat thu k
 // o man NHIET DO - di DUNG duong su kien that (cb_temp_preheat) nen kiem tra duoc tu PC ma khong can
 // cham tay vao man hinh. Dung de doi chieu: log "[PRE] bam ..." (man hinh gui gi) voi so target hien
 // tren man (Marlin nhan duoc gi).
 void temp_test_preheat(const uint8_t k) {
-  if (k >= CYDLCD_PRE_COUNT || !tp_pre_btn[k]) {
-    Serial.println("[UI] TEMP: chua co nut preset (mo man 'UI NHIET DO' truoc)");
+  if (k >= ui_preheat_count() || !tp_pre_btn[k]) {
+    Serial.println("[UI] TEMP: chua co nut preheat do (mo man 'UI NHIET DO' truoc / k qua lon)");
     return;
   }
   lv_event_send(tp_pre_btn[k], LV_EVENT_CLICKED, NULL);
@@ -191,10 +199,20 @@ void temp_test_preheat(const uint8_t k) {
 
 void page_temp_update(void) {
   if (!tp_prof) return;                  // trang da bi thu hoi (an toan: xem page_temp_destroy)
+
+  // DANH SACH VAT LIEU DOI (them/bot o CONFIGURATION > Preheat) -> so nut + be rong doi => phai DUNG
+  // LAI ca trang. Chi dung lai khi trang DA HIEN (giong canh bao o page_submenu_create): luc tao trang
+  // thi s_page_act con la trang CU -> page_rebuild() se thu hoi trang vua tao ma khong tao lai.
+  static uint32_t last_pre = 0;
+  if (last_pre != ui_preheat_rev()) {
+    last_pre = ui_preheat_rev();
+    if (s_page_act == PG_TEMP) { page_rebuild(PG_TEMP); return; }
+  }
+
   char b[40], a1[12], a2[12];
   int16_t cur = 0, tgt = 0;
 
-  tp_pre_sync();                       // nhan PLA/PETG/ABS doi khi preset duoc sua o SETTINGS
+  tp_pre_sync();                       // ten vat lieu doi (doi ten / them bot) -> ve lai nhan nut
 
   snprintf(b, sizeof(b), "Profile: %s", s_profile[0] ? s_profile : "---");
   set_text(tp_prof, b);
@@ -216,18 +234,18 @@ void page_temp_update(void) {
   set_text(tp_fan, b);
 }
 
-// Huy man TEMP (xem quy uoc o ui_lvgl_int.h): dat NULL cac nhan + 3 nut preset, va xoa ban sao
-// nhan dang hien (s_pre_txt) de tp_pre_sync() ve lai nhan cho 3 nut MOI. Container trang do
+// Huy man TEMP (xem quy uoc o ui_lvgl_int.h): dat NULL cac nhan + cac nut preheat, va xoa ban sao
+// nhan dang hien (s_pre_txt) de tp_pre_sync() ve lai nhan cho cac nut MOI. Container trang do
 // show_page() xoa bang lv_obj_del() nen khong xoa widget o day.
 //
-// s_profile: GIU NGUYEN (ten preset nguoi dung da bam o lan truoc) - khong phai trang thai widget
+// s_profile: GIU NGUYEN (ten vat lieu nguoi dung da bam o lan truoc) - khong phai trang thai widget
 // va khong can cho viec tao lai: page_temp_update() hien lai ngay sau khi trang duoc tao.
 void page_temp_destroy(void) {
   tp_prof = NULL;
   tp_noz  = NULL;
   tp_bed  = NULL;
   tp_fan  = NULL;
-  for (uint8_t k = 0; k < CYDLCD_PRE_COUNT; k++) {
+  for (uint8_t k = 0; k < CYDLCD_PRE_MAX; k++) {
     tp_pre_btn[k] = NULL;
     s_pre_txt[k][0] = '\0';
   }

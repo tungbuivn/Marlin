@@ -251,11 +251,16 @@ enum {
   // 2026-10-15: nap lai thong so tu EEPROM (M501) - muc "Load Settings" cua menu Configuration.
   // KHONG co xac nhan 2 buoc: M501 chi doc EEPROM vao RAM (hoan tac thay doi CHUA luu), vo hai.
   A_LOAD_SETTINGS,
+  // 2026-10-15: PREHEAT (danh sach vat lieu do nguoi dung them/bot - xem ui_page_preheat.cpp):
+  //   A_PRE_ADD    = mo BAN PHIM dat ten vat lieu moi (dong "+ Them vat lieu" trong menu con);
+  //   A_PRE_DELETE = lenh THAT cua nut "Xoa" trong hop sua 3-trong-1 (chi chay sau khi xac nhan 2 buoc).
+  A_PRE_ADD, A_PRE_DELETE,
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
   A_MPC_TUNE, A_PID_BED,
-  A_GOTO_MPC,           // mo trang TUNING (MPC/PID) - nut "TUNING" o man NHIET DO + muc trong MENU
+  A_GOTO_MPC,           // mo trang TUNING (MPC/PID) - muc "Tuning (MPC/PID)" trong MENU (nut o man
+                        // NHIET DO da bo 2026-10-15 de lay cho cho 6 nut preheat)
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
   // Thanh day: phan trang noi dung man dang mo (xem page_scroll/bot_sync)
@@ -352,18 +357,14 @@ extern bool s_cal_req;
 extern lv_indev_t *s_indev;
 
 // ===========================================================================
-//  KHO PRESET PREHEAT (PLA/PETG/ABS) - dinh nghia trong ui_preheat.cpp
-//  Cac macro nay dung o NHIEU file (ui_preheat.cpp, ui_page_temp.cpp va ui_page_settings.cpp - trang
-//  SETTINGS) nen phai nam o header. Mang du lieu `s_pre_*` va ham load/save/inject do
-//  ui_preheat.cpp giu; cac file khac doc/ghi qua API cong khai ui_preheat_get() /
-//  ui_preheat_set() / ui_preheat_label() (khai bao trong ui_lvgl.h).
+//  KHO PRESET PREHEAT - DINH NGHIA trong ui_preheat.cpp (2026-10-15: 3 preset CO DINH -> DANH SACH
+//  do nguoi dung tu THEM/BOT, toi da CYDLCD_PRE_MAX = 6 vi trang NHIET DO chi con cho 6 nut).
+//
+//  Cac GIOI HAN (CYDLCD_PRE_MAX / PRE_NAME_LEN / PRE_H_MAX / PRE_B_MAX / PRE_F_MAX / CYDLCD_PRE_SEED)
+//  nam trong **ui_lvgl.h** (header cong khai) vi main.cpp - lenh console `PRE ...` - cung dung.
+//  Mang du lieu `s_pre[]` VA ham load/save chi o ui_preheat.cpp; file khac doc/ghi qua API cong khai
+//  (ui_lvgl.h): ui_preheat_count/name/get/set/add/remove/rename/rev.
 // ===========================================================================
-#define CYDLCD_PRE_COUNT   3
-#define CYDLCD_PRE_ID_BASE 0x4000     // id = BASE + 1 .. BASE + 9 (H,B,F x 3 preset)
-// Gioi han khi sua (giong M145 cua Marlin: hotend [extrude_min..max], bed [BED_MINTEMP..MAX]).
-#define PRE_H_MAX 300
-#define PRE_B_MAX 120
-#define PRE_F_MAX 255
 
 // ---------------------------------------------------------------------------
 //  WiFi (weak) - hop dong voi net_wifi.cpp / net_upload.h
@@ -591,12 +592,10 @@ void page_rate_update(void);
 void page_jog_create(lv_obj_t *p);
 /** Cap nhat toa do 3 truc tren man JOG (chua home -> '?') + to nut truc dang chon. */
 void page_jog_update(void);
-/** Nap 3 preset preheat tu NVS luc khoi dong (ui_lvgl_begin). */
+/** Nap danh sach vat lieu preheat tu NVS luc khoi dong (ui_preheat.cpp; co di tru tu namespace "ph" cu). */
 void preheat_load(void);
-/** Ghi 3 preset preheat xuong NVS (CYD); board khac chi giu RAM. */
+/** Ghi danh sach vat lieu preheat xuong NVS (CYD); board khac chi giu RAM. */
 void preheat_save(void);
-/** Bom 9 gia tri preset vao bang `cydlcd.settings[]` de trang SETTINGS hien/sua duoc (idempotent). */
-void preheat_inject(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_files.cpp (chang 3/4)
 // ---------------------------------------------------------------------------
@@ -637,7 +636,7 @@ void page_settings_create(lv_obj_t *p);
 void page_settings_update(void);
 /** Dong lop phu SUA so (ov_*). show_page() goi TRUOC khi thu hoi trang vi lop phu thuoc lv_scr_act. */
 void ov_hide(void);
-/** Mo lop phu SUA cho 1 dong thong so theo id (CYDLCD_SET_* / CYDLCD_PRE_ID_BASE + n). */
+/** Mo lop phu SUA cho 1 dong thong so theo id (CYDLCD_SET_*). */
 void ov_open_id(const uint16_t id);
 /** true = Marlin DA GUI gia tri cho id nay - dung de AN cac dong/dong menu khong co du lieu. */
 bool settings_has_value(uint16_t id);
@@ -672,6 +671,23 @@ uint8_t submenu_parent(void);
 const char *submenu_title(void);
 /** Dua trang ve nhom GOC - show_page() goi khi MO trang nay tu mot man KHAC (giong Marlin). */
 void submenu_reset_root(void);
+// ---------------------------------------------------------------------------
+//  Dinh nghia trong ui_page_preheat.cpp (chang 3/4) - HOP SUA PREHEAT 3-TRONG-1 + ban phim dat ten
+// ---------------------------------------------------------------------------
+/** Mo hop sua 3-trong-1 (nozzle/bed/fan CUNG 1 HANG) cho vat lieu thu `slot` cua kho preheat. */
+void preheat_edit_open(uint8_t slot);
+/** Dong hop sua (khong luu) + tra focus. show_page() goi khi doi trang (hop thuoc lv_layer_top). */
+void preheat_edit_hide(void);
+/** Hop sua 3-trong-1 co dang mo khong (chan doan `UI PRE` / `UI HIT`). */
+bool preheat_edit_active(void);
+/** Mo BAN PHIM dat ten vat lieu moi (nut "+ Them vat lieu"); bao loi neu kho da du CYDLCD_PRE_MAX. */
+void preheat_add_open(void);
+/** Dong ban phim dat ten neu dang mo (idempotent) - show_page() goi khi doi trang. */
+void preheat_kb_hide(void);
+/** Ban phim dat ten co dang mo khong. */
+bool preheat_kb_active(void);
+/** Lenh THAT cua nut "Xoa" (goi tu do_confirmed(A_PRE_DELETE) sau khi nguoi dung xac nhan 2 buoc). */
+void preheat_delete_pending(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_mesh.cpp / ui_page_custom.cpp / ui_page_endstop.cpp /
 //  ui_page_info.cpp / ui_page_wifi.cpp / ui_page_tbt.cpp (chang 4/4)

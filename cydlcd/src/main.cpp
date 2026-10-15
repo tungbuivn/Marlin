@@ -192,7 +192,7 @@ void ui_console_dispatch(const char *a3) {
 if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strcasecmp(a3, "TESTBOX") == 0) ui_lvgl_test_dialog();
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
-            else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
+            else if (strncasecmp(a3, "PRE", 3) == 0) preheat_test_cmd(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
             // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
             // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
@@ -395,29 +395,55 @@ void loop() {
                             (unsigned)ESP.getFreeHeap());
             }
           } else if (strncmp(s_fwd, "PRE", 3) == 0) {
-            // PRESET PREHEAT cua MAN HINH (kho rieng trong NVS namespace "ph" - xem ui_preheat.cpp).
-            // LUU Y: lenh nay KHONG gui sang Marlin, chi doi gia tri preset cua man hinh.
-            //   PRE?                               -> in ca 3 preset
-            //   PRE <i 0..2> <nozzle> <bed> [fan]  -> dat + luu NVS (0=PLA, 1=PETG, 2=ABS)
+            // PRESET PREHEAT cua MAN HINH: danh sach vat lieu do nguoi dung them/bot (NVS "ph2" - xem
+            // ui_preheat.cpp). LUU Y: lenh nay KHONG gui sang Marlin, chi sua kho cua MAN HINH.
+            // 2026-10-15: 3 preset co dinh -> danh sach dong (toi da CYDLCD_PRE_MAX = 6).
+            //   PRE?                                 -> in danh sach vat lieu
+            //   PRE <i> <nozzle> <bed> [fan]         -> dat gia tri vat lieu thu i
+            //   PRE ADD <ten>                        -> them vat lieu (ten rong -> "MAT n")
+            //   PRE DEL <i>                          -> xoa vat lieu thu i
+            //   PRE NAME <i> <ten>                   -> doi ten vat lieu
             const char *a2 = s_fwd + 3;
             while (*a2 == ' ') a2++;
             if (*a2 == '?') {
-              for (uint8_t i = 0; i < 3; i++) {
+              Serial.printf("[PRE] %u/%u vat lieu:\n", (unsigned)ui_preheat_count(),
+                            (unsigned)CYDLCD_PRE_MAX);
+              for (uint8_t i = 0; i < ui_preheat_count(); i++) {
                 uint16_t pn = 0, pb = 0; uint8_t pf = 0;
                 if (ui_preheat_get(i, &pn, &pb, &pf))
-                  Serial.printf("[PRE] %u) %-4s nozzle=%u C  bed=%u C  fan=%u\n",
-                                (unsigned)i, ui_preheat_label(i), (unsigned)pn, (unsigned)pb, (unsigned)pf);
+                  Serial.printf("[PRE] %u) %-8s nozzle=%u C  bed=%u C  fan=%u\n",
+                                (unsigned)i, ui_preheat_name(i), (unsigned)pn, (unsigned)pb, (unsigned)pf);
               }
+            } else if (strncmp(a2, "ADD", 3) == 0) {
+              const char *nm = a2 + 3;
+              while (*nm == ' ') nm++;
+              Serial.printf("[PRE] them '%s' -> %s (%u vat lieu)\n", nm,
+                            ui_preheat_add(nm) ? "OK" : "DAY (da du 6)",
+                            (unsigned)ui_preheat_count());
+            } else if (strncmp(a2, "DEL", 3) == 0) {
+              int iv = -1;
+              sscanf(a2 + 3, "%d", &iv);
+              Serial.printf("[PRE] xoa %d -> %s (%u vat lieu)\n", iv,
+                            (iv >= 0 && ui_preheat_remove((uint8_t)iv)) ? "OK" : "KHONG (i sai / con 1)",
+                            (unsigned)ui_preheat_count());
+            } else if (strncmp(a2, "NAME", 4) == 0) {
+              int iv = -1;
+              char nm[24] = "";
+              if (sscanf(a2 + 4, "%d %23s", &iv, nm) == 2 && iv >= 0)
+                Serial.printf("[PRE] doi ten %d -> '%s' : %s\n", iv, nm,
+                              ui_preheat_rename((uint8_t)iv, nm) ? "OK" : "i sai");
+              else Serial.println("[PRE] dung: PRE NAME <i> <ten>");
             } else {
               int iv = 0, nv = 0, bv = 0, fv = 0;
               const int got = sscanf(a2, "%d %d %d %d", &iv, &nv, &bv, &fv);
-              if (got >= 3 && iv >= 0 && iv < 3) {
+              if (got >= 3 && iv >= 0 && iv < (int)ui_preheat_count()) {
                 const bool ok = ui_preheat_set((uint8_t)iv, (uint16_t)(nv < 0 ? 0 : nv),
                                                (uint16_t)(bv < 0 ? 0 : bv), (uint8_t)(fv < 0 ? 0 : fv));
-                Serial.printf("[PRE] dat preset %d (%s): nozzle=%d bed=%d fan=%d -> %s\n",
-                              iv, ui_preheat_label((uint8_t)iv), nv, bv, fv, ok ? "OK" : "LOI");
+                Serial.printf("[PRE] dat vat lieu %d (%s): nozzle=%d bed=%d fan=%d -> %s\n",
+                              iv, ui_preheat_name((uint8_t)iv), nv, bv, fv, ok ? "OK" : "LOI");
               } else {
-                Serial.println("[PRE] dung: PRE?   hoac   PRE <i 0..2> <nozzle> <bed> [fan]");
+                Serial.println("[PRE] dung: PRE? | PRE <i> <nozzle> <bed> [fan] | PRE ADD <ten> | "
+                               "PRE DEL <i> | PRE NAME <i> <ten>");
               }
             }
           } else if (strncmp(s_fwd, "UI", 2) == 0 && (s_fwd[2] == '\0' || s_fwd[2] == ' ' || s_fwd[2] == '?')) {
