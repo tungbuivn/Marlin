@@ -706,6 +706,18 @@ uint8_t submenu_parent(void);
 const char *submenu_title(void);
 /** Dua trang ve nhom GOC - show_page() goi khi MO trang nay tu mot man KHAC (giong Marlin). */
 void submenu_reset_root(void);
+/**
+ * Luu VI TRI CUON cua NHOM dang xem (goi tu show_page TRUOC khi thu hoi trang MENU CON).
+ * VI SAO theo NHOM chu khong theo trang: ca cay menu dung CHUNG 1 trang (PG_SUBMENU) nen mot mang
+ * theo trang la khong du - moi nhom co danh sach dai ngan khac nhau.
+ */
+void submenu_save_scroll(void);
+/** Vi tri cuon da luu cua NHOM dang mo (0 = dau danh sach) - de show_page() tra lai cho dang xem. */
+lv_coord_t submenu_scroll_y(void);
+/** Focus + cuon toi DONG da mo nhom con (goi sau khi trang MENU CON da hien lai). */
+void submenu_focus_parent(void);
+/** Focus + cuon toi DONG da mo mot man khac cua trang MENU (goi sau khi trang MENU da hien lai). */
+void page_menu_focus_sel(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_preheat.cpp (chang 3/4) - HOP SUA PREHEAT 3-TRONG-1 + ban phim dat ten
 // ---------------------------------------------------------------------------

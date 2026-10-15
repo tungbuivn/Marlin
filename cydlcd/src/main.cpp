@@ -214,6 +214,9 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strncasecmp(a3, "HIT", 3) == 0) ui_lvgl_test_hit(a3 + 3);
             // `UI BACK` = bam nut BACK o dong tieu de (di dung do_action) - kiem tra chong man hinh.
             else if (strcasecmp(a3, "BACK") == 0)    ui_lvgl_test_back();
+            // `UI NEXT` / `UI PREV` = bam nut phan trang cua trang dang mo (kiem tra "BACK tra ve dung cho").
+            else if (strcasecmp(a3, "NEXT") == 0)    ui_lvgl_test_scroll(true);
+            else if (strcasecmp(a3, "PREV") == 0)    ui_lvgl_test_scroll(false);
             // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
             else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
             // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).

@@ -153,6 +153,10 @@ void ui_lvgl_test_hit(const char *arg);
 // dong tieu de. Can de kiem tra chong man hinh (menu CONFIGURATION -> nhom cha -> MENU/STATUS) tu PC.
 void ui_lvgl_test_back(void);
 
+// CHAN DOAN thanh day (lenh `UI NEXT` / `UI PREV` tren COM8): bam nut phan trang cua trang dang mo (di
+// dung do_action nhu bam tay) - de kiem tra "BACK co tra ve dung cho dang xem khong" (xem `UI BOX`).
+void ui_lvgl_test_scroll(bool next);
+
 // CHAN DOAN THONG BAO trang /status (lenh `UI NOTIFY [ms] <text>` tren COM8, ms=0 -> giu mai):
 // day 1 thong bao vao kho cua trang /status (KHONG hien hop tren LCD) de kiem tra tu PC; khong tham so ->
 // in thong bao dang luu + thoi gian con lai; text rong ("UI NOTIFY 0") -> xoa thong bao dang luu.

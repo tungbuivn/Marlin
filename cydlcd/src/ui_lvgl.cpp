@@ -209,8 +209,14 @@ static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
 // PHANG (THONG SO) can biet no duoc mo TU DAU - tu MENU (-> ve MENU) hay tu menu CONFIGURATION
 // (-> tra ve dung menu do).
 static uint8_t    s_prev_page = PG_STATUS;
+// Vi tri cuon (scroll_top, px) da luu cua TUNG trang: roi trang thi nho, vao lai thi tra lai dung cho
+// dang xem. 0 = dau danh sach. (Trang MENU CON khong dung mang nay - xem submenu_save_scroll.)
+// uint16_t (khong phai lv_coord_t): noi dung 1 trang chi vai tram px -> du, va DRAM cua panel da full
+// (lan dau dung int32 lam linker bao overflow 48 byte).
+static uint16_t   s_scroll_y[PG_COUNT];
 
 static void create_page(uint8_t p);          // forward
+static void page_after_show(uint8_t p);      // forward (dinh nghia ngay truoc show_page)
 // do_action() la API chung (khai bao o ui_lvgl_int.h) vi man FILE (ui_page_files.cpp) cung goi no
 // (A_REQ_FILES / A_INITSD). files_delete_now() / ov_open_id() cung o file rieng - xem ui_lvgl_int.h.
 
@@ -466,6 +472,26 @@ void page_rebuild(uint8_t p) {
   set_text(s_title, page_title(p));
   if (s_group && s_page[p] && !focus_first_in(s_page[p]) && s_bar) lv_group_focus_obj(s_bar);
   bot_sync(true);                            // do lai chieu cao: thanh day PREV/NEXT co the doi
+  page_after_show(p);                        // tra lai cho cuon CUA NHOM + focus dong vua dung
+}
+
+// Sau khi trang da HIEN va da tra lai vi tri cuon: focus + cuon toi DONG ma nguoi dung vua dung, de ho
+// biet minh dang o dau trong danh sach (yeu cau nguoi dung 2026-10-15):
+//   - MENU: dong da mo mot man khac (page_menu_focus_sel);
+//   - MENU CON: dong NHOM vua quay lui (submenu_focus_parent) - va tra lai vi tri cuon CUA NHOM do
+//     (moi nhom co danh sach dai ngan khac nhau nen phai luu theo nhom, khong theo trang).
+static void page_after_show(uint8_t p) {
+  if (p == PG_SUBMENU) {
+    const lv_coord_t sy = submenu_scroll_y();
+    if (sy > 0 && s_page[p]) {
+      lv_obj_scroll_to_y(s_page[p], sy, LV_ANIM_OFF);
+      bot_sync(false);
+    }
+    submenu_focus_parent();
+  }
+  else if (p == PG_MENU) {
+    page_menu_focus_sel();
+  }
 }
 
 void show_page(uint8_t p) {
@@ -496,6 +522,14 @@ void show_page(uint8_t p) {
   // GIU LAI TRANG STATUS: day la trang goc, la noi MOI nut BACK tro ve, va 3 vat trang thai tren no
   // (icon WiFi + chu dBm + the SD) duoc cap nhat dinh ky tu ui_lvgl_task() cho MOI trang -> thu hoi
   // no lam tang nguy co nhap nhay ma loi ich khong dang.
+  //
+  // NHO CHO DANG XEM cua trang cu (yeu cau nguoi dung 2026-10-15: "menu co phan trang, khi bam back
+  // chua quay ve trang truoc do"): luu vi tri cuon TRUOC khi trang bi thu hoi; lan sau vao lai se tra
+  // lai (xem cuoi show_page). Trang MENU CON luu theo NHOM (submenu_save_scroll).
+  if (prev != p && prev != PG_STATUS && s_page[prev]) {
+    if (prev == PG_SUBMENU) submenu_save_scroll();
+    else                    s_scroll_y[prev] = lv_obj_get_scroll_top(s_page[prev]);
+  }
   if (prev != p) page_release(prev);
 
   // ---- 3) Tao (neu chua co) + hien trang moi ----
@@ -536,6 +570,16 @@ void show_page(uint8_t p) {
 
   // Thanh day: do noi dung SAU khi trang da duoc HIEN (xem canh bao o bot_sync)
   bot_sync(true);
+
+  // TRA LAI CHO DANG XEM + FOCUS DONG VUA DUNG (yeu cau nguoi dung 2026-10-15: "menu co phan trang,
+  // khi bam back chua quay ve trang truoc do, va chua highlight item da trigger open sub-menu").
+  // PHAI lam SAU bot_sync(true) vi bot_sync(true) dua trang ve dau (scroll = 0) de DO chieu cao noi dung.
+  // Trang MENU CON (PG_SUBMENU) khong dung mang theo trang: moi NHOM co vi tri cuon rieng.
+  if (p != PG_SUBMENU && s_scroll_y[p] > 0 && s_page[p]) {
+    lv_obj_scroll_to_y(s_page[p], s_scroll_y[p], LV_ANIM_OFF);
+    bot_sync(false);          // cap nhat lai nhan "TRANG x/y" theo vi tri vua tra lai
+  }
+  page_after_show(p);
 }
 
 // ===========================================================================
@@ -947,6 +991,17 @@ static lv_obj_t *hit_nth(lv_obj_t *o, uint16_t *k) {
 
 // CHAN DOAN nut BACK (`UI BACK` tren COM8): goi DUNG do_action(A_BACK) nhu bam nut BACK o goc phai
 // dong tieu de -> kiem tra duoc chong man hinh (menu CONFIGURATION -> nhom cha -> MENU/STATUS) tu PC.
+// CHAN DOAN thanh day: `UI NEXT` / `UI PREV` = bam nut phan trang (di dung do_action nhu bam tay).
+// Dung de kiem tra "BACK co tra ve dung CHO DANG XEM khong" (xem `UI BOX`: dong `scroll=... px`).
+void ui_lvgl_test_scroll(const bool next) {
+  Serial.printf("[UI] %s (trang %u '%s', scroll truoc = %d px)\n", next ? "NEXT" : "PREV",
+                (unsigned)s_page_act, page_title(s_page_act),
+                s_page[s_page_act] ? (int)lv_obj_get_scroll_top(s_page[s_page_act]) : 0);
+  do_action(next ? (int)A_PAGE_NEXT : (int)A_PAGE_PREV);
+  Serial.printf("[UI] %s -> scroll = %d px\n", next ? "NEXT" : "PREV",
+                s_page[s_page_act] ? (int)lv_obj_get_scroll_top(s_page[s_page_act]) : 0);
+}
+
 void ui_lvgl_test_back(void) {
   Serial.printf("[UI] BACK (tu trang %u '%s')\n", (unsigned)s_page_act, page_title(s_page_act));
   do_action((int)A_BACK);
@@ -999,6 +1054,30 @@ void ui_lvgl_dump_layout(void) {
   Serial.printf("[UI] trang %u '%s' | vung noi dung %dx%d | thanh day %s\n",
                 (unsigned)s_page_act, page_title(s_page_act), (int)PAGE_INN_W, (int)PAGE_INN_H,
                 bot_shown() ? "HIEN (noi dung tran)" : "an (noi dung gon)");
+  // CHO DANG XEM + VAT DANG FOCUS (de kiem tra "BACK co tra ve dung trang/dong khong"):
+  //   scroll  = scroll_top (px) - 0 la dau danh sach;
+  //   focus   = chi so + chu cua vat dang focus TRONG trang (dong menu nao dang duoc to sang).
+  if (pg) {
+    Serial.printf("[UI] scroll=%d px", (int)lv_obj_get_scroll_top(pg));
+    lv_obj_t *f = s_group ? lv_group_get_focused(s_group) : NULL;
+    if (!f) Serial.println(" | focus=(khong co)");
+    else {
+      // Tim vat dang focus trong cay con cua trang: in CHU cua no (nhan dau tien).
+      lv_obj_t *fc = f;
+      while (fc && lv_obj_get_parent(fc) != pg && lv_obj_get_parent(fc) != NULL &&
+             lv_obj_get_parent(fc) != lv_scr_act() && lv_obj_get_parent(fc) != lv_layer_top())
+        fc = lv_obj_get_parent(fc);
+      const char *ft = "-";
+      if (fc && lv_obj_get_child_cnt(fc)) {
+        lv_obj_t *l0 = lv_obj_get_child(fc, 0);
+        if (lv_obj_check_type(l0, &lv_label_class)) ft = lv_label_get_text(l0);
+      }
+      int16_t idx = -1;
+      if (fc) for (uint32_t i = 0; i < lv_obj_get_child_cnt(pg); i++)
+                if (lv_obj_get_child(pg, i) == fc) { idx = (int16_t)i; break; }
+      Serial.printf(" | focus=%d '%s'\n", (int)idx, ft);
+    }
+  }
   if (pg) {
     const uint32_t n = lv_obj_get_child_cnt(pg);
     for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(pg, i), 1);

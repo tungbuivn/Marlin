@@ -2169,6 +2169,16 @@ CAU HINH
   build dùng `CLASSIC_JERK`), `TEMP (ADV) 11/14` (ẩn `Hotend PID` vì hotend chạy `MPCTEMP`).
 * **BACK đi theo nhóm CHA** (`submenu_parent()`); đang mở lớp phủ sửa thì BACK **chỉ đóng lớp phủ**; trang
   bảng phẳng mở từ trong cây thì BACK trả về đúng cây (`s_prev_page`).
+* 🔙 **BACK nhớ CHỖ ĐANG XEM + tô sáng dòng vừa dùng** (2026-10-15 — yêu cầu người dùng: *"đối với menu có
+  phân trang, khi bấm back chưa quay về trang trước đó, và cũng chưa highlight item đã trigger open
+  sub-menu đó"*): vị trí cuộn lưu **theo từng trang** (`s_scroll_y[]`, `ui_lvgl.cpp`) và **theo từng NHÓM**
+  với menu CONFIGURATION (`s_sm_scroll[]` — cả cây dùng chung 1 trang nên không thể lưu theo trang); dòng
+  vừa mở được **focus lại** (`page_menu_focus_sel()` cho MENU, `submenu_focus_parent()` cho menu con) nên
+  có viền sáng đúng dòng đó. Hai điểm dễ sai: (1) trả lại vị trí cuộn phải làm **SAU `bot_sync(true)`** vì
+  `bot_sync(true)` đưa trang về đầu để đo chiều cao; (2) KHÔNG gọi `lv_obj_scroll_to_view()` theo dòng đã
+  nhớ (`lv_group_focus_obj()` không tự cuộn) — cuộn theo dòng sẽ **ghi đè** vị trí cuộn vừa trả lại (đã gặp:
+  nhóm ADVANCED ở scroll 92 px, quay lui bị kéo về 0). Chẩn đoán: `UI BOX` in thêm `scroll=<px>` +
+  `focus=<chỉ số dòng> '<chữ>'`, và `UI NEXT` / `UI PREV` bấm nút phân trang từ console để kiểm tra.
 
 **14 thông số mới** (phải nạp **CẢ HAI** firmware: enum `cydlcd_setting_t` trong 2 bản `cydlcd_protocol.h`
 phải khớp y nguyên thứ tự — proto vẫn là 4): `MIN_FEEDRATE` (M205 S) · `MIN_TRAVEL_FEEDRATE` (M205 T) ·

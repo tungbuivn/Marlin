@@ -45,9 +45,28 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
 };
 static lv_obj_t *mn_val[MENU_ROWS];
 static lv_obj_t *mn_val_cal;                 // dong "Calibrate touch" (chi co tren board co touch)
+// Dong nguoi dung vua bam: khi BACK ve MENU phai focus + cuon toi dong do (yeu cau nguoi dung
+// 2026-10-15: "chua highlight item da trigger open sub-menu"). KHONG luu mang con tro nut: cac dong
+// duoc tao LIEN TIEP theo thu tu nen `lv_obj_get_child(trang, i)` chinh la dong thu i (tiet kiem DRAM -
+// panel da full, xem ghi chu dram0_0_seg).
+static uint8_t s_menu_sel = 255;             // 255 = chua bam dong nao
 
 static void cb_menu_row(lv_event_t *e) {
-  show_page((uint8_t)(intptr_t)lv_event_get_user_data(e));
+  // user_data = CHI SO DONG (khong phai chi so trang nua) de nho dong vua mo man khac.
+  const uint8_t i = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  if (i >= MENU_ROWS) return;
+  s_menu_sel = i;
+  show_page(MENU_ITEMS[i].page);
+}
+
+// Focus dong da mo man khac (goi tu page_after_show() cua ui_lvgl.cpp SAU khi trang MENU da hien lai va
+// da tra vi tri cuon; focus_mark se ve khung sang cho dong do).
+// KHONG cuon theo dong (`lv_obj_scroll_to_view`): vi tri cuon da duoc tra lai dung cho nguoi dung vua
+// xem, va dong vua bam luon nam trong cho do -> cuon theo se ghi de cho cuon vua tra lai.
+void page_menu_focus_sel(void) {
+  if (s_menu_sel >= MENU_ROWS) return;
+  lv_obj_t *r = lv_obj_get_child(s_page[PG_MENU], s_menu_sel);   // xem ghi chu: child i = dong thu i
+  if (r && s_group) lv_group_focus_obj(r);
 }
 
 // "Calibrate touch": chay trinh hieu chuan 4 goc cua port (blocking, tu ve bang TFT_eSPI),
@@ -93,7 +112,7 @@ void page_menu_create(lv_obj_t *p) {
 
   for (uint8_t i = 0; i < MENU_ROWS; i++) {
     lv_obj_t *r = mk_hit(p, 0, 0, PAGE_INN_W, MENU_ROW_H - 2,
-                         cb_menu_row, (void *)(intptr_t)MENU_ITEMS[i].page);
+                         cb_menu_row, (void *)(intptr_t)i);   // user_data = CHI SO DONG (xem cb_menu_row)
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
     lv_obj_t *n = mk_label(r, MENU_ITEMS[i].name, MR_MENU);
@@ -213,6 +232,7 @@ void page_menu_destroy(void) {
   for (uint8_t i = 0; i < MENU_ROWS; i++) mn_val[i] = NULL;
   mn_val_cal   = NULL;
   s_cal_hold_ms = 0;
+  // s_menu_sel: GIU NGUYEN (dong nguoi dung da bam) - dung de focus lai khi quay ve MENU.
 }
 
 #endif  // CYDLCD_USE_LVGL

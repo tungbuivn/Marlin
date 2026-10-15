@@ -267,6 +267,7 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
 // Cap phat bang malloc() (heap ESP32) chu KHONG bang lv_mem_alloc(): pool LVGL chi 48 KB va dang
 // dung cho widget cac trang (xem page_release o ui_lvgl.cpp) - mang con tro nay khong phai widget.
 typedef struct {
+  lv_obj_t *hit[SM_ROWS];      // NUT cua tung dong (de FOCUS lai dong nguoi dung vua dung)
   lv_obj_t *nm[SM_ROWS];       // nhan TEN dong (chi SM_PRE moi phai ghi lai: ten vat lieu la dong)
   lv_obj_t *val[SM_ROWS];      // nhan COT GIA TRI cua tung dong dang ve
   uint8_t   vis[SM_ROWS];      // chi so THAT trong SM_GROUPS[g].items[] cua dong dang ve
@@ -278,6 +279,13 @@ static sm_ctx_t *s_sm = NULL;
 // Nhom dang mo: PHAI nam ngoai s_sm vi submenu_title()/submenu_parent() duoc goi CA KHI trang chua
 // duoc tao (show_page dat tieu de cho trang MOI) va page_submenu_destroy() xoa s_sm.
 static uint8_t s_sm_g = SMG_ROOT;
+// VI TRI CUON cua TUNG NHOM (yeu cau nguoi dung 2026-10-15: "menu co phan trang, khi bam back chua quay
+// ve trang truoc do"). Ca cay dung CHUNG 1 trang nen khong the luu theo trang: moi nhom co danh sach dai
+// ngan khac nhau -> phai luu theo NHOM. uint16_t cho tiet kiem DRAM (noi dung 1 nhom chi vai tram px).
+static uint16_t s_sm_scroll[SMG_COUNT];
+// DONG (chi so item) can FOCUS khi nhom hien lai: la dong vua mo nhom con (do_action A_BACK quay lui
+// hoac bam 1 dong SM_SUB). 255 = khong to dong nao.
+static uint8_t s_sm_hi = 255;
 
 // ===========================================================================
 //  Loc dong khong co du lieu (de quy qua cac nhom con)
@@ -338,6 +346,7 @@ void page_submenu_create(lv_obj_t *p) {
 
     lv_obj_t *r = mk_hit(p, 0, 0, PAGE_INN_W, MENU_ROW_H - 2,
                          cb_sm_row, (void *)(intptr_t)s_sm->n);
+    s_sm->hit[s_sm->n] = r;      // de submenu_focus_parent() focus lai dong vua mo nhom con
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
     // Dong SM_PRE lay TEN tu kho preheat (khong phai it->name) -> giu con tro nhan de update ghi lai.
@@ -405,6 +414,20 @@ void page_submenu_destroy(void) {
 // ===========================================================================
 void submenu_open(uint8_t g) {
   if (g >= SMG_COUNT) g = SMG_ROOT;
+
+  // NHO CHO CUA NHOM DANG XEM + DONG VUA DUNG (yeu cau nguoi dung 2026-10-15):
+  //   - luu `scroll_top` cua nhom dang mo de lan quay lai dung cho (moi nhom 1 vi tri rieng);
+  //   - tim DONG trong NHOM DICH co arg == nhom dang mo: do chinh la dong nguoi dung vua bam (di xuong)
+  //     hoac dong vua quay lui (BACK len nhom cha) -> se duoc FOCUS + to sang khi nhom dich hien lai.
+  s_sm_hi = 255;
+  if (s_sm_g < SMG_COUNT) {
+    const sm_group_t *G = &SM_GROUPS[g];
+    for (uint8_t i = 0; i < G->n; i++)
+      if (G->items[i].kind == SM_SUB && (uint8_t)G->items[i].arg == s_sm_g) { s_sm_hi = i; break; }
+    // Luu vi tri cuon cua nhom dang xem TRUOC khi doi nhom (trang con dang hien nen doc duoc).
+    submenu_save_scroll();
+  }
+
   s_sm_g = g;
   // Dang o TRONG trang nay (bam 1 dong nhom con): chi dung lai noi dung, KHONG tao trang moi
   // (tao trang moi se ton them bo nho LVGL va page cu van nam do).
@@ -418,6 +441,32 @@ void submenu_open(uint8_t g) {
     s_sm_g = g;
     page_rebuild(PG_SUBMENU);
   }
+}
+
+// Luu vi tri cuon cua NHOM dang mo (goi tu show_page TRUOC khi thu hoi trang MENU CON).
+void submenu_save_scroll(void) {
+  if (s_sm_g < SMG_COUNT && s_page[PG_SUBMENU])
+    s_sm_scroll[s_sm_g] = (uint16_t)lv_obj_get_scroll_top(s_page[PG_SUBMENU]);
+}
+
+// Vi tri cuon da luu cua NHOM dang mo (page_after_show tra lai sau khi trang da hien).
+lv_coord_t submenu_scroll_y(void) {
+  return (s_sm_g < SMG_COUNT) ? (lv_coord_t)s_sm_scroll[s_sm_g] : 0;
+}
+
+// Focus DONG da mo nhom con (goi tu page_after_show SAU khi trang MENU CON da hien lai VA da tra lai vi
+// tri cuon). KHONG goi `lv_obj_scroll_to_view()`: dong do chinh la dong nguoi dung vua bam (luon nam
+// trong vung nhin cua cho cuon da luu) nen chi can FOCUS - neu cuon theo dong thi se ghi de vi tri cuon
+// vua tra lai (gap that 2026-10-15: nhom ADVANCED dang o scroll 92 px, quay lui thi bi keo ve 0).
+// Chi to sang MOT lan: sau do xoa `s_sm_hi` de lan ve sau (tu man khac) khong focus lai dong cu.
+void submenu_focus_parent(void) {
+  if (!s_sm || s_sm_hi >= SMG_COUNT) return;
+  for (uint8_t k = 0; k < s_sm->n; k++) {
+    if (s_sm->vis[k] != s_sm_hi || !s_sm->hit[k]) continue;
+    if (s_group) lv_group_focus_obj(s_sm->hit[k]);
+    break;
+  }
+  s_sm_hi = 255;
 }
 
 uint8_t submenu_parent(void) {
