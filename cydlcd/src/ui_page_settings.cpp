@@ -135,10 +135,10 @@ static const set_row_t SET_ROWS[] = {
 };
 #define SET_NROWS ((uint8_t)(sizeof(SET_ROWS) / sizeof(SET_ROWS[0])))
 
-// Bang 124 + info 16 + 2 hang nut (30 + 28) + 3*GAP = 206 <= PAGE_INN_H
-// 2026-10-15: bang 124 -> 122. Font mono size 15 (line_height 20) lam dong info va 2 hang nut cao
-// them 3 px moi hang -> tong trang 208 (tran 2 px). Bang la vat CUON duoc nen bot 2 px khong anh huong.
-#define SET_TABLE_H 122                              // bang (cuon duoc) - xem tong chieu cao tren
+// Bang 112 + info 24 + 2 hang nut (30 + 28) + 3*GAP = 200 <= PAGE_INN_H
+// 2026-10-15: 124 -> 122 (font chu 20 px) -> **112** khi doi sang Blink size 17 (dong 24 px).
+// Bang la vat CUON duoc nen bot chieu cao khong anh huong gi (chi hien it dong hon).
+#define SET_TABLE_H 112                              // bang (cuon duoc) - xem tong chieu cao tren
 #define SET_COL0_W  190
 #define SET_COL1_W  (PAGE_INN_W - SET_COL0_W - 4)
 
@@ -176,11 +176,11 @@ static void settings_fill_table(void) {
 //  thi cac nhan co dau nay se ra O VUONG (Montserrat khong co U+1EA0..U+1EF9).
 // ---------------------------------------------------------------------------
 #define OV_W       260                              // khung noi dung (giua man 320)
-// 2026-10-15: 112 -> 118. Font mono size 15 -> 1 dong chu cao 20 px (truoc 17): ten (20) + dong gia
-// tri (OV_LINE_H 20) + 2 hang nut (28+28) + pad/gap = 110 -> de 112 la sat, 118 cho du khoang tho.
-#define OV_H       118
+// 2026-10-15: 112 -> 118 (font chu 20 px) -> **126** khi doi sang Blink size 17 (dong 24 px):
+// ten (24) + dong gia tri (OV_LINE_H 24) + 2 hang nut (28+28) + pad/gap = 118 -> 126 cho du khoang tho.
+#define OV_H       126
 #define OV_BTN_H   28                               // nut >= 26 px cho de cham
-#define OV_LINE_H  20                               // 1 dong chu cua font Segoe (line_height 18)
+#define OV_LINE_H  24                               // 1 dong chu cua font CHU (Blink size 17 = 24 px)
 #define OV_PAD     4
 #define OV_VCAP    150                              // be rong o gia tri
 #define OV_RAW_LIM 100000000L                       // tran raw (du moi thong so o day)

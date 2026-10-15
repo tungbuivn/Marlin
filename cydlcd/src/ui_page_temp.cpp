@@ -58,7 +58,7 @@ static void cb_temp_adj(lv_event_t *e) {
   cydlcd_link_send_gcode(cmd);
 }
 
-#define TP_ROW_H   30                                  // 1 hang nhom nhiet do
+#define TP_ROW_H   29                                  // 1 hang nhom nhiet do (font chu 24 px)
 #define TP_LBL_W   60                                  // "NOZZLE" / "BED"
 #define TP_BTN_BIG 32                                  // nut -10 / +10
 #define TP_BTN_SML 28                                  // nut -1 / +1
@@ -176,13 +176,13 @@ void page_temp_create(lv_obj_t *p) {
   }
   tp_pre_sync();
 
-  mk_btn(p, "COOLDOWN", PAGE_INN_W, 26, cb_action, (void *)(intptr_t)A_COOLDOWN);
+  mk_btn(p, "COOLDOWN", PAGE_INN_W, 24, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
   // 2026-10-15: hang nut "TUNING (MPC/PID)" DA BO theo yeu cau nguoi dung ("bo nut turning de co cho
-  // render preheat, nut turning se tinh sau"). Trang TUNING van mo duoc tu MENU (muc "Tuning (MPC/PID)")
-  // va tu nut "TUNING" o... khong con: chi con duong MENU. Nut rieng se tinh sau.
+  // render preheat, nut turning se tinh sau"). Trang TUNING van mo duoc tu MENU (muc "Tuning (MPC/PID)").
   //
-  // Tong chieu cao (6 vat lieu = 2 hang): 20 + 30*3 + 28*2 + 26 + 6*GAP = 204 <= PAGE_INN_H (206)
+  // Tong chieu cao (6 vat lieu = 2 hang; font chu Blink size 17 = dong 24 px):
+  // 24 (Profile) + 29*3 (NOZZLE/BED/FAN) + 28*2 (2 hang preheat) + 24 (COOLDOWN) + 6*GAP = 203 <= 206
 }
 
 // CHAN DOAN (lenh `UI PRE <k>` tren COM8): ban su kien CHAM vao nut preheat thu k

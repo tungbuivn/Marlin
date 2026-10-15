@@ -71,7 +71,7 @@
  *
  * LUU Y: chu tren man hinh PHAI la ASCII, vi font montserrat_14 cua LVGL khong co dau
  * tieng Viet (U+1EA0..U+1EF9). NGOAI LE: che do UI_MONO_FONT 4 dung font mono GFX TU SINH
- * (gfx4_font_robotomono qua driver lv_font_gfxfont) CO DU dau tieng Viet, nho vay lop phu SUA
+ * (gfx4_font_text qua driver lv_font_gfxfont) CO DU dau tieng Viet, nho vay lop phu SUA
  * trong SETTINGS + hang PREHEAT moi hien duoc chu co dau; chu co dau van viet bang ma UTF-8
  * (\x..) de file nguon giu duoc ASCII thuan.
  * Che do UI_MONO_FONT 0 chi dung Montserrat -> KHONG hien duoc dau (xem vn_font()).
@@ -152,7 +152,7 @@ bool wifi_api_ok(void) { return net_wifi_scan != NULL; }
 #if UI_MONO_FONT == 4
 #if UI_MONO_GFX_BPP == 4
 static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] =
-  UI_GFX_RANGES(gfx4_font_robotomono);
+  UI_GFX_RANGES(gfx4_font_text);
 #else
 static const GFXfont *const UI_FONT_RANGES[UI_GFX_RANGE_COUNT] =
   UI_GFX_RANGES(gfx_font_robotomono);
@@ -986,11 +986,26 @@ static void dump_obj(lv_obj_t *o, const uint8_t depth) {
   const char *txt = is_label  ? lv_label_get_text(o)
                   : is_roller ? lv_roller_get_options(o)
                               : "";
+  // Nhan co the chua KY TU ICON (vung Private Use U+E000..U+E0FF, UTF-8 3 byte EE 80 xx - vd chevron
+  // cua dong menu con) -> doi thanh "<icon E008>" cho DOC DUOC o log (dump khong ve duoc glyph).
+  char txtp[80];
+  {
+    size_t o2 = 0;
+    for (size_t i = 0; txt[i] && o2 + 14 < sizeof(txtp); ) {
+      const unsigned char c = (unsigned char)txt[i];
+      if (c == 0xEE && (unsigned char)txt[i + 1] == 0x80) {
+        o2 += (size_t)snprintf(txtp + o2, sizeof(txtp) - o2, "<icon E%02X>", (unsigned)(unsigned char)txt[i + 2]);
+        i += 3;
+      }
+      else txtp[o2++] = txt[i++];
+    }
+    txtp[o2] = '\0';
+  }
   Serial.printf("[UI] %s%-6s x=%d y=%d %dx%d%s%s%s\n", ind, cls,
                 (int)lv_obj_get_x(o), (int)lv_obj_get_y(o),
                 (int)lv_obj_get_width(o), (int)lv_obj_get_height(o),
                 lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN) ? " [AN]" : "",
-                (!is_roller && txt[0]) ? " : " : "", is_roller ? "" : txt);
+                (!is_roller && txtp[0]) ? " : " : "", is_roller ? "" : txtp);
   // Roller: in NGUYEN chuoi lua chon (moi dong 1 muc) - de kiem tra danh sach file man FILE SD
   // (co lan muc "." / ".." cua FAT khong, dong dau co rong khong).
   if (is_roller && txt[0]) Serial.printf("[UI] %slua chon: <<%s>>\n", ind, txt);

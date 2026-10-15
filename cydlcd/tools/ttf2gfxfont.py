@@ -285,6 +285,11 @@ def main():
                          "nho hon de 'thu' hop dong lai cho khit net (xem gfx4_font_icons).")
     ap.add_argument("--advance", type=int, default=0,
                     help="ep xAdvance (px) cho moi glyph; 0 = do tu font (font chu: advance mono)")
+    ap.add_argument("--proportional", action="store_true",
+                    help="giu xAdvance RIENG cua tung glyph (font ti le nhu SF/Blink, Arial...) "
+                         "thay vi ep 1 buoc chung. Driver lv_font_gfxfont da doc xAdvance theo tung "
+                         "glyph (dsc->adv_w = g->xAdvance) nen ve dung; KHONG dung cho font ICON "
+                         "(icon can o vuong deu nhau).")
     ap.add_argument("--map", action="append", default=[], metavar="DICH=NGUON",
                     help="doi codepoint: xuat glyph cua codepoint NGUON vao o codepoint DICH "
                          "(vd --map 0xE000=0xE63E). Can cho font ICON vi font nguon khong co "
@@ -328,7 +333,8 @@ def main():
     upem = tt["head"].unitsPerEm
 
     font = ImageFont.truetype(args.font, args.size)
-    # advance cua font mono: do tren vai ky tu, phai giong nhau
+    # advance cua font mono: do tren vai ky tu, phai giong nhau.
+    # --proportional: KHONG ep buoc chung, moi glyph giu advance rieng (xem --advance/--proportional).
     advs = [font.getlength(c) for c in "M0iW."]
     mono_adv = args.advance if args.advance else int(round(max(advs)))
     adv_spread = max(advs) - min(advs)
@@ -338,7 +344,10 @@ def main():
     print("=" * 78)
     print("ttf2gfxfont: %s" % args.font)
     print("  size (px)      : %d      unitsPerEm %d" % (args.size, upem))
-    if args.advance:
+    if args.proportional:
+        print("  xAdvance       : RIENG tung glyph (--proportional; do lech 'M0iW.' = %.3f px)"
+              % adv_spread)
+    elif args.advance:
         print("  xAdvance       : %d px  (EP bang --advance)" % mono_adv)
     else:
         print("  xAdvance       : %d px  (do lech giua cac ky tu = %.3f px -> %s)"
@@ -376,7 +385,10 @@ def main():
                 g.present = False
             else:
                 g.present = True
-                g.adv = mono_adv
+                # --proportional: advance RIENG cua glyph (font ti le). Phai >= 1 vi driver bo qua
+                # glyph co xAdvance == 0 (coi la o trong - xem lv_font_gfxfont.c).
+                g.adv = (max(1, int(round(font.getlength(chr(src_cp)))))
+                         if args.proportional else mono_adv)
                 ras = rasterize(font, chr(src_cp), args.threshold, args.bpp)
                 if ras is None:
                     g.w = g.h = 0
@@ -495,8 +507,10 @@ def main():
                % (args.size, "   nguong 1-bit: %d" % args.threshold if args.bpp == 1 else
                   "   16 muc xam (4 bit/pixel), KHONG threshold"))
     out.append(" *   bpp     : %d" % args.bpp)
-    out.append(" *   xAdvance: %d px %s  yAdvance: %d px   base_line: %d px"
-               % (mono_adv, "(mono)" if not args.advance else "(EP)", yadv, base_line))
+    out.append(" *   xAdvance: %s  yAdvance: %d px   base_line: %d px"
+               % ("RIENG tung glyph (font ti le)" if args.proportional
+                  else "%d px %s" % (mono_adv, "(mono)" if not args.advance else "(EP)"),
+                  yadv, base_line))
     out.append(" *   do dai  : %d dai, %d o, %d glyph co net, %d byte bitmap"
                % (len(blocks), total_glyphs, total_ink, total_bytes))
     out.append(" *")
@@ -598,7 +612,11 @@ def main():
     out.append("#define %s_BASELINE %d" % (args.name.upper(), base_line))
     out.append("#define %s_ASCENDER %d" % (args.name.upper(), asc_eff))
     out.append("#define %s_DESCENDER %d" % (args.name.upper(), desc_eff))
-    out.append("#define %s_XADVANCE %d" % (args.name.upper(), mono_adv))
+    # XADVANCE: font mono la buoc chung; font ti le thi ghi buoc LON NHAT (chi de tham khao - driver
+    # dung xAdvance cua TUNG glyph).
+    out.append("#define %s_XADVANCE %d%s"
+               % (args.name.upper(), mono_adv, "   /* font ti le: chi la buoc LON NHAT */"
+                  if args.proportional else ""))
     out.append("")
     out.append("#endif /* %s */" % guard)
     out.append("")

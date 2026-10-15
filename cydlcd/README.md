@@ -2370,29 +2370,55 @@ và từ bản này màu bám **NHIỆT ĐỘ THỰC** chứ không còn chia th
 ## Font chu (cap nhat: chi con font TU SINH)
 UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co the ep tu ngoai:
 `-DUI_MONO_FONT=0` de thu che do 0 ma khong phai sua file):
-- **`UI_MONO_FONT 4` (MAC DINH)**: font **mono TU SINH** `gfx4_font_robotomono` (4 bpp, **xAdvance 9,
-  yAdvance 20** — tu 2026-10-15 la **size 15**; truoc do size 13 / xAdvance 8 / yAdvance 17, 5 dai roi rac)
-  qua driver `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man
-  (`s_title`) giu Montserrat. **CO DU DAU tieng Viet** (U+1EA0..U+1EF9 + Ă ă Đ đ Ơ ơ Ư ư).
-  Sinh lai font bang `tools/ttf2gfxfont.py` (KHONG dung `lv_font_conv`).
+- **`UI_MONO_FONT 4` (MAC DINH)**: font **CHU TU SINH** `gfx4_font_text` (4 bpp) qua driver
+  `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man (`s_title`) giu Montserrat.
+  **CO DU DAU tieng Viet** (U+1EA0..U+1EF9 + Ă ă Đ đ Ơ ơ Ư ư). Sinh lai bang `tools/ttf2gfxfont.py`.
+  * 🆕 **2026-10-15 — ĐỔI FONT 2 LẦN (theo yêu cầu người dùng)**: lần 1 thử **BlinkMacSystemFont size 17**
+    (*"thử thay font này xem có đẹp hơn không?"*) → người dùng: *"font này xấu quá"* → lần 2 (ĐANG DÙNG):
+    **Segoe UI Regular** (`C:/Windows/Fonts/segoeui.ttf`) **size 17**, font **TỈ LỆ**, **yAdvance 22**,
+    base_line 4, ascender 18, box_h max 19, 301 glyph có nét, 17 047 byte bitmap
+    (file `src/gfx4_font_text.h` + `.c`; tên cũ `gfx4_font_robotomono` — Roboto Mono size 15 mono — **đã xoá**).
+    **Nét chữ cao đúng 12 px = BẰNG hàng X/Y/Z ở màn STATUS** (Montserrat 16): `'A' 11x12`, `'X' 10x12`,
+    `'0' 10x12` — trước đó Blink 14 chỉ cao 10 px nên người dùng thấy *"cỡ chữ bé quá"*.
+    Vì sao đổi được sang font tỉ lệ: driver đặt `dsc->adv_w = g->xAdvance` cho **từng glyph**, nên chỉ cần
+    tool sinh đúng xAdvance từng glyph ⇒ đã thêm tuỳ chọn **`--proportional`** cho `tools/ttf2gfxfont.py`
+    (trước đây tool ép 1 bước chung ⇒ chỉ dùng được cho font mono). **Font ICON vẫn phải mono** (`--advance`).
+    Kiểm chứng trên máy (log khởi động): `line_height=22 base_line=4 (ascender thuc=18)`,
+    `'A' box=11x12 adv_w=11`, `'0' 9x12 adv_w=9`, `'a' 8x9 adv_w=9`, `U+1EC7 (ệ) 9x16`
+    ⇒ **adv_w khác nhau = tỉ lệ đúng**, dấu tiếng Việt vẫn có nét. 33 codepoint "thiếu" của Segoe UI đều là
+    ký tự điều khiển U+007F..U+009F (không bao giờ dùng).
+  * 🆕 **Icon tách khỏi chữ**: dòng menu có menu con **KHÔNG còn dùng ký tự `>`** (yêu cầu người dùng:
+    *"việc hiển thị menu có submenu với '>' quá xấu, hãy vẽ icon font đẹp chút"* + *"đối với các icon
+    không phải chữ thì tách ra chỗ khác"*) — nay dùng **font ICON riêng** `gfx4_font_icons` với glyph
+    Material Icons: `U+E008` chevron_right (dòng menu con), `U+E009/E00A/E00B` = trái/lên/xuống (4 nút
+    điều hướng màn BED MESH). Đã mở rộng font icon bằng `--first 0xE000 --last 0xE00B` + 4 `--map`
+    (`0xE008=0xE5CC`, `0xE009=0xE5CB`, `0xE00A=0xE5CE`, `0xE00B=0xE5CF`) và **chứng minh 8 glyph cũ
+    không đổi một byte** bằng `tools/cmp_font_headers.py` (KẾT LUẬN: 8 GLYPH CU KHONG DOI).
+    `UI BOX` in ký tự vùng PUA thành `<icon E008>` cho dễ đọc.
 - **`UI_MONO_FONT 0`**: chi Montserrat 14 mac dinh cua LVGL (du phong). **KHONG HIEN DUOC DAU tieng
   Viet** -> `vn_font()`/`vn_font_btn()` thanh no-op, 3 nhan co dau o lop phu SUA ("Gia tri" / "Buoc" /
   "Huy") se ra **O VUONG**. Muon co dau thi PHAI dung che do 4.
-- Font ICON (WiFi / the nho) dung rieng `gfx4_font_icons` (ban nho 14 px — icon WiFi o header) va
-  `gfx4_font_icons_big` (ban to 30 px — icon WiFi o man STATUS, to bang icon FR/FL 32x32), cung sinh
-  bang `tools/ttf2gfxfont.py`.
+- Font ICON (WiFi / the nho / **chevron menu**) dung rieng `gfx4_font_icons` (ban nho 14 px — icon WiFi o
+  header + 4 chevron) va `gfx4_font_icons_big` (ban to 30 px — icon WiFi o man STATUS, to bang icon FR/FL
+  32x32), cung sinh bang `tools/ttf2gfxfont.py` tu **Material Icons**.
 - Cac font sinh bang `lv_font_conv` **DA XOA khoi repo** (che do 1 va 2 gan o cap man hinh / tung
   vat deu da thu tren may that va **MAT HET CHU**; che do 3 chua lam) — dung lai la vo ich.
-- ⚠️ **`line_height` cua font mono la 20** (size 15; truoc 2026-10-15 la 17 nhu Montserrat 14 la 16):
-  **MOI CHO CO CHIEU CAO TINH THEO 17 px PHAI XEM LAI**. Da chinh khi tang co: `MENU_ROW_H` 22 → **25**
-  (MENU + menu CONFIGURATION), `FILES_ROW_H` 18 → **21** va `FILES_ROWS` 5 → **4** (man FILE SD van 196 px),
-  `ES_ROW_H` 20 → **23** (ENDSTOP), `SET_TABLE_H` man THONG SO 124 → **122**, 2 hang nut man TUNING MPC
-  28 → **26**, `OV_H` cua lop phu SUA 112 → **118**, comment bo cuc man WIFI (202 px). Cac man tran 206 px
-  thi `bot_sync()` **TU hien thanh day PREV/NEXT**: MENU (luon tran), **menu CONFIGURATION** (10 dong x 23
-  = 250) va **INFO** (11 dong x 20 = 230) — day la 2 man MOI bi tran so voi truoc.
+- ⚠️ **Chiều cao dòng của font chữ: 22 px** (Segoe UI 17). Lịch sử: 17 (Roboto Mono 13) → 20 (Roboto Mono 15)
+  → 24 (Blink 17) → **22 (Segoe UI 17)**. Mọi chiều cao đã được nới cho **24 px** nên 22 px còn **dư 2 px —
+  KHÔNG phải sửa gì**: `MENU_ROW_H` **27** (nội dung 25), `FILES_ROW_H` **25** + `FILES_ROWS` **3** (màn FILE
+  SD 189 px), `ES_ROW_H` **25** (màn ENDSTOP 220 px → **tự phân trang** PREV/NEXT), `SET_TABLE_H` **112**
+  (THONG SO 200 px), `OV_LINE_H` **24** + `OV_H` **126** (hộp sửa số), màn TUNING MPC đặt `pad_row = 0`
+  (196 px), màn NHIỆT ĐỘ `TP_ROW_H` **29** + COOLDOWN **24** (203 px). Các màn tràn 206 px thì `bot_sync()`
+  **TỰ hiện thanh đáy PREV/NEXT**: MENU, MOTION, CAU HINH (8 dòng × 25 = 200 — vừa), INFO, ENDSTOP.
+  Đo trên máy: STATUS · CAU HINH · NHIỆT ĐỘ · FILE SD · THONG SO = **không tràn**; MENU · MOTION = tràn (có
+  thanh đáy) ✓ đúng như thiết kế.
 - Bang (`THONG SO`, luoi BED MESH) va `roller` man WIFI dung **font MAC DINH cua LVGL (montserrat_14,
-  line_height 16)** chu KHONG phai font mono (`mono_obj` chi duoc goi trong `mk_label`/`mk_btn`) → khi tang
-  co font mono thi cac bang nay KHONG doi, nen khong bi tran cot.
+  line_height 16)** chu KHONG phai font chu (`mono_obj` chi duoc goi trong `mk_label`/`mk_btn`) → khi doi
+  font chu thi cac bang nay KHONG doi, nen khong bi tran cot.
+- ✅ **Đã kiểm không chồng lấn với font tỉ lệ**: quét `UI BOX` trên 9 màn (STATUS · MENU · CAU HINH ·
+  MOTION · NHIET DO · FILE SD · THONG SO · INFO · CMD?) rồi so `x+w` của nhãn tên với `x` của nhãn giá trị
+  trong cùng một dòng — **không dòng nào chồng lấn** (chỉ còn 2 cảnh báo GIẢ trên STATUS: các nhãn nhiệt
+  độ nằm cùng ô 64 px nhưng KHÁC `y` = target/current xếp trên dưới).
 
 ## EEPROM tren trang SETTINGS (doi 2026-10-13)
 - **Da BO nut `M501 LOAD`** theo yeu cau: M501 chi DOC LAI toan bo thong so tu chip EEPROM I2C

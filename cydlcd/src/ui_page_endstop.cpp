@@ -17,10 +17,11 @@
 //  ENDSTOP (P4) -- trang thai kieu M119 tu frame CYDLCD_F_ENDSTOPS
 //  6 o: PROBE / X min / Y min / Z min / X max / Y max (id theo cydlcd_endstop_id_t)
 //  May dung Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN thi chi bao PROBE (id 0), Z min luon "mo".
-//  Chieu cao: 16 + 6*23 + 30 + 7*GAP = 198 <= 206 (font mono size 15: line_height 20 -> dong phai
-//  cao >= 20; truoc day 20 px voi line_height 17)
+//  Chieu cao (font chu Blink size 17: dong 24 px): 24 + 6*25 + 30 + 7*GAP(2) = 220 px -> TRAN 206 px
+//  => trang nay TU hien thanh day PREV/NEXT va cuon (6 dong + 1 hang nut = 2 trang). Chap nhan duoc:
+//  6 dong endstop la thong tin doc, cuon 4 px la thay het.
 // ===========================================================================
-#define ES_ROW_H 23
+#define ES_ROW_H 25
 #define ES_NAME_W 120
 
 static const uint8_t ES_ID[CYDLCD_ENDSTOP_MAX] = {

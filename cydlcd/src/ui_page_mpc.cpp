@@ -42,6 +42,10 @@ static lv_obj_t *mp_val[6];
 static lv_obj_t *mp_note;
 
 void page_mpc_create(lv_obj_t *p) {
+  // Font CHU Blink size 17 = dong 24 px: 24 (tieu de) + 6*16 (6 dong, pad_row = 0) + 24 (dong nhac
+  // nozzle) + 2*26 (2 hang nut) = 196 <= 206. Dat pad_row 0 cho 6 dong tham so (giong man MENU) vi
+  // de nguyen khoang 2 px thi trang thanh 212 px -> tran.
+  lv_obj_set_style_pad_row(p, 0, 0);
   mk_label_w(p, "MPC (M306) - nhu Marlin 12864", MR_MENU, PAGE_INN_W);
 
   for (uint8_t i = 0; i < 6; i++) {

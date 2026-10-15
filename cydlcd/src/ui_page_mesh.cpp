@@ -300,9 +300,14 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_pos(me_edit_btn, MESH_TABLE_W - ME_EDIT_W - 2, 2);
   lv_obj_set_style_bg_color(me_edit_btn, COL_BTN, 0);    // tat = mau nut thuong (bat -> COL_ACCENT)
 
-  static const char *const NAV_TXT[4] = { "<", "^", "v", ">" };
+  // 4 nut dieu huong: dung ICON cua FONT ICON (Material Icons) thay vi chu "< ^ v >" (yeu cau nguoi
+  // dung 2026-10-15: icon phai o font rieng, khong dung ky tu chu). U+E009/E00A/E00B/E008 = trai/len/
+  // xuong/phai (xem src/gfx4_font_icons.h).
+  static const char *const NAV_TXT[4] = { "\xEE\x80\x89", "\xEE\x80\x8A", "\xEE\x80\x8B", "\xEE\x80\x88" };
   for (uint8_t k = 0; k < 4; k++) {
     me_nav[k] = mk_btn(me_layer, NAV_TXT[k], ME_NAV_W, ME_NAV_H, cb_mesh_nav, (void *)(intptr_t)k);
+    // Doi font cho NHAN cua nut (mk_btn tao dung 1 label con) -> icon hien dung net.
+    lv_obj_set_style_text_font(lv_obj_get_child(me_nav[k], 0), gfx4_font_icons_get(), 0);
     const lv_coord_t w = MESH_TABLE_W, h = MESH_TABLE_H;
     if (k == 0)      lv_obj_set_pos(me_nav[k], 2, h / 2 - ME_NAV_H / 2);            // trai
     else if (k == 1) lv_obj_set_pos(me_nav[k], w / 2 - ME_NAV_W / 2, 2);            // tren

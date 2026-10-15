@@ -101,9 +101,9 @@
 // repo (che do 1 va 2 da thu tren may that deu MAT CHU; che do 3 chua lam).
 //
 // Chon font cho UI (chi con 2 che do):
-//   4 = font MONO GFX TU SINH (MAC DINH): gfx4_font_robotomono qua driver lv_font_gfxfont, gan
-//       TUNG nhan/nut (xem mono_obj). CO DU DAU tieng Viet (5 dai roi rac - xem UI_GFX_RANGES).
-//       Ten man (s_title) giu Montserrat DOI CHUNG. Do phan giai mau: UI_MONO_GFX_BPP o duoi.
+//   4 = font CHU GFX TU SINH (MAC DINH): gfx4_font_text (BlinkMacSystemFont, font TI LE) qua driver
+//       lv_font_gfxfont, gan TUNG nhan/nut (xem mono_obj). CO DU DAU tieng Viet (5 dai roi rac -
+//       xem UI_GFX_RANGES). Ten man (s_title) giu Montserrat DOI CHUNG. Do phan giai mau: UI_MONO_GFX_BPP.
 //   0 = chi Montserrat 14 mac dinh cua LVGL (du phong khi khong muon font GFX).
 //       >>> KHONG HIEN DUOC DAU TIENG VIET: Montserrat khong co U+1EA0..U+1EF9, va vi da xoa het
 //       font sinh bang lv_font_conv nen KHONG con font nao co dau -> vn_font()/vn_font_btn() thanh
@@ -128,17 +128,16 @@
 //  - 5 dai roi rac (khong the la 1 bang 0x20..0x1EF9: ton ~55 KB vo ich).
 //  - Moi dai la mot bang glyph rieng; lv_font_gfxfont_get_ex() tra tuan tu.
 //  - line_height/base_line lay tu du lieu glyph cua CA 5 dai (glyph tieng Viet cao hon ASCII).
-//  - Ca 2 ban font (1bpp va 4bpp) cung size 13 nen co CUNG so do: xAdvance 8, yAdvance 17,
-//    base_line 3 -> doi qua lai khong lam xo lech bo cuc UI. Chi 1 ban duoc LINK vao
-//    (ban khong dung bi linker GC khoi flash).
+//  - 2026-10-15: font CHU doi sang **BlinkMacSystemFont size 14** (font TI LE, yAdvance 19, xAdvance
+//    rieng tung glyph); font ICON van mono (`--advance`) de cac o icon deu nhau.
 // ---------------------------------------------------------------------------
 #if UI_MONO_GFX_BPP == 4
   #define UI_GFX_LAYOUT LV_FONT_GFXFONT_LAYOUT_LVGL_BPP4
-  extern const GFXfont gfx4_font_robotomono_ascii;  // U+0020..U+00FF
-  extern const GFXfont gfx4_font_robotomono_vn1;    // U+0102..U+0103  A(breve) a(breve)
-  extern const GFXfont gfx4_font_robotomono_vn2;    // U+0110..U+0111  D/ d/ gach ngang
-  extern const GFXfont gfx4_font_robotomono_vn3;    // U+01A0..U+01B1  O/ o/ U/ u/ moc
-  extern const GFXfont gfx4_font_robotomono_vn4;    // U+1EA0..U+1EF9  to hop dau tieng Viet
+  extern const GFXfont gfx4_font_text_ascii;        // U+0020..U+00FF
+  extern const GFXfont gfx4_font_text_vn1;          // U+0102..U+0103  A(breve) a(breve)
+  extern const GFXfont gfx4_font_text_vn2;          // U+0110..U+0111  D/ d/ gach ngang
+  extern const GFXfont gfx4_font_text_vn3;          // U+01A0..U+01B1  O/ o/ U/ u/ moc
+  extern const GFXfont gfx4_font_text_vn4;          // U+1EA0..U+1EF9  to hop dau tieng Viet
 #elif UI_MONO_GFX_BPP == 1
   #define UI_GFX_LAYOUT LV_FONT_GFXFONT_LAYOUT_ADAFRUIT_BPP1
   extern const GFXfont gfx_font_robotomono_ascii;
@@ -339,11 +338,10 @@ enum {
 #define GAP        2                                    // khoang cach giua cac hang / doi tuong
 
 // --- C) man MENU (menu doc kieu Marlin; cac dong do FLEX cua mk_page tu xep doc) ---
-// 2026-10-15: 22 -> 25. YEU CAU NGUOI DUNG: "tang co chu cac noi to bang co chu vi tri X,Y,Z o trang
-// STATUS" -> font mono duoc sinh lai o size 15 (line_height 17 -> 20, xAdvance 8 -> 9 - xem
-// tools/ttf2gfxfont.py va dau file src/gfx4_font_robotomono.h) nen dong menu phai cao them:
-// 25 - 2 (khoang) = 23 px cho 1 dong chu 20 px.
-#define MENU_ROW_H  25
+// 2026-10-15: 22 -> 25 (font chu len 20 px) -> **28** (doi sang BlinkMacSystemFont size 17: dong 24 px).
+// Font CHU hien tai: BlinkMacSystemFont size 17, yAdvance 24, net chu cao 12 px = DUNG bang hang X/Y/Z
+// o man STATUS (Montserrat 16) - xem src/gfx4_font_text.c.
+#define MENU_ROW_H  27
 
 // ===========================================================================
 //  Bien toan cuc dung CHUNG giua cac file

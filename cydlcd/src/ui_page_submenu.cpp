@@ -404,9 +404,14 @@ void page_submenu_create(lv_obj_t *p) {
     // Dong SM_PRE lay TEN tu kho preheat (khong phai it->name) -> giu con tro nhan de update ghi lai.
     s_sm->nm[s_sm->n] = mk_label(r, it->name, MR_MENU);
     lv_obj_align(s_sm->nm[s_sm->n], LV_ALIGN_LEFT_MID, 4, 0);
-    // Cot phai: nhom con -> ">" (bao con nua), dong sua duoc -> gia tri (dien o page_submenu_update).
-    s_sm->val[s_sm->n] = mk_label(r, it->kind == SM_SUB ? ">" : "", MR_MENUVAL);
-    lv_obj_align(s_sm->val[s_sm->n], LV_ALIGN_RIGHT_MID, -4, 0);
+    // Cot phai: nhom con -> ICON chevron (font ICON, KHONG phai chu ">"), dong sua duoc -> gia tri.
+    // YEU CAU NGUOI DUNG 2026-10-15: "viec hien thi menu co submenu voi '>' qua xau, hay ve icon font
+    // dep chut" + "doi voi cac icon khong phai chu thi tach ra cho khac" -> dung FONT ICON rieng
+    // (gfx4_font_icons, Material Icons) chu khong dung ky tu chu: U+E008 = chevron_right.
+    const bool is_sub = (it->kind == SM_SUB);
+    s_sm->val[s_sm->n] = mk_label(r, is_sub ? "\xEE\x80\x88" : "", is_sub ? COL_ACCENT : MR_MENUVAL);
+    if (is_sub) lv_obj_set_style_text_font(s_sm->val[s_sm->n], gfx4_font_icons_get(), 0);
+    lv_obj_align(s_sm->val[s_sm->n], LV_ALIGN_RIGHT_MID, -6, 0);
     s_sm->vis[s_sm->n] = i;
     s_sm->n++;
   }
