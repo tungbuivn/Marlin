@@ -2207,6 +2207,7 @@ Marlin. Đã nạp `mks_monster8.bin` qua `M997` + `dfu-util` (bản sao ở `D:
 | `UI MENU` + `UI BOX` | **10 mục** + `Calibrate touch`; cột giá trị đúng dòng (`Info = TBT`, `WiFi = DA NOI`) |
 | `UI BOX` trang ENDSTOP | 3 dòng hiện (PROBE/X min/Y min), 3 dòng `[AN]` (ẩn, `y=0` — flex bỏ qua); nội dung 95 px ⇒ `thanh day an` |
 | `M119` trên COM4 | `z_min: TRIGGERED` — **Marlin vẫn báo vậy** (đó là mức điện của chân); panel mới là chỗ gửi `open` khi chưa deploy |
+| `M401` (Deploy Z-Probe) rồi xem lại trang ENDSTOP | ✅ **người dùng đã thử trên máy: đúng** — chưa deploy thì `PROBE = mo (open)`, sau `M401` (đầu dò đã bật) thì `PROBE = CHAM (triggered)`. `M402` (Stow) đưa về `open` như cũ |
 | Đo nhịp trên COM4 (`PANEL DIAG … REQ=`) khi **đang mở** trang ENDSTOP | **300 frame / 10 s = 30,0 lần/giây** |
 | Đo nhịp sau khi **`UI BACK` ra khỏi** trang ENDSTOP | `REQ` đứng yên: **0 frame / 5 s** ⇒ đã ngừng monitor |
 | `[CYD] ui cham >=20ms` khi mở trang ENDSTOP | **0 lần/giây**, lượt cập nhật **≈0,36 ms** |
