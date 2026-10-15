@@ -138,6 +138,7 @@ chỉ còn 2 cách tệ hơn: vẽ ngay theo từng frame (kiểu 1 luồng hi�
 | **B0** | Dựng "ranh giới" (`state_read()` seqlock, `link_post_*()`, `ui_post_*()`, `card_lock/unlock()`, `log_post()`) — **vẫn 1 luồng** — **+ đồng hồ đo độ trễ của link** (`max gap` giữa 2 lần link chạy, số lần trễ > X ms) | `UI RX`, `UI PERF`, `UI BOX`, `M220 S42` → Marlin `FR:43%`; **ghi lại `max gap` làm mốc "trước khi tách"** |
 | **B1** | Tách **`link` một mình trên core 1** (prio 20) + UART `onReceive` notify + toàn bộ log qua queue; `loopTask` kết thúc | ✅ **XONG 2026-10-15** — xem §5.1 (số đo ngay dưới) |
 | **B2a** | **`card_mtx`** (khoá thẻ dùng chung 2 core) + sửa 2 chỗ gọi chéo task | ✅ **XONG 2026-10-15** — xem §5.2 |
+| **B2c** | **Ưu tiên Marlin khi dùng thẻ** (yêu cầu người dùng: *"nếu lúc in mà user mở trang list file thì sẽ thành lỗi… nếu Marlin request thì hủy access bên phía LCD, trừ trường hợp đang upload"*) | ✅ **XONG 2026-10-15** — xem §5.3 |
 | **B2b** | Tách **`net`** (core 0, prio 4) + đổi 6 chỗ ghi `cydlcd` ngoài `link` thành lệnh + overlay upload qua thông điệp | upload 4 MB ⇒ `PING` **không sót frame**, `max gap` vẫn nhỏ, UI vẫn vẽ, `UI RX` trả lời được |
 | **B3** | Tách **`ui`** (core 0, prio 5, 10 lần/s + ngắt touch) + bỏ LVGL khỏi `loop()` | `UI PERF` → ~10 lần thức/s; `UI STALL 30` (chỉ chặn task `net`) ⇒ PING/PONG vẫn đều; hiệu chuẩn cảm ứng không làm link chết |
 | **B4** | Tách **`log`**/console + heartbeat từng task + xoá `s_stage`; đo lại, cập nhật README | bắn lệnh COM8 liên tục trong lúc upload + vẽ ⇒ `PING` vẫn đủ, `max gap` vẫn nhỏ |
@@ -188,6 +189,33 @@ hạn); **core 0 lấy `ms=0`** (chờ tới khi có). Bọc ở: `cyd_sd_raw_re
 | Khoá thẻ — khi Marlin đọc thẻ liên tục (**`M20` ×10**) + `sd_alive()` 1 Hz của panel | **5 831 µs**, **0 lần hết trần** |
 | Task `link` trong cùng phép thử | `gap max 20 975 µs`, **0 lần > 50 ms** |
 | Marlin trong cùng phép thử | 10/10 lần `M20` trả **đủ danh sách file**; `err=0`; `alive=1`; `PING` vẫn **+1/s** (516→521→526→531→536); `hoan=10 bo=0` |
+
+### 5.3 B2c — ƯU TIÊN MARLIN KHI DÙNG THẺ SD
+
+**Yêu cầu người dùng**: *"chú ý bên marlin, nếu lúc in mà user mở trang list file thì sẽ thành lỗi (do list nhiều
+file nên timeout chẳng hạn), cho nên nếu Marlin request thì hủy access bên phía LCD, trừ trường hợp đang upload"*.
+
+**Cách làm** (`cyd_sd.cpp`): mỗi lần Marlin hỏi 1 sector (`cyd_sd_raw_read/write`) thì ghi mốc `s_marlin_sd_ms`;
+`cyd_sd_yield_to_marlin()` = *"Marlin có request trong 400 ms vừa qua **và** không có phiên upload"*. Khi đó **mọi
+thao tác thẻ CỦA MÀN HÌNH tự nhường**:
+* `cyd_sd_task()` → bỏ qua luôn vòng này (không `sd_alive()`, không `clean_dir()`, không mount lại);
+* `clean_dir()` → **thoát giữa vòng quét** (giữ phần đã dọn, lần sau làm tiếp);
+* `cyd_sd_dir_count()` / `cyd_sd_root_entry()` (trang web `/files`) → trả "bận" ngay, **không quét**;
+* `cyd_sd_delete()` / `cyd_sd_delete_dir()` → **từ chối** khi Marlin đang đọc thẻ;
+* `cyd_sd_log_dir()` (console `UI TAP L`) → in `NHUONG cho Marlin (dang doc the) - thu lai sau`.
+
+**Ngoại lệ đúng như yêu cầu**: đang có phiên upload (`s_file`/`s_busy`) thì **không nhường** — upload phải chạy xong
+(và chiều ngược lại đã bị từ chối từ trước, xem §5.2).
+
+**Đo được** (Marlin `M20` liên tục = đọc thẻ nặng, đúng tình huống "mở trang list file lúc in"):
+
+| Phép thử | Kết quả |
+|---|---|
+| `UI TAP L` **trong lúc** Marlin đọc thẻ | `[UP] goc the: NHUONG cho Marlin (dang doc the) - thu lai sau` — **trả lời ngay, không chạm thẻ** |
+| `UI TAP L` khi Marlin rảnh | liệt kê đủ **4 mục** (không hồi quy) |
+| Khoá thẻ khi Marlin đọc liên tục | chờ lâu nhất **5 736 µs**, **0 lần hết trần** |
+| Task `link` | `gap max 21 048 µs`, **0 lần > 50 ms** |
+| Marlin (6 và 8 lần `M20`) | **tất cả trả đủ danh sách file**, `err=0`, `alive=1`, `PING` vẫn **+1/s**, `hoan=14 bo=0` |
 
 ---
 

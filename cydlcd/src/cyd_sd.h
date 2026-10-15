@@ -34,6 +34,12 @@ void cyd_sd_log(void);          // 1 dong log 1 Hz (the, WiFi, phien upload, hea
 // `cyd_sd_task()`, roi XOA bo dem. Dung khi man hinh cham ma phan ve (LVGL/SPI) lai nhanh.
 void cyd_sd_perf_report(void);
 
+// UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15: "neu Marlin request thi huy access ben phia LCD, tru truong
+// hop dang upload"): true = Marlin dang dung the (co request sector trong 400 ms vua qua) VA khong co phien
+// upload -> MOI thao tac the CUA MAN HINH phai nhuong (bo qua/thu lai sau, vong quet thu muc thi thoat giua
+// duong). Dung cho cac ham liet ke/xoa trong cyd_sd.cpp va cho trang web `/files`.
+bool cyd_sd_yield_to_marlin(void);
+
 // The SD
 bool cyd_sd_ready(void);        // cache - khong SPI, khong chan
 bool cyd_sd_mount_now(void);    // mount NGAY (chan ~20-100 ms) - dung khi nguoi dung vua cam the

@@ -156,6 +156,27 @@ struct CardLock {
 };
 
 // ===========================================================================
+//  UU TIEN MARLIN KHI DUNG THE (yeu cau nguoi dung 2026-10-15)
+// ===========================================================================
+// YEU CAU: *"neu luc in ma user mo trang list file thi se thanh loi (do list nhieu file nen timeout chang han),
+// cho nen neu Marlin request thi huy access ben phia LCD, tru truong hop dang upload"*.
+// VI SAO: Marlin doc the qua UART TUNG SECTOR voi tran 1000 ms/sector (CYDLCD_SD_TIMEOUT_MS). Neu man hinh CYD
+// dang tu quet the (liet ke file cho trang web `/files`, dem muc con, tim thu muc, don rac) va giu khoa the lau
+// -> Marlin cho qua tran -> bao loi doc the GIUA BAN IN (ban in dung).
+// CACH LAM: moi lan Marlin hoi 1 sector (`cyd_sd_raw_read/write`), ghi moc `s_marlin_sd_ms`. Cac thao tac the
+// CUA MAN HINH (khong phai upload) se TU HUY / BO QUA khi Marlin dang dung the (trong 400 ms vua qua) va thu lai
+// sau; rieng vong quet thu muc thi THOAT GIUA DUONG (tra ve phan da lam) de khong giu khoa lau.
+// NGOAI LE (dung y nguoi dung): dang co PHIEN UPLOAD (`s_file`/`s_busy`) thi KHONG huy - upload phai chay xong;
+// va trong luc upload thi chieu nguoc lai da bi TU CHOI tu truoc (xem cyd_sd_raw_read).
+volatile uint32_t s_marlin_sd_ms = 0;
+#define MARLIN_SD_ACTIVE_MS 400u        // "Marlin dang dung the" = co request trong 400 ms vua qua
+static inline bool marlin_sd_active(void) {
+  return s_marlin_sd_ms && (uint32_t)(millis() - s_marlin_sd_ms) < MARLIN_SD_ACTIVE_MS;
+}
+// `upload_session()` / `cyd_sd_yield_to_marlin()` dinh nghia SAU phan khai bao `s_file`/`s_busy` (o duoi),
+// vi chung can 2 bien do.
+
+// ===========================================================================
 //  KHOA THE SD - dung chung cho CA 2 CORE (xem cydlcd/docs/ke-hoach-da-luong.md, B2a)
 // ===========================================================================
 // VI SAO PHAI CO: tu B1 (tach task `link`), the SD bi 2 CORE cham vao:
@@ -210,6 +231,11 @@ lv_obj_t *ov = nullptr, *ov_state = nullptr, *ov_info = nullptr, *ov_bar = nullp
 char      txt_state[48], txt_info[48];
 uint32_t  ov_ms = 0, rate_ms = 0, rate_base = 0, rate_x10 = 0;
 bool      s_busy = false;              // dang ghi vao the (de /status bao "writing")
+
+// ---- UU TIEN MARLIN (xem khoi chu thich o dau file) ----
+// Dat SAU `s_file`/`s_busy` vi can 2 bien do. (Ham CONG KHAI `cyd_sd_yield_to_marlin()` dinh nghia o CUOI
+// file, NGOAI anonymous namespace - vi cyd_sd.h khai bao no trong `extern "C"`.)
+static inline bool upload_session(void) { return s_file || s_busy; }
 
 // ===========================================================================
 // Tien ich nho
@@ -534,6 +560,12 @@ uint16_t clean_dir(const char *why, const bool verbose, const uint32_t min_age_s
   uint64_t freed = 0;
   const time_t nowt = time(nullptr);
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> THOAT GIUA DUONG (tra ve so da don)
+    // de khong giu khoa the lau lam Marlin qua tran 1000 ms/sector. Lan don sau (30 phut) lam tiep.
+    if (marlin_sd_active() && !upload_session()) {
+      ELOG("[UP] don %s: TAM DUNG giua duong vi Marlin dang doc the (da xoa %u file)\n", why, (unsigned)n);
+      break;
+    }
     const bool   isdir = f.isDirectory();
     const size_t sz    = f.size();
     const time_t mt    = f.getLastWrite();   // phai doc TRUOC khi close
@@ -611,6 +643,7 @@ bool cyd_sd_raw_read(const uint32_t sector, uint8_t *dst) {
   //   gui M22+M21 -> Marlin mount lai).
   // ---------------------------------------------------------------------------
   if (s_file || s_busy) { s_raw_rd_refused++; return false; }
+  s_marlin_sd_ms = millis();          // UU TIEN MARLIN: bao cho cac thao tac the CUA MAN HINH biet de NHUONG
   // KHOA THE (B2a): core 0 co the dang FATFS (sd_alive/clean_dir/xoa file/liet ke) -> cho toi da 300 ms
   // (Marlin cho 1000 ms/sector). Het tran -> tra false (Marlin coi la loi doc, thu lai sau) - KHONG cho vo han.
   if (!cyd_sd_lock(CARD_WAIT_LINK_MS)) return false;
@@ -645,6 +678,7 @@ bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
            (unsigned long)sector, (unsigned long)s_raw_wr_refused);
     return false;
   }
+  s_marlin_sd_ms = millis();          // UU TIEN MARLIN: xem chu thich o cyd_sd_raw_read
   // DONG BO TRUOC KHI GHI THO: Marlin ghi thang len the (FAT/dir), con FATFS cua man hinh CYD co cache
   // rieng -> phai day het du lieu dang cho xuong the truoc, neu khong cache cu se de len.
   // DA LUONG (sua 2026-10-15): KHONG goi `fatfs_sync()` NGAY O DAY nua. `fatfs_sync()` = `SD.end()` +
@@ -674,6 +708,8 @@ bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
 
 bool cyd_sd_delete(const char *name) {
   CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
+  // UU TIEN MARLIN: dang in/doc the thi KHONG xoa (xem khoi chu thich o dau file).
+  if (cyd_sd_yield_to_marlin()) return false;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return false;
   // Dang in thi KHONG xoa (Marlin dang doc the qua UART; xoa file khac thi duoc nhung de an toan
@@ -704,9 +740,12 @@ bool cyd_sd_delete(const char *name) {
 // Dem so MUC CON cua 1 thu muc o goc the. ESP32 VFS da bo qua "." va ".." khi liet ke (xem clean_dir()
 // o tren - vong lap do khong phai tu loc gi) nen chi can dem. -1 = khong mo duoc thu muc.
 int cyd_sd_dir_count(const char *name) {
-  CardLock lk(0); if (!lk.ok) return 0;
+  CardLock lk(0); if (!lk.ok) return -1;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return -1;
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the thi KHONG quet thu muc -> tra -1
+  // (nguoi goi hieu la "ban/thu lai sau"). Vong quet nhieu file co the lam Marlin qua tran 1000 ms/sector.
+  if (cyd_sd_yield_to_marlin()) return -1;
   // Chi mount lai khi Marlin vua ghi tho (xem giai thich o cyd_sd_delete()).
   if (s_fatfs_stale) fatfs_sync();
   if (!s_sd_ready) return -1;
@@ -734,6 +773,8 @@ int cyd_sd_dir_count(const char *name) {
 // goi rmdir() khi duong dan la thu muc, va rmdir chi xoa duoc thu muc RONG.
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) {
   CardLock lk(0); if (!lk.ok) { if (not_empty) *not_empty = false; return false; }
+  // UU TIEN MARLIN: dang in/doc the thi KHONG xoa.
+  if (cyd_sd_yield_to_marlin()) { if (not_empty) *not_empty = false; return false; }
   if (not_empty) *not_empty = false;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return false;
@@ -776,6 +817,9 @@ uint32_t    cyd_sd_last_written(void) { return s_written; }
 bool cyd_sd_root_entry(const uint8_t idx, char *name, const size_t name_n, uint32_t *size, bool *isdir) {
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || name_n == 0) return false;
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> KHONG liet ke (tra false = het danh
+  // sach lan nay). Trang web `/files` se bao "ban, thu lai sau" (xem net_upload_http.cpp).
+  if (cyd_sd_yield_to_marlin()) return false;
   if (s_fatfs_stale) fatfs_sync();          // chi khi Marlin vua ghi tho (xem cyd_sd_delete())
   if (!s_sd_ready) return false;
   File dir = SD.open("/");
@@ -827,6 +871,9 @@ const char *cyd_sd_temp_err(void) { return s_err; }
 void cyd_sd_log_dir(const char *path) {
 #if CYDLCD_SD_UART
   if (!s_sd_ready) { ELOG("[UP] goc the: chua co the\n"); return; }
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> KHONG liet ke (tra loi ngay, khong
+  // giu khoa the lau). Thu lai sau khi Marlin doc xong.
+  if (cyd_sd_yield_to_marlin()) { ELOG("[UP] goc the: NHUONG cho Marlin (dang doc the) - thu lai sau\n"); return; }
   // Chi mount lai khi Marlin vua ghi tho (xem giai thich o cyd_sd_delete()).
   if (s_fatfs_stale) fatfs_sync();
   if (!s_sd_ready) { ELOG("[UP] goc the: chua co the\n"); return; }
@@ -1540,6 +1587,9 @@ void cyd_sd_task(void) {
   // YEU CAU DONG BO FATFS tu duong `link` (core 1 khong duoc tu lam - xem cyd_sd_raw_write):
   // thao tac nay can mount lai (~2 s khi the loi) nen PHAI chay o core 0, va dang giu khoa the.
   if (s_fatfs_sync_req) { s_fatfs_sync_req = false; fatfs_sync(); }
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): Marlin dang doc the (dang in / mo danh sach file) thi
+  // MAN HINH KHONG cham vao the nua - bo qua kiem the/don rac/mount lai o vong nay (tru khi dang upload).
+  if (cyd_sd_yield_to_marlin()) return;
 #if CYDLCD_SD_SHARED
   // The dung chung: khi man hinh CYD ranh thi bus thuoc Marlin => TUYET DOI khong cham vao the (khong
   // kiem tra 1 Hz, khong mount lai). Trang thai the lay tu Marlin (co CYDLCD_SF_MEDIA trong PUSH).
@@ -1611,6 +1661,10 @@ void cyd_sd_task(void) {
 // VI SAO CAN: do duoc chang nay an ~2 s MOI vong lap (=> vong lap 0.5 Hz => "man hinh chay cuc cham" du
 // phan ve chi 3-5 ms). Hai nghi pham: `sd_alive()` (= `SD.exists("/")`, cham vao the moi lan) va `clean_dir()`
 // (quet thu muc /cydlcd_tmp). Hai con so duoi day noi ro cai nao.
+// UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15: "neu Marlin request thi huy access ben phia LCD, tru truong
+// hop dang upload"): dinh nghia O DAY (ngoai anonymous namespace) vi cyd_sd.h khai bao trong `extern "C"`.
+bool cyd_sd_yield_to_marlin(void) { return marlin_sd_active() && !upload_session(); }
+
 void cyd_sd_perf_report(void) {
   Serial.printf("[PERF] sd_task: sd_alive %lu lan, %lu us tong, tb %lu us, max %lu us | clean_dir %lu us\n",
                 (unsigned long)s_pf_check_n, (unsigned long)s_pf_check_us,
