@@ -1191,6 +1191,7 @@ preheat trên 1 dòng để điều chỉnh thì không cần vào menu con đ�
 | Giới hạn | nozzle 0..300 °C · bed 0..120 °C · fan 0..255 (0 = **không** đụng tới quạt khi preheat) |
 | API | `ui_preheat_count/name/get/set/add/remove/rename/rev` (`ui_lvgl.h`) — mọi trang đọc/ghi qua đây, chỉ `ui_preheat.cpp` giữ mảng `s_pre[]` |
 | Vẽ lại | `ui_preheat_rev()` tăng mỗi lần đổi ⇒ menu CONFIGURATION và trang NHIỆT ĐỘ tự `page_rebuild()` khi số vật liệu đổi (thêm/bớt) |
+| Nút BACK | đóng **lớp phủ trước** theo thứ tự: bàn phím đặt tên → hộp sửa 3-trong-1 → lớp phủ sửa số (THONG SO), rồi mới lên nhóm cha (nếu không, BACK vừa đổi nhóm vừa để hộp mở trên màn mới — lỗi đã gặp 2026-10-15) |
 | Lệnh console | COM8: `UI PRE` (in danh sách) · `UI PRE ADD <tên>` · `UI PRE DEL <i>` · `UI PRE SET <i> <h> <b> <f>` · `UI PRE NAME <i> <tên>` · `UI PRE OPEN <i>` (mở hộp 3-trong-1) · `UI PRE KB` (mở bàn phím) · `UI PRE <k>` (bấm nút preheat thứ k ở trang NHIỆT ĐỘ); COM7: `PRE?` · `PRE <i> <h> <b> [fan]` · `PRE ADD/DEL/NAME` |
 
 

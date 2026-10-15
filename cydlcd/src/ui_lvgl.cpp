@@ -251,6 +251,11 @@ void do_action(const int a) {
     //   3) trang bang phang (THONG SO) mo TU menu CONFIGURATION -> tra ve dung menu do;
     //   4) con lai: man con -> MENU, MENU -> STATUS.
     case A_BACK:
+      // Lop phu cua trang MENU CON phai duoc DONG TRUOC khi BACK (giong lop phu SUA cua man THONG SO):
+      // ban phim dat ten -> hop sua PREHEAT 3-trong-1 -> lop phu SUA so. Neu khong dong truoc thi BACK
+      // vua doi nhom menu vua de hop mo tren man hinh moi (loi that 2026-10-15).
+      if (preheat_kb_active())   { preheat_kb_hide();   break; }
+      if (preheat_edit_active()) { preheat_edit_hide(); break; }
       if (ov_close_open()) break;
       if (s_page_act == PG_SUBMENU) {
         const uint8_t par = submenu_parent();
@@ -942,8 +947,11 @@ static lv_obj_t *hit_nth(lv_obj_t *o, uint16_t *k) {
 void ui_lvgl_test_back(void) {
   Serial.printf("[UI] BACK (tu trang %u '%s')\n", (unsigned)s_page_act, page_title(s_page_act));
   do_action((int)A_BACK);
-  Serial.printf("[UI] BACK -> trang %u '%s' | lop phu SUA: %s\n",
-                (unsigned)s_page_act, page_title(s_page_act), ov_is_open() ? "DANG MO" : "dong");
+  Serial.printf("[UI] BACK -> trang %u '%s' | lop phu: SUA=%s PREHEAT=%s BANPHIM=%s\n",
+                (unsigned)s_page_act, page_title(s_page_act),
+                ov_is_open() ? "MO" : "dong",
+                preheat_edit_active() ? "MO" : "dong",
+                preheat_kb_active() ? "MO" : "dong");
 }
 
 void ui_lvgl_test_hit(const char *arg) {
@@ -975,9 +983,12 @@ void ui_lvgl_test_hit(const char *arg) {
   Serial.printf("[UI] HIT %d -> CLICKED vao vat %d '%s' cua trang %u '%s'\n",
                 k, k, nm, (unsigned)page0, page_title(page0));
   lv_event_send(o, LV_EVENT_CLICKED, NULL);
-  // Sau su kien: trang/tieu de co the DOI (dong menu mo man khac) hoac lop phu SUA mo ra.
-  Serial.printf("[UI] HIT -> trang %u '%s' | lop phu SUA: %s\n",
-                (unsigned)s_page_act, page_title(s_page_act), ov_is_open() ? "DANG MO" : "dong");
+  // Sau su kien: trang/tieu de co the DOI (dong menu mo man khac) hoac lop phu mo ra.
+  Serial.printf("[UI] HIT -> trang %u '%s' | lop phu: SUA=%s PREHEAT=%s BANPHIM=%s\n",
+                (unsigned)s_page_act, page_title(s_page_act),
+                ov_is_open() ? "MO" : "dong",
+                preheat_edit_active() ? "MO" : "dong",
+                preheat_kb_active() ? "MO" : "dong");
 }
 
 void ui_lvgl_dump_layout(void) {

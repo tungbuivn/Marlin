@@ -408,8 +408,16 @@ void submenu_open(uint8_t g) {
   s_sm_g = g;
   // Dang o TRONG trang nay (bam 1 dong nhom con): chi dung lai noi dung, KHONG tao trang moi
   // (tao trang moi se ton them bo nho LVGL va page cu van nam do).
-  if (s_page_act == PG_SUBMENU && s_page[PG_SUBMENU]) page_rebuild(PG_SUBMENU);
-  else show_page(PG_SUBMENU);
+  if (s_page_act == PG_SUBMENU && s_page[PG_SUBMENU]) { page_rebuild(PG_SUBMENU); return; }
+
+  show_page(PG_SUBMENU);
+  // show_page() dua trang ve NHOM GOC khi MO trang nay tu mot trang KHAC (dung y Marlin: bam tu MENU
+  // thi vao tu dau) - nhung o day NGUOI GOI DA CHI DINH nhom (vd lenh chan doan `UI CFG 14`), nen dat
+  // lai nhom da yeu cau roi dung lai noi dung. LOI THAT 2026-10-15: `UI CFG 14` in ra nhom 0.
+  if (s_sm_g != g) {
+    s_sm_g = g;
+    page_rebuild(PG_SUBMENU);
+  }
 }
 
 uint8_t submenu_parent(void) {
@@ -472,15 +480,13 @@ void submenu_dump(const char *arg) {
         // Dong VAT LIEU PREHEAT: ten + 3 thuoc tinh tren cung 1 dong (giong cach hien tren LCD).
         uint16_t h = 0, bed = 0;
         uint8_t  f = 0;
-        const bool ok = ui_preheat_get((uint8_t)it->arg, &h, &bed, &f);
-        Serial.printf("[UI] CFG     %-24s PRE slot=%u = %s\n",
-                      ok ? ui_preheat_name((uint8_t)it->arg) : "(chua co vat lieu)",
-                      (unsigned)it->arg,
-                      ok ? b : "-");
-        if (ok) {
+        if (ui_preheat_get((uint8_t)it->arg, &h, &bed, &f)) {
           snprintf(b, sizeof(b), "%u/%u/%u", (unsigned)h, (unsigned)bed, (unsigned)f);
-          Serial.printf("[UI] CFG       -> nozzle/bed/fan = %s (sua: cham dong nay -> hop 3-trong-1)\n", b);
+          Serial.printf("[UI] CFG     %-24s PRE slot=%u = %s\n", ui_preheat_name((uint8_t)it->arg),
+                        (unsigned)it->arg, b);
         }
+        else Serial.printf("[UI] CFG     %-24s PRE slot=%u = (chua co vat lieu)\n",
+                           "-", (unsigned)it->arg);
       }
       else Serial.printf("[UI] CFG     %-24s %s %u\n", it->name,
                          it->kind == SM_SUB ? "SUB ->" : "ACT", (unsigned)it->arg);
