@@ -338,10 +338,11 @@ enum {
 #define GAP        2                                    // khoang cach giua cac hang / doi tuong
 
 // --- C) man MENU (menu doc kieu Marlin; cac dong do FLEX cua mk_page tu xep doc) ---
-// 2026-10-15: 22 -> 25 (font chu len 20 px) -> **28** (doi sang BlinkMacSystemFont size 17: dong 24 px).
-// Font CHU hien tai: BlinkMacSystemFont size 17, yAdvance 24, net chu cao 12 px = DUNG bang hang X/Y/Z
-// o man STATUS (Montserrat 16) - xem src/gfx4_font_text.c.
-#define MENU_ROW_H  27
+// 2026-10-15: 22 -> 25 (font chu len 20 px, "to bang hang X/Y/Z") -> **28** khi thu Blink (dong 24 px)
+// -> **25** khi chot **Segoe UI size 16** (dong 20 px, net chu 11 px = DUNG bang Roboto Mono 15 truoc do;
+// nguoi dung: "co chinh cung co voi Roboto Mono 15 duoc khong ? chu hoi to qua").
+// 25 - 2 (khoang) = 23 px cho 1 dong chu 20 px.
+#define MENU_ROW_H  25
 
 // ===========================================================================
 //  Bien toan cuc dung CHUNG giua cac file

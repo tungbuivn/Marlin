@@ -69,10 +69,10 @@ extern "C" int  net_sd_dir_count(const char *name) __attribute__((weak));
 //      Nay moi dong la 1 nut: cham vao dong nao la `s_sel` = dung dong do, va dong do duoc to sang.
 // ===========================================================================
 #define FILES_BTN_H   26                // cao 1 hang nut (PRINT... / PAUSE... / PREV...)
-// 2026-10-15: 5 -> 4 (font chu 20 px) -> **4 -> 3** khi doi sang Blink size 17 (dong 24 px).
-// 3 dong x 25 = 75 + 2 khoang(2) = 79 -> tong trang: info 24 + 79 + 3 hang nut 78 + khoang = 189 px.
-#define FILES_ROWS    3                 // so dong file trong 1 TRANG
-#define FILES_ROW_H   25                // cao 1 dong file (= 1 nut chon; >= dong 24 px cua font chu)
+// 2026-10-15: 5 -> 4 (font chu 20 px) -> 3 khi thu Blink (dong 24 px) -> **4** khi chot Segoe UI 16
+// (dong 20 px): 4 dong x 21 + 3 khoang(2) = 90 -> tong trang 20 (info) + 90 + 3 hang nut 78 + khoang = 196 px.
+#define FILES_ROWS    4                 // so dong file trong 1 TRANG
+#define FILES_ROW_H   21                // cao 1 dong file (= 1 nut chon; >= dong 20 px cua font chu)
 
 static lv_obj_t *fl_info;                        // dong "SD: n file  T1/2" (hoac ghi chu tam thoi)
 static lv_obj_t *fl_rows;                        // khung flex COLUMN chua FILES_ROWS dong file

@@ -2373,18 +2373,19 @@ UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co th
 - **`UI_MONO_FONT 4` (MAC DINH)**: font **CHU TU SINH** `gfx4_font_text` (4 bpp) qua driver
   `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man (`s_title`) giu Montserrat.
   **CO DU DAU tieng Viet** (U+1EA0..U+1EF9 + Ă ă Đ đ Ơ ơ Ư ư). Sinh lai bang `tools/ttf2gfxfont.py`.
-  * 🆕 **2026-10-15 — ĐỔI FONT 2 LẦN (theo yêu cầu người dùng)**: lần 1 thử **BlinkMacSystemFont size 17**
-    (*"thử thay font này xem có đẹp hơn không?"*) → người dùng: *"font này xấu quá"* → lần 2 (ĐANG DÙNG):
-    **Segoe UI Regular** (`C:/Windows/Fonts/segoeui.ttf`) **size 17**, font **TỈ LỆ**, **yAdvance 22**,
-    base_line 4, ascender 18, box_h max 19, 301 glyph có nét, 17 047 byte bitmap
-    (file `src/gfx4_font_text.h` + `.c`; tên cũ `gfx4_font_robotomono` — Roboto Mono size 15 mono — **đã xoá**).
-    **Nét chữ cao đúng 12 px = BẰNG hàng X/Y/Z ở màn STATUS** (Montserrat 16): `'A' 11x12`, `'X' 10x12`,
-    `'0' 10x12` — trước đó Blink 14 chỉ cao 10 px nên người dùng thấy *"cỡ chữ bé quá"*.
+  * 🆕 **2026-10-15 — ĐỔI FONT 3 LẦN (theo yêu cầu người dùng)**: lần 1 thử **BlinkMacSystemFont size 17**
+    (*"thử thay font này xem có đẹp hơn không?"*) → *"font này xấu quá"*; lần 2 thử **Segoe UI size 17**
+    → *"chữ hơi to quá, chỉnh cùng cỡ với Roboto Mono 15 được không?"*; lần 3 (ĐANG DÙNG):
+    **Segoe UI Regular size 16** (`C:/Windows/Fonts/segoeui.ttf`), font **TỈ LỆ**, **yAdvance 20**,
+    base_line 4, ascender 16, box_h max 18, 301 glyph có nét, 14 746 byte bitmap
+    (file `src/gfx4_font_text.h` + `.c`; tên cũ `gfx4_font_robotomono` — Roboto Mono 15 mono — **đã xoá**).
+    **Nét chữ cao đúng 11 px = BẰNG Roboto Mono 15 bản đã chốt trước đó** (`'A' 10x11`, `'X' 9x11`,
+    `'0' 8x11`) và **dòng 20 px** — nên bố cục quay về đúng các con số cũ (xem mục chiều cao bên dưới).
     Vì sao đổi được sang font tỉ lệ: driver đặt `dsc->adv_w = g->xAdvance` cho **từng glyph**, nên chỉ cần
     tool sinh đúng xAdvance từng glyph ⇒ đã thêm tuỳ chọn **`--proportional`** cho `tools/ttf2gfxfont.py`
     (trước đây tool ép 1 bước chung ⇒ chỉ dùng được cho font mono). **Font ICON vẫn phải mono** (`--advance`).
-    Kiểm chứng trên máy (log khởi động): `line_height=22 base_line=4 (ascender thuc=18)`,
-    `'A' box=11x12 adv_w=11`, `'0' 9x12 adv_w=9`, `'a' 8x9 adv_w=9`, `U+1EC7 (ệ) 9x16`
+    Kiểm chứng trên máy (log khởi động): `line_height=20 base_line=4 (ascender thuc=16)`,
+    `'A' box=10x11 adv_w=10`, `'0' 8x11 adv_w=9`, `'a' 7x8 adv_w=8`, `U+1EC7 (ệ) 8x15`
     ⇒ **adv_w khác nhau = tỉ lệ đúng**, dấu tiếng Việt vẫn có nét. 33 codepoint "thiếu" của Segoe UI đều là
     ký tự điều khiển U+007F..U+009F (không bao giờ dùng).
   * 🆕 **Icon tách khỏi chữ**: dòng menu có menu con **KHÔNG còn dùng ký tự `>`** (yêu cầu người dùng:
@@ -2403,15 +2404,14 @@ UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co th
   32x32), cung sinh bang `tools/ttf2gfxfont.py` tu **Material Icons**.
 - Cac font sinh bang `lv_font_conv` **DA XOA khoi repo** (che do 1 va 2 gan o cap man hinh / tung
   vat deu da thu tren may that va **MAT HET CHU**; che do 3 chua lam) — dung lai la vo ich.
-- ⚠️ **Chiều cao dòng của font chữ: 22 px** (Segoe UI 17). Lịch sử: 17 (Roboto Mono 13) → 20 (Roboto Mono 15)
-  → 24 (Blink 17) → **22 (Segoe UI 17)**. Mọi chiều cao đã được nới cho **24 px** nên 22 px còn **dư 2 px —
-  KHÔNG phải sửa gì**: `MENU_ROW_H` **27** (nội dung 25), `FILES_ROW_H` **25** + `FILES_ROWS` **3** (màn FILE
-  SD 189 px), `ES_ROW_H` **25** (màn ENDSTOP 220 px → **tự phân trang** PREV/NEXT), `SET_TABLE_H` **112**
-  (THONG SO 200 px), `OV_LINE_H` **24** + `OV_H` **126** (hộp sửa số), màn TUNING MPC đặt `pad_row = 0`
-  (196 px), màn NHIỆT ĐỘ `TP_ROW_H` **29** + COOLDOWN **24** (203 px). Các màn tràn 206 px thì `bot_sync()`
-  **TỰ hiện thanh đáy PREV/NEXT**: MENU, MOTION, CAU HINH (8 dòng × 25 = 200 — vừa), INFO, ENDSTOP.
-  Đo trên máy: STATUS · CAU HINH · NHIỆT ĐỘ · FILE SD · THONG SO = **không tràn**; MENU · MOTION = tràn (có
-  thanh đáy) ✓ đúng như thiết kế.
+- ⚠️ **Chiều cao dòng của font chữ: 20 px** (Segoe UI 16). Lịch sử: 17 → 20 (Roboto Mono 15, đã chốt)
+  → 24 (thử Blink 17) → 22 (thử Segoe 17) → **20 (Segoe UI 16, đang dùng)**. Vì đã nới cho 24 px khi thử
+  nên 20 px dư nhiều — nhưng **đã trả lại đúng các con số đã chốt** cho gọn: `MENU_ROW_H` **25** (nội dung
+  23), `FILES_ROW_H` **21** + `FILES_ROWS` **4** (FILE SD 196 px), `ES_ROW_H` **23** (ENDSTOP 198 px, KHÔNG
+  phân trang nữa), `SET_TABLE_H` **122** (THONG SO 206 px), `OV_LINE_H` **22** + `OV_H` **118**,
+  `TP_ROW_H` **30** + COOLDOWN **26** (NHIỆT ĐỘ 204 px); màn TUNING MPC giữ `pad_row = 0` (196 px).
+  Đo trên máy: STATUS · CAU HINH · NHIỆT ĐỘ · FILE SD · THONG SO · ENDSTOP = **không tràn**;
+  MENU = tràn (có thanh đáy PREV/NEXT) ✓ đúng như thiết kế.
 - Bang (`THONG SO`, luoi BED MESH) va `roller` man WIFI dung **font MAC DINH cua LVGL (montserrat_14,
   line_height 16)** chu KHONG phai font chu (`mono_obj` chi duoc goi trong `mk_label`/`mk_btn`) → khi doi
   font chu thi cac bang nay KHONG doi, nen khong bi tran cot.
