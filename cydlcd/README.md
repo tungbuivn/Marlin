@@ -437,7 +437,8 @@ python cydlcd/tools/make_lvgl_icons.py
 >   thêm `M106 S<fan>` **chỉ khi** fan > 0) + **`COOLDOWN`** (`M104 S0` + `M140 S0`). 🆕 **Từ 2026-10-15 danh
 >   sách vật liệu do người dùng tự thêm/bớt/sửa** (NVS `ph2`, xem **§9.22**): nút chỉ hiện **tên** vật liệu,
 >   bấm xong dòng đầu hiện `Profile: <tên> <nozzle>/<bed>`; **hàng nút `TUNING (MPC/PID)` đã bỏ** để lấy chỗ
->   (trang TUNING vẫn mở được từ **MENU**).
+>   (tuning MPC/PID nay nằm ở **Configuration → Advanced Settings → Temperature** — mục `Tuning (MPC/PID)`
+>   trong MENU và cả trang đó **đã bỏ hẳn** 2026-10-15).
 > * **SETTINGS**: bảng **chỉ vẽ những dòng Marlin thực sự gửi giá trị** (bỏ `Junction dev` / `Linear adv` /
 >   PID khi build không dùng) và **sửa được tại chỗ**: chạm một dòng → hiện lớp phủ có **4 nút bước
 >   `0.01` · `0.1` · `1` · `10`** (nút đang chọn được tô nổi) + `-` / `+` (giữ nút = nhảy nhanh) + `OK` /
@@ -1211,7 +1212,7 @@ preheat trên 1 dòng để điều chỉnh thì không cần vào menu con đ�
 | Cấu trúc | **3 preset cố định** PLA/PETG/ABS, hiện **3 nhóm** `Preheat … Settings` trong menu CONFIGURATION **và 9 dòng** ở bảng THONG SO (lặp lại 2 nơi) | **1 nhóm `Preheat`** trong CONFIGURATION: mỗi vật liệu **1 dòng** hiện `TÊN  nozzle/bed/fan`; bảng THONG SO **bỏ hẳn 9 dòng** preheat |
 | Thêm/bớt | không được | dòng `+ Thêm vật liệu` (bàn phím LVGL đặt tên, tối đa 8 ký tự) + nút `Xóa` trong hộp sửa (xác nhận **2 bước**); **tối đa `CYDLCD_PRE_MAX` = 6** (trang NHIỆT ĐỘ chỉ đủ 6 nút); **không cho xóa vật liệu cuối cùng** |
 | Sửa | vào menu con rồi sửa từng dòng (nozzle / bed / fan riêng) | **hộp 3-trong-1** (`ui_page_preheat.cpp`): 3 ô `NOZ`/`BED`/`FAN` **cùng 1 hàng** — chạm ô nào thì `-`/`+` chỉnh ô đó; 3 mức bước (nhiệt độ `1/5/10`, quạt `1/5/25`); `OK` · `Hủy` · `Xóa` |
-| Trang NHIỆT ĐỘ | 1 hàng 3 nút `PLA/PETG/ABS (kèm số)` + 1 hàng `TUNING (MPC/PID)` | **2 hàng × 3 nút** = tối đa 6 vật liệu (nút chỉ hiện **TÊN**, số hiện ở dòng `Profile:` sau khi bấm); **hàng `TUNING` đã bỏ** (trang TUNING vẫn mở được từ MENU) |
+| Trang NHIỆT ĐỘ | 1 hàng 3 nút `PLA/PETG/ABS (kèm số)` + 1 hàng `TUNING (MPC/PID)` | **2 hàng × 3 nút** = tối đa 6 vật liệu (nút chỉ hiện **TÊN**, số hiện ở dòng `Profile:` sau khi bấm); **hàng `TUNING` đã bỏ**, và **trang TUNING cũng bỏ hẳn** (2026-10-15) — tuning MPC/PID chỉ còn ở Configuration → Advanced Settings → Temperature |
 
 | | |
 |---|---|
@@ -1774,7 +1775,8 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
   * *Lưu ý*: với lưới **7×7 hiện tại** thì toàn bộ lưới đã vừa khung (308×119 trong bảng 312×124) nên **4 nút
     điều hướng chưa có gì để dịch** — chúng dùng khi lưới lớn hơn (10×10) hoặc khi ô được phóng to; muốn
     phóng to ô (`MESH_CELL_W`) để phải cuộn thì chỉ cần đổi 1 dòng.
-- **(2026-10-15) Trang TUNING (MPC/PID) mới** (`ui_page_mpc.cpp`, `PG_MPC`): mở từ nút **“TUNING (MPC/PID)”**
+- **(2026-10-15) Trang TUNING (MPC/PID)** (`ui_page_mpc.cpp`, `PG_MPC`) — 📜 *lịch sử, trang này đã bị xoá
+  cuối ngày 2026-10-15, xem gạch đầu dòng ⛔ ngay dưới*: mở từ nút **“TUNING (MPC/PID)”**
   ở man NHIỆT ĐỘ hoặc mục **“Tuning (MPC/PID)”** trong MENU. Hiển thị **6 tham số MPC (M306)** đúng như menu
   MPC của Marlin 12864: `P heater W`, `C block J/K`, `R sensor`, `A amb fan0 W/K`, `F amb fanN W/K`,
   `H filament` (4 số lẻ cho R/A/F/H), kèm dòng nhắc `nozzle <n> C` (vàng + “CHO NGUOI truoc khi tune!” khi
@@ -1787,6 +1789,13 @@ Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
   * **Đo trên máy thật**: `id 43 MPC P = 40.00 · id 44 C = 7.13 · id 45 R = 0.1284 · id 46 A = 0.0680 ·
     id 47 F = 0.0970 · id 48 H = 0.0056` (khớp `M306` của Marlin) và `UI BOX` xác nhận trang TUNING có đủ
     6 dòng + 4 nút, **không phải cuộn** (`thanh day an`).
+  * ⛔ **ĐÃ BỎ HẲN (2026-10-15, cuối ngày)** — yêu cầu người dùng: *“‘turning MPC’ đã có ở trong phần
+    Configuration → advance setting → temperature rồi, bỏ những chỗ khác đi”*. Trang `PG_MPC` +
+    mục `Tuning (MPC/PID)` ở MENU + `A_GOTO_MPC` + `ui_page_mpc.cpp` **đã xoá**; MENU còn **11 dòng**
+    (`MENU_ROWS 12 → 11`). Nay **CHỈ CÒN MỘT CHỖ** để tune MPC/PID: **Configuration → Advanced Settings →
+    Temperature** = 6 dòng `SM_V` M306 (sửa được) + `MPC Autotune (M306 T)` + `Bed PID Autotune (M303)` +
+    `Hotend PID` (xem mục *“Menu CONFIGURATION kiểu 12864”*). Bảng phẳng `All settings (table)` vẫn có 6
+    dòng `MPC …` (là bảng đầy đủ, không phải chỗ tune).
 - **Icon đầu in / bàn in trên man STATUS (2026-10-15)** — theo yêu cầu: *“nếu Marlin cấp nguồn cho hot end thì
   icon fill đặc, màu thay đổi dần từ xanh đến đỏ; ngừng cấp nguồn thì chỉ vẽ border; bàn in chỉ hiện biểu
   tượng khói khi cấp nguồn”*:
@@ -2074,8 +2083,9 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
   khong rieng MENU. Nut nao het duong cuon thi bi lam mo (`bg_opa 40`).
 - `bot_sync(false)` chay o nhip cham 400 ms: chi cap nhat nhan + do mo nut, KHONG do lai chieu cao
   (xem cam bay 44 o README goc).
-- MENU: `MENU_ROWS` 9 -> 10 (them `Endstops (M119)` -> `PG_ENDSTOP`). MENU co 10 muc + dong
-  "Calibrate touch" = 11 hang x 20 px = 220 px > 206 => thanh day luon xuat hien o MENU va phan
+- MENU: `MENU_ROWS` 9 -> 10 (them `Endstops (M119)` -> `PG_ENDSTOP`); **2026-10-15 (cuoi ngay) 12 -> 11**
+  (bo muc `Tuning (MPC/PID)` - trung voi Configuration > Advanced Settings > Temperature). MENU co 11 muc +
+  dong "Calibrate touch" = 12 hang x 20 px = 240 px > 206 => thanh day luon xuat hien o MENU va phan
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
 
@@ -2429,7 +2439,8 @@ UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co th
   nên 20 px dư nhiều — nhưng **đã trả lại đúng các con số đã chốt** cho gọn: `MENU_ROW_H` **25** (nội dung
   23), `FILES_ROW_H` **21** + `FILES_ROWS` **4** (FILE SD 196 px), `ES_ROW_H` **23** (ENDSTOP 198 px, KHÔNG
   phân trang nữa), `SET_TABLE_H` **122** (THONG SO 206 px), `OV_LINE_H` **22** + `OV_H` **118**,
-  `TP_ROW_H` **30** + COOLDOWN **26** (NHIỆT ĐỘ 204 px); màn TUNING MPC giữ `pad_row = 0` (196 px).
+  `TP_ROW_H` **30** + COOLDOWN **26** (NHIỆT ĐỘ 204 px). (Màn TUNING MPC đã bỏ 2026-10-15 nên không còn
+  phải canh `pad_row` cho nó.)
   Đo trên máy: STATUS · CAU HINH · NHIỆT ĐỘ · FILE SD · THONG SO · ENDSTOP = **không tràn**;
   MENU = tràn (có thanh đáy PREV/NEXT) ✓ đúng như thiết kế.
 - Bang (`THONG SO`, luoi BED MESH) va `roller` man WIFI dung **font MAC DINH cua LVGL (montserrat_14,

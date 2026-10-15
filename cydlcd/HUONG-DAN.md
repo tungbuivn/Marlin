@@ -283,30 +283,33 @@ Dải màu nhiệt độ dựa trên **nhiệt độ thực**, không dựa trê
 
 ### 7.2 MENU
 
-MENU có 12 mục chính và một dòng hiệu chuẩn cảm ứng:
+MENU có 11 mục chính và một dòng hiệu chuẩn cảm ứng:
 
 1. `Temperature`
-2. `Motion (JOG)`
+2. `Motion`
 3. `Feed/Flow rate`
 4. `SD card`
 5. `Bed mesh`
-6. `Custom G34/SD`
+6. `Custom/Init SD`
 7. `Configuration`
-8. `Tuning (MPC/PID)`
-9. `Tramming wizard`
-10. `Info`
-11. `Endstops (M119)`
-12. `WiFi`
-13. `Calibrate touch (giu 1.5s)` — chỉ hiện trên board có touch.
+8. `Tramming wizard`
+9. `Info`
+10. `Endstops (M119)`
+11. `WiFi`
+12. `Calibrate touch (giu 1.5s)` — chỉ hiện trên board có touch.
 
 Chi tiết hiển thị hiện tại:
 
 - dòng `SD card` **không còn đếm số file**;
 - dòng `Bed mesh` cho biết kích thước lưới và `ON/OFF`;
 - dòng `Configuration` mở cây menu con kiểu 12864 (xem 7.10), không còn là bảng phẳng;
-- `Tuning` hiển thị giá trị MPC P nếu có;
+- dòng `Motion` mở menu MOTION kiểu 12864 (Move Axis (JOG), Z Probe Wizard, Tramming, UBL, Level Bed,
+  Deploy/Stow Z-Probe, M48, Disable Steppers);
 - `Tramming wizard` hiển thị trạng thái phiên;
 - `WiFi` hiển thị tắt, đang nối hoặc đã nối.
+
+> **Mục `Tuning (MPC/PID)` đã bỏ (2026-10-15)**: tuning MPC/PID nay chỉ còn ở
+> **Configuration → Advanced Settings → Temperature** (xem 7.11).
 
 ### 7.3 TEMPERATURE
 
@@ -444,11 +447,23 @@ Bấm `REFRESH (M119)` để yêu cầu dữ liệu mới. Với cấu hình dù
 
 ### 7.10 CONFIGURATION (cây menu kiểu 12864)
 
-Mục `Configuration` trong MENU mở một cây menu con giống màn 12864, thay cho bảng phẳng trước đây. Các nhóm:
+Mục `Configuration` trong MENU mở một cây menu con giống màn 12864, thay cho bảng phẳng trước đây.
 
-- `Preheat`: danh sách vật liệu (xem 7.3);
-- các nhóm thông số Marlin (Motion, Temperature, …);
-- `Advanced Settings` → `All settings`: bảng phẳng cũ (trang THONG SO) với UP/DOWN, SAVE EEPROM, M502.
+Thứ tự ở nhóm gốc `CAU HINH` (2026-10-15):
+
+1. `Advanced Settings` — **dòng đầu tiên**; bên trong có `Max Speed`, `Acceleration`, `Jerk`,
+   `Probe Offsets`, `Steps/mm`, `TMC Drivers`, `Temperature`, `Filament`, `Tune (runtime)`,
+   `Home Offset X/Y`;
+2. `Probe Z Offset` (`M851 Z`, mở hộp sửa);
+3. `Fade Height` (`M420 Z`) — **ngay dưới `Probe Z Offset`**; đây là **chỗ duy nhất** có dòng này
+   (đã bỏ khỏi `Advanced`, `Motion` và `UBL`);
+4. `Controller Fan` (`M710` I/A/S/D);
+5. `Preheat`: danh sách vật liệu (xem 7.3);
+6. `Store Settings (M500)` · `Load Settings (M501)` · `Restore Defaults (M502)` (có xác nhận 2 bước);
+7. `All settings (table)`: bảng phẳng cũ (trang THONG SO) với UP/DOWN, SAVE EEPROM, M502.
+
+Nhóm `Advanced Settings → Temperature` là nơi **duy nhất** để tuning nhiệt: 6 tham số MPC (`M306`),
+`MPC Autotune (M306 T)`, PID bàn (`M304`) + `Bed PID Autotune (M303)`, PID đầu in (`M301`) — xem 7.11.
 
 Trong bảng `All settings`: hai cột `THONG SO` và `GIA TRI`; chạm một dòng để mở hộp sửa với bước, `-`, `+`, `OK`, `Hủy`. Dòng nào Marlin không gửi giá trị thì tự ẩn. Các thông số mới gồm Min Velocity/Min Travel Speed (`M205`), dòng TMC cho Z2/Z3 (`M906`), StealthChop 6 trục (`M569`), quạt điều khiển (`M710`).
 
@@ -461,7 +476,11 @@ Trong bảng `All settings`: hai cột `THONG SO` và `GIA TRI`; chạm một d�
 
 ### 7.11 TUNING (MPC/PID)
 
-Trang này hiển thị sáu giá trị MPC thật từ Marlin:
+⛔ **Trang “TUNING (MPC/PID)” đã bỏ (2026-10-15)** — tuning MPC/PID nay **chỉ còn một chỗ**:
+**Configuration → Advanced Settings → Temperature**.
+
+Vào: MENU → `Configuration` → dòng đầu `Advanced Settings` → `Temperature`. Trong nhóm đó có sáu giá trị MPC
+thật từ Marlin (sửa được bằng `-` / `+` / `OK`):
 
 - P: heater power;
 - C: block heat capacity;
@@ -472,12 +491,12 @@ Trang này hiển thị sáu giá trị MPC thật từ Marlin:
 
 Các nút:
 
-- `M306 T (tune)`: autotune MPC đầu in;
-- `M303 E-1 60`: PID autotune bàn nhiệt ở 60 °C;
-- `SAVE EEPROM`: lưu kết quả;
-- `THONG SO`: sang SETTINGS để sửa tay.
+- `MPC Autotune (M306 T)`: autotune MPC đầu in;
+- `Bed PID Autotune (M303)`: PID autotune bàn nhiệt ở 60 °C;
+- `Bed PID-P/I/D`, `Hotend PID-P/I/D`: sửa tay thông số PID.
 
-Làm autotune khi máy an toàn, đầu in nguội theo yêu cầu của Marlin và không có bản in đang chạy.
+Muốn lưu kết quả: quay ra `Configuration` → `Store Settings (M500)`. Làm autotune khi máy an toàn, đầu in nguội
+theo yêu cầu của Marlin và không có bản in đang chạy.
 
 ### 7.12 TRAMMING WIZARD
 

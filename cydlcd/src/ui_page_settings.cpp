@@ -53,7 +53,8 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_FAN_PCT_E0,    "Fan E0 %",       100, 0 },
   { CYDLCD_SET_TARGET_TEMP_E0,"Target E0 C",    100, 0 },
   { CYDLCD_SET_TARGET_TEMP_BED,"Target bed C",  100, 0 },
-  // 6 tham so MPC (M306) - SUA duoc o day, va man TUNING chi hien thi (giong menu MPC cua Marlin 12864).
+  // 6 tham so MPC (M306) - SUA duoc o CA HAI cho: bang phang nay (SET_ROWS) va
+  // Configuration > Advanced Settings > Temperature (SM_I_TEMP tro ve dung cac id nay).
   // Chi hien khi Marlin co MPCTEMP (khong co thi Marlin khong day -> dong tu bi loc).
   { CYDLCD_SET_MPC_P,         "MPC P heater W",   1000, 2 },
   { CYDLCD_SET_MPC_C,         "MPC C block J/K",  1000, 2 },

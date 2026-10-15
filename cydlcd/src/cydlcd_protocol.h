@@ -262,7 +262,8 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_RUNOUT_EN,           // 1 = bat cam bien het filament (runout.enabled)
   CYDLCD_SET_FADE_HEIGHT,         // mm (planner.z_fade_height: chieu cao bu mesh - M420 Z,
                                   //     chi co khi ENABLE_LEVELING_FADE_HEIGHT; 0 = tat fade)
-  // 6 tham so MPC (M306) - de man TUNING hien thi giong menu MPC cua Marlin 12864 (yeu cau 2026-10-15).
+  // 6 tham so MPC (M306) - hien/sua o Configuration > Advanced Settings > Temperature (thay cho trang
+  // "TUNING MPC" da bo 2026-10-15) va o bang phang THONG SO.
   // Don vi: P W (x1000), C J/K (x1000), R K/s/K (x10000), A W/K (x10000), F W/K (x10000), H J/K/mm (x10000).
   CYDLCD_SET_MPC_P,               // cong suat heater (W)
   CYDLCD_SET_MPC_C,               // nhiet dung khoi hotend (J/K)

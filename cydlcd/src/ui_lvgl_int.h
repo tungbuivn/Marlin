@@ -224,7 +224,8 @@ enum {
   PG_STATUS = 0, PG_MENU, PG_RATE, PG_TEMP, PG_JOG, PG_FILES, PG_SETTINGS, PG_MESH, PG_CUSTOM,
   PG_TBT, PG_INFO, PG_ENDSTOP,
   PG_WIFI,                 // trang WIFI (mo tu icon WiFi o header/man STATUS hoac muc "WiFi" MENU)
-  PG_MPC,                  // trang TUNING (MPC/PID) - 6 tham so M306 + nut tune (mo tu man NHIET DO/MENU)
+  // 2026-10-15: PG_MPC (trang "TUNING MPC") da BO - xem ghi chu o MENU_ITEMS (ui_page_menu.cpp):
+  // 6 tham so M306 + 2 nut autotune deu da co trong Configuration > Advanced Settings > Temperature.
   PG_SUBMENU,              // trang MENU CON (menu "Configuration" kieu 12864): NOI DUNG do bang
                            // SM_GROUPS/SM_ITEMS trong ui_page_submenu.cpp quyet dinh theo `s_sm_g` ->
                            // MOT trang dung chung cho ca cay (khong phai 1 trang cho moi nhom).
@@ -256,10 +257,9 @@ enum {
   A_PRE_ADD, A_PRE_DELETE,
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
-  // P5 - tuning tren man TEMP
+  // P5 - tuning nhiet (dung cho Configuration > Advanced Settings > Temperature)
   A_MPC_TUNE, A_PID_BED,
-  A_GOTO_MPC,           // mo trang TUNING (MPC/PID) - muc "Tuning (MPC/PID)" trong MENU (nut o man
-                        // NHIET DO da bo 2026-10-15 de lay cho cho 6 nut preheat)
+  // 2026-10-15: A_GOTO_MPC da BO cung trang PG_MPC (muc "Tuning (MPC/PID)" o MENU).
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
   // 2026-10-15: menu MOTION giong so do 12864 (xem docs/12864-menu-map.md, nut m20):
@@ -623,7 +623,7 @@ void page_status_update(void);
 void page_menu_create(lv_obj_t *p);
 /** Cap nhat nhan cac muc MENU (mo/lam mo nut theo trang thai may + link). */
 void page_menu_update(void);
-/** Man TEMP: +/- nhiet dau in/ban in, hang FAN, 3 nut preset preheat, tuning MPC/PID + COOLDOWN. */
+/** Man TEMP: +/- nhiet dau in/ban in, hang FAN, cac dong preheat + COOLDOWN (nut tuning da bo). */
 void page_temp_create(lv_obj_t *p);
 /** Cap nhat nhiet hien tai/target, gia tri FAN va 3 nut preset cua man TEMP. */
 void page_temp_update(void);
@@ -786,14 +786,6 @@ void page_wifi_create(lv_obj_t *p);
 /** Cap nhat trang thai quet mang + ket noi WiFi (SSID/IP/RSSI) tren man WIFI. */
 void page_wifi_update(void);
 /**
- * Man TUNING (MPC/PID): hien 6 tham so MPC (M306 P/C/R/A/F/H) giong menu MPC cua Marlin 12864 + cac nut
- * tuning (M306 T autotune / M303 E-1 bed PID / SAVE EEPROM / mo man THONG SO de sua tay).
- * Mo tu nut "TUNING" o man NHIET DO hoac muc trong MENU.
- */
-void page_mpc_create(lv_obj_t *p);
-/** Cap nhat 6 gia tri MPC tu frame SETTING + dong nhac trang thai nozzle (autotune can nozzle nguoi). */
-void page_mpc_update(void);
-/**
  * Don moi thu CUA TRANG WIFI khi roi trang: dong ban phim nhap mat khau + lop phu "DANG QUET..."
  * (ca 2 la con cua lv_scr_act, KHONG phai con cua trang) va huy phien quet dang chay (mo lai input).
  * Goi tu show_page() moi khi doi man, va tu page_wifi_destroy() (idempotent).
@@ -856,7 +848,5 @@ void page_info_destroy(void);
 void page_endstop_destroy(void);
 /** Huy man WIFI (3 nhan + nut mat khau + roller). Don ban phim/lop phu quet truoc khi xoa trang. */
 void page_wifi_destroy(void);
-/** Huy man TUNING (6 nhan gia tri + 2 nhan nut + dong nhac). */
-void page_mpc_destroy(void);
 
 #endif  // CYDLCD_USE_LVGL

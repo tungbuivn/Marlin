@@ -177,7 +177,7 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 
 static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
                                                "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
-                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI", "TUNING MPC",
+                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI",
                                                "CAU HINH"};
 // Ten cua trang MENU CON khong lay tu bang tren: CA cay menu Configuration dung CHUNG 1 trang
 // (PG_SUBMENU) nen tieu de la ten NHOM dang mo -> xem page_title() duoi day.
@@ -295,7 +295,8 @@ void do_action(const int a) {
     case A_GOTO_RATE:     show_page(PG_RATE); break;
     case A_GOTO_STATUS:   show_page(PG_STATUS); break;   // nut HOME: ve thang man STATUS
     case A_GOTO_WIFI:     show_page(PG_WIFI); break;     // icon WiFi / muc MENU: mo trang WIFI
-    case A_GOTO_MPC:      show_page(PG_MPC);  break;     // muc "Tuning (MPC/PID)" trong MENU -> trang TUNING
+    // (2026-10-15: A_GOTO_MPC / PG_MPC da BO - muc "Tuning (MPC/PID)" o MENU trung voi
+    //  Configuration > Advanced Settings > Temperature, xem MENU_ITEMS o ui_page_menu.cpp.)
     case A_GOTO_ENDSTOP:  show_page(PG_ENDSTOP); break;
     // ---- Menu MOTION giong so do 12864 (xem docs/12864-menu-map.md, nut m20) ----
     case A_GOTO_MESH:     show_page(PG_MESH);  break;     // "Unified Bed Leveling > Bed Mesh"
@@ -361,7 +362,9 @@ void do_action(const int a) {
     case A_RUNOUT_TOGGLE: break;                                        // xu ly rieng (xem cb_runout_toggle)
 
     // ---- P5 tuning ----
-    case A_MPC_TUNE: cydlcd_link_send_gcode("M306 T");       break;   // MPC autotune dau in
+    // 2026-10-15: MPC autotune dau in - dung cho dong "MPC Autotune (M306 T)" trong
+    // Configuration > Advanced Settings > Temperature (trang TUNING cu da bo).
+    case A_MPC_TUNE: cydlcd_link_send_gcode("M306 T");       break;
     case A_PID_BED:  cydlcd_link_send_gcode("M303 E-1 S60"); break;   // PID ban in, target 60 do C
 
     // ---- thanh day: lui/toi 1 trang noi dung (xem bot_sync de biet khi nao co thanh nay) ----
@@ -418,7 +421,6 @@ static void create_page(uint8_t p) {
     case PG_INFO:     page_info_create(s_page[p]);     break;
     case PG_ENDSTOP:  page_endstop_create(s_page[p]);  break;
     case PG_WIFI:     page_wifi_create(s_page[p]);     break;
-    case PG_MPC:      page_mpc_create(s_page[p]);      break;
     case PG_SUBMENU:  page_submenu_create(s_page[p]);  break;
     default: break;
   }
@@ -480,7 +482,6 @@ static void page_release(uint8_t p) {
     case PG_INFO:     page_info_destroy();     break;
     case PG_ENDSTOP:  page_endstop_destroy();  break;
     case PG_WIFI:     page_wifi_destroy();     break;
-    case PG_MPC:      page_mpc_destroy();      break;
     case PG_SUBMENU:  page_submenu_destroy();  break;
     case PG_STATUS:   break;                 // khong bao gio toi day (da return o tren)
     default: break;
@@ -842,7 +843,6 @@ static void ui_lvgl_task_body(void) {
       case PG_MESH:     page_mesh_update();     break;
       case PG_CUSTOM:   page_custom_update();   break;
       case PG_WIFI:     page_wifi_update();     break;
-      case PG_MPC:      page_mpc_update();      break;
       // Menu CONFIGURATION (PG_SUBMENU): cot gia tri chi doi khi Marlin gui thong so -> nhip CHAM
       // 400 ms la du (giong trang THONG SO), khong ton SPI.
       case PG_SUBMENU:  page_submenu_update();  break;

@@ -96,7 +96,9 @@ static void fan_row(lv_obj_t *p) {
 //
 // 2026-10-15 (YEU CAU NGUOI DUNG: "max la 6 vi trang temperature kin roi, trong trang temperature bo
 // nut tuning de co cho render preheat"): 1 hang 3 nut co dinh -> 2 HANG x 3 NUT (toi da 6 vat lieu),
-// va BO hang nut "TUNING (MPC/PID)" (trang TUNING van mo duoc tu MENU - se tinh lai sau).
+// va BO hang nut "TUNING (MPC/PID)". 2026-10-15 (tiep): trang TUNING do cung da BO LUON - 6 tham so M306
+// + nut "MPC Autotune (M306 T)" + "Bed PID Autotune (M303)" nay chi con o MOT cho:
+// Configuration > Advanced Settings > Temperature (xem SM_I_TEMP o ui_page_submenu.cpp).
 #define TP_PRE_H       28                              // cao 1 hang nut preheat
 #define TP_PRE_PER_ROW 3                               // 3 nut moi hang (6 vat lieu = 2 hang)
 
@@ -179,7 +181,8 @@ void page_temp_create(lv_obj_t *p) {
   mk_btn(p, "COOLDOWN", PAGE_INN_W, 26, cb_action, (void *)(intptr_t)A_COOLDOWN);
 
   // 2026-10-15: hang nut "TUNING (MPC/PID)" DA BO theo yeu cau nguoi dung ("bo nut turning de co cho
-  // render preheat, nut turning se tinh sau"). Trang TUNING van mo duoc tu MENU (muc "Tuning (MPC/PID)").
+  // render preheat"). Trang TUNING cung da BO luon (khong con o MENU): tuning MPC/PID nam o
+  // Configuration > Advanced Settings > Temperature.
   //
   // Tong chieu cao (6 vat lieu = 2 hang; font chu Segoe UI 16 = dong 20 px):
   // 20 (Profile) + 30*3 (NOZZLE/BED/FAN) + 28*2 (2 hang preheat) + 26 (COOLDOWN) + 6*GAP = 204 <= 206
