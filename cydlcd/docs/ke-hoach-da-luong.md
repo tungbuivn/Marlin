@@ -137,7 +137,8 @@ chỉ còn 2 cách tệ hơn: vẽ ngay theo từng frame (kiểu 1 luồng hi�
 |---|---|---|
 | **B0** | Dựng "ranh giới" (`state_read()` seqlock, `link_post_*()`, `ui_post_*()`, `card_lock/unlock()`, `log_post()`) — **vẫn 1 luồng** — **+ đồng hồ đo độ trễ của link** (`max gap` giữa 2 lần link chạy, số lần trễ > X ms) | `UI RX`, `UI PERF`, `UI BOX`, `M220 S42` → Marlin `FR:43%`; **ghi lại `max gap` làm mốc "trước khi tách"** |
 | **B1** | Tách **`link` một mình trên core 1** (prio 20) + UART `onReceive` notify + toàn bộ log qua queue; `loopTask` kết thúc | ✅ **XONG 2026-10-15** — xem §5.1 (số đo ngay dưới) |
-| **B2** | Tách **`net`** (core 0, prio 4) + `card_mtx` (1 thao tác/lần giữ) + đổi 6 chỗ ghi `cydlcd` ngoài `link` thành lệnh + overlay upload qua thông điệp | upload 4 MB ⇒ `PING` **không sót frame**, `max gap` vẫn nhỏ, UI vẫn vẽ, `UI RX` trả lời được; (không cần thử chồng với Marlin đọc sector — người dùng chốt là không cần) |
+| **B2a** | **`card_mtx`** (khoá thẻ dùng chung 2 core) + sửa 2 chỗ gọi chéo task | ✅ **XONG 2026-10-15** — xem §5.2 |
+| **B2b** | Tách **`net`** (core 0, prio 4) + đổi 6 chỗ ghi `cydlcd` ngoài `link` thành lệnh + overlay upload qua thông điệp | upload 4 MB ⇒ `PING` **không sót frame**, `max gap` vẫn nhỏ, UI vẫn vẽ, `UI RX` trả lời được |
 | **B3** | Tách **`ui`** (core 0, prio 5, 10 lần/s + ngắt touch) + bỏ LVGL khỏi `loop()` | `UI PERF` → ~10 lần thức/s; `UI STALL 30` (chỉ chặn task `net`) ⇒ PING/PONG vẫn đều; hiệu chuẩn cảm ứng không làm link chết |
 | **B4** | Tách **`log`**/console + heartbeat từng task + xoá `s_stage`; đo lại, cập nhật README | bắn lệnh COM8 liên tục trong lúc upload + vẽ ⇒ `PING` vẫn đủ, `max gap` vẫn nhỏ |
 
@@ -161,7 +162,32 @@ Mỗi bước: nạp panel → chạy bộ kiểm tra ở cột phải → commi
 ⚠️ **Việc còn lại của B2 phải làm NGAY vì B1 đã tạo ra truy cập song song lên thẻ**: task `link` đọc/ghi sector thô
 trên **core 1** trong khi `cyd_sd_task()` (`sd_alive()` 1 Hz, `clean_dir()`) và đường upload (FATFS) chạy trên
 **core 0** — **chưa có `card_mtx`**. Lần thử vừa rồi may mắn không đụng nhau (`bo=0`, không lỗi), nhưng khi **đang in**
-thì Marlin đọc sector liên tục ⇒ phải thêm `card_mtx` trước khi in.
+thì Marlin đọc sector liên tục ⇒ phải thêm `card_mtx` trước khi in. → **ĐÃ LÀM ở B2a (§5.2).**
+
+### 5.2 B2a — KHOÁ THẺ SD (2 core) + 2 lỗi gọi chéo task (commit sau B1)
+
+**Khoá**: `xSemaphoreCreateRecursiveMutex` (`cyd_sd_lock(ms)` / `cyd_sd_unlock()`, có `CardLock` RAII để mọi đường
+`return` đều nhả). Luật: **đường `link` (core 1) lấy với trần 300 ms** (hết trần ⇒ trả `ERR` cho Marlin, không chờ vô
+hạn); **core 0 lấy `ms=0`** (chờ tới khi có). Bọc ở: `cyd_sd_raw_read/write`, `cyd_sd_task` (⇒ `sd_alive`/`clean_dir`/
+`sd_mount`), `cyd_sd_temp_open/write/close/abort`, `cyd_sd_finish_upload`, `cyd_sd_delete/dir_count/delete_dir`,
+`cyd_sd_mount_now`, `cyd_sd_write_test`.
+
+**2 lỗi gọi chéo task phát hiện khi rà (do B1 tạo ra, đã sửa):**
+1. `cyd_sd.cpp: notify_media_changed()` gọi **`cydclcd_link_task()` từ core 0** ⇒ **2 core cùng chạy 1 hàm không
+   re-entrant** (bộ giải frame + hàng đợi TX + trạng thái) — trước B1 chỉ có 1 người gọi nên không lộ. Nay bỏ
+   (task `link` tự chạy), chỉ `delay(CYDLCD_HTTP_SDWAIT_MS)` chờ Marlin mount lại.
+2. `cyd_sd_raw_write()` gọi **`fatfs_sync()`** (`SD.end()` + mount lại, có thể ~2 s) **ngay trong task `link`** ⇒ sẽ
+   làm gián đoạn serial. Nay chỉ **bật cờ** `s_fatfs_sync_req`, **từ chối** lần ghi đó (Marlin báo lỗi ghi thẻ, thử
+   lại sau — ghi thô từ Marlin chỉ là M28/M29/PLR) và **core 0** làm việc đồng bộ trong `cyd_sd_task()`.
+
+**Đo được:**
+
+| Phép thử | Kết quả |
+|---|---|
+| Khoá thẻ — chờ lâu nhất (rảnh) | **2 442 µs**, **0 lần hết trần** |
+| Khoá thẻ — khi Marlin đọc thẻ liên tục (**`M20` ×10**) + `sd_alive()` 1 Hz của panel | **5 831 µs**, **0 lần hết trần** |
+| Task `link` trong cùng phép thử | `gap max 20 975 µs`, **0 lần > 50 ms** |
+| Marlin trong cùng phép thử | 10/10 lần `M20` trả **đủ danh sách file**; `err=0`; `alive=1`; `PING` vẫn **+1/s** (516→521→526→531→536); `hoan=10 bo=0` |
 
 ---
 

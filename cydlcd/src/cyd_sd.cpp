@@ -107,6 +107,71 @@ uint32_t s_cleanup_ms = 0;             // moc lan don file tam dinh ky (CYDLCD_S
 // ---- DO HIEU NANG (`UI PERF`) cua chang cyd_sd_task(): xem cyd_sd_perf_report() ----
 uint32_t s_pf_check_n = 0, s_pf_check_us = 0, s_pf_check_max_us = 0, s_pf_clean_us = 0;
 uint32_t s_pf_log_n = 0, s_pf_log_us = 0;       // dong log 1 Hz (co goi SD.totalBytes/usedBytes)
+
+// ---- KHOA THE SD (xem khoi chu thich o tren) ----
+#if defined(CYDLCD_BOARD_CYD)
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/semphr.h"
+  static SemaphoreHandle_t s_card_mtx = nullptr;
+#endif
+uint32_t s_pf_card_wait_max_us = 0;    // cho lau nhat (chan doan - `UI PERF`)
+uint32_t s_pf_card_wait_to = 0;        // so lan het tran cho khoa
+#define CARD_WAIT_LINK_MS  300u        // tran cho khoa cua duong `link` (Marlin cho 1000 ms/sector)
+
+static void card_mtx_init(void) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (!s_card_mtx) s_card_mtx = xSemaphoreCreateRecursiveMutex();
+#endif
+}
+
+// Lay khoa the. `ms` = tran cho: CARD_WAIT_LINK_MS cho duong `link`, **0 = cho den khi co** (core 0).
+bool cyd_sd_lock(const uint32_t ms) {
+#if defined(CYDLCD_BOARD_CYD)
+  card_mtx_init();
+  if (!s_card_mtx) return true;                       // khong tao duoc khoa -> chay nhu cu (khong chan)
+  const uint32_t t0 = micros();
+  const TickType_t ticks = ms ? pdMS_TO_TICKS(ms) : portMAX_DELAY;
+  const bool ok = (xSemaphoreTakeRecursive(s_card_mtx, ticks) == pdTRUE);
+  const uint32_t dt = (uint32_t)(micros() - t0);
+  if (dt > s_pf_card_wait_max_us) s_pf_card_wait_max_us = dt;
+  if (!ok) { s_pf_card_wait_to++; return false; }
+  return true;
+#else
+  (void)ms; return true;
+#endif
+}
+
+void cyd_sd_unlock(void) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (s_card_mtx) xSemaphoreGiveRecursive(s_card_mtx);
+#endif
+}
+
+// RAII: tu dong nha khoa khi ra khoi pham vi (moi duong `return` deu dung, khong phai sua tung return).
+// Dung: `CardLock lk(0); if (!lk.ok) return false;`   (0 = cho den khi co khoa; duong `link` dung ms=300)
+struct CardLock {
+  bool ok;
+  explicit CardLock(const uint32_t ms) : ok(cyd_sd_lock(ms)) {}
+  ~CardLock() { if (ok) cyd_sd_unlock(); }
+};
+
+// ===========================================================================
+//  KHOA THE SD - dung chung cho CA 2 CORE (xem cydlcd/docs/ke-hoach-da-luong.md, B2a)
+// ===========================================================================
+// VI SAO PHAI CO: tu B1 (tach task `link`), the SD bi 2 CORE cham vao:
+//   - core 1 (task `link`): doc/ghi SECTOR THO cho Marlin (`cyd_sd_raw_read/write`) - phai tra loi trong
+//     1000 ms/sector (CYDLCD_SD_TIMEOUT_MS ben Marlin),
+//   - core 0 (task loop / sau nay la `net`): FATFS (mount, `sd_alive()` 1 Hz, `clean_dir()` 30 phut, xoa file,
+//     liet ke thu muc) va phien upload (SD.write tung khoi 16 KB).
+// Driver SD cua ESP32 (`SPIClass` + `SD`/FATFS) KHONG re-entrant => 2 core cung vao la hong du lieu/treo.
+//
+// LUAT (de KHONG pha muc tieu "serial khong bi gian doan"):
+//   1. `link` lay khoa voi TRAN 300 ms (`CARD_WAIT_LINK_MS`); het tran -> tra false (Marlin nhan ERR) chu
+//      KHONG cho vo han. Marlin cho 1000 ms/sector nen van con du.
+//   2. Core 0 giu khoa quanh TUNG thao tac (mot lan `SD.write` ~10-30 ms), khong giu suot ca phien upload.
+//   3. KHONG mount lai / don rac khi dang in (xem cyd_sd_task) - `sd_mount()` khi the loi mat ~2 s > 300 ms.
+//   4. Chi 1 khoa, dung RECURSIVE (cac ham nhu cyd_sd_finish_upload() goi long nhau).
+//   5. Do duoc: `s_pf_card_wait_max_us` (cho lau nhat) + `s_pf_card_wait_to` (so lan het tran) - in o `UI PERF`.
 File     s_file;
 char     s_tmp[72] = "";               // file DANG mo (1 PART, hoac file .tmp luc merge/doi ten)
 uint32_t s_got = 0;                    // TONG byte da ghi vao the cua CA PHIEN (cong don qua cac part)
@@ -371,6 +436,9 @@ void sd_lost(const char *why) {
 // ===========================================================================
 bool s_fatfs_stale   = false;
 bool s_fatfs_written = false;
+// DA LUONG (2026-10-15): duong `link` (core 1) KHONG duoc tu dong bo FATFS (`SD.end()` + mount lai ~2 s lam
+// gian doan serial) -> chi BAT CO nay; core 0 lam o `cyd_sd_task()` (ham do da giu khoa the).
+volatile bool s_fatfs_sync_req = false;
 
 // Bo dem phuc vu Marlin (de KIEM CHUNG driver SD qua UART: doc bao nhieu sector, bao nhieu loi)
 uint32_t s_raw_rd = 0, s_raw_rd_err = 0, s_raw_wr = 0, s_raw_wr_err = 0;
@@ -400,12 +468,12 @@ void fatfs_sync(void) {
 void notify_media_changed(void) {
   ELOG("[UP] bao Marlin mount lai the (M22/M21) + xin lai danh sach file\n");
   cydlcd_link_send_gcode2("M22", "M21");
-  const uint32_t t0 = millis();
-  while (millis() - t0 < CYDLCD_HTTP_SDWAIT_MS) {
-    lv_timer_handler();
-    cydlcd_link_task();
-    delay(10);
-  }
+  // DA LUONG (sua 2026-10-15): KHONG con goi `cydclcd_link_task()` / `lv_timer_handler()` o day nua:
+  //   - `cydclcd_link_task()` chay trong TASK `link` (core 1) => goi tu core 0 = HAI CORE CUNG CHAY MOT HAM
+  //     khong re-entrant (bo giai frame, hang doi TX, trang thai) => hong du lieu/treo. Truoc B1 chi co 1
+  //     nguoi goi nen khong lo; tu B1 phai bo.
+  //   - `lv_timer_handler()` thuoc task UI (core 0); o day chi can CHO Marlin mount lai (delay nhuong CPU).
+  delay(CYDLCD_HTTP_SDWAIT_MS);
   // DA LUONG: KHONG ghi thang vao `cydlcd` (do la ban cong khai, task `link` la chu so huu) - chi YEU CAU.
   cydlcd_link_reset_files();
   cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES);
@@ -513,7 +581,10 @@ void cyd_sd_retry(void) {
   s_sd_retry_ms = millis() - CYDLCD_SD_RETRY_MS;    // cho phep chay ngay o vong lap ke tiep
 }
 
-bool cyd_sd_mount_now(void) { return sd_mount(true); }
+bool cyd_sd_mount_now(void) {
+  CardLock lk(0); if (!lk.ok) return false;
+  return sd_mount(true);
+}
 
 bool cyd_sd_printer_busy(void) { return printer_busy(); }
 
@@ -540,9 +611,13 @@ bool cyd_sd_raw_read(const uint32_t sector, uint8_t *dst) {
   //   gui M22+M21 -> Marlin mount lai).
   // ---------------------------------------------------------------------------
   if (s_file || s_busy) { s_raw_rd_refused++; return false; }
+  // KHOA THE (B2a): core 0 co the dang FATFS (sd_alive/clean_dir/xoa file/liet ke) -> cho toi da 300 ms
+  // (Marlin cho 1000 ms/sector). Het tran -> tra false (Marlin coi la loi doc, thu lai sau) - KHONG cho vo han.
+  if (!cyd_sd_lock(CARD_WAIT_LINK_MS)) return false;
   // SD.readRAW(): doc THANG sector vat ly, khong qua FATFS (core ESP32 SD.cpp:124 -> sd_read_raw).
   // Doc lap voi FATFS dang mount: chi doc, khong dung cache cua FATFS.
   const bool ok = SD.readRAW(dst, sector);
+  cyd_sd_unlock();
   if (ok) s_raw_rd++; else { s_raw_rd_err++; ELOG("[UP] doc RAW sector %lu THAT BAI (the rut ra?)\n", (unsigned long)sector); }
   return ok;
 #else
@@ -572,8 +647,22 @@ bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
   }
   // DONG BO TRUOC KHI GHI THO: Marlin ghi thang len the (FAT/dir), con FATFS cua man hinh CYD co cache
   // rieng -> phai day het du lieu dang cho xuong the truoc, neu khong cache cu se de len.
-  if (s_fatfs_written) { fatfs_sync(); if (!s_sd_ready) return false; }
+  // DA LUONG (sua 2026-10-15): KHONG goi `fatfs_sync()` NGAY O DAY nua. `fatfs_sync()` = `SD.end()` +
+  // mount lai => co the ton ~2 s, ma day la duong `link` (core 1) -> se lam GIAN DOAN duong serial (vuot
+  // xa tran 300 ms). Nay chi YEU CAU core 0 dong bo (o `cyd_sd_task()`, ngoai luc nay) va TU CHOI lan ghi
+  // nay: Marlin bao loi ghi the va thu lai sau - ghi tho tu Marlin chi la M28/M29/PLR, khong cap thiet
+  // khi dang in (xem README muc 12).
+  if (s_fatfs_written) {
+    s_fatfs_sync_req = true;
+    s_raw_wr_refused++;
+    if (s_raw_wr_refused == 1 || (s_raw_wr_refused % 64u) == 0)
+      ELOG("[UP] TU CHOI ghi RAW sector %lu: chua dong bo FATFS (da xin core 0 dong bo, lan %lu)\n",
+           (unsigned long)sector, (unsigned long)s_raw_wr_refused);
+    return false;
+  }
+  if (!cyd_sd_lock(CARD_WAIT_LINK_MS)) return false;
   const bool ok = SD.writeRAW((uint8_t *)src, sector);   // core ESP32: sd_write_raw() (SD.h/SD.cpp)
+  cyd_sd_unlock();
   if (ok) { s_raw_wr++; s_fatfs_stale = true; }   // FATFS cua cydlcd gio co the LECH -> mount lai truoc
   else    { s_raw_wr_err++; ELOG("[UP] ghi RAW sector %lu THAT BAI\n", (unsigned long)sector); }
   return ok;
@@ -584,6 +673,7 @@ bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
 }
 
 bool cyd_sd_delete(const char *name) {
+  CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return false;
   // Dang in thi KHONG xoa (Marlin dang doc the qua UART; xoa file khac thi duoc nhung de an toan
@@ -614,6 +704,7 @@ bool cyd_sd_delete(const char *name) {
 // Dem so MUC CON cua 1 thu muc o goc the. ESP32 VFS da bo qua "." va ".." khi liet ke (xem clean_dir()
 // o tren - vong lap do khong phai tu loc gi) nen chi can dem. -1 = khong mo duoc thu muc.
 int cyd_sd_dir_count(const char *name) {
+  CardLock lk(0); if (!lk.ok) return 0;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return -1;
   // Chi mount lai khi Marlin vua ghi tho (xem giai thich o cyd_sd_delete()).
@@ -642,6 +733,7 @@ int cyd_sd_dir_count(const char *name) {
 // The dang o khe MAN HINH CYD (CYDLCD_SD_UART) nen man hinh tu xoa bang FATFS: ESP32 VFS `remove()`
 // goi rmdir() khi duong dan la thu muc, va rmdir chi xoa duoc thu muc RONG.
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) {
+  CardLock lk(0); if (!lk.ok) { if (not_empty) *not_empty = false; return false; }
   if (not_empty) *not_empty = false;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return false;
@@ -794,6 +886,7 @@ static uint8_t parts_scan_max(void) {
 }
 
 bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part) {
+  CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
   s_err[0] = '\0';
   s_result[0] = '\0';
   const bool first = (part <= 1u);
@@ -998,6 +1091,7 @@ static size_t sd_wbuf_flush(void) {
 }
 
 size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
+  CardLock lk(0); if (!lk.ok) return 0;      // KHOA THE: nha ngay sau moi khoi ghi (xem ke hoach)
   // PHAN BIET RO 2 LOAI "ghi loi" (truoc day gop chung thanh "ghi the TF loi" nen khong biet loi that):
   //  - file tam KHONG MO (phien bi ngat / bi chia phan lai) -> day moi la loi logic, khong phai loi the;
   //  - the ghi THIEU byte -> loi the/FATFS that.
@@ -1070,6 +1164,7 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
 // (ESP32 Arduino tat exception (-fno-exceptions) nen "try/catch" o day = MOI duong thoat deu goi ham nay:
 //  het part, het request, loi ghi, bi ngat, va ca khi mo part moi ma part cu chua dong.)
 uint32_t cyd_sd_temp_close(void) {
+  CardLock lk(0); if (!lk.ok) return 0;
   if (!s_file && !s_wbuf) return s_got;             // da dong roi -> khong lam gi
   const size_t flushed = sd_wbuf_flush();
   s_got += (uint32_t)flushed;
@@ -1093,6 +1188,7 @@ uint32_t cyd_sd_temp_close(void) {
 
 // BO PHIEN: dong file dang mo (neu con) + XOA MOI file part/.tmp cua phien.
 void cyd_sd_temp_abort(void) {
+  CardLock lk(0);
   const uint16_t left = s_wbuf_n;         // byte con trong dem (chua xuong the) - de bao trong log
   s_wbuf_n = 0;                           // bo dem ghi (khong day phan con lai xuong the)
   if (s_wbuf) { free(s_wbuf); s_wbuf = nullptr; }
@@ -1259,6 +1355,7 @@ static bool merge_parts(const uint32_t expect, char *err, const size_t errn) {
 // API: chot phien upload - doi ten file tam vao goc the (CHAN - co lop phu + khoa UI)
 // ===========================================================================
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, const size_t errn) {
+  CardLock lk(0); if (!lk.ok) { if (err && errn) snprintf(err, errn, "dang ban the SD"); return false; }   // KHOA THE (recursive)
   if (written) *written = 0;
   if (err && errn) err[0] = '\0';
   s_busy = true;
@@ -1388,6 +1485,7 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
 //  the/FATFS; neu ghi tron thi loi nam o duong upload.
 // ===========================================================================
 bool cyd_sd_write_test(const uint32_t kb) {
+  CardLock lk(0); if (!lk.ok) return false;
   const uint32_t total = kb ? (kb * 1024u) : (4u * 1024u * 1024u);
   static uint8_t buf[1436];                       // dung bang kich thuoc chunk cua WebServer
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = (uint8_t)(i * 7u + 3u);
@@ -1423,6 +1521,7 @@ bool cyd_sd_write_test(const uint32_t kb) {
 // Vong doi + log
 // ===========================================================================
 void cyd_sd_begin(void) {
+  card_mtx_init();                    // KHOA THE (B2a): tao TRUOC khi cac task bat dau chay
 #if CYDLCD_SD_SHARED
   // THE DUNG CHUNG: luc khoi dong the thuoc MARLIN -> man hinh CYD KHONG mount, chi dat chan chon MUX ve
   // phia Marlin. Panel chi gianh bus khi co phien upload (xem sd_mount/sd_release_to_marlin).
@@ -1437,6 +1536,10 @@ void cyd_sd_begin(void) {
 }
 
 void cyd_sd_task(void) {
+  CardLock lk(0);   // KHOA THE (B2a): FATFS tren core 0 vs sector tho tren core 1
+  // YEU CAU DONG BO FATFS tu duong `link` (core 1 khong duoc tu lam - xem cyd_sd_raw_write):
+  // thao tac nay can mount lai (~2 s khi the loi) nen PHAI chay o core 0, va dang giu khoa the.
+  if (s_fatfs_sync_req) { s_fatfs_sync_req = false; fatfs_sync(); }
 #if CYDLCD_SD_SHARED
   // The dung chung: khi man hinh CYD ranh thi bus thuoc Marlin => TUYET DOI khong cham vao the (khong
   // kiem tra 1 Hz, khong mount lai). Trang thai the lay tu Marlin (co CYDLCD_SF_MEDIA trong PUSH).
@@ -1516,8 +1619,12 @@ void cyd_sd_perf_report(void) {
   Serial.printf("[PERF] log 1 Hz: %lu lan, %lu us tong, tb %lu us (SD.totalBytes/usedBytes)\n",
                 (unsigned long)s_pf_log_n, (unsigned long)s_pf_log_us,
                 (unsigned long)(s_pf_log_n ? s_pf_log_us / s_pf_log_n : 0));
+  // KHOA THE (B2a): cho lau nhat + so lan het tran. YEU CAU: cho cua duong `link` phai << 1000 ms (Marlin).
+  Serial.printf("[PERF] khoa the SD: cho lau nhat %lu us | so lan het tran (300 ms): %lu\n",
+                (unsigned long)s_pf_card_wait_max_us, (unsigned long)s_pf_card_wait_to);
   s_pf_check_n = s_pf_check_us = s_pf_check_max_us = s_pf_clean_us = 0;
   s_pf_log_n = s_pf_log_us = 0;
+  s_pf_card_wait_max_us = 0; s_pf_card_wait_to = 0;
 }
 
 void cyd_sd_log(void) {
