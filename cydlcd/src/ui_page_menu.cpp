@@ -21,7 +21,7 @@
 //  MENU -- menu doc kieu Marlin (nut SETTINGS tren man STATUS mo vao day)
 //  Moi dong: [ten vang] .......... [gia tri trang]; dong la 1 nut (encoder bam = mo)
 // ===========================================================================
-#define MENU_ROWS 11
+#define MENU_ROWS 10
 // 1 dong menu: ten + trang se mo (page) HOAC mot hanh dong A_* (act) khi page == MENU_ACT_PAGE.
 // 2026-10-15: dong "Motion" khong mo mot TRANG nao ma mo NHOM menu MOTION (giong 12864: Motion la muc
 // trong Main menu) -> phai di qua do_action(A_GOTO_MOTION).
@@ -47,9 +47,11 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   // Configuration > Advanced Settings > Temperature (xem SM_I_TEMP o ui_page_submenu.cpp).
   { "Tramming wizard", PG_TBT,    0 },
   { "Info",            PG_INFO,   0 },
-  { "Endstops (M119)", PG_ENDSTOP,0 },
-  // Muc 12: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
-  // MENU gio 12 muc + dong "Calibrate touch" = 13 hang x 22 px = 286 > 206 -> thanh day
+  // 2026-10-15 (YEU CAU NGUOI DUNG: "cho hien thi endstop (m119) thi hay cho vao motion"): dong
+  // "Endstops (M119)" (PG_ENDSTOP) da BO khoi MENU chinh -> nam trong menu MOTION
+  // (Configuration khong lien quan; xem SM_I_MOTION o ui_page_submenu.cpp).
+  // Muc 10: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
+  // MENU gio 10 muc + dong "Calibrate touch" = 11 hang x 23 px = 253 > 206 -> thanh day
   // PREV/NEXT xuat hien va phan trang.
   { "WiFi",            PG_WIFI,   0 }
 };
@@ -116,7 +118,7 @@ static void cb_cal_touch(lv_event_t *e) {
 //  MENU la 1 man BINH THUONG: co dong tieu de chung o tren (ten man + LINK + BACK ben phai),
 //  cac dong menu do FLEX cua mk_page() tu xep doc (khong can toa do y).
 void page_menu_create(lv_obj_t *p) {
-  // 11 dong menu + (tren board co touch) 1 dong "Calibrate touch" = 12 dong x 20 px = 240 > 206,
+  // 10 dong menu + (tren board co touch) 1 dong "Calibrate touch" = 11 dong x 23 px = 253 > 206,
   // nen MENU luon co thanh day de phan trang (xem bot_sync; trang bi thu nho con 192 px -> 184 trong).
   // mk_page() dat pad_row = GAP cho moi man, o day phai de 0 thi moi du (cac dong la o dac lien
   // nhau - giong danh sach menu cua Marlin; dong dang chon duoc to sang + vien xanh).
@@ -196,8 +198,8 @@ void page_menu_update(void) {
   snprintf(b, sizeof(b), "%u muc", (unsigned)cydlcd.n_settings);
   set_text(mn_val[6], b);
 
-  // (2026-10-15: dong "Tuning (MPC/PID)" da BO - xem ghi chu o MENU_ITEMS. Cac chi so mn_val[] phia
-  //  duoi da doi theo: Tramming 7, link 8, Endstops 9, WiFi 10.)
+  // (2026-10-15: dong "Tuning (MPC/PID)" da BO - xem ghi chu o MENU_ITEMS. Sau do dong "Endstops (M119)"
+  //  cung BO (chuyen vao menu MOTION) nen cac chi so mn_val[] con lai la: Tramming 7, link 8, WiFi 9.)
 
   // Tramming wizard: hien trang thai WIZARD (khong phai chi bao link - chi bao link o THANH TREN).
   // Chua co dong TBT nao / mat link thi ghi ro de biet duong nao chua thong.
@@ -211,14 +213,12 @@ void page_menu_update(void) {
   snprintf(b, sizeof(b), "%s", tbt.ever ? "TBT" : (cydlcd.linked ? "PUSH" : "-"));
   set_text(mn_val[8], b);
 
-  // Muc "Endstops (M119)": man chi hien ket qua M119 nen o day chi ghi lenh da gui
-  set_text(mn_val[9], "M119");
   // Muc "WiFi": hien trang thai ngan (TAT / DANG KET NOI / DA KET NOI / khong ho tro)
-  if (!wifi_api_ok()) set_text(mn_val[10], "n/a");
+  if (!wifi_api_ok()) set_text(mn_val[9], "n/a");
   else {
     static const char *const WST[3] = { "TAT", "dang noi", "DA NOI" };
     const uint8_t ws = wifi_state_now();
-    set_text(mn_val[10], WST[ws <= 2 ? ws : 0]);
+    set_text(mn_val[9], WST[ws <= 2 ? ws : 0]);
   }
   // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
   // hien tien do de nguoi dung biet da du 1.5s chua.

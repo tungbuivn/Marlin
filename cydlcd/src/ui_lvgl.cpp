@@ -778,6 +778,17 @@ static void ui_lvgl_task_body(void) {
     return;
   }
 
+  // 2026-10-15 (YEU CAU NGUOI DUNG voi man ENDSTOP: "doc tin hieu M115 30 lan 1 giay"):
+  // Man ENDSTOP can doc nhanh hon nhieu so voi nhip chung `UI_REFRESH_MS` (150 ms), nen co DUONG RIENG:
+  // goi `page_endstop_poll()` moi nhip task `ui` (30 Hz = 33 ms) - dat TRUOC cong UI_REFRESH_MS de luot
+  // 150 ms khong lam mat nhip. PHAI giu KHOA TRANG THAI khi doc (nhu luot cap nhat ben duoi).
+  // ⚠️ CHI goi khi `s_page_act == PG_ENDSTOP`: RA KHOI MAN la ngung monitor ngay (khong xin frame M119 nua).
+  if (s_page_act == PG_ENDSTOP) {
+    cydlcd_link_state_lock();
+    page_endstop_poll();
+    cydlcd_link_state_unlock();
+  }
+
   if (now - s_upd_ms < UI_REFRESH_MS) return;      // UI_REFRESH_MS trong cydlcd_config.h
   s_upd_ms = now;
 

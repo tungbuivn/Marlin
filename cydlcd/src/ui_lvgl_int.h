@@ -773,9 +773,15 @@ void page_mesh_update(void);
 void page_custom_create(lv_obj_t *p);
 /** Cap nhat trang CUSTOM: to lai nut M412 theo trang thai cam bien filament. */
 void page_custom_update(void);
-/** Man ENDSTOP: 6 o trang thai kieu M119 (frame CYDLCD_F_ENDSTOPS). */
+/** Man ENDSTOP: cac o trang thai kieu M119 (frame CYDLCD_F_ENDSTOPS). */
 void page_endstop_create(lv_obj_t *p);
-/** Cap nhat 6 o trang thai endstop tu frame CYDLCD_F_ENDSTOPS. */
+/**
+ * Man ENDSTOP - duong RIENG 30 Hz (2026-10-15, yeu cau nguoi dung "doc tin hieu M115 30 lan 1 giay"):
+ * xin lai `CYDLCD_REQ_ENDSTOPS` moi 30 ms va ve lai cac nhan. CHI duoc goi tu `ui_lvgl_task_body()` khi
+ * `s_page_act == PG_ENDSTOP` (ra khoi man = ngung monitor) va PHAI goi trong khoa trang thai.
+ */
+void page_endstop_poll(void);
+/** Cap nhat cac o trang thai endstop tu frame CYDLCD_F_ENDSTOPS (luot chung UI_REFRESH_MS). */
 void page_endstop_update(void);
 /** Man INFO: 11 dong thong tin THAT (firmware, board, font, WiFi, protocol, link, SD, he thong). */
 void page_info_create(lv_obj_t *p);

@@ -39,6 +39,9 @@
 #if ENABLED(USE_CONTROLLER_FAN)
   #include "../../../feature/controllerfan.h"      // controllerFan.settings (M710 - menu Controller Fan)
 #endif
+#if HAS_BED_PROBE
+  #include "../../../module/endstops.h"             // endstops.z_probe_enabled (probe da deploy chua?)
+#endif
 
 using namespace ExtUI;
 
@@ -387,10 +390,25 @@ namespace {
     #if HAS_Z_MIN
       #if ENABLED(Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN)
         tx_u8(CYDLCD_ES_PROBE);
+        // 2026-10-15 (YEU CAU NGUOI DUNG: "gia tri hien thi cua z-probe dang bi nguoc, boi vi chua goi
+        // deploy probe z nen value chua la open"): chan Z_MIN o day CHINH LA DAU PROBE, ma voi
+        // PROBE_ENABLE_DISABLE thi probe chi tra tin hieu khi da duoc BAT (M401 / G28 Z -> probe.deploy()
+        // -> endstops.enable_z_probe(true) -> WRITE(PROBE_ENABLE_PIN, 1)). Luc CHUA deploy, PROBE_ENABLE_PIN
+        // (PA8) = LOW nen dau doc len muc "TRIGGERED" -> man hinh bao "CHAM" sai.
+        // Marlin cung BO QUA chan nay khi probe chua bat (module/endstops.cpp, update()):
+        //   if (TERN1(Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN, z_probe_enabled)) PROCESS_ENDSTOP_Z(MIN);
+        // -> bao "open" cho dung nghia "chua/khong cham".
+        {
+          bool zmin_hit = (READ(Z_MIN_PIN) != Z_MIN_ENDSTOP_INVERTING);
+          #if ENABLED(PROBE_ENABLE_DISABLE)
+            if (!endstops.z_probe_enabled) zmin_hit = false;   // probe chua deploy -> coi nhu "open"
+          #endif
+          tx_u8(zmin_hit ? 1 : 0);
+        }
       #else
         tx_u8(CYDLCD_ES_Z_MIN);
+        tx_u8(READ(Z_MIN_PIN) != Z_MIN_ENDSTOP_INVERTING ? 1 : 0);
       #endif
-      tx_u8(READ(Z_MIN_PIN) != Z_MIN_ENDSTOP_INVERTING ? 1 : 0);
       n++;
     #endif
     #if HAS_X_MIN

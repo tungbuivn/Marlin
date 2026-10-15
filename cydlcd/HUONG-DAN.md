@@ -283,7 +283,7 @@ Dải màu nhiệt độ dựa trên **nhiệt độ thực**, không dựa trê
 
 ### 7.2 MENU
 
-MENU có 11 mục chính và một dòng hiệu chuẩn cảm ứng:
+MENU có 10 mục chính và một dòng hiệu chuẩn cảm ứng:
 
 1. `Temperature`
 2. `Motion`
@@ -294,9 +294,8 @@ MENU có 11 mục chính và một dòng hiệu chuẩn cảm ứng:
 7. `Configuration`
 8. `Tramming wizard`
 9. `Info`
-10. `Endstops (M119)`
-11. `WiFi`
-12. `Calibrate touch (giu 1.5s)` — chỉ hiện trên board có touch.
+10. `WiFi`
+11. `Calibrate touch (giu 1.5s)` — chỉ hiện trên board có touch.
 
 Chi tiết hiển thị hiện tại:
 
@@ -304,7 +303,7 @@ Chi tiết hiển thị hiện tại:
 - dòng `Bed mesh` cho biết kích thước lưới và `ON/OFF`;
 - dòng `Configuration` mở cây menu con kiểu 12864 (xem 7.10), không còn là bảng phẳng;
 - dòng `Motion` mở menu MOTION kiểu 12864 (Move Axis (JOG), Z Probe Wizard, Tramming, UBL, Level Bed,
-  Deploy/Stow Z-Probe, M48, Disable Steppers);
+  Deploy/Stow Z-Probe, M48, Endstops (M119), Disable Steppers);
 - `Tramming wizard` hiển thị trạng thái phiên;
 - `WiFi` hiển thị tắt, đang nối hoặc đã nối.
 
@@ -437,13 +436,20 @@ Trang CUSTOM gom các chức năng không đủ chỗ ở MENU:
 
 ### 7.9 ENDSTOPS (M119)
 
-Hiển thị sáu trạng thái:
+Vào: **MENU → `Motion` → `Endstops (M119)`** — nằm **ngay sau `Stow Z-Probe (M402)`** (từ 2026-10-15; trước
+đây là một dòng của MENU chính).
 
-- PROBE;
-- X min, Y min, Z min;
-- X max, Y max.
+Trang hiển thị trạng thái các chân endstop/probe. Máy này Marlin chỉ báo **3 chân** —`PROBE`, `X min`, `Y min` —
+nên trang chỉ hiện đúng 3 dòng; dòng nào bản build không có thì **tự ẩn** (trước đây hiện thêm `Z min`, `X max`,
+`Y max` với giá trị `mo (open)` giả tạo).
 
-Bấm `REFRESH (M119)` để yêu cầu dữ liệu mới. Với cấu hình dùng probe chung chân Z min, `Z min` có thể luôn mở còn `PROBE` mới là trạng thái cần xem.
+- `mo (open)` = chưa chạm (chữ xanh); `CHAM (triggered)` = đang chạm (chữ đỏ).
+- Giá trị **tự đọc lại 30 lần/giây**, **không còn nút `REFRESH`**.
+- **Ra khỏi màn là ngừng đọc**: chỉ khi màn ENDSTOP đang mở panel mới xin dữ liệu M119; vào màn khác là dừng
+  hẳn (không tốn đường truyền).
+- Dòng `PROBE`: máy này dùng chung chân Z min cho đầu dò và bật `PROBE_ENABLE_DISABLE`, nên **khi CHƯA deploy
+  đầu dò thì Marlin coi như `open`** (đúng như Marlin bỏ qua chân này trong lúc chưa bật đầu dò). Muốn thấy
+  `CHAM` thì phải deploy đầu dò trước (`Motion → Deploy Z-Probe (M401)`, hoặc khi máy đang home trục Z).
 
 ### 7.10 CONFIGURATION (cây menu kiểu 12864)
 

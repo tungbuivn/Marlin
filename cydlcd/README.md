@@ -1748,8 +1748,10 @@ gốc, "Cẩm bẫy 47"). Muốn reset màn hình CYD: kéo `RtsEnable` true→f
 
 Da nap va xac nhan tren may that (`link PUSH=1 TBT=1 err=0`).
 Protocol: `CYDLCD_PROTO_VERSION 2` - **phai nap ca Marlin va màn hình CYD**.
-- `CYDLCD_F_ENDSTOPS (0x0F)` + `CYDLCD_REQ_ENDSTOPS`: trang ENDSTOP moi (6 o
-  PROBE/X min/Y min/Z min/X max/Y max, xanh=mo do=CHAM, nut REFRESH gui M119).
+- `CYDLCD_F_ENDSTOPS (0x0F)` + `CYDLCD_REQ_ENDSTOPS`: trang ENDSTOP (xanh=mo do=CHAM).
+  2026-10-15: **bỏ nút REFRESH** — trang tự gửi `CYDLCD_REQ_ENDSTOPS` mỗi **30 ms** (⇒ 30 lần/giây, chỉ khi
+  màn ENDSTOP đang mở), và **chỉ hiện chân nào bản build THẬT SỰ có** (thêm `cydlcd.es_present` = bitmask id
+  trong frame, xem *"ENDSTOP: đọc 30 lần/giây"* bên dưới).
 - `CYDLCD_REQ_DFU`: nut `REBOOT DFU` trong CUSTOM, xac nhan 2 buoc; Marlin tu choi
   neu dang ban (`printer_busy()`) va tra WARN.
 - Setting id 34..41: `M204 P/R/T` (accel print/retract/travel),
@@ -2084,8 +2086,9 @@ Them thanh co dinh o DAY man hinh (cao 22 px, `BOT_Y = 240 - 22 = 218`), sticky 
 - `bot_sync(false)` chay o nhip cham 400 ms: chi cap nhat nhan + do mo nut, KHONG do lai chieu cao
   (xem cam bay 44 o README goc).
 - MENU: `MENU_ROWS` 9 -> 10 (them `Endstops (M119)` -> `PG_ENDSTOP`); **2026-10-15 (cuoi ngay) 12 -> 11**
-  (bo muc `Tuning (MPC/PID)` - trung voi Configuration > Advanced Settings > Temperature). MENU co 11 muc +
-  dong "Calibrate touch" = 12 hang x 20 px = 240 px > 206 => thanh day luon xuat hien o MENU va phan
+  (bo muc `Tuning (MPC/PID)` - trung voi Configuration > Advanced Settings > Temperature); **11 -> 10**
+  (chuyen `Endstops (M119)` vao menu MOTION, ngay sau `Stow Z-Probe`). MENU co 10 muc +
+  dong "Calibrate touch" = 11 hang x 23 px = 253 px > 206 => thanh day luon xuat hien o MENU va phan
   trang duoc. Day la duong de them muc menu moi ma khong phai nhoi vao `PG_CUSTOM` nua.
 - STATUS khong co thanh day (giong header).
 
@@ -2156,9 +2159,16 @@ MOTION
 │                           Output for Host (G29 T0) · Output for CSV (G29 T1) · Off Printer Backup (G29 S-1)
 ├─ Level Bed (G29 N)
 ├─ Deploy Z-Probe (M401) · Stow Z-Probe (M402)
+├─ Endstops (M119)          ★ NGAY SAU `Stow Z-Probe` (2026-10-15: **chuyển từ MENU chính vào đây**)
 ├─ M48 Probe Test           gửi `G28 O` rồi `M48 P10` (đúng như 12864: `G28O\nM48 P10`)
 └─ Disable Steppers (M84)
 ```
+
+* **`Endstops (M119)` nằm ở ĐÂY, ngay sau `Stow Z-Probe (M402)`** (yêu cầu người dùng 2026-10-15: *"chỗ hiển
+  thị endstop (m119) thì hãy cho vào motion"* rồi *"di chuyển menu 'endstop' xuống ngay sau 'stow probe'"*):
+  dòng này đã **bỏ khỏi MENU chính** (`MENU_ROWS 11 → 10`), MENU giờ còn 10 mục + `Calibrate touch`.
+  Trang ENDSTOP cũng đổi cách đọc: **bỏ nút `REFRESH`**, tự đọc lại **30 lần/giây**, và **ra khỏi màn là
+  ngừng monitor** — xem mục *"ENDSTOP: đọc 30 lần/giây"* bên dưới.
 
 * **KHÔNG có dòng `Fade Height`** (12864 có, ở cả `Motion` và `UBL`): từ 2026-10-15 nó được **gom về MỘT chỗ**
   trong CONFIGURATION, ngay dưới `Probe Z Offset` — xem mục *"★ Một chỗ DUY NHẤT cho `Fade Height`"*.
@@ -2166,6 +2176,42 @@ MOTION
   trong JOG rồi"*): trang JOG đã có `HOME ALL (G28)`, home từng trục X/Y/Z và `M84` — thêm menu con nữa là thừa.
 * **KHÔNG có `Auto Z-Align (G34)`** — G34 **bị tắt hẳn** trên máy này (trục Z cứng), xem mục
   *"TẮT HẲN G34"* bên dưới.
+
+## ENDSTOP: đọc 30 lần/giây, bỏ nút REFRESH, chỉ hiện chân có thật (2026-10-15)
+
+**Yêu cầu người dùng:** *"chỗ hiển thị endstop (m115) thì hãy cho vào motion, đồng thời cập nhật value 10 lần
+1 giây đi, không cần nút refresh nữa, giá trị hiển thị của z-probe đang bị ngược, bởi vì chưa gọi deploy probe
+z nên value chưa là open"* → sau đó: *"di chuyển menu 'endstop' xuống ngay sau 'stow probe', đọc tín hiệu M115
+30 lần 1 giây, khi ra khỏi menu thì bỏ việc monitor tín hiệu của màn hình 'endstop' đi"*.
+
+| Việc | Ở đâu |
+|---|---|
+| Vào từ **Motion**, **ngay sau `Stow Z-Probe (M402)`** | `SM_I_MOTION` (`ui_page_submenu.cpp`): `Move Axis · Z Probe Wizard · Tramming · UBL · Level Bed · Deploy Z-Probe · Stow Z-Probe · **Endstops (M119)** · M48 Probe Test · Disable Steppers`; `MENU_ITEMS` bỏ dòng `Endstops (M119)` ⇒ **`MENU_ROWS 12 → 11 → 10`** (chỉ số cột giá trị ở MENU: Tramming 7 · link 8 · WiFi 9) |
+| Bỏ nút `REFRESH` | `ui_page_endstop.cpp`: `mk_btn("REFRESH (M119)", …)` **đã xoá**; vẫn còn `A_REQ_ENDSTOPS` trong enum/`do_action` (không còn nút nào dùng) |
+| **30 lần/giây** | `ES_REQ_MS 30` + hàm mới **`page_endstop_poll()`** (xin `CYDLCD_REQ_ENDSTOPS` + vẽ lại nhãn). Nó được gọi từ `ui_lvgl_task_body()` (task `ui` **30 Hz = 33 ms**) **TRƯỚC cổng `UI_REFRESH_MS`** và **trong khoá trạng thái** (`cydlcd_link_state_lock()`), **chỉ khi `s_page_act == PG_ENDSTOP`** |
+| **Ra khỏi menu = NGỪNG monitor** | `page_endstop_poll()` chỉ được gọi khi trang ENDSTOP đang mở; đổi trang là không còn ai gọi ⇒ **không xin frame M119 nữa**. `page_endstop_destroy()` còn xoá `es_next_ms = 0` để lần sau vào lại xin frame đầu tiên ngay |
+| `UI_REFRESH_MS` trả về **150** | Đã thử hạ 150 → 90 để lấy 10 Hz cho *mọi* trang; khi trang ENDSTOP có đường riêng thì **trả lại 150** cho các trang khác như cũ (đo lại: man ENDSTOP vẫn 30 lần/giây) |
+| Chỉ hiện chân có thật | Thêm `uint8_t es_present` (**bitmask id**) vào struct `cydlcd` (`cydlcd_link.h`), phía Marlin điền trong `CYDLCD_F_ENDSTOPS`. Trang ENDSTOP **ẩn** dòng nào không có bit ⇒ máy này chỉ còn **PROBE · X min · Y min** (trước đây `Z min / X max / Y max` hiện `mo (open)` **giả tạo**) |
+| ⚠️ Bẫy: ẩn/hiện phải SO SÁNH cờ trước | `lv_obj_add_flag/clear_flag(HIDDEN)` **luôn** gọi `lv_obj_invalidate()` + đánh dấu layout lại ⇒ gọi vô điều kiện 6 dòng × mỗi lượt làm **cả trang vẽ lại qua SPI**: đo được lượt cập nhật từ **0,1 ms nhảy lên 27 ms**, `ui cham >=20ms` = **11 lần/giây** (màn hình giật). Sửa: chỉ gọi khi `lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN) != !present` ⇒ về lại **0,36 ms, 0 lần/giây** |
+| **PROBE = `open` khi chưa deploy** | Marlin-side `push_endstops()` (`cydlcd_serial.cpp`): máy này `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN` + **`PROBE_ENABLE_DISABLE`** ⇒ chân Z_MIN **chính là đầu dò**, mà đầu dò chỉ trả tín hiệu khi **đã được bật** (`M401` / `G28 Z` → `probe.deploy()` → `endstops.enable_z_probe(true)`, trên MKS Monster8 `PROBE_ENABLE_PIN = PA8`). Lúc chưa deploy, PA8 = LOW nên đầu đọc lên mức "TRIGGERED" ⇒ panel báo `CHAM` **sai**. Nay gửi `0` (open) khi `!endstops.z_probe_enabled` — đúng như Marlin bỏ qua chân này trong `endstops.cpp update()` (`if (TERN1(Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN, z_probe_enabled)) PROCESS_ENDSTOP_Z(MIN);`). Thêm `#include "../../../module/endstops.h"` (dưới `#if HAS_BED_PROBE`) |
+
+**Vì sao vẫn phải nạp LẠI CẢ MARLIN** (không chỉ màn hình): phần "PROBE = open khi chưa deploy" nằm ở phía
+Marlin. Đã nạp `mks_monster8.bin` qua `M997` + `dfu-util` (bản sao ở `D:\0in\mks_monster8.bin`).
+
+**Kiểm trên máy thật:**
+
+| Lệnh / phép đo | Kết quả |
+|---|---|
+| `UI CFG 15` | `[15] MOTION dong=10/10`; **dòng 7 = `Endstops (M119) ACT 40`** (ngay sau `Stow Z-Probe (M402)`) |
+| `UI HIT 7` (trong MOTION) | `trang 11 'ENDSTOP'`, BACK về đúng `MOTION` (nhớ dòng vừa bấm) |
+| `UI MENU` + `UI BOX` | **10 mục** + `Calibrate touch`; cột giá trị đúng dòng (`Info = TBT`, `WiFi = DA NOI`) |
+| `UI BOX` trang ENDSTOP | 3 dòng hiện (PROBE/X min/Y min), 3 dòng `[AN]` (ẩn, `y=0` — flex bỏ qua); nội dung 95 px ⇒ `thanh day an` |
+| `M119` trên COM4 | `z_min: TRIGGERED` — **Marlin vẫn báo vậy** (đó là mức điện của chân); panel mới là chỗ gửi `open` khi chưa deploy |
+| Đo nhịp trên COM4 (`PANEL DIAG … REQ=`) khi **đang mở** trang ENDSTOP | **300 frame / 10 s = 30,0 lần/giây** |
+| Đo nhịp sau khi **`UI BACK` ra khỏi** trang ENDSTOP | `REQ` đứng yên: **0 frame / 5 s** ⇒ đã ngừng monitor |
+| `[CYD] ui cham >=20ms` khi mở trang ENDSTOP | **0 lần/giây**, lượt cập nhật **≈0,36 ms** |
+| `UI HELLO` (hàng đợi TX của màn hình) | `tx cho=0 bo=0` ⇒ 30 frame/s **không** làm rớt frame nào |
+| `PANEL DIAG` phía Marlin | `err=0`, `hoan=18 bo=2` (tích luỹ từ lúc boot), `sd_busy=0 defer=0` |
 
 ## TẮT HẲN G34 (Auto Z-Align) — `CYDLCD_NO_G34` (2026-10-15)
 

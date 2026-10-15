@@ -469,15 +469,20 @@ static void handle_frame() {
 
     case CYDLCD_F_ENDSTOPS: {
       // u8 n, n * (u8 id, u8 hit). Xoa truoc roi nap -> id nao Marlin khong bao (vi du Z_MIN
-      // khi da bao la PROBE) coi nhu khong cham.
+      // khi da bao la PROBE) coi nhu khong cham. es_present = bitmask id CO trong frame (trang
+      // ENDSTOP an cac dong khong co - xem cydlcd_link.h).
       s_src.n_endstops = 0;
+      s_src.es_present = 0;
       for (uint8_t i = 0; i < CYDLCD_ENDSTOP_MAX; i++) s_src.es_hit[i] = 0;
       if (n >= 1) {
         const uint8_t cnt = p[0];
         uint8_t off = 1;
         for (uint8_t i = 0; i < cnt && off + 1 < n; i++, off += 2) {
           const uint8_t id = p[off];
-          if (id < CYDLCD_ENDSTOP_MAX) s_src.es_hit[id] = p[off + 1] ? 1 : 0;
+          if (id < CYDLCD_ENDSTOP_MAX) {
+            s_src.es_hit[id] = p[off + 1] ? 1 : 0;
+            s_src.es_present = (uint8_t)(s_src.es_present | (uint8_t)(1u << id));
+          }
           if (s_src.n_endstops < CYDLCD_ENDSTOP_MAX) s_src.n_endstops++;
         }
       }

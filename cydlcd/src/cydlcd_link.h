@@ -80,6 +80,10 @@ typedef struct {
   // 3 Z_MIN, 4 X_MAX, 5 Y_MAX). May dung Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN thi
   // Marlin bao chan Z_MIN voi id 0 (PROBE) va khong bao id 3.
   uint8_t  es_hit[CYDLCD_ENDSTOP_MAX]; uint8_t n_endstops;
+  // es_present = BITMASK cac id CO trong frame vua nhan (bit id). Dung de trang ENDSTOP AN han nhung
+  // dong ma ban build khong co (vd may nay chi co PROBE + X min + Y min -> khong hien "X max/Y max"
+  // voi gia tri "mo (open)" gia tao). 2026-10-15.
+  uint8_t  es_present;
 
   // ---- thong bao / su kien moi nhat ----
   char     message[CYDLCD_TEXT_LEN]; uint8_t message_sev; uint32_t message_ms;

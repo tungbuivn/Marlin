@@ -255,6 +255,7 @@ static const sm_item_t SM_I_PREHEAT[] = {
 // Deploy/Stow Z-Probe -> Z Probe Wizard -> Tramming Wizard -> (Worst Point) -> Unified Bed Leveling ->
 // Level Bed -> Bed Leveling -> Fade Height -> M48 Probe Test -> Disable Steppers.
 // (Fade Height 2026-10-15 da chuyen sang Configuration, xem ghi chu o SM_I_ROOT.)
+// 2026-10-15 (tiep): them "Endstops (M119)" (dong cuoi truoc "Disable Steppers") - lay tu MENU chinh.
 // KHONG lam 4 muc cua 12864:
 //   - "Homing >": YEU CAU NGUOI DUNG 2026-10-15 ("an menu Homing vi da co het trong JOG roi") - trang
 //     JOG da co HOME ALL + home tung truc + M84 nen menu con nay la thua;
@@ -270,6 +271,11 @@ static const sm_item_t SM_I_MOTION[] = {
   SM_A("Level Bed (G29 N)",         A_G29_LEVEL),
   SM_A("Deploy Z-Probe (M401)",     A_PROBE_DEPLOY),
   SM_A("Stow Z-Probe (M402)",       A_PROBE_STOW),
+  // 2026-10-15 (YEU CAU NGUOI DUNG: "cho hien thi endstop (m119) thi hay cho vao motion" + "di chuyen
+  // menu 'endstop' xuong ngay sau 'stow probe'"): dong nay o MENU chinh da BO, chuyen vao day DUNG SAU
+  // "Stow Z-Probe (M402)" -> mo trang ENDSTOP (doc tin hieu M119 30 lan/giay, KHONG con nut REFRESH;
+  // ra khoi man la NGUNG xin frame - xem page_endstop_poll o ui_lvgl.cpp/ui_page_endstop.cpp).
+  SM_A("Endstops (M119)",           A_GOTO_ENDSTOP),
   // 2026-10-15: BO dong "Fade Height" (12864 co) - da chuyen sang CONFIGURATION > ngay duoi Probe Z Offset.
   SM_A("M48 Probe Test (G28 O+M48)", A_M48),
   SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)

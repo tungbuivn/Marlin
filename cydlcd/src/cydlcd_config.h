@@ -170,6 +170,11 @@
 #define POLL_POS_MS     700          // how often M114 is sent
 #define POLL_PROGRESS_MS 2000        // how often M27 is sent while printing
 #define LINK_TIMEOUT_MS 4000         // no "ok" for this long -> show LINK LOST
+// UI_REFRESH_MS = nhip ve lai cac gia tri co the doi (man nao cung chi ve khi chu THAT SU doi ->
+// `set_text()` so sanh truoc, xem ui_widgets.cpp).
+// 2026-10-15: thu 150 -> 90 de man ENDSTOP doc 10 lan/giay, nhung sau do man ENDSTOP co DUONG RIENG
+// (30 lan/giay, xem `page_endstop_poll()` trong ui_page_endstop.cpp + ui_lvgl.cpp) nen tra lai 150 cho
+// cac man khac nhu cu (do lai: man ENDSTOP van 30 lan/giay, cac man khac khong bi ve lai nhieu hon).
 #define UI_REFRESH_MS   150          // redraw period for changed values
 
 // ===========================================================================
