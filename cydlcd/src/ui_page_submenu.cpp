@@ -76,6 +76,11 @@ enum {
   SMG_TUNE,         //   Tune (runtime)
   SMG_CTRLFAN,      // Controller Fan (ngang cap Advanced Settings)
   SMG_PREHEAT,      // Preheat (DANH SACH vat lieu do nguoi dung them/bot - toi da 6)
+  // 2026-10-15: menu MOTION giong so do 12864 (docs/12864-menu-map.md, nut m20 "Motion"). Day la nhom
+  // NGANG CAP CONFIGURATION (parent = SM_PARENT_NONE -> BACK ve MENU, giong 12864: Motion nam trong Main).
+  SMG_MOTION,
+  SMG_HOMING,       //   Homing >
+  SMG_UBL,          //   Unified Bed Leveling >
   SMG_COUNT
 };
 
@@ -236,6 +241,52 @@ static const sm_item_t SM_I_PREHEAT[] = {
   SM_A("+ Them vat lieu",           A_PRE_ADD)
 };
 
+// ===========================================================================
+//  MENU MOTION (2026-10-15) - giong menu "Motion" cua 12864 (docs/12864-menu-map.md, nut m20)
+// ===========================================================================
+// Thu tu dong bam theo so do 12864: Move Axis -> Homing -> Auto Z-Align -> (Z Align Manual) ->
+// Deploy/Stow Z-Probe -> Z Probe Wizard -> Tramming Wizard -> (Worst Point) -> Unified Bed Leveling ->
+// Level Bed -> Bed Leveling -> Fade Height -> M48 Probe Test -> Disable Steppers.
+// KHONG lam 3 muc cua 12864: "Z Align Manual" (man phep do rieng), "Worst Point = MAX/MIN" (da co trong
+// trang TRAMMING) va "Bed Leveling" (G29 P1..P4 - da co nguyen trang BED MESH voi cac nut UBL).
+static const sm_item_t SM_I_MOTION[] = {
+  SM_A("Move Axis (JOG)",           A_GOTO_JOG),        // 12864: "Move Axis >" (chon truc + buoc)
+  SM_S("Homing",                    SMG_HOMING),
+  SM_A("Auto Z-Align (G34)",        A_G34),
+  SM_A("Z Probe Wizard",            A_EDIT_PROBE_Z),    // mo lop phu sua M851 Z (nhu 12864)
+  SM_A("Tramming Wizard",           A_GOTO_TBT),
+  SM_S("Unified Bed Leveling",      SMG_UBL),
+  SM_A("Level Bed (G29 N)",         A_G29_LEVEL),
+  SM_A("Deploy Z-Probe (M401)",     A_PROBE_DEPLOY),
+  SM_A("Stow Z-Probe (M402)",       A_PROBE_STOW),
+  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),
+  SM_A("M48 Probe Test (G28 O+M48)", A_M48),
+  SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
+};
+
+static const sm_item_t SM_I_HOMING[] = {
+  SM_A("Auto Home (G28)",           A_HOME),
+  SM_A("Home X (G28 X)",            A_HOME_X),
+  SM_A("Home Y (G28 Y)",            A_HOME_Y),
+  SM_A("Home Z (G28 Z)",            A_HOME_Z),
+  SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
+};
+
+static const sm_item_t SM_I_UBL[] = {
+  SM_A("Activate UBL (G29 A)",      A_G29_ON),
+  SM_A("Deactivate UBL (G29 D)",    A_G29_OFF),
+  SM_A("Bed Mesh (luoi)",           A_GOTO_MESH),       // trang BED MESH: luoi + G29 P1/P3/P4/SAVE
+  SM_A("Manually Build Mesh",       A_G29_UBL_MANUAL),  // G29 I999 + G29 P2BT0 (12864)
+  SM_A("Fill-in Mesh (G29 P3)",     A_G29_FILL),
+  SM_A("Fine Tune All (G29 P4RT)",  A_G29_FT),
+  SM_A("Save Bed Mesh (G29 S0)",    A_G29_SAVE),
+  SM_A("Output UBL Info (G29 W)",   A_G29_INFO),
+  SM_A("Output for Host (G29 T0)",  A_UBL_T0),
+  SM_A("Output for CSV (G29 T1)",   A_UBL_T1),
+  SM_A("Off Printer Backup (S-1)",  A_UBL_S1),
+  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT)
+};
+
 #define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
 
 // Thu tu trong bang KHONG quan trong (moi nhom tro bang ten SMG_*), nhung de doc thi xep theo cay.
@@ -254,7 +305,10 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
   [SMG_FILAMENT]  = { "FILAMENT",     SMG_ADV,        SM_I_FILAMENT,  SM_N(SM_I_FILAMENT) },
   [SMG_TUNE]      = { "TUNE",         SMG_ADV,        SM_I_TUNE,      SM_N(SM_I_TUNE) },
   [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
-  [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) }
+  [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) },
+  [SMG_MOTION]    = { "MOTION",       SM_PARENT_NONE, SM_I_MOTION,    SM_N(SM_I_MOTION) },
+  [SMG_HOMING]    = { "HOMING",       SMG_MOTION,     SM_I_HOMING,    SM_N(SM_I_HOMING) },
+  [SMG_UBL]       = { "UBL",          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) }
 };
 
 // ===========================================================================
@@ -441,6 +495,12 @@ void submenu_open(uint8_t g) {
     s_sm_g = g;
     page_rebuild(PG_SUBMENU);
   }
+}
+
+// Mo menu MOTION (muc "Motion" trong MENU - xem ui_page_menu.cpp; 12864 de Motion ngang cap
+// Configuration trong Main menu nen nhom nay co parent = SM_PARENT_NONE -> BACK tu day ve MENU).
+void submenu_open_motion(void) {
+  submenu_open(SMG_MOTION);
 }
 
 // Luu vi tri cuon cua NHOM dang mo (goi tu show_page TRUOC khi thu hoi trang MENU CON).

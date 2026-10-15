@@ -22,11 +22,11 @@
 // bang THONG SO thieu dong ma khong hieu vi sao. So luong thuc te: ~41 Marlin (them 6 MPC + fade + 2 M206 +
 // 2 M200 + 2 M603 = ~52) + 9 preheat + du phong.
 // (Moi muc = u16 id + i32 value = 8 byte -> tang 16 muc = 128 byte RAM tinh.)
-// 2026-10-15 (lan 2): nang 72 -> 80. Menu CONFIGURATION kieu 12864 them 14 thong so Marlin gui xuong
-// (M205 S/T + M906 Z2/Z3 + 6 StealthChop + M710 I/A/S/D) => 69 Marlin + 9 preheat = 78. Neu de 72 thi
-// 6 dong CUOI bi bo am tham dung nhu loi cu. (8 muc = 64 byte RAM tinh; DRAM cua panel da full nen
-// phai do lai bang build - xem ghi chu dram0_0_seg trong cydlcd/docs/ke-hoach-da-luong.md.)
-#define CYDLCD_SETTINGS_MAX   80
+// 2026-10-15 (lan 3): 80 -> 72. Menu PREHEAT chuyen sang DANH SACH dong rieng (NVS "ph2", xem
+// ui_preheat.cpp) nen KHONG con bom 9 gia tri preheat vao bang thong so nua -> so dong thuc te = 63
+// (chi Marlin gui). 72 thua 9 cho du phong. Giam 8 muc = 64 byte RAM tinh MOI BAN (2 ban = 128 B) -
+// can thiet vi dram0_0_seg da full (them mang nho vi tri cuon + menu MOTION lam overflow 8 byte).
+#define CYDLCD_SETTINGS_MAX   72
 // 2026-10-15 (lan 2): 16 -> 12. DRAM tinh (dram0_0_seg) da full: sau khi nang SETTINGS_MAX (x2 vi co
 // ca `s_src` trong cydlcd_link.cpp lan ban `cydlcd` da publish) linker bao overflow 160 byte.
 // Luoi mesh la mang LON NHAT trong struct: int16_t mesh[16][16] = 512 B -> [12][12] = 288 B, tuc la

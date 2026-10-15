@@ -280,6 +280,21 @@ void do_action(const int a) {
     case A_GOTO_WIFI:     show_page(PG_WIFI); break;     // icon WiFi / muc MENU: mo trang WIFI
     case A_GOTO_MPC:      show_page(PG_MPC);  break;     // muc "Tuning (MPC/PID)" trong MENU -> trang TUNING
     case A_GOTO_ENDSTOP:  show_page(PG_ENDSTOP); break;
+    // ---- Menu MOTION giong so do 12864 (xem docs/12864-menu-map.md, nut m20) ----
+    case A_GOTO_MESH:     show_page(PG_MESH);  break;     // "Unified Bed Leveling > Bed Mesh"
+    case A_GOTO_TBT:      show_page(PG_TBT);   break;     // "Tramming Wizard"
+    case A_PROBE_DEPLOY:  cydlcd_link_send_gcode("M401"); break;   // Deploy Z-Probe (probe co dinh -> Marlin bao loi)
+    case A_PROBE_STOW:    cydlcd_link_send_gcode("M402"); break;   // Stow Z-Probe
+    case A_G29_LEVEL:     cydlcd_link_send_gcode("G29 N");  break; // Level Bed
+    case A_G29_INFO:      cydlcd_link_send_gcode("G29 W");  break; // Output UBL Info
+    case A_G29_UBL_MANUAL: cydlcd_link_send_gcode2("G29 I999", "G29 P2BT0"); break;  // Manually Build Mesh
+    case A_UBL_T0:        cydlcd_link_send_gcode("G29 T0"); break; // Output for Host
+    case A_UBL_T1:        cydlcd_link_send_gcode("G29 T1"); break; // Output for CSV
+    case A_UBL_S1:        cydlcd_link_send_gcode("G29 S-1"); break;// Off Printer Backup
+    // M48 Probe Test: 12864 gui "G28O\nM48 P10" (O = khong home neu da home) -> gui 2 lenh lien tiep.
+    case A_M48:           cydlcd_link_send_gcode2("G28 O", "M48 P10"); break;
+    // Muc "Motion" trong MENU: mo NHOM MOTION cua cay menu con (ngang cap CONFIGURATION, giong 12864).
+    case A_GOTO_MOTION:   submenu_open_motion(); break;
     case A_HOME:          cydlcd_link_send_gcode("G28"); break;
     case A_HOME_X:        cydlcd_link_send_gcode("G28 X"); break;
     case A_HOME_Y:        cydlcd_link_send_gcode("G28 Y"); break;

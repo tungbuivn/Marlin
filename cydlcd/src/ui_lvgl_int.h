@@ -263,6 +263,22 @@ enum {
                         // NHIET DO da bo 2026-10-15 de lay cho cho 6 nut preheat)
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
+  // 2026-10-15: menu MOTION giong so do 12864 (xem docs/12864-menu-map.md, nut m20):
+  //   A_GOTO_MESH / A_GOTO_TBT = mo trang BED MESH / TRAMMING tu trong menu (MENU mo bang chi so trang,
+  //   con menu CON thi phai qua hanh dong);
+  //   A_PROBE_DEPLOY / A_PROBE_STOW = M401 / M402 (12864: "Deploy/Stow Z-Probe"; may nay probe CO DINH
+  //   (Voron Tap) nen Marlin se bao loi - van de nguyen vi 12864 cung hien 2 muc nay);
+  //   A_G29_LEVEL = G29 N (Level Bed), A_G29_INFO = G29 W (Output UBL Info);
+  //   A_UBL_T0 / A_UBL_T1 / A_UBL_S1 = G29 T0 (Output for Host) / G29 T1 (CSV) / G29 S-1 (Off Printer Backup);
+  //   A_UBL_MANUAL = G29 I999 + G29 P2BT0 (12864: "Manually Build Mesh");
+  //   A_M48 = G28 O + M48 P10 (12864: "M48 Probe Test").
+  A_GOTO_MESH, A_GOTO_TBT,
+  A_PROBE_DEPLOY, A_PROBE_STOW,
+  A_G29_LEVEL, A_G29_INFO, A_G29_UBL_MANUAL,
+  A_UBL_T0, A_UBL_T1, A_UBL_S1,
+  A_M48,
+  // Mo menu MOTION (nhom rieng, ngang cap CONFIGURATION - giong 12864: Motion la muc trong Main menu).
+  A_GOTO_MOTION,
   // Thanh day: phan trang noi dung man dang mo (xem page_scroll/bot_sync)
   A_PAGE_PREV, A_PAGE_NEXT
 };
@@ -718,6 +734,8 @@ lv_coord_t submenu_scroll_y(void);
 void submenu_focus_parent(void);
 /** Focus + cuon toi DONG da mo mot man khac cua trang MENU (goi sau khi trang MENU da hien lai). */
 void page_menu_focus_sel(void);
+/** Mo menu MOTION (nhom ngang cap CONFIGURATION, giong muc "Motion" trong Main menu cua 12864). */
+void submenu_open_motion(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_preheat.cpp (chang 3/4) - HOP SUA PREHEAT 3-TRONG-1 + ban phim dat ten
 // ---------------------------------------------------------------------------

@@ -22,26 +22,33 @@
 //  Moi dong: [ten vang] .......... [gia tri trang]; dong la 1 nut (encoder bam = mo)
 // ===========================================================================
 #define MENU_ROWS 12
-typedef struct { const char *name; uint8_t page; } menu_item_t;
+// 1 dong menu: ten + trang se mo (page) HOAC mot hanh dong A_* (act) khi page == MENU_ACT_PAGE.
+// 2026-10-15: dong "Motion" khong mo mot TRANG nao ma mo NHOM menu MOTION (giong 12864: Motion la muc
+// trong Main menu) -> phai di qua do_action(A_GOTO_MOTION).
+#define MENU_ACT_PAGE 0xFF
+typedef struct { const char *name; uint8_t page; uint8_t act; } menu_item_t;
 static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
-  { "Temperature",     PG_TEMP },
-  { "Motion (JOG)",    PG_JOG },
-  { "Feed/Flow rate",  PG_RATE },
-  { "SD card",         PG_FILES },
-  { "Bed mesh",        PG_MESH },
-  { "Custom G34/SD",   PG_CUSTOM },
+  { "Temperature",     PG_TEMP,   0 },
+  // 2026-10-15 (yeu cau nguoi dung: "sua not menu motion giong so do menu cua 12864"): dong nay
+  // truoc la "Motion (JOG)" mo THANG trang JOG; nay mo menu MOTION (Move Axis/Homing/Z-Align/UBL/
+  // Tramming/M48...) - trong do co dong "Move Axis (JOG)" mo lai trang JOG cu.
+  { "Motion",          MENU_ACT_PAGE, A_GOTO_MOTION },
+  { "Feed/Flow rate",  PG_RATE,   0 },
+  { "SD card",         PG_FILES,  0 },
+  { "Bed mesh",        PG_MESH,   0 },
+  { "Custom G34/SD",   PG_CUSTOM, 0 },
   // 2026-10-15 (yeu cau nguoi dung: "phan configuration toi thay lam giong 12864 tien hon"): dong nay
   // KHONG con mo THANG bang phang nua ma mo CAY menu Configuration (PG_SUBMENU, xem ui_page_submenu.cpp)
   // giong menu Configuration cua Marlin 12864. Bang phang cu van con: "Advanced Settings > All settings".
-  { "Configuration",   PG_SUBMENU },
-  { "Tuning (MPC/PID)",PG_MPC },     // 2026-10-15: 6 tham so MPC (M306) + nut tune, giong Marlin 12864
-  { "Tramming wizard", PG_TBT },
-  { "Info",            PG_INFO },
-  { "Endstops (M119)", PG_ENDSTOP },
+  { "Configuration",   PG_SUBMENU, 0 },
+  { "Tuning (MPC/PID)",PG_MPC,    0 },     // 2026-10-15: 6 tham so MPC (M306) + nut tune, giong Marlin 12864
+  { "Tramming wizard", PG_TBT,    0 },
+  { "Info",            PG_INFO,   0 },
+  { "Endstops (M119)", PG_ENDSTOP,0 },
   // Muc 12: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
   // MENU gio 12 muc + dong "Calibrate touch" = 13 hang x 22 px = 286 > 206 -> thanh day
   // PREV/NEXT xuat hien va phan trang.
-  { "WiFi",            PG_WIFI }
+  { "WiFi",            PG_WIFI,   0 }
 };
 static lv_obj_t *mn_val[MENU_ROWS];
 static lv_obj_t *mn_val_cal;                 // dong "Calibrate touch" (chi co tren board co touch)
@@ -56,7 +63,9 @@ static void cb_menu_row(lv_event_t *e) {
   const uint8_t i = (uint8_t)(intptr_t)lv_event_get_user_data(e);
   if (i >= MENU_ROWS) return;
   s_menu_sel = i;
-  show_page(MENU_ITEMS[i].page);
+  // Dong co the mo 1 TRANG (page) hoac chay 1 HANH DONG (act - vd "Motion" mo menu MOTION).
+  if (MENU_ITEMS[i].page == MENU_ACT_PAGE) do_action((int)MENU_ITEMS[i].act);
+  else                                     show_page(MENU_ITEMS[i].page);
 }
 
 // Focus dong da mo man khac (goi tu page_after_show() cua ui_lvgl.cpp SAU khi trang MENU da hien lai va

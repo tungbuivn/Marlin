@@ -422,7 +422,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | Màn | Nội dung / lệnh gửi |
 |---|---|
 | **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
-| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · **Motion** · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Motion`** mở **menu MOTION** kiểu 12864 (Move Axis (JOG) · Homing · Auto Z-Align · Z Probe Wizard · Tramming Wizard · Unified Bed Leveling · Level Bed · Deploy/Stow Z-Probe · Fade Height · M48 Probe Test · Disable Steppers — trước 2026-10-15 dòng này tên `Motion (JOG)` và mở thẳng trang JOG). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
@@ -2127,6 +2127,48 @@ hình hiện **43%** (đã trả lại `M220 S100`).
 **Sửa kèm (dòng MENU):** mục `SD card` **không còn đếm số file** (yêu cầu người dùng: *"bỏ phần đếm số lượng file ở
 menu file"*) và mục `Settings` không còn ghi `58/33` (tổng 33 là con số cũ; Marlin gửi 58 dòng) mà ghi **`58 muc`**
 — màn hình không biết tổng số thật vì Marlin không gửi frame "hết danh sách" cho SETTING.
+
+## Menu MOTION kiểu 12864 (2026-10-15) — nhóm `SMG_MOTION` trong `src/ui_page_submenu.cpp`
+
+**Yêu cầu người dùng:** *"sửa nốt menu 'motion' giống sơ đồ menu của 12864"*. Trước đây dòng `Motion (JOG)`
+trong MENU mở **thẳng trang JOG**; nay nó mở **menu MOTION** đúng thứ tự của menu `Motion` trong 12864
+(`docs/12864-menu-map.md`, nút m20). Đây là **nhóm ngang cấp CONFIGURATION** (`parent = SM_PARENT_NONE`)
+nên BACK từ MOTION về thẳng MENU — giống 12864 (Motion nằm trong Main menu).
+
+```
+MOTION
+├─ Move Axis (JOG)          mở trang JOG (chọn trục + bước 0.1/1/10 mm như cũ)
+├─ Homing >                 Auto Home (G28) · Home X/Y/Z · Disable Steppers (M84)
+├─ Auto Z-Align (G34)       G34 Q99
+├─ Z Probe Wizard           mở lớp phủ sửa M851 Z (như 12864)
+├─ Tramming Wizard          mở trang TRAMMING (Bed Tramming Wizard)
+├─ Unified Bed Leveling >   Activate (G29 A) · Deactivate (G29 D) · Bed Mesh (trang lưới) ·
+│                           Manually Build Mesh (G29 I999 + G29 P2BT0) · Fill-in (G29 P3) ·
+│                           Fine Tune All (G29 P4RT) · Save Bed Mesh (G29 S0) · Output UBL Info (G29 W) ·
+│                           Output for Host (G29 T0) · Output for CSV (G29 T1) · Off Printer Backup (G29 S-1) ·
+│                           Fade Height
+├─ Level Bed (G29 N)
+├─ Deploy Z-Probe (M401) · Stow Z-Probe (M402)
+├─ Fade Height              (sửa trực tiếp, id thông số CYDLCD_SET_FADE_HEIGHT)
+├─ M48 Probe Test           gửi `G28 O` rồi `M48 P10` (đúng như 12864: `G28O\nM48 P10`)
+└─ Disable Steppers (M84)
+```
+
+* **Hành động mới** (thêm vào enum `A_*` trong `ui_lvgl_int.h`, xử lý ở `do_action()`): `A_GOTO_MOTION`
+  (mở nhóm MOTION), `A_GOTO_MESH` / `A_GOTO_TBT` (mở trang BED MESH / TRAMMING từ trong menu — MENU mở
+  bằng chỉ số trang, menu con thì phải qua hành động), `A_PROBE_DEPLOY` (M401), `A_PROBE_STOW` (M402),
+  `A_G29_LEVEL` (G29 N), `A_G29_INFO` (G29 W), `A_G29_UBL_MANUAL` (G29 I999 + G29 P2BT0),
+  `A_UBL_T0` / `A_UBL_T1` / `A_UBL_S1`, `A_M48` (gửi 2 lệnh bằng `cydclcd_link_send_gcode2()`).
+* **Dòng MENU có thể chạy HÀNH ĐỘNG** chứ không chỉ mở trang: `menu_item_t` thêm trường `act`, và
+  `page == MENU_ACT_PAGE (0xFF)` ⇒ `cb_menu_row()` gọi `do_action(act)` (trước đây `page` là chỉ số trang).
+* **3 mục của 12864 KHÔNG làm** (và vì sao): **`Z Align Manual`** (màn riêng của 12864),
+  **`Worst Point = MAX/MIN`** (đã có trong trang TRAMMING) và **`Bed Leveling`** (G29 P1/P3/P4 — đã có
+  nguyên trang BED MESH với các nút UBL, thêm nữa là trùng).
+* ⚠️ **`Deploy/Stow Z-Probe` giữ nguyên dù máy dùng probe CỐ ĐỊNH** (Voron Tap): `PROBE_DEPLOY_STOW_MENU`
+  đang bật nên 12864 cũng hiện 2 mục này; Marlin sẽ trả lỗi khi bấm — không ảnh hưởng gì.
+* ⚠️ DRAM: thêm nhóm + bảng mới (const → FLASH) và mảng nhớ vị trí cuộn làm `dram0_0_seg` **vượt 8 byte**
+  → đã hạ `CYDLCD_SETTINGS_MAX` 80 → **72** (menu PREHEAT không còn bơm 9 giá trị vào bảng thông số nên
+  chỉ dùng 63/72) ⇒ tiết kiệm 128 B (2 bản `s_src` + `cydlcd`), build sạch (RAM 38.0%).
 
 ## Menu CONFIGURATION kiểu 12864 (2026-10-15) — `src/ui_page_submenu.cpp`
 
