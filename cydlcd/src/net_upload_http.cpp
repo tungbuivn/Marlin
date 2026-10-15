@@ -567,6 +567,15 @@ void handle_files(void) {
   }
   String js = "{\"status\":\"Ok\",\"sd\":";
   js += (cyd_sd_ready() ? '1' : '0');
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): Marlin dang doc/ghi the thi MAN HINH KHONG quet the ->
+  // tra ve trang thai BUSY RO RANG (khac voi loi that) de trang web bao "thu lai sau" chu KHONG hien
+  // danh sach rong (de bi hieu la the het file).
+  if (cyd_sd_yield_to_marlin()) {
+    HLOG("[HTTP] GET /files -> BAN: Marlin dang doc/ghi the SD (tra loi 'thu lai sau')\n");
+    send_json(200, "{\"status\":\"Busy\",\"sd\":1,\"files\":[],\"count\":0,"
+                   "\"message\":\"Marlin dang doc/ghi the SD - thu lai sau\"}");
+    return;
+  }
   js += ",\"files\":[";
   char nm[64];
   uint8_t n = 0;
@@ -639,7 +648,19 @@ void handle_delete(void) {
     send_json(503, "{\"status\":\"Error\",\"message\":\"chua co the TF\"}");
     return;
   }
-  const int cnt = cyd_sd_dir_count(nm);      // >=0: la THU MUC (so muc con); -1: khong phai thu muc
+  // UU TIEN MARLIN: Marlin dang doc/ghi the -> TRA LOI RO "BAN" (khac loi that) de trang web bao
+  // "thu lai sau" (thao tac that bai thi cu thu lai, khong phai loi - y kien nguoi dung 2026-10-15).
+  if (cyd_sd_yield_to_marlin()) {
+    HLOG("[HTTP] HOAN /delete \"%s\": Marlin dang doc/ghi the SD -> thu lai sau\n", nm);
+    send_json(409, "{\"status\":\"Busy\",\"message\":\"Marlin dang doc/ghi the SD - thu lai sau\"}");
+    return;
+  }
+  const int cnt = cyd_sd_dir_count(nm);      // >=0: THU MUC (so muc con); -1: khong phai thu muc; -2: BAN
+  if (cnt == -2) {                           // BAN vi Marlin dang doc/ghi the (khac loi that) -> thu lai sau
+    HLOG("[HTTP] HOAN /delete \"%s\": Marlin dang doc/ghi the SD -> thu lai sau\n", nm);
+    send_json(409, "{\"status\":\"Busy\",\"message\":\"Marlin dang doc/ghi the SD - thu lai sau\"}");
+    return;
+  }
   bool ok = false;
   if (cnt == 0) {
     bool not_empty = false;

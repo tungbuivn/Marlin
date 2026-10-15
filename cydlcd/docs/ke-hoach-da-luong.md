@@ -217,6 +217,26 @@ thao tác thẻ CỦA MÀN HÌNH tự nhường**:
 | Task `link` | `gap max 21 048 µs`, **0 lần > 50 ms** |
 | Marlin (6 và 8 lần `M20`) | **tất cả trả đủ danh sách file**, `err=0`, `alive=1`, `PING` vẫn **+1/s**, `hoan=14 bo=0` |
 
+### 5.4 B2d — "BẬN" phải RÕ RÀNG + tự thử lại sau (ý người dùng 2026-10-15)
+
+**Ý người dùng**: *"vì việc đọc ghi marlin sẽ không bao giờ fail nếu màn hình còn, cho nên thao tác gì fail thì cứ
+thử lại sau, nhưng **chỉ khi lcd trả về là có 'ai' đó đang đọc hoặc ghi sd**"*.
+
+Nghĩa là: thất bại do nhường Marlin **không được báo như lỗi thật** — phải nói rõ *"Marlin đang đọc/ghi thẻ SD"* và
+**thử lại sau**. Đã làm:
+
+| Chỗ | Trước | Nay |
+|---|---|---|
+| `cyd_sd_dir_count()` | trả `-1` (lẫn với "không phải thư mục") | **`-2` = BẬN** (khác hẳn `-1`) |
+| `GET /files` (trang web) | danh sách rỗng (dễ hiểu sai là "thẻ hết file") | `{"status":"Busy","message":"Marlin dang doc/ghi the SD - thu lai sau"}` |
+| `POST /delete` | lỗi chung | `409 {"status":"Busy",…}` + log `HOAN /delete` |
+| Nút **XOA** trên LCD | "Khong xoa duoc…" | ghi **"Marlin dang doc the SD - se thu lai sau"** rồi **TỰ THỬ LẠI 4 lần, mỗi 2 s** (`files_del_retry` + `files_job_task`) |
+| `cyd_sd_last_op()` (mới) | — | `OK / ERR / BUSY` để mọi nơi phân biệt *bận* với *lỗi thật* |
+
+**Đo được**: bắn 10 lần `GET /files` liên tiếp trong lúc Marlin `M20` liên tục → **1 lần trả `Busy`** (đúng lúc Marlin
+đang đọc), 9 lần `Ok` (rơi vào khe giữa 2 lần `M20`, Marlin không đọc) — đúng thiết kế: **chỉ nhường khi Marlin THẬT SỰ
+đang đọc/ghi**. Marlin: 6/6 `M20` OK, `err=0`, `alive=1`, `PING` +1/s, `hoan=16 bo=0`.
+
 ---
 
 ## 6. Tiêu chí nghiệm thu (một câu, đo được)

@@ -113,6 +113,21 @@ static void files_note(const char *txt, const bool temp) {
   s_fl_note_ms = temp ? lv_tick_get() : 0;
 }
 
+// THU LAI SAU khi thao tac that bai CHI VI Marlin dang doc/ghi the SD (y kien nguoi dung 2026-10-15:
+// "thao tac gi fail thi cu thu lai sau, nhung chi khi lcd tra ve la co ai do dang doc hoac ghi sd").
+// Bao ro tren dong info + tu dong thu lai `FILES_DEL_RETRY_N` lan, moi lan cach `FILES_DEL_RETRY_MS`.
+#define FILES_DEL_RETRY_N   4
+#define FILES_DEL_RETRY_MS  2000u
+static uint8_t  s_del_retry_left = 0;
+static uint32_t s_del_retry_ms   = 0;
+static void files_del_retry(void) {
+  s_del_retry_left = FILES_DEL_RETRY_N;
+  s_del_retry_ms   = lv_tick_get() + FILES_DEL_RETRY_MS;
+  // DUNG CHUOI HANG (rodata/flash): `files_note()` chi giu CON TRO chuoi nen KHONG duoc dung buffer tam, va
+  // chuoi hang khong ton DRAM (ESP32 o day da kin dram0 - them buffer 64 B la tran linker 56 B).
+  files_note("Marlin dang doc the SD - se thu lai sau", true);
+}
+
 static void files_job_start(const uint8_t job) {
   s_fl_job    = job;
   s_fl_job_ms = lv_tick_get();
@@ -472,6 +487,9 @@ void files_delete_now(void) {
       files_init_sd();                                  // bao Marlin mount lai the + xin lai danh sach
       return;
     }
+    // UU TIEN MARLIN (y kien nguoi dung 2026-10-15: "thao tac gi fail thi cu thu lai sau"): neu that bai
+    // chi vi Marlin dang doc/ghi the SD thi bao RO va TU THU LAI (khong phai loi that).
+    if (cyd_sd_last_op() == CYDLCD_SDOP_BUSY) { files_del_retry(); return; }
     // Khong xoa duoc: phan biet "con muc con" (khong mat gi) voi loi khac -> nguoi dung biet phai lam gi.
     files_note(not_empty ? "Thu muc con file - xoa file ben trong truoc"
                          : "Khong xoa duoc thu muc", true);
@@ -487,6 +505,7 @@ void files_delete_now(void) {
     files_init_sd();
     return;
   }
+  if (cyd_sd_last_op() == CYDLCD_SDOP_BUSY) { files_del_retry(); return; }
 
   char cmd[CYDLCD_FILE_NAME_LEN + 6];
   snprintf(cmd, sizeof(cmd), "M30 %s", s_del_name);
@@ -528,6 +547,15 @@ static void cb_files_delete(lv_event_t *e) {
 // danh sach) deu khong cham vao widget cua trang, va files_del_lock() tu bo qua khi fl_del = NULL ->
 // viec cham van hoan tat, chi bo phan cap nhat widget (xem page_files_destroy).
 void files_job_task(void) {
+  // THU LAI thao tac XOA sau khi bi HOAN vi Marlin dang doc/ghi the SD (xem files_del_retry).
+  if (s_del_retry_left && (int32_t)(lv_tick_get() - s_del_retry_ms) >= 0) {
+    s_del_retry_left--;
+    s_del_retry_ms = lv_tick_get() + FILES_DEL_RETRY_MS;
+    WIFILOG("FILES: THU LAI xoa <<%s>> (con %u lan) - truoc do bi hoan vi Marlin dang doc the\n",
+            s_del_name, (unsigned)s_del_retry_left);
+    files_delete_now();
+    return;                              // lan nay chi lam viec thu lai
+  }
   if (s_fl_job == FLJOB_NONE) return;
   if (lv_tick_elaps(s_fl_job_ms) < FILES_JOB_DELAY_MS) return;
 

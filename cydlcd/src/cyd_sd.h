@@ -40,6 +40,12 @@ void cyd_sd_perf_report(void);
 // duong). Dung cho cac ham liet ke/xoa trong cyd_sd.cpp va cho trang web `/files`.
 bool cyd_sd_yield_to_marlin(void);
 
+// Trang thai thao tac THE cuoi cung cua MAN HINH - de phan biet "BAN vi Marlin dang doc/ghi the SD" (=> THU LAI
+// SAU, khong phai loi) voi "loi that" (y kien nguoi dung 2026-10-15: *"thao tac gi fail thi cu thu lai sau,
+// nhung chi khi lcd tra ve la co ai do dang doc hoac ghi sd"*).
+enum { CYDLCD_SDOP_OK = 0, CYDLCD_SDOP_ERR = 1, CYDLCD_SDOP_BUSY = 2 };
+uint8_t cyd_sd_last_op(void);
+
 // The SD
 bool cyd_sd_ready(void);        // cache - khong SPI, khong chan
 bool cyd_sd_mount_now(void);    // mount NGAY (chan ~20-100 ms) - dung khi nguoi dung vua cam the
