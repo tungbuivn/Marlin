@@ -904,7 +904,10 @@ static void dump_obj(lv_obj_t *o, const uint8_t depth) {
   // (co lan muc "." / ".." cua FAT khong, dong dau co rong khong).
   if (is_roller && txt[0]) Serial.printf("[UI] %slua chon: <<%s>>\n", ind, txt);
 
-  if (depth >= 2) return;
+  // Do sau 4 (truoc la 2): hop thoai cua lv_msgbox nam sau 3-4 cap (backdrop -> hop -> content ->
+  // btnmatrix) nen do sau 2 KHONG thay duoc hang nut -> khong kiem tra duoc "nut co can giua hop
+  // khong / co khoang trang khong" (yeu cau nguoi dung 2026-10-15).
+  if (depth >= 4) return;
   const uint32_t n = lv_obj_get_child_cnt(o);
   for (uint32_t i = 0; i < n; i++) dump_obj(lv_obj_get_child(o, i), (uint8_t)(depth + 1));
 }

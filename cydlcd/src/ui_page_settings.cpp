@@ -518,21 +518,24 @@ static void ov_create(void) {
   vn_font(ov_val);              // 2 nhan nay co dau tieng Viet -> dung font Segoe
   vn_font(ov_hint);
 
-  // Dong 3: 4 NUT BUOC co dinh - nut dang chon duoc to COL_ACCENT (nhu jg_axis[])
-  lv_obj_t *rs = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
+  // Dong 3: 4 NUT BUOC co dinh - CAN GIUA hop + cach nhau DLG_BTN_GAP (truoc day dan het be rong,
+  // cac nut dinh nhau). Nut dang chon duoc to COL_ACCENT (nhu jg_axis[]).
+  lv_obj_t *rs = mk_dlg_row(ov_box, OV_W - 2 * OV_PAD, OV_BTN_H);
   for (uint8_t k = 0; k < 4; k++)
-    ov_step_btn[k] = mk_btn_grow(rs, OV_STEP_TXT[k], OV_BTN_H, cb_se_ov_step, OV_STEP(k));
+    ov_step_btn[k] = mk_dlg_btn(rs, OV_STEP_TXT[k], 52, OV_BTN_H, DLG_NEUTRAL_BG,
+                                cb_se_ov_step, OV_STEP(k));
   // 4 nut buoc TU QUAN LY NEN (LV_OBJ_FLAG_USER_1): giong 3 nut truc man JOG - focus_mark()
   // chi ve VIEN (mau sang MR_FRAME) cho chung, KHONG doi nen -> nen COL_ACCENT cua buoc dang
   // chon khong bi ghi de khi focus chuyen sang nut khac trong lop phu.
+  // (mk_dlg_btn da dat co nay; giu lai vong lap duoi day cho chac chan.)
   for (uint8_t k = 0; k < 4; k++) lv_obj_add_flag(ov_step_btn[k], LV_OBJ_FLAG_USER_1);
 
-  // Dong 4: - | + | OK | Huy
-  lv_obj_t *rb = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_BTN_H, 0, GAP);
-  ov_minus = mk_btn_grow(rb, "-",   OV_BTN_H, cb_se_ov_adj, OV_ADJ(-1));
-  lv_obj_t *plus = mk_btn_grow(rb, "+", OV_BTN_H, cb_se_ov_adj, OV_ADJ(+1));
-  mk_btn_grow(rb, "OK",  OV_BTN_H, cb_se_ov_ok, NULL);
-  lv_obj_t *huy = mk_btn_grow(rb, "H\xE1\xBB\xA7y", OV_BTN_H, cb_se_ov_cancel, NULL);  // "Huy"
+  // Dong 4: - | + | OK (XANH) | Huy (DO) - can giua, co khoang trang (yeu cau nguoi dung 2026-10-15)
+  lv_obj_t *rb = mk_dlg_row(ov_box, OV_W - 2 * OV_PAD, OV_BTN_H);
+  ov_minus = mk_dlg_btn(rb, "-", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(-1));
+  lv_obj_t *plus = mk_dlg_btn(rb, "+", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(+1));
+  mk_dlg_btn(rb, "OK",  58, OV_BTN_H, DLG_OK_BG,     cb_se_ov_ok, NULL);
+  lv_obj_t *huy = mk_dlg_btn(rb, "H\xE1\xBB\xA7y", 58, OV_BTN_H, DLG_CANCEL_BG, cb_se_ov_cancel, NULL);  // "Huy"
   vn_font_btn(huy);             // chu co dau: chi doi font cho nhan BEN TRONG nut
 
   // Giu nut de tang nhanh: nhan them PRESSED + LONG_PRESSED_REPEAT cho 2 nut -/+

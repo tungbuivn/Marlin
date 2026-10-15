@@ -447,6 +447,33 @@ lv_obj_t *mk_icon(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const lv_img_dsc
 /** Doi mau icon (Marlin doi mau bitmap theo nhiet do / trang thai). */
 void icon_color(lv_obj_t *im, const lv_color_t col);
 
+// ---- NUT TRONG HOP THOAI: THONG NHAT moi dialog (yeu cau nguoi dung 2026-10-15) ----------------
+// "cac nut bam o cac dialog can vao giua dialog, co khoang trang giua cac nut, nut OK luon mau xanh
+//  va huy hoac xoa luon mau do. Ban phim touch chua co mau nen nen khong nhin ro chu."
+//
+// Truoc day moi dialog tu ve nut mot kieu: co cho dung `mk_btn_grow` (nut dan het be rong -> cac nut
+// dinh nhau, khong can giua), co cho dung `lv_msgbox` (nut nam trong `lv_btnmatrix`, be rong chia deu
+// ca hop). Nay dung 3 muc nay cho TAT CA:
+//   - mk_dlg_row(): hang chua nut, CAN GIUA hop, khoang trang deu nhau (DLG_BTN_GAP);
+//   - mk_dlg_btn(): nut be rong CO DINH + mau nen chi dinh (xanh = dong y, do = huy/xoa);
+//   - style_keyboard(): ban phim lv_keyboard co NEN + VIEN + mau phim/chu ro rang.
+// Mau nen: vang xam (COL_BTN) cho nut thuong, xanh la dam (DLG_OK_BG) cho OK/dong y, do dam
+// (DLG_CANCEL_BG) cho Huy/Xoa/Cancel. Chu tren nut la trang tuyet doi de dat tuong phan tren ca 2 mau.
+#define DLG_BTN_W      62                                   // be rong 1 nut trong hop thoai
+#define DLG_BTN_H      28                                   // cao 1 nut trong hop thoai
+#define DLG_BTN_GAP    8                                    // khoang trang giua 2 nut
+#define DLG_OK_BG      lv_color_hex(0x1B5E20)               // xanh la dam (Material green 900): chu trang 5.5:1
+#define DLG_CANCEL_BG  lv_color_hex(0xB71C1C)               // do dam (Material red 800): chu trang 4.8:1
+#define DLG_NEUTRAL_BG COL_BTN                              // nut thuong (-, +, muc buoc, ...)
+#define DLG_TXT        lv_color_hex(0xFFFFFF)               // chu tren nut cua hop thoai (trang tuyet doi)
+/** Hang nut cua HOP THOAI: can GIUA hop, cach nhau DLG_BTN_GAP (khong dan het be rong). */
+lv_obj_t *mk_dlg_row(lv_obj_t *parent, lv_coord_t w, lv_coord_t h);
+/** Nut trong hop thoai: be rong CO DINH + mau nen chi dinh (DLG_OK_BG / DLG_CANCEL_BG / DLG_NEUTRAL_BG). */
+lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
+                     lv_color_t bg, lv_event_cb_t cb, void *ud);
+/** Trang tri ban phim `lv_keyboard` + o nhap `ta` cho de nhin (nen dam, vien sang, chu trang). */
+void style_keyboard(lv_obj_t *kb, lv_obj_t *ta);
+
 // ---- Dai mau theo NHIET DO TUYET DOI (man STATUS: icon + so cua dau in / ban in) ----------------
 // YEU CAU NGUOI DUNG 2026-10-15: "min max hot-end la 10-250; bed 0-60" -> MOC TREN lay dung y (250 / 60).
 // MOC DUOI thi KHONG lay 10 / 0 ma keo len MR_TEMP_AMB = 25 do C, VI SAO:

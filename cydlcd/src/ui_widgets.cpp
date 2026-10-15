@@ -18,6 +18,7 @@
 
 #include <stdio.h>                  // snprintf (fmt_scaled / fmt_time)
 #include <string.h>                 // strcmp (set_text)
+#include <Arduino.h>                // Serial.printf (WIFILOG trong style_keyboard - chan doan style ban phim)
 
 // ---------------------------------------------------------------------------
 //  Bien chi dung trong file nay -> VAN giu `static`
@@ -248,6 +249,73 @@ lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
   lv_obj_t *b = mk_btn(parent, txt, 0, h, cb, ud);
   lv_obj_set_flex_grow(b, 1);
   return b;
+}
+
+// ---------------------------------------------------------------------------
+//  NUT TRONG HOP THOAI (thong nhat moi dialog - xem ghi chu o ui_lvgl_int.h)
+// ---------------------------------------------------------------------------
+// Hang nut: flex ROW can GIUA theo CA 2 CHIEU. Nut be rong co dinh (mk_dlg_btn) nen hang nay KHONG
+// dan het be rong hop -> trong hop thua ra 2 ben, dung y "cac nut can vao giua dialog".
+lv_obj_t *mk_dlg_row(lv_obj_t *parent, lv_coord_t w, lv_coord_t h) {
+  lv_obj_t *r = mk_flex(parent, LV_FLEX_FLOW_ROW, w, h, 0, DLG_BTN_GAP);
+  lv_obj_set_flex_align(r, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(r, DLG_BTN_GAP, 0);
+  return r;
+}
+
+// 1 nut trong hop thoai: be rong CO DINH + mau nen chi dinh. Vat TU QUAN LY NEN (LV_OBJ_FLAG_USER_1)
+// de focus_mark() chi ve VIEN khi focus (khong ghi de mau xanh/do - giong nut buoc cua lop phu SUA).
+lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
+                            lv_color_t bg, lv_event_cb_t cb, void *ud) {
+  lv_obj_t *b = mk_btn(row, txt, w, h, cb, ud);
+  lv_obj_set_style_bg_color(b, bg, 0);
+  lv_obj_set_style_radius(b, 4, 0);
+  lv_obj_add_flag(b, LV_OBJ_FLAG_USER_1);
+  // Chu trang tuyet doi tren nen xanh/do (COL_TXT la trang nga -> tuong phan thap hon tren mau dam).
+  lv_obj_t *l = lv_obj_get_child(b, 0);
+  if (l) lv_obj_set_style_text_color(l, DLG_TXT, 0);
+  return b;
+}
+
+// Ban phim lv_keyboard: MAC DINH khong co nen (trong suot) nen chu trang tren nen sang cua trang rat
+// kho doc (yeu cau nguoi dung 2026-10-15: "ban phim touch chua co mau nen nen khong nhin ro chu").
+// Dat: nen dam (COL_BAR) + vien sang (COL_ACCENT) cho CA ban phim; tung PHIM co nen COL_BTN + chu
+// trang; phim dang bam (PRESSED) doi sang COL_ACCENT. O nhap (ta) cung dat nen toi + chu trang.
+void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
+  if (kb) {
+    lv_obj_set_style_bg_color(kb, COL_BAR, 0);
+    lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(kb, COL_ACCENT, 0);
+    lv_obj_set_style_border_width(kb, 1, 0);
+    lv_obj_set_style_radius(kb, 4, 0);
+    lv_obj_set_style_pad_all(kb, 3, 0);
+    // Tung PHIM: nen xam dam + chu trang; giu mau nen nay ca khi focus (khong doi theo theme).
+    lv_obj_set_style_bg_color(kb, COL_BTN, LV_PART_ITEMS);
+    lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(kb, DLG_TXT, LV_PART_ITEMS);
+    lv_obj_set_style_border_color(kb, COL_DIM, LV_PART_ITEMS);
+    lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
+    lv_obj_set_style_radius(kb, 3, LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_PRESSED));
+    lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
+  }
+  if (ta) {
+    lv_obj_set_style_bg_color(ta, lv_color_hex(0x0B0B2B), 0);   // toi hon nen trang: chu trang noi ro
+    lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(ta, COL_ACCENT, 0);
+    lv_obj_set_style_border_width(ta, 1, 0);
+    lv_obj_set_style_text_color(ta, DLG_TXT, 0);
+    lv_obj_set_style_radius(ta, 3, 0);
+    lv_obj_set_style_pad_all(ta, 4, 0);
+  }
+  // Doc lai style THAT SU dat duoc (chan doan tu COM8) - `lv_color_to32()` doi RGB565 -> RGB888 de doc
+  // bang mat thuong: vd "[UI] ban phim: nen=#160C52 opa=255 | phim nen=#2A2080 chu=#FFFFFF".
+  if (kb)
+    WIFILOG("[UI] ban phim: nen=#%06lX opa=%u | phim nen=#%06lX chu=#%06lX\n",
+            (unsigned long)lv_color_to32(lv_obj_get_style_bg_color(kb, 0)),
+            (unsigned)lv_obj_get_style_bg_opa(kb, 0),
+            (unsigned long)lv_color_to32(lv_obj_get_style_bg_color(kb, LV_PART_ITEMS)),
+            (unsigned long)lv_color_to32(lv_obj_get_style_text_color(kb, LV_PART_ITEMS)));
 }
 
 // Vung BAM trong suot co toa do tuyet doi (man STATUS/MENU khong dung flex).

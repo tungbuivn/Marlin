@@ -123,6 +123,7 @@ static void cb_wifi_pass(lv_event_t *e) {
   lv_obj_set_pos(s_kb_kb, 4, 42);
   lv_obj_set_size(s_kb_kb, UI_LCD_HOR_RES - 8, UI_LCD_VER_RES - 46);
   lv_keyboard_set_textarea(s_kb_kb, s_kb_ta);
+  style_keyboard(s_kb_kb, s_kb_ta);        // nen + vien + mau phim (mac dinh ban phim trong suot)
   lv_obj_add_event_cb(s_kb_kb, cb_wifi_kb, LV_EVENT_READY, NULL);
   lv_obj_add_event_cb(s_kb_kb, cb_wifi_kb, LV_EVENT_CANCEL, NULL);
   if (s_group) { lv_group_add_obj(s_group, s_kb_kb); lv_group_focus_obj(s_kb_kb); }

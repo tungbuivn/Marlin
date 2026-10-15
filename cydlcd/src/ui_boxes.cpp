@@ -49,6 +49,29 @@ static lv_color_t sev_color(uint8_t sev) {
   }
 }
 
+// To MAU tung nut cua hop thoai (yeu cau nguoi dung 2026-10-15: "nut OK luon mau xanh va huy hoac xoa
+// luon mau do"): nut cua msgbox nam trong 1 `lv_btnmatrix`, ma ban LVGL nay KHONG co
+// LV_BTNMATRIX_CTRL_CUSTOM_1/2 de style theo tung nut -> dung su kien DRAW_PART_BEGIN (LVGL cho phep
+// doi `rect_dsc`/`label_dsc` cua TUNG nut qua `dsc->id` truoc khi ve). Xac dinh nut theo CHU cua no:
+//   OK / YES / DONG Y  -> xanh (DLG_OK_BG)
+//   CANCEL / NO / HUY / XOA -> do (DLG_CANCEL_BG)
+// Cac nut khac giu nguyen mau nen COL_BTN.
+static void cb_box_btn_draw(lv_event_t *e) {
+  lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+  if (!dsc || dsc->part != LV_PART_ITEMS) return;
+  lv_obj_t *bm = lv_event_get_target(e);
+  const char *t = lv_btnmatrix_get_btn_text(bm, dsc->id);
+  if (!t || !t[0]) return;
+  char c0 = t[0];
+  if (c0 >= 'a' && c0 <= 'z') c0 = (char)(c0 - 'a' + 'A');
+  lv_color_t bg;
+  if      (c0 == 'O' || c0 == 'Y' || c0 == 'D') bg = DLG_OK_BG;        // OK / YES / Dong y
+  else if (c0 == 'C' || c0 == 'N' || c0 == 'H' || c0 == 'X') bg = DLG_CANCEL_BG;  // Cancel/No/Huy/Xoa
+  else return;
+  if (dsc->rect_dsc) { dsc->rect_dsc->bg_color = bg; dsc->rect_dsc->bg_opa = LV_OPA_COVER; }
+  if (dsc->label_dsc) dsc->label_dsc->color = DLG_TXT;
+}
+
 static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_col,
                           const char *const *btns) {
   lv_obj_t *box = lv_msgbox_create(NULL, title, txt, (const char **)btns, false);
@@ -76,10 +99,33 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
   if (bm) {
     lv_obj_set_style_bg_color(bm, COL_BTN, LV_PART_ITEMS);
     lv_obj_set_style_bg_opa(bm, LV_OPA_COVER, LV_PART_ITEMS);
-    lv_obj_set_style_text_color(bm, COL_TXT, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(bm, DLG_TXT, LV_PART_ITEMS);
     lv_obj_set_style_border_color(bm, COL_ACCENT, LV_PART_ITEMS);
     lv_obj_set_style_border_width(bm, 1, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(bm, 2, LV_PART_ITEMS);
+    lv_obj_set_style_radius(bm, 4, LV_PART_ITEMS);
+    // KHOANG TRANG giua cac nut (truoc day 2 nut dinh lien nhau) + hang nut can GIUA hop.
+    lv_obj_set_style_pad_column(bm, DLG_BTN_GAP, 0);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    // Mau xanh/do cho tung nut (xem cb_box_btn_draw).
+    lv_obj_add_event_cb(bm, cb_box_btn_draw, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    // Chan doan (COM8): in tung nut + mau se to - de kiem tra tu PC ma khong can nhin man hinh.
+    {
+      char line[128];
+      uint8_t used = 0;
+      used += (uint8_t)snprintf(line + used, sizeof(line) - used, "[UI] hop '%s':", title ? title : "");
+      // (khong co lv_btnmatrix_get_btn_cnt trong ban LVGL nay -> duyet toi da 4 nut roi dung)
+      for (uint16_t i = 0; i < 4 && used < sizeof(line) - 16; i++) {
+        const char *t = lv_btnmatrix_get_btn_text(bm, i);
+        if (!t || !t[0]) continue;
+        char c0 = t[0];
+        if (c0 >= 'a' && c0 <= 'z') c0 = (char)(c0 - 'a' + 'A');
+        const char *col = (c0 == 'O' || c0 == 'Y' || c0 == 'D') ? "XANH"
+                        : (c0 == 'C' || c0 == 'N' || c0 == 'H' || c0 == 'X') ? "DO" : "xam";
+        used += (uint8_t)snprintf(line + used, sizeof(line) - used, " [%s=%s]", t, col);
+      }
+      WIFILOG("%s | be rong btnmatrix=%d px (2 nut: 2*W + %d px khe)\n", line, (int)lv_obj_get_width(bm), DLG_BTN_GAP);
+    }
     if (s_group) { lv_group_add_obj(s_group, bm); lv_group_focus_obj(bm); }
   }
   return box;

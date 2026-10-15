@@ -705,6 +705,25 @@ Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
 
 ## 8b. HỘP THOẠI (msgbox): `lv_event_get_target()` **SAI** — phải dùng `lv_event_get_current_target()` (đã sửa 2026-10-15)
 
+> 🎨 **Kiểu nút trong hộp thoại (thống nhất 2026-10-15, yêu cầu người dùng: *"các nút bấm ở các dialog
+> cân vào giữa dialog, có khoảng trắng giữa các nút, nút OK luôn màu xanh và hủy hoặc xóa luôn màu đỏ.
+> Bàn phím touch chưa có màu nền nên không nhìn rõ chữ"*)** — mọi hộp thoại dùng chung 3 thứ trong
+> `ui_widgets.cpp` + `ui_lvgl_int.h`:
+>
+> | Thứ | Việc |
+> |---|---|
+> | `mk_dlg_row()` | hàng nút **căn GIỮA** hộp (flex `ALIGN_CENTER` cả 2 chiều), không dàn hết bề rộng |
+> | `mk_dlg_btn(txt, w, h, bg, …)` | nút **bề rộng cố định** + **màu nền chỉ định**; `DLG_BTN_GAP` = **8 px** khoảng trắng giữa các nút; chữ trắng tuyệt đối; cờ `USER_1` để khung focus chỉ vẽ viền (không ghi đè nền) |
+> | `style_keyboard()` | `lv_keyboard`: **nền `COL_BAR` + viền `COL_ACCENT`** + phím nền `COL_BTN` chữ trắng (mặc định bàn phím trong suốt → chữ trắng trên nền sáng không đọc được); ô nhập cũng được đặt nền tối |
+>
+> Màu: `DLG_OK_BG` = **xanh lá đậm** `#1B5E20` (OK/YES/Đồng ý) · `DLG_CANCEL_BG` = **đỏ đậm** `#B71C1C`
+> (CANCEL/NO/HỦY/XÓA) · `DLG_NEUTRAL_BG` = `COL_BTN` (nút `-`/`+`/mức bước). Nút của `lv_msgbox` nằm
+> trong `lv_btnmatrix` và **bản LVGL này không có `LV_BTNMATRIX_CTRL_CUSTOM_1/2`** để style theo từng nút
+> → `ui_boxes.cpp` dùng **`LV_EVENT_DRAW_PART_BEGIN`** (`dsc->id` = chỉ số nút) để đổi `rect_dsc`/
+> `label_dsc` theo **chữ của nút**. Khi mở hộp, log COM8 in ra màu sẽ tô, ví dụ:
+> `[UI] hop 'KIEM TRA': [OK=XANH] [CANCEL=DO]`. Đo lại bằng `UI BOX`: hộp 200x76 ở `x=60 y=82` (giữa
+> 320x240), `btnmatrix` 132x26 ở `x=33` (giữa khung 198 px) = 2 nút 62 px + khe 8 px.
+
 **Triệu chứng**: bấm **OK/CANCEL** của **bất kỳ** hộp thoại nào (prompt của Marlin *"Click to Resume..."*,
 hộp **XAC NHAN** của `XOA`/`REBOOT DFU`, hộp **THONG BAO**, hộp **PID**) → màn hình CYD **tự reboot**:
 

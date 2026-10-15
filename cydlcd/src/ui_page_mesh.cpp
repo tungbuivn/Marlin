@@ -337,14 +337,16 @@ void page_mesh_create(lv_obj_t *p) {
 
   me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
   me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
-  lv_obj_t *rs = mk_flex(me_box, LV_FLEX_FLOW_ROW, 220, 24, 0, GAP);
+  // 2026-10-15 (yeu cau nguoi dung): nut trong hop thoai can GIUA + co khoang trang + OK xanh / Huy do.
+  lv_obj_t *rs = mk_dlg_row(me_box, 220, 24);
   for (uint8_t k = 0; k < ME_STEP_N; k++)
-    me_step_btn[k] = mk_btn_grow(rs, ME_STEP_TXT[k], 24, cb_mesh_step, (void *)(intptr_t)k);
-  lv_obj_t *ra = mk_flex(me_box, LV_FLEX_FLOW_ROW, 220, 26, 0, GAP);
-  mk_btn_grow(ra, "-", 26, cb_mesh_adj, (void *)(intptr_t)(int8_t)-1);
-  mk_btn_grow(ra, "+", 26, cb_mesh_adj, (void *)(intptr_t)(int8_t)+1);
-  mk_btn_grow(ra, "OK", 26, cb_mesh_ok, NULL);
-  mk_btn_grow(ra, "HUY", 26, cb_mesh_cancel, NULL);
+    me_step_btn[k] = mk_dlg_btn(rs, ME_STEP_TXT[k], 56, 24, DLG_NEUTRAL_BG,
+                                cb_mesh_step, (void *)(intptr_t)k);
+  lv_obj_t *ra = mk_dlg_row(me_box, 220, 26);
+  mk_dlg_btn(ra, "-",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)-1);
+  mk_dlg_btn(ra, "+",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)+1);
+  mk_dlg_btn(ra, "OK", 52, 26, DLG_OK_BG,      cb_mesh_ok, NULL);
+  mk_dlg_btn(ra, "HUY", 52, 26, DLG_CANCEL_BG, cb_mesh_cancel, NULL);
   me_step_marks();
 }
 

@@ -32,7 +32,9 @@
 // ===========================================================================
 //  HOP SUA 3-TRONG-1
 // ===========================================================================
-#define PO_W      268
+// 2026-10-15: 268 -> 300 (rong hon de hang nut 3-trong-1 + hang 5 nut co the CAN GIUA voi khoang
+// trang DLG_BTN_GAP; man 320 px nen hop 300 van thua 2 ben 10 px).
+#define PO_W      300
 #define PO_H      122
 #define PO_FIELD_H 26                // hang 3 o NOZ/BED/FAN
 #define PO_STEP_H  24                // hang 3 muc buoc
@@ -214,27 +216,30 @@ static void po_create(void) {
   // Dong 1: ten vat lieu
   s_po_title = mk_label_w(s_po_box, "-", MR_MENU, iw);
 
-  // Dong 2: 3 O (nozzle | bed | fan) - CA 3 TRONG 1 HANG, cham o nao thi -/+ chinh o do.
-  lv_obj_t *rf = mk_flex(s_po_box, LV_FLEX_FLOW_ROW, iw, PO_FIELD_H, 0, GAP);
+  // Dong 2: 3 O (nozzle | bed | fan) - CA 3 TRONG 1 HANG, cham o nao thi -/+ chinh o do. Nut be rong
+  // CO DINH + can GIUA + cach nhau DLG_BTN_GAP (yeu cau nguoi dung 2026-10-15).
+  lv_obj_t *rf = mk_dlg_row(s_po_box, iw, PO_FIELD_H);
   for (uint8_t f = 0; f < PO_FIELDS; f++) {
-    s_po_fld[f] = mk_btn_grow(rf, PO_FNAME[f], PO_FIELD_H, cb_po_field, (void *)(intptr_t)f);
+    s_po_fld[f] = mk_dlg_btn(rf, PO_FNAME[f], 84, PO_FIELD_H, DLG_NEUTRAL_BG,
+                             cb_po_field, (void *)(intptr_t)f);
     lv_obj_add_flag(s_po_fld[f], LV_OBJ_FLAG_USER_1);  // tu quan ly NEN (xem po_refresh)
   }
 
   // Dong 3: 3 muc buoc (nghia doi theo o dang chon)
-  lv_obj_t *rs = mk_flex(s_po_box, LV_FLEX_FLOW_ROW, iw, PO_STEP_H, 0, GAP);
+  lv_obj_t *rs = mk_dlg_row(s_po_box, iw, PO_STEP_H);
   for (uint8_t k = 0; k < 3; k++) {
-    s_po_stp[k] = mk_btn_grow(rs, PO_STEP_TXT[0][k], PO_STEP_H, cb_po_step, (void *)(intptr_t)k);
+    s_po_stp[k] = mk_dlg_btn(rs, PO_STEP_TXT[0][k], 60, PO_STEP_H, DLG_NEUTRAL_BG,
+                             cb_po_step, (void *)(intptr_t)k);
     lv_obj_add_flag(s_po_stp[k], LV_OBJ_FLAG_USER_1);
   }
 
-  // Dong 4: - | + | OK | Huy | Xoa
-  lv_obj_t *ra = mk_flex(s_po_box, LV_FLEX_FLOW_ROW, iw, PO_ACT_H, 0, GAP);
-  s_po_minus = mk_btn_grow(ra, "-", PO_ACT_H, cb_po_adj, (void *)(intptr_t)(int8_t)-1);
-  s_po_plus  = mk_btn_grow(ra, "+", PO_ACT_H, cb_po_adj, (void *)(intptr_t)(int8_t)+1);
-  mk_btn_grow(ra, "OK",  PO_ACT_H, cb_po_ok, NULL);
-  lv_obj_t *huy = mk_btn_grow(ra, "H\xE1\xBB\xA7y", PO_ACT_H, cb_po_cancel, NULL);   // "Huy"
-  lv_obj_t *xoa = mk_btn_grow(ra, "X\xC3\xB3a", PO_ACT_H, cb_po_del, NULL);          // "Xoa"
+  // Dong 4: - | + | OK (XANH) | Huy (DO) | Xoa (DO) - can giua, co khoang trang
+  lv_obj_t *ra = mk_dlg_row(s_po_box, iw, PO_ACT_H);
+  s_po_minus = mk_dlg_btn(ra, "-", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)-1);
+  s_po_plus  = mk_dlg_btn(ra, "+", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)+1);
+  mk_dlg_btn(ra, "OK", 56, PO_ACT_H, DLG_OK_BG, cb_po_ok, NULL);
+  lv_obj_t *huy = mk_dlg_btn(ra, "H\xE1\xBB\xA7y", 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_cancel, NULL);  // "Huy"
+  lv_obj_t *xoa = mk_dlg_btn(ra, "X\xC3\xB3a", 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_del, NULL);          // "Xoa"
   vn_font_btn(huy);
   vn_font_btn(xoa);
   // Giu nut -/+ de nhay nhanh (nhu lop phu SUA cua trang THONG SO).
@@ -332,6 +337,7 @@ void preheat_add_open(void) {
   lv_obj_set_pos(s_kb_kb, 4, 42);
   lv_obj_set_size(s_kb_kb, UI_LCD_HOR_RES - 8, UI_LCD_VER_RES - 46);
   lv_keyboard_set_textarea(s_kb_kb, s_kb_ta);
+  style_keyboard(s_kb_kb, s_kb_ta);        // nen + vien + mau phim (mac dinh ban phim trong suot)
   lv_obj_add_event_cb(s_kb_kb, cb_pre_kb, LV_EVENT_READY, NULL);
   lv_obj_add_event_cb(s_kb_kb, cb_pre_kb, LV_EVENT_CANCEL, NULL);
   if (s_group) { lv_group_add_obj(s_group, s_kb_kb); lv_group_focus_obj(s_kb_kb); }
