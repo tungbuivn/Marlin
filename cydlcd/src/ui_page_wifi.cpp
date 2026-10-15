@@ -108,10 +108,13 @@ static void cb_wifi_pass(lv_event_t *e) {
   lv_obj_set_style_radius(s_kb_bd, 0, 0);
   lv_obj_set_style_pad_all(s_kb_bd, 0, 0);
   lv_obj_clear_flag(s_kb_bd, LV_OBJ_FLAG_SCROLLABLE);
+  // DAY lop phu len TRUOC (trang WIFI co the bi dung lai sau khi ban phim mo -> trang tao sau se ve de
+  // len ban phim). Xem ghi chu giong o ui_page_preheat.cpp.
+  lv_obj_move_foreground(s_kb_bd);
 
   s_kb_ta = lv_textarea_create(s_kb_bd);
-  lv_obj_set_pos(s_kb_ta, 4, 4);
-  lv_obj_set_size(s_kb_ta, UI_LCD_HOR_RES - 8, 34);
+  lv_obj_set_pos(s_kb_ta, 2, 4);
+  lv_obj_set_size(s_kb_ta, UI_LCD_HOR_RES - 4, KB_TA_H);
   lv_textarea_set_one_line(s_kb_ta, true);
   lv_textarea_set_password_mode(s_kb_ta, true);       // hien ****
   lv_textarea_set_max_length(s_kb_ta, WIFI_PASS_MAX - 1);
@@ -120,8 +123,9 @@ static void cb_wifi_pass(lv_event_t *e) {
   lv_obj_add_event_cb(s_kb_ta, cb_wifi_kb, LV_EVENT_CANCEL, NULL);
 
   s_kb_kb = lv_keyboard_create(s_kb_bd);
-  lv_obj_set_pos(s_kb_kb, 4, 42);
-  lv_obj_set_size(s_kb_kb, UI_LCD_HOR_RES - 8, UI_LCD_VER_RES - 46);
+  // RONG HET man + CAN DAY (phim fill het le trai/phai, hang cuoi khong bi cat) - xem KB_H.
+  lv_obj_set_size(s_kb_kb, UI_LCD_HOR_RES, KB_H);
+  lv_obj_align(s_kb_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_keyboard_set_textarea(s_kb_kb, s_kb_ta);
   style_keyboard(s_kb_kb, s_kb_ta);        // nen + vien + mau phim (mac dinh ban phim trong suot)
   lv_obj_add_event_cb(s_kb_kb, cb_wifi_kb, LV_EVENT_READY, NULL);

@@ -466,6 +466,14 @@ void icon_color(lv_obj_t *im, const lv_color_t col);
 #define DLG_CANCEL_BG  lv_color_hex(0xB71C1C)               // do dam (Material red 800): chu trang 4.8:1
 #define DLG_NEUTRAL_BG COL_BTN                              // nut thuong (-, +, muc buoc, ...)
 #define DLG_TXT        lv_color_hex(0xFFFFFF)               // chu tren nut cua hop thoai (trang tuyet doi)
+// BAN PHIM TOUCH (lv_keyboard) - kich thuoc + vi tri dung chung cho man WIFI va hop dat ten vat lieu.
+// VI SAO chieu cao CO DINH 144 px: `lv_btnmatrix` chia DEU chieu cao cho so HANG
+// (lv_btnmatrix.c: content_height / row_cnt) -> de cao 194 px thi 4 hang x ~46 px = phim bi keo CAO,
+// hang cuoi sat mep duoi va bi che (nguoi dung bao 2026-10-15: "chu cao qua nen hang cuoi bi tut va
+// bi che"). 144 px -> moi hang ~35 px, va CAN DAY man hinh nen khong bao gio bi cat.
+// Chieu rong = CA man hinh (320) de phim fill het le trai/phai (truoc day le 4 px + padding).
+#define KB_H           144
+#define KB_TA_H        34                                   // o nhap (textarea) phia tren ban phim
 /** Hang nut cua HOP THOAI: can GIUA hop, cach nhau DLG_BTN_GAP (khong dan het be rong). */
 lv_obj_t *mk_dlg_row(lv_obj_t *parent, lv_coord_t w, lv_coord_t h);
 /** Nut trong hop thoai: be rong CO DINH + mau nen chi dinh (DLG_OK_BG / DLG_CANCEL_BG / DLG_NEUTRAL_BG). */

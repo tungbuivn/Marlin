@@ -288,7 +288,11 @@ void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
     lv_obj_set_style_border_color(kb, COL_ACCENT, 0);
     lv_obj_set_style_border_width(kb, 1, 0);
     lv_obj_set_style_radius(kb, 4, 0);
-    lv_obj_set_style_pad_all(kb, 3, 0);
+    // Padding NHO (2 px) de cac phim FILL HET be ngang man hinh (yeu cau nguoi dung 2026-10-15:
+    // "ban phim chua fill het margin trai phai"); pad_row/pad_column = khe giua cac phim.
+    lv_obj_set_style_pad_all(kb, 2, 0);
+    lv_obj_set_style_pad_row(kb, 2, 0);
+    lv_obj_set_style_pad_column(kb, 2, 0);
     // Tung PHIM: nen xam dam + chu trang; giu mau nen nay ca khi focus (khong doi theo theme).
     lv_obj_set_style_bg_color(kb, COL_BTN, LV_PART_ITEMS);
     lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
@@ -296,6 +300,7 @@ void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
     lv_obj_set_style_border_color(kb, COL_DIM, LV_PART_ITEMS);
     lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
     lv_obj_set_style_radius(kb, 3, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS);
     lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_PRESSED));
     lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
   }

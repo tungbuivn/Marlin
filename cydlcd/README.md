@@ -723,6 +723,16 @@ Script làm 4 việc, **an toàn và chạy lại được nhiều lần**:
 > `label_dsc` theo **chữ của nút**. Khi mở hộp, log COM8 in ra màu sẽ tô, ví dụ:
 > `[UI] hop 'KIEM TRA': [OK=XANH] [CANCEL=DO]`. Đo lại bằng `UI BOX`: hộp 200x76 ở `x=60 y=82` (giữa
 > 320x240), `btnmatrix` 132x26 ở `x=33` (giữa khung 198 px) = 2 nút 62 px + khe 8 px.
+>
+> ⌨️ **Bàn phím: kích thước + lề (sửa 2026-10-15, lần 2)** — người dùng báo *"bàn phím chưa fill hết margin
+> trái phải, mà chữ cao quá nên hàng cuối bị tụt và bị che"*. Nguyên nhân: `lv_btnmatrix` chia **đều** chiều
+> cao cho số hàng (`content_height / row_cnt`, `lv_btnmatrix.c:422`) nên đặt cao 194 px thì 4 hàng × ~46 px =
+> phím bị **kéo cao**, hàng cuối sát mép dưới; còn bàn phím đặt ở `x=4` rộng `320-8` + padding 3 px nên chừa
+> lề 2 bên. Nay: `KB_H` = **144 px** (mỗi hàng ~35 px), **rộng đúng 320** (`x=0`), **căn ĐÁY**
+> (`LV_ALIGN_BOTTOM_MID`) nên hàng cuối không bao giờ bị cắt, padding 2 px + `pad_row`/`pad_column` 2 px để
+> phím fill hết bề ngang, và `lv_obj_move_foreground()` lúc mở (trang bị `page_rebuild()` sau đó sẽ vẽ **đè
+> lên** bàn phím vì LVGL vẽ con theo thứ tự tạo). Đo lại bằng `UI BOX` (mục *"lớp phủ trên MÀN"*, mới thêm):
+> `obj x=0 y=96 320x144` + ô nhập `x=2 y=4 316x26` — đúng cho **cả** bàn phím WiFi và bàn phím đặt tên vật liệu.
 
 **Triệu chứng**: bấm **OK/CANCEL** của **bất kỳ** hộp thoại nào (prompt của Marlin *"Click to Resume..."*,
 hộp **XAC NHAN** của `XOA`/`REBOOT DFU`, hộp **THONG BAO**, hộp **PID**) → màn hình CYD **tự reboot**:

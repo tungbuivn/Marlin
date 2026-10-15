@@ -1024,6 +1024,22 @@ void ui_lvgl_dump_layout(void) {
   Serial.printf("[UI] lop tren (hop thoai): %u vat | man hinh %dx%d\n",
                 (unsigned)nt, (int)UI_LCD_HOR_RES, (int)UI_LCD_VER_RES);
   for (uint32_t i = 0; i < nt; i++) dump_obj(lv_obj_get_child(top, i), 1);
+
+  // LOP PHU TAO TREN `lv_scr_act()` (KHONG phai con cua trang): BAN PHIM nhap mat khau WiFi / dat ten vat
+  // lieu, lop phu "DANG QUET MANG". In ra de kiem tra kich thuoc + vi tri - dac biet "ban phim co fill het
+  // be ngang man hinh khong" va "hang phim cuoi co bi cat khong" (yeu cau nguoi dung 2026-10-15).
+  lv_obj_t *scr = lv_scr_act();
+  if (scr) {
+    const uint32_t ns = lv_obj_get_child_cnt(scr);
+    Serial.println("[UI] lop phu tren MAN (khong thuoc trang):");
+    for (uint32_t i = 0; i < ns; i++) {
+      lv_obj_t *c = lv_obj_get_child(scr, i);
+      bool is_page = false;
+      for (uint8_t p = 0; p < PG_COUNT; p++) if (s_page[p] == c) { is_page = true; break; }
+      if (is_page) continue;
+      dump_obj(c, 1);
+    }
+  }
 }
 
 // Mo 1 hop thoai XAC NHAN de kiem tra bo cuc (lenh `UI TESTBOX` tren COM7). Action 0xFF khong
