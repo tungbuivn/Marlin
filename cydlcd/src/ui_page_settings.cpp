@@ -16,6 +16,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -632,15 +633,15 @@ static void cb_se_cell(lv_event_t *e) {
 
 void page_settings_create(lv_obj_t *p) {
   settings_build_list();
-  se_info = mk_label_w(p, "Marlin gui: 0 thong so", COL_DIM, PAGE_INN_W);
+  se_info = mk_label_w(p, T(UI_T_SET_INFO_NONE), COL_DIM, PAGE_INN_W);
 
   se_table = lv_table_create(p);
   lv_obj_set_size(se_table, PAGE_INN_W, SET_TABLE_H);
   lv_table_set_col_cnt(se_table, 2);
   lv_table_set_col_width(se_table, 0, SET_COL0_W);
   lv_table_set_col_width(se_table, 1, SET_COL1_W);
-  lv_table_set_cell_value(se_table, 0, 0, "THONG SO");
-  lv_table_set_cell_value(se_table, 0, 1, "GIA TRI");
+  lv_table_set_cell_value(se_table, 0, 0, T(UI_T_SET_COL_NAME));
+  lv_table_set_cell_value(se_table, 0, 1, T(UI_T_SET_COL_VAL));
   settings_fill_table();
 
   lv_obj_set_style_bg_color(se_table, COL_BG, 0);
@@ -694,7 +695,7 @@ void page_settings_update(void) {
   // Ghi ro cach dung: bang co the NHIEU dong hon khung nhin (~7 dong) -> phai VUOT de cuon; dong nao cung
   // cham duoc de sua. (Them 2026-10-15 sau khi nguoi dung tuong "mat setting fade height" - thuc ra dong do
   // nam duoi mep bang, phai cuon moi thay.)
-  snprintf(b, sizeof(b), "vuot=cuon | cham=SUA | %u/%u thong so", (unsigned)se_n, (unsigned)SET_NROWS);
+  snprintf(b, sizeof(b), T(UI_T_SET_HINT), (unsigned)se_n, (unsigned)SET_NROWS);
   set_text(se_info, b);
 
   // Lop phu SUA co the dang mo -> ve lai dau "buoc dang chon" moi chu ky (giong jog_axis_mark()
@@ -735,7 +736,7 @@ void page_settings_dump(void) {
   for (uint8_t k = 0; k < se_n; k++) {
     const uint8_t i = se_idx[k];
     const int32_t raw = cydlcd_setting(SET_ROWS[i].id, INT32_MIN);
-    if (raw == INT32_MIN) snprintf(a, sizeof(a), "(khong co)");
+    if (raw == INT32_MIN) snprintf(a, sizeof(a), T(UI_T_VALUE_NONE));
     else                  fmt_scaled(a, sizeof(a), raw, SET_ROWS[i].scale, SET_ROWS[i].dec);
     Serial.printf("[UI]   id %2u  %-18s = %-12s (raw %ld)\n", (unsigned)SET_ROWS[i].id, SET_ROWS[i].name,
                   a, (long)raw);

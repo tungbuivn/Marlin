@@ -70,10 +70,78 @@ def parse_ovr(path):
     return out, dup, order
 
 
-def text_preview(lit, n=40):
-    s = lit[1:-1] if len(lit) >= 2 else lit
-    s = s.replace('\\x', '~')          # byte UTF-8 -> khong in ra byte la
-    return s if len(s) <= n else s[:n] + '...'
+# ---------------------------------------------------------------------------
+#  AUDIT: con chuoi HIEN THI nao bang TIENG VIET chua chuyen sang T() khong?
+# ---------------------------------------------------------------------------
+# Quy tac (chinh xac hon `--hardcoded`, dung lam BANG CHUNG hoan thanh B2):
+#   1) bo comment /* */ va //;
+#   2) tach thanh TUNG CAU LENH (den dau ';');
+#   3) cau lenh nao la LOG (Serial./WIFILOG/HLOG/...) -> BO QUA (co tinh khong dich);
+#   4) con lai: literal nao "trong nhu tieng Viet" (tu khoa tieng Viet khong dau, hoac chu HOA
+#      khong dau kieu "CANH BAO") thi PHAI duoc boc trong `T(...)`, hoac dong do phai co
+#      `i18n-ok` (dung cho khoa console PG_KEY - co tinh khong dich).
+VN_WORD = re.compile(
+    r'\b(khong|duoc|truc|bam|nhiet|chon|xoa|huy|gui|trang|dong|thong|bao|luu|cua|voi|khi|lai|nhu|'
+    r'hoac|nguoi|dung|chay|xong|loi|het|day|luc|sau|truoc|nho|ten|gia tri|buoc|chieu|rong|duoi|tren|'
+    r'phai|trai|giua|tat|bat|moi|cho|den|khe|nhieu|khoa|khop|danh sach|thu muc|tap tin|man hinh|'
+    # cac am tiet tieng Viet hay dung trong chuoi HIEN THI (them 2026-10-15 sau khi audit bat duoc):
+    r'quet|ngat|ket noi|dang|nhan|cham|thay|thu lai|qua ngan|hieu chuan|sat|goc|keo|tiep tuc|nhac|'
+    r'do lech|doi moc|thu muc|thong so|gia tri|cai dat)\b', re.I)
+LOG_STMT = re.compile(r'\b(Serial|WIFELOG|WIFILOG|HLOG|LOG)\b')
+UI_FILES = ('ui_chrome.cpp', 'ui_widgets.cpp', 'ui_boxes.cpp', 'ui_overlay.cpp', 'ui_lvgl.cpp',
+            'ui_lang.cpp', 'ui_page_submenu.cpp', 'ui_page_settings.cpp')
+LIT_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def audit_display():
+    """Tra ve danh sach (file, dong, chuoi) = chuoi TIENG VIET con hard-code trong duong HIEN THI."""
+    bad = []
+    files = sorted(f for f in os.listdir(SRC)
+                   if f.endswith('.cpp') and (f.startswith('ui_') or f in UI_FILES))
+    for f in files:
+        raw = read(os.path.join(SRC, f))
+        nocomment = re.sub(r'/\*.*?\*/', lambda m: '\n' * m.group(0).count('\n'), raw, flags=re.S)
+        nocomment = '\n'.join(l.split('//')[0] for l in nocomment.split('\n'))
+        # tach cau lenh: giu nguyen so dong de bao dung vi tri
+        lines = nocomment.split('\n')
+        stmt, stmt_line = '', 1
+        raw_lines = raw.split('\n')
+        for i, line in enumerate(lines):
+            if stmt == '':
+                stmt_line = i + 1
+            stmt += line + '\n'
+            if ';' not in line:
+                continue
+            if not LOG_STMT.search(stmt):
+                for m in LIT_RE.finditer(stmt):
+                    s = m.group(1)
+                    if len(s) < 4 or not re.search(r'[A-Za-z]', s):
+                        continue
+                    if s.startswith('%') or s.startswith('\\x') or s.startswith('['):
+                        continue
+                    if re.match(r'^[MG]\d', s):
+                        continue
+                    if s[:4].lower() in ('http', '/cydl', '/sd/'):
+                        continue
+                    looks_vn = bool(VN_WORD.search(s))
+                    if not looks_vn:
+                        continue
+                    # dong THUC SU chua literal (khong phai dong bat dau cau lenh)
+                    lit_line = stmt_line + stmt[:m.start()].count('\n')
+                    src_line = raw_lines[lit_line - 1] if 0 < lit_line <= len(raw_lines) else ''
+                    if src_line.lstrip().startswith('#'):      # #warning / #error / #ifndef -> khong phai UI
+                        continue
+                    # da boc trong T(...) chua?
+                    if re.search(r'T\(\s*[A-Z_0-9]*\s*$', stmt[:m.start()]):
+                        continue
+                    if re.search(r'\bUI_T_[A-Z0-9_]+\s*$', stmt[:m.start()]):
+                        continue
+                    if any('i18n-ok' in raw_lines[k] for k in range(max(0, lit_line - 3),
+                                                                    min(len(raw_lines), lit_line + 2))):
+                        continue
+                    bad.append((f, lit_line, s))
+            stmt = ''
+    return bad
 
 
 def scan_hardcoded():
@@ -120,6 +188,8 @@ def main():
     ap.add_argument('--hardcoded', action='store_true', help='liet ke chuoi hien thi con hard-code')
     ap.add_argument('--fallback', action='store_true',
                     help='liet ke ID cua bang EN dang DUNG CHUNG ban tieng Viet (de soi "quen dich")')
+    ap.add_argument('--audit', action='store_true',
+                    help='AUDIT: con chuoi HIEN THI nao bang tieng Viet chua boc T() khong (bang chung B2)')
     args = ap.parse_args()
 
     ids = parse_enum(os.path.join(SRC, 'ui_lang.h'))
@@ -195,6 +265,17 @@ def main():
 
     if args.hardcoded:
         scan_hardcoded()
+
+    if args.audit:
+        left = audit_display()
+        print('\n-- AUDIT: chuoi TIENG VIET con hard-code trong duong HIEN THI --')
+        if left:
+            for f, ln, s in left:
+                print('   [CAN DICH] %s:%d  "%s"' % (f, ln, s[:70]))
+            print('   ==> con %d cho (hoac boc T() hoac them `i18n-ok` neu co tinh khong dich)' % len(left))
+            bad = True
+        else:
+            print('   [OK] khong con chuoi hien thi nao bang tieng Viet ngoai log/console/G-code')
 
     print('\n==> %s' % ('CO LOI - xem danh sach [LOI] o tren' if bad else 'DAT: 2 bang ngon ngu day du'))
     return 1 if bad else 0

@@ -2296,11 +2296,43 @@ danh sách đó một lần** để chắc không lọt chữ tiếng Việt và
 ```bash
 cd cydlcd
 python tools/check_lang.py              # bang GOC phai day du + dung vi tri; bang ghi de phai hop le
-python tools/check_lang.py --fallback   # 🚨 in ra ID dang DUNG CHUNG ban VI (soi "quen dich" moi batch)
-python tools/check_lang.py --hardcoded  # + so do TIEN DO chuyen doi (chuoi hien thi con hard-code)
+python tools/check_lang.py --audit      # 🚨 BẰNG CHỨNG B2: còn chuỗi HIỂN THỊ nào bằng tiếng Việt chưa bọc T()?
+python tools/check_lang.py --fallback   # in ra ID đang DÙNG CHUNG bản VI (soi "quên dịch" mỗi batch)
+python tools/check_lang.py --hardcoded  # + sổ tiến độ chuyển đổi (đếm thô, nhiều dương tính giả)
 ```
 Script đọc `ui_lang.h` (enum) rồi kiểm: bảng VI **thiếu dòng / thừa / sai vị trí / chuỗi rỗng / khai 2 lần**
 và bảng EN **ID lạ / trùng / rỗng** → **exit code 1**. `--hardcoded` in bảng xếp hạng theo file (theo dõi B2).
+
+**`--audit` là bằng chứng hoàn thành B2** (không phải đếm thô): nó bỏ comment, tách từng **câu lệnh** (đến `;`),
+bỏ qua câu lệnh **log** (`Serial.`/`WIFILOG`/`HLOG`), bỏ dòng `#warning`/`#error`, rồi soi các literal còn lại:
+literal nào "trông như tiếng Việt" (bộ từ khoá âm tiết tiếng Việt) mà **không** nằm trong `T(...)` và dòng đó
+không có marker `// i18n-ok` → báo `[CAN DICH]`. Kết quả hiện tại:
+
+```
+-- AUDIT: chuoi TIENG VIET con hard-code trong duong HIEN THI --
+   [OK] khong con chuoi hien thi nao bang tieng Viet ngoai log/console/G-code
+```
+(Dòng nào **cố tình** không dịch — khoá console `PG_KEY[]`, log chẩn đoán `UI BOX`, `#error` lúc biên dịch —
+được đánh dấu `// i18n-ok (khong phai chu hien thi)` ngay trong mã nguồn.)
+
+### Kiểm "chữ tiếng Anh có bị tràn khỏi nút không"
+
+Nút/nhãn có **bề rộng cố định** (flex chia đều), nên bản EN dài hơn có thể tràn. Cách kiểm: cho màn hình sang EN
+rồi `UI BOX` — LVGL đặt nhãn canh giữa trong nút, nên **nhãn rộng hơn nút sẽ có `x` ÂM**. Quét cả bộ trang:
+
+```powershell
+# sau khi UI LANG 1, mo tung trang va UI BOX -> tim dong co x am
+Select-String -Path <log> -Pattern 'label  x=-\d'
+```
+Đã quét TEMP · SETTINGS · INFO · FEED/FLOW · MENU · JOG · FILES · MESH · TRAMMING · WIFI · CONFIGURATION: **không
+còn nhãn nào `x` âm**. Một trường hợp đã gặp và sửa: nút `DISCONNECT` (10 ký tự ≈ 85 px) **không vừa** nút 76 px
+trong hàng 4 nút của trang WIFI (đo được `label x=-10`) → đổi bản EN thành **`LEAVE`** (VI vẫn `NGAT`).
+
+### ⚠️ Bài học thêm: enum vượt 255 thì ID không còn nhét vừa `uint8_t`
+
+Khi số ID vượt 255, các mảng `static const uint8_t WST[3] = { UI_T_… }` (trang WIFI/INFO) báo
+`narrowing conversion … to 'uint8_t'` lúc biên dịch → đổi sang **`uint16_t`**. `ui_text_t` là enum (int) nên
+bản thân ID luôn đủ chỗ; chỉ các mảng/biến phụ mới phải để ý.
 
 ### Trạng thái (cập nhật mỗi batch)
 
@@ -2309,10 +2341,11 @@ và bảng EN **ID lạ / trùng / rỗng** → **exit code 1**. `--hardcoded` i
 | **B1** | Khung `ui_lang.*` + `UI LANG` + `check_lang.py` + mục **Language** trong menu + NVS | ✅ **xong, đã kiểm trên máy** (45/45 chuỗi) |
 | **B2+batch1** | `ui_chrome.cpp` (BACK/PREV/NEXT/`TRANG %d/%d`) · `PG_TITLE` · `ui_page_menu.cpp` (10 dòng + cột giá trị + `Calibrate touch`) | ✅ xong, đã kiểm |
 | **B2+batch2** | **`ui_page_submenu.cpp`** — TOÀN BỘ cây Configuration: 111 tên dòng + 18 tiêu đề nhóm, `sm_item_t.name_id`/`sm_group_t.title_id` = ID 2 B | ✅ **xong, đã kiểm trên máy** (VI y nguyên như trước; EN: `CONFIGURATION`, `TEMP`, `+ Add material`…) |
-| **B2+batch3** | `ui_page_jog.cpp` (`TRUC`/`DI CHUYEN (mm)`/hint G91) · `ui_page_custom.cpp` (`M412: BAT/TAT`, 3 dòng ghi chú) · `ui_page_rate.cpp` (dòng gợi ý) · `ui_page_endstop.cpp` (`CHAM`/`mo (open)` + dòng `M119: %u chan…`) · `ui_page_status.cpp` (`LINK ERR (byte khong hop le)`) · `ui_boxes.cpp` (`Chac chan? Bam OK lan nua`, `TUNE XONG`) | ✅ **xong, đã kiểm trên máy** (VI y nguyên; EN: `AXIS`, `MOVE (mm)`, `press = G91…`, `M119: 3 pins - auto refresh 30 Hz`) |
-| **Quy tắc chọn có ID hay không** | Chỉ cấp ID cho chuỗi **có tiếng Việt** hoặc **câu/đoạn** mà bản EN sẽ khác. Chuỗi **một từ kỹ thuật / ký hiệu giống hệt ở 2 ngôn ngữ** thì để nguyên trong code (`FAN`, `OFF`, `MAX`, `COOLDOWN`, `NOZZLE`, `BED`, `PROBE`, `X min`, `INIT SD`, `M84`, `G28 X`, `%-số`, `mm`, `%`) — thêm ID chỉ tạo dòng trùng lặp vô nghĩa | 📌 ghi tại đây + ở đầu mỗi file khi cần |
-| **B3** | Bảng EN: 40 dòng ghi đè (phần còn lại dùng chung bản VI - thuật ngữ tiếng Anh) | 🔄 đủ cho tới batch 3 |
-| Còn lại | `ui_page_files.cpp` (~25 thông báo/hộp thoại) · `ui_page_settings.cpp` (5) · `ui_page_wifi.cpp` (9) · `ui_page_preheat.cpp` (7) · `ui_page_mesh.cpp` (6) · `ui_page_info.cpp` (3) · `ui_page_tbt.cpp` (2) · `ui_lvgl.cpp` (hộp xác nhận `DUNG IN`/`M502 RESET`…) | 🔄 batch 4… |
+| **B2+batch3** | `ui_page_jog.cpp` (`TRUC`/`DI CHUYEN (mm)`/hint G91) · `ui_page_custom.cpp` (`M412: BAT/TAT`, 3 dòng ghi chú) · `ui_page_rate.cpp` (dòng gợi ý) · `ui_page_endstop.cpp` (`CHAM`/`mo (open)` + dòng `M119: %u chan…`) · `ui_page_status.cpp` (`LINK ERR (byte khong hop le)`) · `ui_boxes.cpp` (`Chac chan? Bam OK lan nua`, `TUNE XONG`) | ✅ **xong, đã kiểm trên máy** |
+| **B2+batch4** | `ui_page_files.cpp` (20 thông báo + 3 hộp xoá file/thư mục) · `ui_page_wifi.cpp` (4 nút + 4 nhãn mật khẩu + 3 trạng thái + lớp phủ "đang quét") · `ui_page_settings.cpp` (2 tiêu đề cột + dòng gợi ý + `(khong co)`) · `ui_page_info.cpp` (`FONT:` + trạng thái WiFi + `co`/`khong`) · `ui_page_mesh.cpp`, `ui_page_tbt.cpp` · `ui_page_preheat.cpp` (`XOA VAT LIEU` + hỏi xoá) · `ui_page_menu.cpp` (`4 goc`) · `ui_boxes.cpp` (**tiêu đề mức độ** `CANH BAO`/`LOI`/`LOI NANG`/`THONG BAO`) · `ui_lvgl.cpp` (hộp xác nhận `DUNG IN`, `M502`, **`REBOOT DFU`**) · `ui_port_cyd_st7789.cpp` (**màn HIỆU CHUẨN cảm ứng**: 12 câu, vẽ bằng TFT_eSPI) | ✅ **xong, đã kiểm trên máy** |
+| **Quy tắc chọn có ID hay không** | Chỉ cấp ID cho chuỗi **có tiếng Việt** hoặc **câu/đoạn** mà bản EN sẽ khác. Chuỗi **một từ kỹ thuật / ký hiệu giống hệt ở 2 ngôn ngữ** thì để nguyên trong code (`FAN`, `OFF`, `MAX`, `COOLDOWN`, `NOZZLE`, `BED`, `PROBE`, `X min`, `INIT SD`, `M84`, `G28 X`, `FEED`, `FLOW`, `IDLE`/`PRINTING`…, `%-số`, `mm`, `%`) — thêm ID chỉ tạo dòng trùng lặp vô nghĩa | 📌 ghi tại đây; dòng nào cố tình KHÔNG dịch thì có marker `// i18n-ok` |
+| **B3** | Bảng EN: **121 dòng ghi đè** (151 ID còn lại dùng chung bản VI - thuật ngữ tiếng Anh) | ✅ **xong** |
+| Còn lại | — | ✅ **B2/B3 hoàn tất** |
 
 **Đã kiểm trên máy thật (COM8):**
 

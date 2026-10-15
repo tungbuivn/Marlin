@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_info.cpp -- man INFO cua UI LVGL (man hinh CYD): 11 dong thong tin THAT
  * (firmware, board, font, WiFi, protocol, link, SD, he thong).
  *
@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -84,16 +85,16 @@ void page_info_update(void) {
   // Che do 0: chi Montserrat -> noi ro KHONG co dau tieng Viet.
 #if UI_MONO_FONT == 4
   snprintf(b, sizeof(b), "FONT: mono4 %dbpp %d dai %s", UI_MONO_GFX_BPP, (int)UI_GFX_RANGE_COUNT,
-           s_gfx_mono ? "OK" : "LOI->MS14");
+           s_gfx_mono ? "OK" : T(UI_T_INFO_FONT_FAIL));
 #else
-  snprintf(b, sizeof(b), "FONT: Montserrat (khong dau)");
+  snprintf(b, sizeof(b), T(UI_T_INFO_FONT_MONTS));
 #endif
   set_text(in_font, b);
 
   // Trang thai WiFi - CUNG NGUON voi icon o header (wifi_state_now(), xem dau file).
-  static const char *const WIFI_TXT[3] = { "OFF", "DANG KET NOI", "DA KET NOI" };
+  static const uint16_t WIFI_TXT[3] = { UI_T_MENU_WIFI_OFF, UI_T_INFO_WIFI_CONN, UI_T_INFO_WIFI_OK };
   const uint8_t ws = wifi_state_now();
-  snprintf(b, sizeof(b), "WIFI: %s", WIFI_TXT[ws <= 2 ? ws : 0]);
+  snprintf(b, sizeof(b), "WIFI: %s", T((ui_text_t)WIFI_TXT[ws <= 2 ? ws : 0]));
   set_text(in_wifi, b);
 
   // Phien ban protocol PUSH: cua Marlin (gui trong HELLO) / cua MAN HINH CYD + co nang luc (hello_flags).
@@ -116,7 +117,7 @@ void page_info_update(void) {
   // RX/ERR: 2 CO MOT CHIEU (cydlcd_link.h) - khong con bo dem nen KHONG BAO GIO tran:
   //   rx_frames = da nhan duoc it nhat 1 frame hop le; rx_errors = da tung gap frame loi.
   snprintf(b, sizeof(b), "RX: %s  ERR: %s", cydlcd.rx_frames ? "OK" : "--",
-           cydlcd.rx_errors ? "co" : "khong");
+           cydlcd.rx_errors ? T(UI_T_INFO_YES) : T(UI_T_INFO_NO));
   set_text(in_rx, b);
 
   // Danh sach file SD + luoi bed mesh (ca 2 deu lay tu du lieu Marlin da gui).

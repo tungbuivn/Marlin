@@ -22,6 +22,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf / sscanf
 #include <string.h>                 // strcmp
@@ -169,10 +170,10 @@ static void cb_po_del(lv_event_t *e) {
   (void)e;
   if (!s_po_open) return;
   char t[40];
-  snprintf(t, sizeof(t), "Xoa vat lieu '%s'?", ui_preheat_name(s_po_slot));
+  snprintf(t, sizeof(t), T(UI_T_PRE_DEL_Q), ui_preheat_name(s_po_slot));
   s_po_del_slot = s_po_slot;
   preheat_edit_close();
-  ui_confirm("XOA VAT LIEU", t, (uint8_t)A_PRE_DELETE, 2);
+  ui_confirm(T(UI_T_PRE_DEL_TITLE), t, (uint8_t)A_PRE_DELETE, 2);
 }
 
 void preheat_delete_pending(void) {
@@ -297,7 +298,7 @@ static void cb_pre_kb(lv_event_t *e) {
         const char *t = lv_textarea_get_text(s_kb_ta);
         const bool ok = ui_preheat_add(t ? t : "");   // rev++ -> cac trang tu ve lai
         WIFILOG("[PRE] ban phim dat ten: '%s' -> %s\n", t ? t : "",
-                ok ? "da them" : "KHONG them duoc (da du 6)");
+                ok ? "da them" : T(UI_T_PRE_ADD_FULL));
       }
       preheat_kb_hide();
       break;

@@ -13,6 +13,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <stdio.h>          // snprintf (man hinh ket qua hieu chuan)
+#include "ui_lang.h"        // T() - da ngon ngu (chu tren man HIEU CHUAN cam ung)
   #include <TFT_eSPI.h>
   #include <Preferences.h>          // luu ket qua hieu chuan cam ung vao NVS (khong mat khi reset)
   static TFT_eSPI s_lcd;
@@ -25,7 +26,7 @@
   // UI la man NGANG 320x240 (ui_lvgl.h) con man hinh CYD la 240x320 -> cho phep ca 2 chieu
   #if !((UI_LCD_HOR_RES == TFT_WIDTH  && UI_LCD_VER_RES == TFT_HEIGHT) || \
         (UI_LCD_HOR_RES == TFT_HEIGHT && UI_LCD_VER_RES == TFT_WIDTH))
-    #error "UI_LCD_* trong ui_lvgl.h khong khop TFT_WIDTH/TFT_HEIGHT cua TFT_eSPI"
+    #error "UI_LCD_* trong ui_lvgl.h khong khop TFT_WIDTH/TFT_HEIGHT cua TFT_eSPI"   // i18n-ok (khong phai chu hien thi)
   #endif
 
 // ===========================================================================
@@ -304,12 +305,12 @@ uint32_t ui_port_millis(void) { return millis(); }
       for (uint8_t attempt = 0; attempt < 3 && !ok; attempt++) {
         uint32_t t0 = millis();
         while (cal_touched() && (millis() - t0) < 5000U) delay(5);         // doi nhac tay
-        cal_draw(TFT_BLACK, NAME[i], "CHAM + KEO SAT GOC NAY", "ROI NHAC TAY");
+        cal_draw(TFT_BLACK, NAME[i], T(UI_T_CAL_CORNER_1), T(UI_T_CAL_CORNER_2));
         t0 = millis();
         while (!cal_touched() && (millis() - t0) < 60000U) delay(5);       // doi bat dau cham
-        if (!cal_touched()) { cal_draw(TFT_RED, NAME[i], "KHONG THAY CHAM", "THU LAI"); delay(1500); continue; }
+        if (!cal_touched()) { cal_draw(TFT_RED, NAME[i], T(UI_T_CAL_NO_TOUCH), T(UI_T_CAL_RETRY)); delay(1500); continue; }
 
-        cal_draw(TFT_GREEN, NAME[i], "DANG NHAN", "keo sat goc roi NHAC TAY");   // <- ca man hinh XANH
+        cal_draw(TFT_GREEN, NAME[i], T(UI_T_CAL_READING), T(UI_T_CAL_DRAG_HOLD));   // <- ca man hinh XANH
         const bool want_max_x = (i == 1 || i == 2);                        // TR, BR: raw_x lon nhat
         const bool want_max_y = (i == 2 || i == 3);                        // BR, BL: raw_y lon nhat
         uint16_t ex = 0, ey = 0, n = 0, px = 0, py = 0;
@@ -333,10 +334,10 @@ uint32_t ui_port_millis(void) { return millis(); }
         if (n >= 5) { cx[i] = ex; cy[i] = ey; ok = true;
                       Serial.printf("[TOUCHCAL] %s raw=%u,%u (n=%u)\n", NAME[i],
                                     (unsigned)ex, (unsigned)ey, (unsigned)n); }
-        else { cal_draw(TFT_RED, NAME[i], "QUA NGAN / NHIEU", "CHAM LAI"); delay(1500); }
+        else { cal_draw(TFT_RED, NAME[i], T(UI_T_CAL_TOO_SHORT), T(UI_T_CAL_TOUCH_AGAIN)); delay(1500); }
       }
       if (!ok) {
-        cal_draw(TFT_RED, "LOI", "khong hieu chuan duoc", "van dung gia tri cu");
+        cal_draw(TFT_RED, "LOI", T(UI_T_CAL_FAIL_L1), T(UI_T_CAL_FAIL_L2));
         Serial.println("[TOUCHCAL] that bai");
         delay(2500);
         return;
@@ -386,7 +387,7 @@ uint32_t ui_port_millis(void) { return millis(); }
     s_lcd.setTextDatum(MC_DATUM);
     s_lcd.setTextColor(TFT_GREEN, TFT_BLACK);
     s_lcd.setTextFont(4);
-    s_lcd.drawString("DA LUU", UI_LCD_HOR_RES / 2, 34);
+    s_lcd.drawString(T(UI_T_CAL_SAVED), UI_LCD_HOR_RES / 2, 34);
     s_lcd.setTextFont(2);
     s_lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     s_lcd.drawString(b1, UI_LCD_HOR_RES / 2, 92);
@@ -394,7 +395,7 @@ uint32_t ui_port_millis(void) { return millis(); }
     s_lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     s_lcd.drawString(b3, UI_LCD_HOR_RES / 2, 152);
     s_lcd.drawString(b4, UI_LCD_HOR_RES / 2, 178);
-    s_lcd.drawString("cham de tiep tuc", UI_LCD_HOR_RES / 2, 214);
+    s_lcd.drawString(T(UI_T_CAL_CONTINUE), UI_LCD_HOR_RES / 2, 214);
     s_lcd.setTextDatum(TL_DATUM);
     delay(4000);
   }

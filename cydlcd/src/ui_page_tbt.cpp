@@ -8,6 +8,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -73,7 +74,7 @@ void page_tbt_create(lv_obj_t *p) {
   // R = home + probe lai ca 4 goc. Marlin tu bat dau wizard neu chua chay (tbt_run::begin)
   // nen nut nay la diem KHOI DONG cua man Tramming tren MAN HINH CYD.
   lv_obj_t *r0 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
-  mk_btn_grow(r0, "HOME + PROBE 4 GOC", 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_RESTART);
+  mk_btn_grow(r0, T(UI_T_TBT_RESTART), 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_RESTART);
 
   lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
   mk_btn_grow(rb, "PROBE",   38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_PROBE);
@@ -81,7 +82,7 @@ void page_tbt_create(lv_obj_t *p) {
   mk_btn_grow(rb, "BACK",    38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_BACK);
   mk_btn_grow(rb, "DONE",    38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_DONE);
 
-  mk_label_w(p, "DONE = goc xong | MAX/MIN = doi moc", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_TBT_HINT), COL_DIM, PAGE_INN_W);
 }
 
 void page_tbt_update(void) {
@@ -117,7 +118,7 @@ void page_tbt_update(void) {
     snprintf(b, sizeof(b), "%s...", tbt_phase_name(tbt.st.phase));
   }
   else if (tbt.st.all_dat) {
-    snprintf(b, sizeof(b), "DAT - lech so voi tam (chi con BACK)");
+    snprintf(b, sizeof(b), T(UI_T_TBT_RESULT));
     hcol = COL_OK;
   }
   else {

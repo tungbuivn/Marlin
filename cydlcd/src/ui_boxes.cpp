@@ -35,10 +35,10 @@ static void box_close(lv_obj_t **box) {
 static const char *sev_name(uint8_t sev) {
   switch (sev) {
     case CYDLCD_SEV_INFO:  return "INFO";
-    case CYDLCD_SEV_WARN:  return "CANH BAO";
-    case CYDLCD_SEV_ERROR: return "LOI";
-    case CYDLCD_SEV_FATAL: return "LOI NANG";
-    default:              return "THONG BAO";
+    case CYDLCD_SEV_WARN:  return T(UI_T_BOX_SEV_WARN);
+    case CYDLCD_SEV_ERROR: return T(UI_T_BOX_SEV_ERR);
+    case CYDLCD_SEV_FATAL: return T(UI_T_BOX_SEV_FATAL);
+    default:              return T(UI_T_BOX_SEV_NOTICE);
   }
 }
 
@@ -241,7 +241,7 @@ void boxes_test_ok(void) {
 // `M0` -> hop PROMPT cua Marlin dang cho nguoi dung tra loi).
 void boxes_dump(void) {
   lv_obj_t *const boxes[4] = { s_prompt_box, s_cf_box, s_msg_box, s_pid_box };
-  const char *const names[4] = { "PROMPT cua Marlin", "XAC NHAN", "THONG BAO", "PID" };
+  const char *const names[4] = { "PROMPT cua Marlin", "XAC NHAN", "THONG BAO", "PID" };   // i18n-ok (khong phai chu hien thi)
   for (uint8_t i = 0; i < 4; i++) {
     if (!boxes[i]) continue;
     lv_obj_t *t = lv_msgbox_get_title(boxes[i]);

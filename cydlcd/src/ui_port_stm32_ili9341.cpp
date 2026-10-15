@@ -19,7 +19,7 @@
   static ILI9341 s_lcd;
 
   #if (TFT_ROTATION != 0) && (TFT_ROTATION != 1) && (TFT_ROTATION != 2) && (TFT_ROTATION != 3)
-    #error "TFT_ROTATION phai la 0..3"
+    #error "TFT_ROTATION phai la 0..3"   // i18n-ok (khong phai chu hien thi)
   #endif
 
 // ===========================================================================

@@ -491,7 +491,7 @@ void build_chrome(void) {
   // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de.
   // 64 px: du cho "LINK ERR" (8 ky tu mono x 8 px = 64) va vua du cho 4 nut + icon wifi + ten man
   // (xem bang be rong o dau build_chrome).
-  s_link  = mk_label_w(s_bar, "NO LINK", COL_ERR, LINK_LBL_W);
+  s_link  = mk_label_w(s_bar, T(UI_T_LINK_NONE), COL_ERR, LINK_LBL_W);
   // Icon trang thai WiFi: ngay SAU ten may in, TRUOC 2 nut PAUSE/STOP va BACK. La CON CUA s_bar
   // nen tu an/hien cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
   // Dung font icon BAN NHO (14 px) - thanh tieu de chi cao 26 px; ban to (30 px) danh cho STATUS.

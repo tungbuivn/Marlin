@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -147,7 +148,7 @@ static void cb_mesh_edit_toggle(lv_event_t *e) {
   me_edit = !me_edit;
   mesh_edit_apply();
   WIFILOG("[UI] MESH EDIT: %s\n", me_edit ? "BAT (cham o de sua, 4 nut dieu huong hien ra)"
-                                          : "TAT (xem luoi binh thuong)");
+                                          : T(UI_T_MESH_OFF));
 }
 
 // 4 nut dieu huong: dich vung nhin cua bang (cuon) theo trai/tren/phai/duoi.
@@ -234,7 +235,7 @@ void page_mesh_create(lv_obj_t *p) {
   }
   if (!(cydlcd.hello_flags & CYDLCD_HAS_MESH)) {
     mk_spacer(p, 1, 30, 0);                      // day chu thich xuong giua vung noi dung
-    me_note = mk_label_w(p, "khong ho tro (CYDLCD_HAS_MESH=0)", COL_WARN, PAGE_INN_W);
+    me_note = mk_label_w(p, T(UI_T_MESH_UNSUPPORTED), COL_WARN, PAGE_INN_W);
     (void)me_note;
     return;
   }

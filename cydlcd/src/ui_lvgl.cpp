@@ -169,7 +169,7 @@ const lv_font_t *s_gfx_mono = NULL;
 
 // Port day pixel ra LCD lam viec truc tiep tren buffer 16-bit (xem ui_lvgl_port.cpp)
 static_assert(LV_COLOR_DEPTH == 16, "UI nay chi ho tro LV_COLOR_DEPTH 16");
-static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
+static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");   // i18n-ok (khong phai chu hien thi)
 
 
 // ===========================================================================
@@ -178,7 +178,7 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 
 // TEN TRANG cho CONSOLE (`UI MENU`, `UI ENDSTOP`, `UI ?`...) - KHONG DICH, giu y nguyen nhu truoc de
 // cac lenh chan doan khong phu thuoc ngon ngu dang chon (2026-10-15, da ngon ngu).
-static const char *const PG_KEY[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
+static const char *const PG_KEY[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",   // i18n-ok (khong phai chu hien thi)
                                              "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
                                              "TRAMMING", "INFO", "ENDSTOP", "WIFI",
                                              "CAU HINH"};
@@ -330,7 +330,7 @@ void do_action(const int a) {
     case A_STEPPERS_OFF:  cydlcd_link_send_gcode("M84"); break;
     case A_PAUSE:         cydlcd_link_send_gcode("M25"); break;
     case A_RESUME:        cydlcd_link_send_gcode("M24"); break;
-    case A_STOP:          ui_confirm("DUNG IN", "Dung han ban in? (M524)", (uint8_t)A_STOP_NOW, 1); break;
+    case A_STOP:          ui_confirm(T(UI_T_CF_STOP_TITLE), T(UI_T_CF_STOP_TEXT), (uint8_t)A_STOP_NOW, 1); break;
     case A_STOP_NOW:      stop_request(); break;                   // gui lai M524 toi khi dung (xem stop_retry_task)
     case A_COOLDOWN:      cydlcd_link_send_gcode("M104 S0"); cydlcd_link_send_gcode("M140 S0"); break;
     case A_SAVE:          cydlcd_link_request((uint8_t)CYDLCD_REQ_SAVE_SETTINGS); break;
@@ -365,9 +365,9 @@ void do_action(const int a) {
     // M502 tra thong so trong RAM ve MAC DINH cua firmware -> XAC NHAN 2 BUOC (giong REBOOT DFU)
     // vi bam nham roi bam tiep SAVE EEPROM se ghi de vinh vien len chip EEPROM I2C.
     case A_EEPROM_RESET: ui_confirm("M502 RESET",
-                                    "Tra thong so trong RAM ve MAC DINH?\nChi ghi vao EEPROM neu sau do bam SAVE",
+                                    T(UI_T_CF_M502_TEXT),
                                     (uint8_t)A_EEPROM_RESET, 2); break;
-    case A_REBOOT_DFU:   ui_confirm("REBOOT DFU", "Nhay vao ROM DFU bootloader?", (uint8_t)A_REBOOT_DFU, 2); break;
+    case A_REBOOT_DFU:   ui_confirm("REBOOT DFU", T(UI_T_CF_DFU_TEXT), (uint8_t)A_REBOOT_DFU, 2); break;
     case A_FILAMENT_CHANGE: cydlcd_link_send_gcode("M600 B0"); break;   // doi filament, khong lui dai
     case A_RUNOUT_TOGGLE: break;                                        // xu ly rieng (xem cb_runout_toggle)
 
@@ -1283,7 +1283,7 @@ void ui_lvgl_dump_layout(void) {
 // Mo 1 hop thoai XAC NHAN de kiem tra bo cuc (lenh `UI TESTBOX` tren COM7). Action 0xFF khong
 // tuong ung A_* nao -> bam OK/CANCEL deu khong lam gi (xem do_action(): default: break).
 void ui_lvgl_test_dialog(void) {
-  ui_confirm("KIEM TRA", "Hop thoai nay phai nam GIUA man hinh", 0xFF, 1);
+  ui_confirm("KIEM TRA", "Hop thoai nay phai nam GIUA man hinh", 0xFF, 1);   // i18n-ok (khong phai chu hien thi)
   ui_confirm_autoclose(6000);      // tu dong dong sau 6 s (khong de hop modal nam tren man)
 }
 

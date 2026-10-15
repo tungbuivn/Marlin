@@ -153,7 +153,7 @@ void page_menu_create(lv_obj_t *p) {
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
     lv_obj_t *n = mk_label(r, T(UI_T_MENU_CALTOUCH), MR_MENU);
     lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
-    mn_val_cal = mk_label(r, "4 goc", MR_MENUVAL);
+    mn_val_cal = mk_label(r, T(UI_T_VALUE_CORNERS), MR_MENUVAL);
     lv_obj_align(mn_val_cal, LV_ALIGN_RIGHT_MID, -4, 0);
   }
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_wifi.cpp -- man WIFI cua UI LVGL (man hinh CYD): xem trang thai, quet mang,
  * nhap mat khau, ket noi/ngat/quen cau hinh (NVS).
  * API WiFi deu `weak`: thieu module -> trang VAN MO DUOC va bao "khong ho tro".
@@ -8,6 +8,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -30,7 +31,7 @@
 //
 //  API WiFi deu `weak` (xem khoi khai bao o dau file): thieu module -> trang VAN MO DUOC, hien
 //  "KHONG HO TRO", moi nut khong lam gi (khong crash, khong loi link).
-//  Nut QUET goi net_wifi_scan() BLOCKING ~2-4 s -> hien lop phu "DANG QUET MANG..." + KHOA input
+//  Nut QUET goi net_wifi_scan() BLOCKING ~2-4 s -> hien lop phu T(UI_T_WIFI_SCANNING) + KHOA input
 //  (lv_indev_enable) trong luc quet (giong cach nhanh firmware lam o pha init), xong moi mo lai.
 // ===========================================================================
 #define WIFI_ROLLER_H  (4 * 17)        // 68 = 4 dong x line_height 17 (mono mode 4)
@@ -65,7 +66,7 @@ static void wifi_ov_show(const bool on, const char *txt) {
   else    lv_obj_add_flag(s_wf_ov, LV_OBJ_FLAG_HIDDEN);
 }
 
-// ---- lop phu NHAP MAT KHAU: TAO khi bam nut "MAT KHAU...", XOA ngay khi dong (tra pool LVGL) ----
+// ---- lop phu NHAP MAT KHAU: TAO khi bam nut T(UI_T_WIFI_PASS_DOTS), XOA ngay khi dong (tra pool LVGL) ----
 // CHI co khi env bat ban phim: `src/lv_conf_cydlcd.h` (env CYD) dat LV_USE_KEYBOARD/TEXTAREA = 1.
 // Env STM32 LVGL dung `lv_conf.h` (de 0) -> khong co ban phim: nut MAT KHAU chi bao "nhap qua COM7"
 // (xem nhanh #else) chu KHONG lam hong build.
@@ -156,7 +157,7 @@ static void wifi_fill_roller(const int n) {
     if (w < 0 || (size_t)w >= left) break;
     p += w; left -= (size_t)w;
   }
-  if (!cnt) snprintf(buf, sizeof(buf), "(khong tim thay mang)");
+  if (!cnt) snprintf(buf, sizeof(buf), T(UI_T_WIFI_NO_AP));
   lv_roller_set_options(wf_roller, buf, LV_ROLLER_MODE_NORMAL);
   lv_roller_set_selected(wf_roller, 0, LV_ANIM_OFF);
 }
@@ -184,7 +185,7 @@ static void cb_wifi_scan(lv_event_t *e) {
   if (s_wifi_busy || !wifi_api_ok() || !wf_roller) return;   // !wf_roller: trang da bi thu hoi
   if (cyd_sd_printer_busy && cyd_sd_printer_busy()) {
     // Quet lam WiFi roi kenh (va truoc day con CHAN vong lap) -> Marlin mat the giua ban in.
-    lv_roller_set_options(wf_roller, "(Marlin dang in - khong quet mang)", LV_ROLLER_MODE_NORMAL);
+    lv_roller_set_options(wf_roller, T(UI_T_WIFI_SCAN_BUSY), LV_ROLLER_MODE_NORMAL);
     WIFILOG("[WIFI] TU CHOI quet: Marlin dang in\n");
     return;
   }
@@ -197,12 +198,12 @@ static void cb_wifi_scan(lv_event_t *e) {
       return;                                        // dang quet roi -> bo qua
     }
     s_wifi_busy = true;
-    wifi_ov_show(true, "DANG QUET MANG...");
+    wifi_ov_show(true, T(UI_T_WIFI_SCANNING));
     return;                                          // ket qua lay o page_wifi_update()
   }
   // Duong lui (firmware khong co API async): quet dong bo 2-8 s + khoa input
   s_wifi_busy = true;
-  wifi_ov_show(true, "DANG QUET MANG...");
+  wifi_ov_show(true, T(UI_T_WIFI_SCANNING));
   if (s_indev) lv_indev_enable(s_indev, false);        // KHOA cam ung + encoder
   for (uint8_t k = 0; k < 3; k++) lv_timer_handler();  // ve lop phu TRUOC khi goi ham blocking
   const uint32_t t0 = millis();
@@ -238,7 +239,7 @@ static void cb_wifi_disconnect(lv_event_t *e) {
 static void cb_wifi_forget(lv_event_t *e) {
   (void)e;
   if (s_wifi_busy || !net_wifi_disconnect) return;
-  ui_confirm("XOA WIFI", "Xoa cau hinh WiFi da luu (NVS)?\nLan sau phai nhap lai mat khau!",
+  ui_confirm(T(UI_T_WIFI_FORGET), T(UI_T_WIFI_FORGET_Q),
              (uint8_t)A_WIFI_FORGET, 2);
 }
 
@@ -270,13 +271,13 @@ void page_wifi_create(lv_obj_t *p) {
   wf_ssid  = mk_label_w(p, "SSID: -", COL_DIM, PAGE_INN_W);
   wf_ip    = mk_label_w(p, "IP: -",   COL_DIM, PAGE_INN_W);
 
-  wf_pass = mk_btn(p, "MAT KHAU...", PAGE_INN_W, 26, cb_wifi_pass, NULL);
+  wf_pass = mk_btn(p, T(UI_T_WIFI_PASS_DOTS), PAGE_INN_W, 26, cb_wifi_pass, NULL);
 
   wf_roller = lv_roller_create(p);
   lv_obj_set_width(wf_roller, PAGE_INN_W);
   lv_roller_set_visible_row_count(wf_roller, 4);
   lv_obj_set_height(wf_roller, WIFI_ROLLER_H);
-  lv_roller_set_options(wf_roller, "(bam QUET de tim mang)", LV_ROLLER_MODE_NORMAL);
+  lv_roller_set_options(wf_roller, T(UI_T_WIFI_PRESS_SCAN), LV_ROLLER_MODE_NORMAL);
   lv_obj_set_style_bg_color(wf_roller, COL_BTN, 0);
   lv_obj_set_style_bg_opa(wf_roller, LV_OPA_COVER, 0);
   lv_obj_set_style_text_color(wf_roller, COL_TXT, 0);
@@ -288,10 +289,10 @@ void page_wifi_create(lv_obj_t *p) {
   if (s_group) lv_group_add_obj(s_group, wf_roller);
 
   lv_obj_t *r = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 26, 0, GAP);
-  mk_btn_grow(r, "QUET",    26, cb_wifi_scan, NULL);
-  mk_btn_grow(r, "KET NOI", 26, cb_wifi_connect, NULL);
-  mk_btn_grow(r, "NGAT",    26, cb_wifi_disconnect, NULL);
-  mk_btn_grow(r, "XOA",     26, cb_wifi_forget, NULL);
+  mk_btn_grow(r, T(UI_T_WIFI_BTN_SCAN),   26, cb_wifi_scan, NULL);
+  mk_btn_grow(r, T(UI_T_WIFI_BTN_CONN),   26, cb_wifi_connect, NULL);
+  mk_btn_grow(r, T(UI_T_WIFI_BTN_DISCON), 26, cb_wifi_disconnect, NULL);
+  mk_btn_grow(r, T(UI_T_WIFI_BTN_FORGET), 26, cb_wifi_forget, NULL);
 }
 
 void page_wifi_update(void) {
@@ -302,7 +303,7 @@ void page_wifi_update(void) {
     const int r = net_wifi_scan_poll();
     if (r == -1) return;                       // con dang quet -> giu nguyen lop phu
     if (r >= 0) wifi_fill_roller(r);
-    else        lv_roller_set_options(wf_roller, "(quet that bai)", LV_ROLLER_MODE_NORMAL);
+    else        lv_roller_set_options(wf_roller, T(UI_T_WIFI_SCAN_FAIL), LV_ROLLER_MODE_NORMAL);
     if (net_upload_mdns_pause) net_upload_mdns_pause(false);   // bat lai mDNS sau khi quet
     wifi_ov_show(false, NULL);
     s_wifi_busy = false;
@@ -311,17 +312,17 @@ void page_wifi_update(void) {
 
   char b[64];
   if (!wifi_api_ok()) {                                // nhanh firmware chua merge API WiFi
-    set_text(wf_state, "WiFi: KHONG HO TRO (chua co module)");
+    set_text(wf_state, T(UI_T_WIFI_UNSUPPORTED));
     set_text(wf_ssid, "");
     set_text(wf_ip, "");
-    set_text(lv_obj_get_child(wf_pass, 0), "MAT KHAU: -");
+    set_text(lv_obj_get_child(wf_pass, 0), T(UI_T_WIFI_PASS_NONE));
     return;
   }
-  static const char *const WST[3] = { "TAT", "DANG KET NOI", "DA KET NOI" };
+  static const uint16_t WST[3] = { UI_T_WIFI_ST_OFF, UI_T_WIFI_ST_CONN, UI_T_WIFI_ST_OK };
   const uint8_t st = wifi_state_now();
   const int8_t  rs = wifi_rssi_now();
-  if (st == 2 && rs) snprintf(b, sizeof(b), "WiFi: %s  %d dBm", WST[2], (int)rs);
-  else               snprintf(b, sizeof(b), "WiFi: %s", WST[st <= 2 ? st : 0]);
+  if (st == 2 && rs) snprintf(b, sizeof(b), "WiFi: %s  %d dBm", T((ui_text_t)WST[2]), (int)rs);
+  else               snprintf(b, sizeof(b), "WiFi: %s", T((ui_text_t)WST[st <= 2 ? st : 0]));
   set_text(wf_state, b);
 
   const char *ssid = wifi_ssid_now();
@@ -335,11 +336,11 @@ void page_wifi_update(void) {
   lv_obj_t *pl = lv_obj_get_child(wf_pass, 0);
   if (pl) {
 #if LV_USE_KEYBOARD && LV_USE_TEXTAREA
-    if (s_wifi_pass[0]) snprintf(b, sizeof(b), "MAT KHAU: **** (%u)", (unsigned)strlen(s_wifi_pass));
-    else                snprintf(b, sizeof(b), "MAT KHAU: (bam de nhap)");
+    if (s_wifi_pass[0]) snprintf(b, sizeof(b), T(UI_T_WIFI_PASS_SET), (unsigned)strlen(s_wifi_pass));
+    else                snprintf(b, sizeof(b), T(UI_T_WIFI_PASS_ENTER));
 #else
     // Env khong bat ban phim (xem #if o cb_wifi_pass): noi ro duong nhap mat khau khac.
-    snprintf(b, sizeof(b), "MAT KHAU: nhap qua COM7 (khong co ban phim)");
+    snprintf(b, sizeof(b), T(UI_T_WIFI_PASS_COM7));
 #endif
     set_text(pl, b);
   }
