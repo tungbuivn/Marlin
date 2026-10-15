@@ -422,7 +422,7 @@ python cydlcd/tools/make_lvgl_icons.py
 | Màn | Nội dung / lệnh gửi |
 |---|---|
 | **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
-| **MENU** | menu dọc kiểu Marlin: Temperature · **Motion** · Feed/Flow rate · SD card · Bed mesh · **Custom/Init SD** · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Motion`** mở **menu MOTION** kiểu 12864 (Move Axis (JOG) · Homing · Auto Z-Align · Z Probe Wizard · Tramming Wizard · Unified Bed Leveling · Level Bed · Deploy/Stow Z-Probe · Fade Height · M48 Probe Test · Disable Steppers — trước 2026-10-15 dòng này tên `Motion (JOG)` và mở thẳng trang JOG). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · **Motion** · Feed/Flow rate · SD card · Bed mesh · **Custom/Init SD** · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Motion`** mở **menu MOTION** kiểu 12864 (Move Axis (JOG) · Z Probe Wizard · Tramming Wizard · Unified Bed Leveling · Level Bed · Deploy/Stow Z-Probe · M48 Probe Test · Disable Steppers — trước 2026-10-15 dòng này tên `Motion (JOG)` và mở thẳng trang JOG; `Homing` ẩn 2026-10-15, `Auto Z-Align (G34)` ẩn vì G34 tắt hẳn, `Fade Height` gom về CONFIGURATION). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
@@ -2143,15 +2143,15 @@ MOTION
 ├─ Unified Bed Leveling >   Activate (G29 A) · Deactivate (G29 D) · Bed Mesh (trang lưới) ·
 │                           Manually Build Mesh (G29 I999 + G29 P2BT0) · Fill-in (G29 P3) ·
 │                           Fine Tune All (G29 P4RT) · Save Bed Mesh (G29 S0) · Output UBL Info (G29 W) ·
-│                           Output for Host (G29 T0) · Output for CSV (G29 T1) · Off Printer Backup (G29 S-1) ·
-│                           Fade Height
+│                           Output for Host (G29 T0) · Output for CSV (G29 T1) · Off Printer Backup (G29 S-1)
 ├─ Level Bed (G29 N)
 ├─ Deploy Z-Probe (M401) · Stow Z-Probe (M402)
-├─ Fade Height              (sửa trực tiếp, id thông số CYDLCD_SET_FADE_HEIGHT)
 ├─ M48 Probe Test           gửi `G28 O` rồi `M48 P10` (đúng như 12864: `G28O\nM48 P10`)
 └─ Disable Steppers (M84)
 ```
 
+* **KHÔNG có dòng `Fade Height`** (12864 có, ở cả `Motion` và `UBL`): từ 2026-10-15 nó được **gom về MỘT chỗ**
+  trong CONFIGURATION, ngay dưới `Probe Z Offset` — xem mục *"★ Một chỗ DUY NHẤT cho `Fade Height`"*.
 * **KHÔNG có mục `Homing >`** như 12864 (yêu cầu người dùng 2026-10-15: *"ẩn menu Homing vì đã có hết
   trong JOG rồi"*): trang JOG đã có `HOME ALL (G28)`, home từng trục X/Y/Z và `M84` — thêm menu con nữa là thừa.
 * **KHÔNG có `Auto Z-Align (G34)`** — G34 **bị tắt hẳn** trên máy này (trục Z cứng), xem mục
@@ -2212,11 +2212,7 @@ trong MENU mở **một bảng phẳng 76 dòng** phải cuộn; nay nó mở **
 
 ```
 CAU HINH
-├─ Probe Z Offset                    M851 Z (mở lớp phủ sửa)
-├─ Controller Fan >                  Idle Speed · Auto Mode · Active Speed · Idle Period      M710 I/A/S/D
-├─ Preheat >                         Danh sách vật liệu: mỗi dòng `TÊN  nozzle/bed/fan` (chạm = hộp
-│                                    sửa 3-trong-1) + `+ Thêm vật liệu` (bàn phím đặt tên). TỐI ĐA 6
-├─ Advanced Settings >
+├─ Advanced Settings >                ★ LÀ DÒNG ĐẦU TIÊN (yêu cầu người dùng 2026-10-15)
 │   ├─ Max Speed >        Max X/Y/Z/E Speed · Min Velocity (M205 S) · Min Travel Speed (M205 T)
 │   ├─ Acceleration >     Accel print/retract/travel (M204 P/R/T) · Max X/Y/Z/E Accel (M201)
 │   ├─ Jerk >             Max X/Y/Z/E Jerk (M205) · Junction Dev · Linear Adv (M900 K)
@@ -2226,10 +2222,32 @@ CAU HINH
 │   ├─ Temperature >      MPC P/C/R/A/F/H (M306) + MPC Autotune · Bed PID (M304) + Bed PID Autotune · Hotend PID (M301)
 │   ├─ Filament >         E in mm3 + Filament Diameter (M200) · Load/Unload Length (M603) · Runout Sensor (M412)
 │   ├─ Tune (runtime) >   Feed % (M220) · Flow % (M221) · Fan % (M106) · Target E0 (M104) · Target bed (M140)
-│   └─ Fade Height (M420 Z) · Home Offset X/Y (M206)
+│   └─ Home Offset X/Y    (M206)
+├─ Probe Z Offset                     M851 Z (mở lớp phủ sửa)
+├─ Fade Height                        M420 Z (0.94) — ★ NGAY DƯỚI "Probe Z Offset", xem ghi chú dưới
+├─ Controller Fan >                  Idle Speed · Auto Mode · Active Speed · Idle Period      M710 I/A/S/D
+├─ Preheat >                         Danh sách vật liệu: mỗi dòng `TÊN  nozzle/bed/fan` (chạm = hộp
+│                                    sửa 3-trong-1) + `+ Thêm vật liệu` (bàn phím đặt tên). TỐI ĐA 6
 ├─ Store Settings (M500) · Load Settings (M501) · Restore Defaults (M502 — xác nhận 2 bước)
 └─ All settings (table)              mở lại BẢNG PHẲNG cũ (trang `THONG SO`)
 ```
+
+### ★ Một chỗ DUY NHẤT cho `Fade Height` (2026-10-15)
+
+**Yêu cầu người dùng:** *"tôi thấy có vài chỗ có config 'fade height' gỡ bỏ và cho vào configuration, ngay
+bên dưới z probe offset, ngoài ra, advance setting trong configuration là item đầu tiên"*.
+
+Trước đó dòng này **lặp 3 lần** trong cây (đúng như 12864 — 12864 để nó ở cả `Motion`, `UBL` và
+`Advanced`): `SM_I_ADV`, `SM_I_MOTION`, `SM_I_UBL` đều có `SM_V("Fade Height", CYDLCD_SET_FADE_HEIGHT)`.
+Nay **gỡ cả 3**, chỉ còn **1 dòng ở `SM_I_ROOT`** nằm ngay sau `Probe Z Offset`; `Advanced Settings` được
+đưa lên **đầu bảng** `SM_I_ROOT`. Bảng phẳng `All settings (table)` **vẫn có** dòng `Fade height mm` (nó là
+bảng đầy đủ 63 thông số Marlin gửi — không phải chỗ "cấu hình" nên giữ nguyên).
+
+Kiểm trên máy thật (COM8, `UI CFG`): `[0] CAU HINH dong=9/9` → `Advanced Settings`, `Probe Z Offset = 0.750`,
+`Fade Height = 0.94`, `Controller Fan`, `Preheat`, `Store`, `Load`, `Restore`, `All settings`;
+`[1] ADVANCED dong=11/11` (kết thúc bằng `Home Offset X/Y` — **không còn** Fade Height);
+`[15] MOTION dong=9/9` và `[16] UBL dong=11/11` — **cũng không còn** Fade Height.
+`UI BOX` khi mở nhóm gốc: 9 nút cao 23 px (0…207), thanh đáy tự ẩn vì nội dung gọn.
 
 **Cách làm (vì sao KHÔNG phải 17 trang):**
 
@@ -2286,11 +2304,13 @@ giảm `CYDLCD_MESH_MAX` 16 → **12** (`mesh[16][16]` = 512 B → `[12][12]` = 
 ⚠️ `UI HIT` chỉ đếm **nút** (`lv_btn`) — đếm mọi vật có cờ `CLICK_FOCUSABLE` thì **nhãn chữ cũng bị đếm** và
 chỉ số lệch hết so với dòng đang thấy trên LCD (đã gặp thật).
 
-**Đã kiểm trên máy thật (2026-10-15):** `UI CFG 0` → 10/10 dòng, `Probe Z Offset = 0.750`;
-`UI HIT 5` (`Advanced Settings`) → `ADVANCED`, `UI HIT 0` (`Max Speed`) → `MAX SPEED`; `UI HIT 1` ở gốc
-(`Controller Fan`) → `CTRL FAN` (idle 100 · auto 1 · active 255 · kỳ nghỉ 60 s); `UI CFG 8` → X/Y/Z/**Z2/Z3**/E0
+**Đã kiểm trên máy thật (2026-10-15):** `UI CFG 0` → **9/9 dòng** (2026-10-15: `Advanced Settings` lên đầu,
+`Probe Z Offset = 0.750` rồi `Fade Height = 0.94` ngay dưới, `Advanced` còn 11 dòng);
+`UI HIT 0` ở gốc (`Advanced Settings`, **trước 2026-10-15 là dòng 5**) → `ADVANCED`, `UI HIT 0` (`Max Speed`)
+→ `MAX SPEED`; `UI HIT 3` ở gốc
+(`Controller Fan`, trước là dòng 1) → `CTRL FAN` (idle 100 · auto 1 · active 255 · kỳ nghỉ 60 s); `UI CFG 8` → X/Y/Z/**Z2/Z3**/E0
 = 600 mA; `UI CFG 9` → 6 × StealthChop = 1; sửa `Min Travel Speed` bằng `+`/`OK` **từ console** ⇒ Marlin nhận
-`M205 T0.10` và màn hình đọc lại **0.10** (đã trả về `M205 T0`); `UI HIT 9` (`All settings`) → trang `THONG SO`
+`M205 T0.10` và màn hình đọc lại **0.10** (đã trả về `M205 T0`); `UI HIT 8` (`All settings`, trước là dòng 9) → trang `THONG SO`
 (71/76 dòng có giá trị, Marlin gửi 72 thông số) rồi BACK về đúng cây.
 
 ## Vì sao màn hình chạy chậm (2026-10-15) — đo bằng `UI PERF`

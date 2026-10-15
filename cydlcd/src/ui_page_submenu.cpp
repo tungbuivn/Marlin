@@ -6,10 +6,7 @@
  * thanh CAY nhieu cap giong menu Configuration cua Marlin 12864 (xem docs/12864-menu-map.md):
  *
  *   CAU HINH (root)
- *     |- Probe Z Offset                     (dong SUA duoc)
- *     |- Controller Fan >                   (M710 I/A/S/D)
- *     |- Preheat PLA/PETG/ABS Settings >    (9 preset cua man hinh, luu NVS)
- *     |- Advanced Settings >
+ *     |- Advanced Settings >                (item DAU TIEN - yeu cau nguoi dung)
  *     |    |- Max Speed >      Max X/Y/Z/E Speed, Min Velocity, Min Travel Speed
  *     |    |- Acceleration >   Accel print/retract/travel + Max X/Y/Z/E Accel
  *     |    |- Jerk >           Max X/Y/Z/E Jerk + Junction Dev + Linear Adv
@@ -19,9 +16,17 @@
  *     |    |- Temperature >    MPC P/C/R/A/F/H + MPC Autotune, Bed PID, Bed PID Autotune, Hotend PID
  *     |    |- Filament >       Filament D, E in mm3, Load/Unload Length, Runout Sensor
  *     |    |- Tune (runtime) > Feed %, Flow %, Fan %, Target E0, Target bed
- *     |    |- Fade Height, Home Offset X/Y
+ *     |    |- Home Offset X/Y
+ *     |- Probe Z Offset                     (dong SUA duoc)
+ *     |- Fade Height                        (M420 Z - ngay DUOI Probe Z Offset; 2026-10-15 gom ve 1 cho)
+ *     |- Controller Fan >                   (M710 I/A/S/D)
+ *     |- Preheat >                          (danh sach vat lieu, toi da 6, luu NVS)
  *     |- Store Settings (M500) / Load Settings (M501) / Restore Defaults (M502)
  *     |- All settings (table)               (mo lai TRANG SETTINGS bang phang cu)
+ *
+ * GHI CHU 2026-10-15: "Fade Height" truoc day xuat hien o 3 nhom (Advanced / Motion / UBL) vi 12864 cung
+ * de nhu vay; theo yeu cau nguoi dung no duoc GO khoi ca 3 va chi giu MOT dong o root (duoi Probe Z
+ * Offset) de khoi phai di tim.
  *
  * VI SAO CHI 1 TRANG (PG_SUBMENU) CHO CA CAY:
  *   - Moi trang LVGL ton ~5-10 KB pool (xem ghi chu page_release() o ui_lvgl.cpp); 17 nhom = 17 trang
@@ -98,12 +103,15 @@ typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint
 //  CAY MENU (thu tu dong y nhu menu Configuration cua 12864)
 // ===========================================================================
 static const sm_item_t SM_I_ROOT[] = {
-  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
-  SM_S("Controller Fan",            SMG_CTRLFAN),
-  // 2026-10-15 (YEU CAU NGUOI DUNG: "gom vao 1 menu la preheat, cho phep them bot vat lieu"):
-  // 3 dong "Preheat PLA/PETG/ABS Settings" cu -> MOT dong "Preheat" (danh sach dong, toi da 6).
-  SM_S("Preheat",                   SMG_PREHEAT),
+  // 2026-10-15 (YEU CAU NGUOI DUNG): "advance setting trong configuration la item dau tien" + "fade height
+  // go bo [o cac cho khac] va cho vao configuration, ngay ben duoi z probe offset".
   SM_S("Advanced Settings",         SMG_ADV),
+  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
+  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),      // M420 Z (chi hien khi co ENABLE_LEVELING_FADE_HEIGHT)
+  SM_S("Controller Fan",            SMG_CTRLFAN),
+  // 2026-10-15 (YEU CAU NGUOI DUNG: "gom vao 1 menu la preheat, cho phep them bot vat lieu"): 3 dong
+  // "Preheat PLA/PETG/ABS Settings" cu -> MOT dong "Preheat" (danh sach dong, toi da 6).
+  SM_S("Preheat",                   SMG_PREHEAT),
   SM_A("Store Settings (M500)",     A_SAVE),
   SM_A("Load Settings (M501)",      A_LOAD_SETTINGS),
   SM_A("Restore Defaults (M502)",   A_EEPROM_RESET),              // xac nhan 2 buoc (xem do_action)
@@ -120,8 +128,8 @@ static const sm_item_t SM_I_ADV[] = {
   SM_S("Temperature",               SMG_TEMP),
   SM_S("Filament",                  SMG_FILAMENT),
   SM_S("Tune (runtime)",            SMG_TUNE),
-  // 2 dong duoi day 12864 de trong menu Motion/UBL; o day de trong Advanced Settings cho de tim.
-  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),
+  // 2026-10-15: "Fade Height" DA CHUYEN ra CONFIGURATION (ngay duoi "Probe Z Offset") theo yeu cau
+  // nguoi dung - truoc day dong nay nam o 3 noi (Advanced / UBL / Motion) nen bi lap.
   SM_V("Home Offset X",             CYDLCD_SET_HOME_OFFSET_X),
   SM_V("Home Offset Y",             CYDLCD_SET_HOME_OFFSET_Y)
 };
@@ -246,6 +254,7 @@ static const sm_item_t SM_I_PREHEAT[] = {
 // Thu tu dong bam theo so do 12864: Move Axis -> (Homing) -> Auto Z-Align -> (Z Align Manual) ->
 // Deploy/Stow Z-Probe -> Z Probe Wizard -> Tramming Wizard -> (Worst Point) -> Unified Bed Leveling ->
 // Level Bed -> Bed Leveling -> Fade Height -> M48 Probe Test -> Disable Steppers.
+// (Fade Height 2026-10-15 da chuyen sang Configuration, xem ghi chu o SM_I_ROOT.)
 // KHONG lam 4 muc cua 12864:
 //   - "Homing >": YEU CAU NGUOI DUNG 2026-10-15 ("an menu Homing vi da co het trong JOG roi") - trang
 //     JOG da co HOME ALL + home tung truc + M84 nen menu con nay la thua;
@@ -261,7 +270,7 @@ static const sm_item_t SM_I_MOTION[] = {
   SM_A("Level Bed (G29 N)",         A_G29_LEVEL),
   SM_A("Deploy Z-Probe (M401)",     A_PROBE_DEPLOY),
   SM_A("Stow Z-Probe (M402)",       A_PROBE_STOW),
-  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),
+  // 2026-10-15: BO dong "Fade Height" (12864 co) - da chuyen sang CONFIGURATION > ngay duoi Probe Z Offset.
   SM_A("M48 Probe Test (G28 O+M48)", A_M48),
   SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
 };
@@ -277,8 +286,8 @@ static const sm_item_t SM_I_UBL[] = {
   SM_A("Output UBL Info (G29 W)",   A_G29_INFO),
   SM_A("Output for Host (G29 T0)",  A_UBL_T0),
   SM_A("Output for CSV (G29 T1)",   A_UBL_T1),
-  SM_A("Off Printer Backup (S-1)",  A_UBL_S1),
-  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT)
+  SM_A("Off Printer Backup (S-1)",  A_UBL_S1)
+  // 2026-10-15: BO dong "Fade Height" (12864 co trong nhom UBL) - da chuyen sang CONFIGURATION.
 };
 
 #define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
