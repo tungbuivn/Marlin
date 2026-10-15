@@ -136,13 +136,32 @@ chỉ còn 2 cách tệ hơn: vẽ ngay theo từng frame (kiểu 1 luồng hi�
 | Bước | Việc | Cách kiểm tra (không cần đốt nóng/di chuyển) |
 |---|---|---|
 | **B0** | Dựng "ranh giới" (`state_read()` seqlock, `link_post_*()`, `ui_post_*()`, `card_lock/unlock()`, `log_post()`) — **vẫn 1 luồng** — **+ đồng hồ đo độ trễ của link** (`max gap` giữa 2 lần link chạy, số lần trễ > X ms) | `UI RX`, `UI PERF`, `UI BOX`, `M220 S42` → Marlin `FR:43%`; **ghi lại `max gap` làm mốc "trước khi tách"** |
-| **B1** | Tách **`link` một mình trên core 1** (prio 20) + UART `onReceive` notify + toàn bộ log qua queue; `loopTask` kết thúc | `PANEL DIAG` (COM4): `PING` tăng đúng ~1/s, `err=0`, `alive=1`; `max gap` của link **< vài ms**; `SD r=` tăng khi Marlin đọc thẻ (`M20`), `refused=0` |
+| **B1** | Tách **`link` một mình trên core 1** (prio 20) + UART `onReceive` notify + toàn bộ log qua queue; `loopTask` kết thúc | ✅ **XONG 2026-10-15** — xem §5.1 (số đo ngay dưới) |
 | **B2** | Tách **`net`** (core 0, prio 4) + `card_mtx` (1 thao tác/lần giữ) + đổi 6 chỗ ghi `cydlcd` ngoài `link` thành lệnh + overlay upload qua thông điệp | upload 4 MB ⇒ `PING` **không sót frame**, `max gap` vẫn nhỏ, UI vẫn vẽ, `UI RX` trả lời được; (không cần thử chồng với Marlin đọc sector — người dùng chốt là không cần) |
 | **B3** | Tách **`ui`** (core 0, prio 5, 10 lần/s + ngắt touch) + bỏ LVGL khỏi `loop()` | `UI PERF` → ~10 lần thức/s; `UI STALL 30` (chỉ chặn task `net`) ⇒ PING/PONG vẫn đều; hiệu chuẩn cảm ứng không làm link chết |
 | **B4** | Tách **`log`**/console + heartbeat từng task + xoá `s_stage`; đo lại, cập nhật README | bắn lệnh COM8 liên tục trong lúc upload + vẽ ⇒ `PING` vẫn đủ, `max gap` vẫn nhỏ |
 
 Mỗi bước: nạp panel → chạy bộ kiểm tra ở cột phải → commit riêng (revert được). **Không cần đổi gì phía Marlin**
 (`cydlcd_protocol.h` giữ nguyên).
+
+### 5.1 B1 — KẾT QUẢ ĐO ĐƯỢC (2026-10-15, commit `2e60e5b774`)
+
+| Phép thử | Kết quả |
+|---|---|
+| Độ trễ task `link` — **trước** (1 luồng) | `gap max 63 549 µs`, **1 lần > 50 ms** mỗi ~10 s (do log 700 B @115200 in ngay trong đường link) |
+| Độ trễ task `link` — **sau** (rảnh) | `gap max 6 172 µs`, **0 lần > 50 ms** |
+| Độ trễ task `link` — **trong lúc upload 4,3 MB qua WiFi** | `gap max 4 910 µs` (lần đầu sau boot 23 950 µs), **0 lần > 50 ms** |
+| **Marlin nhận PING trong lúc upload** (COM4 `PANEL DIAG`) | `PING` 128 → 133 → 138 → 143 → 148 → 153 → 158 — **đúng +5 mỗi 5 s = 1/s, không sót frame nào**; `err=0`; `alive=1`; `hoan=8 bo=0` |
+| Upload thật (2 lần, 4,31 MB và 4,31 MB) | `143 KB/s`, `state=done`, `written=4523980/4523824`; panel ghi thẻ rồi gửi `M22`/`M21` → Marlin `echo:SD card ok` |
+| Marlin đọc lại thẻ sau upload (`M20`) | `V300_B~1.GCO 4523980` + `V300_B~2.GCO 4523824` (⇒ đường SD-qua-UART vẫn nguyên vẹn) |
+| Lệnh từ panel → Marlin | `M220 S42` gửi từ panel ⇒ Marlin `FR:42%` (đã trả lại `M220 S100`) |
+| Màn hình | `hello=0x9F`, `PONG cuoi 752 ms`, `mat PONG 0`, `SETTING=101`, `MESH=14 (7x7)`, `FILES=13` |
+| UI | `ui_lvgl_task` tb 17 µs, vẫn 30 Hz; console COM8 **không trả lời trong lúc upload** (task `loop`/core 0 bận xử lý body — chấp nhận được, đúng ưu tiên "chỉ cần serial không bị gián đoạn") |
+
+⚠️ **Việc còn lại của B2 phải làm NGAY vì B1 đã tạo ra truy cập song song lên thẻ**: task `link` đọc/ghi sector thô
+trên **core 1** trong khi `cyd_sd_task()` (`sd_alive()` 1 Hz, `clean_dir()`) và đường upload (FATFS) chạy trên
+**core 0** — **chưa có `card_mtx`**. Lần thử vừa rồi may mắn không đụng nhau (`bo=0`, không lỗi), nhưng khi **đang in**
+thì Marlin đọc sector liên tục ⇒ phải thêm `card_mtx` trước khi in.
 
 ---
 
