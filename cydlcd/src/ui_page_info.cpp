@@ -17,9 +17,10 @@
 // ===========================================================================
 //  INFO -- 11 dong thong tin THAT (moi dong 1 label rong het PAGE_INN_W)
 //
-//  Chieu cao: 11 dong * 17 px (font mono che do 4: line_height 17) + 10 * INFO_ROW_GAP(1) = 197
-//  <= PAGE_INN_H 206 -> KHONG tran, thanh day PREV/NEXT khong hien. (Neu line_height la 16 - che
-//  do font khac - thi 186, van thua cho.)
+//  Chieu cao: 11 dong * 20 px (font mono che do 4: line_height 20 tu 2026-10-15) + 10 *
+//  INFO_ROW_GAP(1) = 230 > PAGE_INN_H 206 -> man INFO nay TRAN va thanh day PREV/NEXT HIEN (truoc day
+//  font line_height 17 nen 197 px, vua khin). Khong sao: 11 dong la chu thong tin, cuon 2 trang van doc
+//  het; muon het tran thi phai bo bot dong hoac chia 2 cot (chua lam).
 //
 //  Truoc day: cot 7 dong cao CO DINH 124 + nut REFRESH FULL + 1 dong chu thich. Da bo nut va dong
 //  chu thich (theo yeu cau) va bo luon KHUNG CAO CO DINH: nay cac label la CON TRUC TIEP cua

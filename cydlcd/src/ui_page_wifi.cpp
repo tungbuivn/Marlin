@@ -18,14 +18,15 @@
 // ===========================================================================
 //  WIFI -- trang quan ly WiFi (mo tu: icon WiFi o header / man STATUS, hoac muc "WiFi" trong MENU)
 //
-//  BO CUC (PAGE_INN_H = 206; font mono line_height 17; gap GAP = 2):
-//    WiFi: <trang thai> <RSSI>    17
-//    SSID: <ssid>                 17
-//    IP: <ip>                     17
+//  BO CUC (PAGE_INN_H = 206; font mono line_height 20 tu 2026-10-15; gap GAP = 2):
+//    WiFi: <trang thai> <RSSI>    20
+//    SSID: <ssid>                 20
+//    IP: <ip>                     20
 //    [ MAT KHAU: ... ]            26
-//    [ roller "-58dBm <ssid>" ]   68   (4 dong, cuon duoc)
+//    [ roller "-58dBm <ssid>" ]   68   (4 dong cua font MAC DINH (montserrat_14, line_height 16) chu
+//                                       KHONG phai font mono -> khong doi khi font mono to len)
 //    [QUET][KET NOI][NGAT][XOA]   26
-//    => 17*3 + 26 + 68 + 26 + 5*GAP(10) = 181 <= 206 -> KHONG tran (thanh day khong hien).
+//    => 20*3 + 26 + 68 + 26 + 5*GAP(10) = 202 <= 206 -> KHONG tran (thanh day khong hien), sat 4 px.
 //
 //  API WiFi deu `weak` (xem khoi khai bao o dau file): thieu module -> trang VAN MO DUOC, hien
 //  "KHONG HO TRO", moi nut khong lam gi (khong crash, khong loi link).

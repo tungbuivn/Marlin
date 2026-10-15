@@ -13,7 +13,10 @@
  *        SAVE EEPROM (M500) = luu ket qua vua tune
  *      Sua TAY tung tham so MPC lam o man THONG SO (bang SETTINGS co 6 dong "MPC ...").
  *
- * Chieu cao: tieu de 16 + 6 dong * 16 = 96 + 28 + 28 + 5*GAP(6) = 198 <= PAGE_INN_H (206).
+ * Chieu cao: tieu de 20 + 6 dong * (16 + GAP 2) = 108 + note 20 + 2 hang nut 26 + 5*GAP(10) = 210
+ * 2026-10-15: nut 28 -> 26 de tong <= PAGE_INN_H (206). Font mono size 15 (line_height 20) lam moi
+ * dong chu cao 20 px; 6 dong tham so VAN de khung 16 px (nhan duoc can giua -> net chu ~11 px van nam
+ * gon, chi sat hon) vi nang 6 dong do len 20 se lam CA TRANG tran han (>240).
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
@@ -50,13 +53,13 @@ void page_mpc_create(lv_obj_t *p) {
 
   mp_note = mk_label_w(p, "sua tay: 6 dong MPC o man THONG SO", COL_DIM, PAGE_INN_W);
 
-  lv_obj_t *r1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
-  mk_btn_grow(r1, "M306 T (tune)", 28, cb_action, (void *)(intptr_t)A_MPC_TUNE);
-  mk_btn_grow(r1, "M303 E-1 60",   28, cb_action, (void *)(intptr_t)A_PID_BED);
+  lv_obj_t *r1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 26, 0, GAP);
+  mk_btn_grow(r1, "M306 T (tune)", 26, cb_action, (void *)(intptr_t)A_MPC_TUNE);
+  mk_btn_grow(r1, "M303 E-1 60",   26, cb_action, (void *)(intptr_t)A_PID_BED);
 
-  lv_obj_t *r2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
-  mk_btn_grow(r2, "SAVE EEPROM", 28, cb_action, (void *)(intptr_t)A_SAVE);
-  mk_btn_grow(r2, "THONG SO",    28, cb_action, (void *)(intptr_t)A_GOTO_SETTINGS);
+  lv_obj_t *r2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 26, 0, GAP);
+  mk_btn_grow(r2, "SAVE EEPROM", 26, cb_action, (void *)(intptr_t)A_SAVE);
+  mk_btn_grow(r2, "THONG SO",    26, cb_action, (void *)(intptr_t)A_GOTO_SETTINGS);
 }
 
 void page_mpc_update(void) {

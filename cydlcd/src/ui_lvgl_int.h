@@ -318,7 +318,11 @@ enum {
 #define GAP        2                                    // khoang cach giua cac hang / doi tuong
 
 // --- C) man MENU (menu doc kieu Marlin; cac dong do FLEX cua mk_page tu xep doc) ---
-#define MENU_ROW_H  22                                  // 20 px mo dong + 2 px khoang
+// 2026-10-15: 22 -> 25. YEU CAU NGUOI DUNG: "tang co chu cac noi to bang co chu vi tri X,Y,Z o trang
+// STATUS" -> font mono duoc sinh lai o size 15 (line_height 17 -> 20, xAdvance 8 -> 9 - xem
+// tools/ttf2gfxfont.py va dau file src/gfx4_font_robotomono.h) nen dong menu phai cao them:
+// 25 - 2 (khoang) = 23 px cho 1 dong chu 20 px.
+#define MENU_ROW_H  25
 
 // ===========================================================================
 //  Bien toan cuc dung CHUNG giua cac file
