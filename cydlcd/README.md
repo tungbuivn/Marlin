@@ -1288,7 +1288,14 @@ mount được thẻ, và còn chỗ (**chừa 256 KB** so với kích thước 
 
 > 🚀 **Cách upload duy nhất: xem §10** — PC/điện thoại gửi file cho **web server của màn hình CYD**
 > (`cydlcd-upload.ps1` / hàm `in3d`) trong mạng nhà; màn hình ghi vào thẻ ở khe màn hình rồi **tự gửi
-> `M22`/`M21`** cho Marlin. Tự dò thiết bị (cache/mDNS), theo dõi tiến độ qua `GET /status`.
+> `M22`/`M21`** cho Marlin. Tự dò thiết bị, theo dõi tiến độ qua `GET /status`.
+
+> 🆕 **Dò thiết bị theo **MAC** (2026-10-15) — ĐÃ BỎ CACHE IP** (yêu cầu người dùng): IP của màn hình do DHCP cấp
+> nên **có thể đổi**, còn **MAC WiFi thì cố định** ⇒ mỗi lần upload chỉ cần tìm IP nào đang có đúng MAC đó.
+> MAC hiện tại:**`48:AF:F3:70:B1:F8`** (đổi được bằng `-Mac`, đo lại bằng `arp -a | findstr <IP>`).
+> Thứ tự dò: `-Host` → **MAC** (đọc bảng ARP; chưa có thì **ping quét song song cả /24 ~1,5 s** rồi đọc lại) →
+> mDNS → gateway → quét LAN → danh sách cố định. **Không còn file `last-target.txt`**, không bao giờ dùng lại IP cũ.
+> Đo thực tế: `[2/6] tim IP theo MAC 48AFF370B1F8` → `MAC = IP 192.168.0.146` trong **0,2 s**.
 
 
 ### 9.23 BẢNG ĐỔI TÊN `panel_*` → `cydlcd_*` + ĐÃ XOÁ 2 đường upload cũ (2026-10-14)

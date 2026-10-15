@@ -49,10 +49,10 @@
 
     THU TU TU TIM THIET BI (bo qua khi co -NoDiscover):
       1. -Host (neu co)                          -> nguon: host
-      2. CACHE: IP cua lan tim THANH CONG gan nhat        -> nguon: cache
-         (%LOCALAPPDATA%\cydlcd-upload\last-target.txt, 1 dong "cydlcd=<ip>")
-         => binh thuong chi mat ~0,2-0,5 s, KHONG phai mDNS hay quet lai LAN (17-27 s).
-         IP cu / doi IP thi tu dong tim lai o cac buoc duoi roi ghi de. Tat bang -NoCache.
+      2. MAC CO DINH cua man hinh (-Mac, mac dinh 48-AF-F3-70-B1-F8) -> nguon: mac
+         Doc bang ARP/neighbor cua Windows; chua co trong ARP thi PING QUET song song ca /24 (~1,5 s)
+         de Windows nap lai bang ARP roi doc lai. IP do DHCP cap nen co the DOI, MAC thi KHONG:
+         KHONG con luu cache IP (yeu cau nguoi dung 2026-10-15: bo cache). -NoCache giu de tuong thich.
       3. mDNS: TBTCYDLCD.local (+ ten CU TBTPANEL.local lam du phong)   -> nguon: mdns
       4. gateway cua card mang dang dung         -> nguon: gateway
       5. quet LAN /24 cua card dang hoat dong, SONG SONG nhieu luong: loc "port 80 mo" truoc,
@@ -60,8 +60,8 @@
       6. danh sach co dinh: 192.168.0.1, 192.168.4.1, 192.168.1.1, 192.168.1.50, 192.168.0.50
                                                               -> nguon: danh sach
       Moi ung vien timeout ngan (1-1,5 s); buoc quet co tran -ScanBudgetSec.
-      Tim duoc thi in:  [cydlcd] thay <IP> (nguon: cache|mdns|gateway|quet|danh sach) va luu cache
-      (%LOCALAPPDATA%\cydlcd-upload\last-target.txt) de lan sau vao thang.
+      Tim duoc thi in:  [cydlcd] thay <IP> (nguon: mac|mdns|gateway|quet|danh sach)
+      Muon biet MAC cua man hinh:  arp -a | findstr <IP cua man hinh>   (hoac xem tren router)
 
     !! CANH BAO MANG (doc truoc khi hoi "sao khong thay may in"):
       * Man hinh CYD vao WiFi STA cua mang nha (TP-Link_31A0, 2.4 GHz) => PC dang o mang nha la gui
@@ -95,10 +95,9 @@
 .PARAMETER TimeoutSec
     Tran thoi gian cho RIENG lan upload (giay). Mac dinh 300 (file 10 MB nen de >= 120).
 .PARAMETER NoDiscover
-    KHONG tu tim: chi dung -Host, neu khong co thi dung IP da luu trong cache.
+    KHONG tu tim: chi dung -Host, neu khong co thi tim IP theo MAC (-Mac).
 .PARAMETER NoCache
-    BO QUA buoc dung IP da luu (cache). Dung khi nghi IP trong cache sai / muon do lai tu dau.
-    Cache: %LOCALAPPDATA%\cydlcd-upload\last-target.txt, 1 dong "cydlcd=<ip>".
+    TUONG THICH (khong con tac dung): cach tim IP bang CACHE da bi bo 2026-10-15, nay tim theo MAC (-Mac).
 .PARAMETER ScanThreads
     So luong quet song song khi quet LAN. Mac dinh 40 (nen trong khoang 30-50).
 .PARAMETER ScanTimeoutMs
@@ -158,6 +157,9 @@ param(
     [int]$Port = 80,
     [string]$Name,
     [string]$Token = 'TBT-3D-up',
+    # MAC WiFi CUA MAN HINH CYD (CO DINH; IP do DHCP cap nen co the doi - xem muc "TIM IP THEO MAC").
+    # Do lai bang:  arp -a | findstr <IP cua man hinh>     (hoac doc tren router)
+    [string]$Mac = '48-AF-F3-70-B1-F8',
     [string]$CydlcdMarker,
     [switch]$InitSd,
     [string]$MarlinPort = 'COM4',
@@ -175,73 +177,20 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# MAC cua man hinh, CHUAN HOA (bo '-', ':', '.', viet HOA) - dung cho Find-IpByMac()/Get-IpByMacInArp().
+# VI SAO phai chuan hoa: Windows tra MAC kieu "48-AF-F3-70-B1-F8", nguoi dung co the go "48:af:f3:70:b1:f8".
+$MacNorm = ($Mac -replace '[^0-9A-Fa-f]', '').ToUpper()
+
 try { Add-Type -AssemblyName System.Net.Http -ErrorAction Stop } catch { }
 
 # ---------------------------------------------------------------------------
-# CACHE IP (2026-10-14): luu IP cua lan tim THANH CONG gan nhat cua man hinh CYD
-#   File MOI: %LOCALAPPDATA%\cydlcd-upload\last-target.txt, moi dong 1 dang  "<target>=<ip>"
-#         cydlcd=192.168.0.146
-#   File CU : %LOCALAPPDATA%\esp3d-upload\last-target.txt (thu muc CU truoc 2026-10-14) -> tu di tru
-#   sang thu muc moi o lan chay dau tien; khi doc van chap nhan khoa CU "panel=<ip>" va dang cu
-#   (file chi co 1 dong IP).
-#   Lan sau: thu IP da luu TRUOC TIEN (1 lan HTTP ngan ~1,5 s). Dung thi xong ngay (khong mDNS,
-#   khong quet LAN 17-27 s); sai (IP doi / thiet bi tat) thi tu tim lai nhu cu roi ghi de.
-#   Tat: -NoCache.
+# TIM IP THEO MAC (2026-10-15) - DA BO CACHE IP theo yeu cau nguoi dung:
+#   Man hinh CYD lay IP dong (DHCP) nhung MAC WiFi thi CO DINH => moi lan upload chi can tim IP nao dang co
+#   dung MAC do (tham so -Mac, mac dinh la MAC cua man hinh hien tai). Khong luu file cache nua.
+#   Ham tim: Find-IpByMac() / Get-IpByMacInArp() / Get-LocalSubnetPrefix() - dinh nghia o duoi (truoc buoc 1).
+#   -NoCache: giu lai de TUONG THICH (khong con tac dung).
 # ---------------------------------------------------------------------------
-$CACHE_DIR      = Join-Path $env:LOCALAPPDATA 'cydlcd-upload'
-$CACHE_FILE     = Join-Path $CACHE_DIR 'last-target.txt'
-$CACHE_DIR_OLD  = Join-Path $env:LOCALAPPDATA 'esp3d-upload'    # thu muc CU - chi de di tru
-$CACHE_FILE_OLD = Join-Path $CACHE_DIR_OLD 'last-target.txt'
-$CACHE_TARGET   = 'cydlcd'
-$CACHE_KEYS_OLD = @('panel')        # khoa CU cua CUNG dich nay: doc duoc, KHONG ghi ra
 
-function Read-CacheIp([string]$path) {
-    # Doc IP cua dich cydlcd trong file cache: chap nhan khoa moi "cydlcd=", khoa CU "panel=" va
-    # dang CU (file chi co 1 dong IP). Cac khoa khac (vd "esp3d=" cua duong da xoa) bi bo qua.
-    if (-not (Test-Path -LiteralPath $path)) { return $null }
-    foreach ($ln in @(Get-Content -LiteralPath $path -ErrorAction SilentlyContinue)) {
-        $s = "$ln".Trim()
-        if (-not $s) { continue }
-        if ($s -match '^([A-Za-z0-9_]+)\s*=\s*(\S+)$') {
-            $k = $matches[1].ToLower()
-            if ($k -eq $CACHE_TARGET -or ($CACHE_KEYS_OLD -contains $k)) { return $matches[2] }
-        } elseif ($s -match '^\d{1,3}(\.\d{1,3}){3}$') {
-            return $s
-        }
-    }
-    return $null
-}
-
-function Initialize-CacheFile {
-    # Di tru cache CU (%LOCALAPPDATA%\esp3d-upload\last-target.txt) sang thu muc MOI - CHI khi thu muc
-    # moi chua co file. Khong bao gio ghi nguoc lai thu muc cu.
-    if (Test-Path -LiteralPath $CACHE_FILE) { return }
-    if (-not (Test-Path -LiteralPath $CACHE_FILE_OLD)) { return }
-    $ip = Read-CacheIp $CACHE_FILE_OLD
-    if (-not $ip) { return }
-    try {
-        if (-not (Test-Path -LiteralPath $CACHE_DIR)) { [void](New-Item -ItemType Directory -Path $CACHE_DIR -Force) }
-        $enc = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($CACHE_FILE, ("{0}={1}`r`n" -f $CACHE_TARGET, $ip), $enc)
-        Write-Dim ("  (da chuyen cache cu {0} -> {1})" -f $CACHE_FILE_OLD, $CACHE_FILE)
-    } catch { Write-Dim ("  (khong chuyen duoc cache cu: {0})" -f $_.Exception.Message) }
-}
-
-function Get-CachedIp {
-    Initialize-CacheFile
-    $ip = Read-CacheIp $CACHE_FILE
-    if (-not $ip) { $ip = Read-CacheIp $CACHE_FILE_OLD }    # thu muc CU (chua kip di tru)
-    return $ip
-}
-
-function Set-CachedIp([string]$ip) {
-    try {
-        if (-not (Test-Path -LiteralPath $CACHE_DIR)) { [void](New-Item -ItemType Directory -Path $CACHE_DIR -Force) }
-        $enc = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($CACHE_FILE, ("{0}={1}`r`n" -f $CACHE_TARGET, $ip), $enc)
-        Write-Dim ("  (da luu cache {0}={1} vao {2})" -f $CACHE_TARGET, $ip, $CACHE_FILE)
-    } catch { Write-Dim ("  (khong ghi duoc cache: {0})" -f $_.Exception.Message) }
-}
 
 $FIXED_LIST = @('192.168.0.1', '192.168.4.1', '192.168.1.1', '192.168.1.50', '192.168.0.50')
 # Chuoi nhan dang man hinh CYD: ten MOI len dau, ten CU (TBT-PANEL/TBTPANEL) giu lam du phong.
@@ -1009,6 +958,58 @@ function Try-Candidate {
     return $false
 }
 
+# ===========================================================================
+#  TIM IP THEO MAC (THAY CHO CACHE IP - yeu cau nguoi dung 2026-10-15)
+# ===========================================================================
+# Man hinh CYD lay IP dong (DHCP) nhung **MAC WiFi thi CO DINH** => moi lan upload chi can tim IP nao dang co
+# dung MAC do. Khong luu trang thai, khong bao gio "dung IP cu da doi".
+#   1) Doc bang neighbor/ARP cua Windows (nhanh, khong gui goi nao).
+#   2) Khong thay -> PING QUET song song ca /24 (1 goi moi dia chi, ~1,5 s) de Windows nap lai ARP, roi doc lai.
+#   3) Van khong thay -> tra $null (cac buoc sau thu mDNS / quet HTTP).
+function Get-IpByMacInArp([string]$macNorm) {
+    $want = ($macNorm -replace '[^0-9A-Fa-f]', '').ToUpper()
+    if (-not $want) { return $null }
+    try {
+        foreach ($e in (Get-NetNeighbor -ErrorAction Stop)) {
+            if (-not $e.LinkLayerAddress) { continue }
+            $m = ($e.LinkLayerAddress -replace '[^0-9A-Fa-f]', '').ToUpper()
+            if ($m -eq $want) { return $e.IPAddress }
+        }
+    } catch {
+        # Windows cu / khong co module NetTCPIP -> doc `arp -a`
+        foreach ($line in (arp -a)) {
+            if ($line -match '^\s*(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})') {
+                $m = ($matches[2] -replace '[^0-9A-Fa-f]', '').ToUpper()
+                if ($m -eq $want) { return $matches[1] }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-LocalSubnetPrefix {
+    # Lay tien to /24 tu dong "Interface: 192.168.0.174 --- 0x..." cua `arp -a` (co tren moi Windows).
+    foreach ($line in (arp -a)) {
+        if ($line -match 'Interface:\s*(\d+\.\d+\.\d+)\.\d+') { return $matches[1] }
+    }
+    return $null
+}
+
+function Find-IpByMac([string]$macNorm, [int]$TimeoutMs = 1200) {
+    $ip = Get-IpByMacInArp $macNorm
+    if ($ip) { return $ip }
+    $prefix = Get-LocalSubnetPrefix
+    if (-not $prefix) { return $null }
+    Write-Dim ("  chua co trong ARP -> quet {0}.1-254 (song song) ..." -f $prefix)
+    $tasks = New-Object System.Collections.ArrayList
+    foreach ($h in 1..254) {
+        $p = New-Object System.Net.NetworkInformation.Ping
+        [void]$tasks.Add($p.SendPingAsync(("{0}.{1}" -f $prefix, $h), $TimeoutMs))
+    }
+    try { [void][System.Threading.Tasks.Task]::WaitAll($tasks.ToArray(), ($TimeoutMs + 900)) } catch { }
+    return (Get-IpByMacInArp $macNorm)
+}
+
 if ($TargetHost) {
     Write-Step ("[1/6] -Host {0}" -f $TargetHost)
     if (Try-Candidate -Ip $TargetHost -Source 'host' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
@@ -1019,30 +1020,31 @@ if ($TargetHost) {
         Write-Warn "  Tiep tuc tu tim..."
     }
 } elseif ($NoDiscover) {
-    Write-Step "[1/6] -NoDiscover: chi dung -Host hoac IP da luu trong cache"
-    $cachedIp = Get-CachedIp
-    if ($cachedIp) {
-        Write-Host ("  cache: {0} = {1}" -f $CACHE_TARGET, $cachedIp)
-        if (Try-Candidate -Ip $cachedIp -Source 'cache' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
+    Write-Step "[1/6] -NoDiscover: chi dung -Host hoac MAC"
+    $macIp = Find-IpByMac $MacNorm -TimeoutMs $ProbeTimeoutMs
+    if ($macIp) {
+        Write-Host ("  MAC {0} = IP {1}" -f $MacNorm, $macIp)
+        if (Try-Candidate -Ip $macIp -Source 'mac' -Port $Port -TimeoutMs $ProbeTimeoutMs) { }
     } else {
-        Write-Dim ("  (chua co cache {0})" -f $CACHE_FILE)
+        Write-Err ("  -NoDiscover: khong co -Host va khong thay may nao co MAC {0} => dung." -f $MacNorm)
+        exit 3
     }
 }
 
 if (-not $foundIp -and -not $NoDiscover -and -not $NoCache) {
-    # ---- 2) CACHE: IP cua lan tim thanh cong gan nhat (nhanh nhat - 1 lan HTTP ngan) ----
-    Write-Step ("[2/6] cache IP lan truoc ({0})" -f $CACHE_FILE)
-    $cachedIp = Get-CachedIp
-    if ($cachedIp) {
-        Write-Host ("  thu IP da luu: {0}  (bo qua bang -NoCache)" -f $cachedIp)
-        # Timeout ngan: IP cu/chet chi lam mat ~1,5 s roi tu tim lai
-        if (Try-Candidate -Ip $cachedIp -Source 'cache' -Port $Port -TimeoutMs ([Math]::Min($ProbeTimeoutMs, 1500))) {
-            Write-Ok ("  DUNG IP DA LUU -> khoi phai do lai (nhanh ~{0:N1} s)" -f $swDisc.Elapsed.TotalSeconds)
+    # ---- 2) MAC (THAY CHO CACHE IP - yeu cau nguoi dung 2026-10-15) ----
+    # Man hinh CYD lay IP dong (DHCP) nhung MAC thi CO DINH -> moi lan upload chi can tim IP nao dang co
+    # dung MAC do. Nhanh, khong luu trang thai, khong bao gio "dung IP cu da doi".
+    Write-Step ("[2/6] tim IP theo MAC {0}" -f $MacNorm)
+    $macIp = Find-IpByMac $MacNorm -TimeoutMs $ProbeTimeoutMs
+    if ($macIp) {
+        if (Try-Candidate -Ip $macIp -Source 'mac' -Port $Port -TimeoutMs $ProbeTimeoutMs) {
+            Write-Ok ("  MAC {0} = IP {1} (nhanh ~{2:N1} s)" -f $MacNorm, $macIp, $swDisc.Elapsed.TotalSeconds)
         } else {
-            Write-Dim "  IP da luu khong dung nua (doi IP / thiet bi tat) -> tim lai tu dau."
+            Write-Dim "  IP theo MAC khong dung chu ky cydlcd -> tim tiep."
         }
     } else {
-        Write-Dim "  chua co cache (lan dau) - se tim roi luu lai."
+        Write-Dim ("  khong thay may nao co MAC {0} trong bang ARP (se thu mDNS/quet)" -f $MacNorm)
     }
 }
 
@@ -1152,9 +1154,8 @@ if (-not $foundIp) {
 Write-Host ""
 Write-Ok ("[cydlcd] thay {0} (nguon: {1})  [do mat {2:N1} s]" -f $foundIp, $foundFrom, $swDisc.Elapsed.TotalSeconds)
 
-# Luu IP de lan sau vao thang - xem Get-CachedIp/Set-CachedIp.
-# Nguon 'cache' thi khong ghi lai (giong y nguyen gia tri dang co).
-if ($foundFrom -ne 'cache') { Set-CachedIp $foundIp }
+# KHONG luu IP nua (yeu cau nguoi dung 2026-10-15): moi lan upload tim IP theo MAC co dinh (`-Mac`).
+# IP cua man hinh do DHCP cap nen co the doi; MAC thi khong -> khong can cache, khong bao gio dung IP cu.
 
 $sameSubnet = $false
 $localIps = @($nets | ForEach-Object { $_.IP })
