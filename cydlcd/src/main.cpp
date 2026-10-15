@@ -92,6 +92,22 @@
     }
   #endif
 
+// ===========================================================================
+//  HEARTBEAT TUNG TASK (da luong B3/B4, 2026-10-15) - task chan doan 1 Hz doc de biet task nao treo.
+//  VI SAO: watchdog cu chi nhin `loop()`; sau khi tach task, `loop()` co the van chay trong khi task `ui`
+//  hoac `net` da chet -> phai co heartbeat rieng cho tung task.
+// ===========================================================================
+volatile uint32_t g_hb_link = 0, g_hb_ui = 0, g_hb_net = 0, g_hb_log = 0;
+
+// Task `net` (core 0, uu tien 4): WiFi + WebServer (nhan file 20-30 s) + the TF (mount/don/xoa) + FATFS.
+// Tach ra de phan upload KHONG con lam dung vong lap UI/console nua; va task `link` (core 1) van duoc phuc vu.
+static void net_task_fn(void *) {
+  for (;;) {
+    net_upload_http_task();
+    g_hb_net++;
+    vTaskDelay(1);
+  }
+}
   void setup() {
     #if defined(CYDLCD_CYD_DEBUG)
       Serial.begin(115200);
@@ -127,11 +143,54 @@
     // Khong lam gi neu tinh nang tuong ung = 0.
     net_wifi_begin();          // doc NVS + (CYDLCD_WIFI_AUTOSTART) vao mang nha - KHONG chan
     net_upload_http_begin();   // the TF + WebServer + mDNS (rong neu CYDLCD_WIFI_UPLOAD = 0)
-    DBGLN("cydlcd ready (LVGL, push mode)");
+    // DA LUONG: task `ui` (core 0, uu tien 5, 30 Hz) = noi DUY NHAT goi LVGL; task `net` (core 0, uu tien 4)
+    // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
+    // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
+    if (!ui_task_start())     Serial.println("[CYD] CANH BAO: khong tao duoc task ui");
+    if (xTaskCreatePinnedToCore(net_task_fn, "net", 6144, nullptr, 4, nullptr, 0) != pdPASS)
+                              Serial.println("[CYD] CANH BAO: khong tao duoc task net");
+    DBGLN("cydlcd ready (LVGL, push mode) - da tach task link/ui/net");
   }
 
 
-  void loop() {
+  // ===========================================================================
+//  Thuc thi 1 lenh console `UI ...` - CHI duoc goi tu task `ui` (xem ui_lvgl.h).
+//  CHUYEN TU nhanh console cua `loop()` (2026-10-15, B3 - da luong): giu NGUYEN chuoi lenh, chi doi NOI
+//  CHAY (console khong duoc cham vao LVGL truc tiep nua).
+// ===========================================================================
+void ui_console_dispatch(const char *a3) {
+if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
+            else if (strcasecmp(a3, "TESTBOX") == 0) ui_lvgl_test_dialog();
+            else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
+            else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
+            else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
+            // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
+            // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
+            else if (strcasecmp(a3, "GRAD") == 0)    ui_lvgl_test_grad();
+            // `UI HELLO` = in `hello_flags` + xin lai FULL/SETTINGS/MESH (kiem tra duong panel -> Marlin).
+            else if (strcasecmp(a3, "HELLO") == 0)   ui_lvgl_test_hello();
+            // `UI RX` = in 2 chieu cua UART (frame theo loai + tuoi PONG) - xem ui_lvgl_test_rx().
+            else if (strcasecmp(a3, "RX") == 0)      ui_lvgl_test_rx();
+            // `UI PERF` = do hieu nang man hinh (ve/SPI/cam ung) - xem ui_lvgl_test_perf().
+            else if (strcasecmp(a3, "PERF") == 0)    ui_lvgl_test_perf();
+            else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
+            else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
+            // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
+            else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
+            // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).
+            else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
+            // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
+            // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
+            else if (strncasecmp(a3, "NOTIFY", 6) == 0) ui_lvgl_test_notify(a3 + 6);
+            else if (strncasecmp(a3, "WTEST", 5) == 0) {
+              // `UI WTEST [KB]` = ghi thu the (khong qua WiFi) de tach nguyen nhan loi ghi the.
+              unsigned kb = 4096;
+              if (a3[5]) sscanf(a3 + 5, "%u", &kb);
+              cyd_sd_write_test(kb);
+            }
+            else                                     ui_lvgl_show_page_name(a3);
+}
+void loop() {
     s_loop_n++;
     s_loop_ms = millis();
     static char s_forward_pending[40];     // lenh G-code nhan tu COM7 (console), cho gui sang Marlin
@@ -162,6 +221,10 @@
                       (unsigned long)s_ms[4], (unsigned)s_stage);
         // Doi chieu voi dong tren: so lan ui_lvgl_task() chay >= 20 ms trong 1 s vua qua + thoi gian lan cuoi
         // (do NGAY TRONG ham). Xem ui_lvgl.h: ui_lvgl_perf_slow_take().
+        // HEARTBEAT TUNG TASK (da luong): task nao khong tang trong ~2 s la task do treo (xem net_task_fn/ui_cmd_task).
+        Serial.printf("[CYD] hb: link=%lu ui=%lu net=%lu log=%lu\n",
+                      (unsigned long)g_hb_link, (unsigned long)g_hb_ui,
+                      (unsigned long)g_hb_net, (unsigned long)g_hb_log);
         Serial.printf("[CYD] ui cham >=20ms: %lu lan/s | lan cuoi %lu us | tong %lu lan\n",
                       (unsigned long)ui_lvgl_perf_slow_take(), (unsigned long)ui_lvgl_perf_last_us(),
                       (unsigned long)ui_lvgl_perf_slow_all());
@@ -190,21 +253,19 @@
       cydlcd_link_send_gcode(s_forward_pending);
       s_forward_pending[0] = '\0';
     }
-    s_stage = 2;
-    // Task `link` (core 1, uu tien 20) da lam viec nay - vong lap nay KHONG con goi `cydclcd_link_task()`.
-    // Do tre duong serial duoc do NGAY TRONG task link (xem link_task_fn + ui_lvgl_perf_link_call).
-    s_ms[2] = 0;
-    // In cac dong log dang cho (do MOI task day vao hang doi - khong ai duoc chan vao UART0):
-    // toi da 8 dong/lan de khong giu core 0 qua lau.
+    // ===========================================================================
+    // DA LUONG (B3/B4, 2026-10-15): vong lap nay (Arduino loopTask, core 0, uu tien THAP NHAT) CHI con:
+    //   - in cac dong log dang cho trong hang doi (khong ai duoc chan vao UART0),
+    //   - doc console COM8 (lenh GUI sang Marlin; lenh `UI ...` thi day vao hang doi cho task `ui`),
+    //   - log chan doan 1 Hz + heartbeat.
+    // WiFi/WebServer/the TF da sang task `net`; LVGL da sang task `ui`; UART Marlin o task `link` (core 1).
+    // ===========================================================================
+    s_ms[2] = 0;           // (khong con do chang link/http/ui o day nua - xem UI PERF)
     logq_task(8);
-    uint32_t t_stage = micros();
-    s_stage = 3;
-    net_upload_http_task();// web server (nhan file qua WiFi) -> ghi vao the SD cua man hinh
-    s_ms[3] = micros() - t_stage;
-    s_stage = 4; t_stage = micros();
-    ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
-    s_ms[4] = micros() - t_stage;
-    s_stage = 1;           // con lai trong vong lap: doc console COM7
+    g_hb_log++;
+    s_stage = 1;
+    // Nhuong CPU cho cac task khac (vong lap nay uu tien thap nhat): 5 ms -> console van tra loi trong ~5 ms.
+    delay(5);
 
     // CONSOLE G-CODE QUA CONG USB CUA MAN HINH CYD (tinh nang, 2026-10-13): nhan tung dong G-code/M-code
     // tu COM7 roi chuyen tiep sang Marlin bang DUNG duong ma cac nut bam tren UI dung
@@ -325,42 +386,18 @@
             // CHAN DOAN UI: mo 1 trang theo ten (`UI TRAMMING`, `UI SETTINGS`...) hoac in danh sach
             // trang (`UI` / `UI ?`). Dung de TAI HIEN loi UI tu PC, khong phai cham tay vao man hinh.
             const char *a3 = s_fwd + 2;
-            while (*a3 == ' ') a3++;
+while (*a3 == ' ') a3++;
+            // DA LUONG (B3): lenh `UI ...` deu cham vao LVGL -> GUI vao hang doi cho task `ui`
+            // thuc thi (khong chay truc tiep tu task console nua). Xem ui_post_cmd()/ui_console_dispatch().
+            ui_post_cmd(a3);
+            s_fwd_len = 0;
+            continue;
             // `UI BOX` = in bo cuc trang dang mo (toa do/kich thuoc tung vat + thanh day + lop
             // phu/hop thoai) - man hinh CYD khong co framebuffer doc nguoc nen day la cach DUY NHAT
             // kiem tra bo cuc tu PC. `UI TESTBOX` = mo 1 hop thoai rong de kiem tra canh giua.
             // `UI TAP <dong>` = ban su kien CHAM vao 1 dong cua man FILE (kiem tra duong chon file).
             // `UI PRE <k>` = bam nut preset preheat PLA/PETG/ABS cua man NHIET DO.
-            if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
-            else if (strcasecmp(a3, "TESTBOX") == 0) ui_lvgl_test_dialog();
-            else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
-            else if (strncasecmp(a3, "PRE", 3) == 0) ui_lvgl_test_preheat(a3 + 3);
-            else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
-            // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
-            // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
-            else if (strcasecmp(a3, "GRAD") == 0)    ui_lvgl_test_grad();
-            // `UI HELLO` = in `hello_flags` + xin lai FULL/SETTINGS/MESH (kiem tra duong panel -> Marlin).
-            else if (strcasecmp(a3, "HELLO") == 0)   ui_lvgl_test_hello();
-            // `UI RX` = in 2 chieu cua UART (frame theo loai + tuoi PONG) - xem ui_lvgl_test_rx().
-            else if (strcasecmp(a3, "RX") == 0)      ui_lvgl_test_rx();
-            // `UI PERF` = do hieu nang man hinh (ve/SPI/cam ung) - xem ui_lvgl_test_perf().
-            else if (strcasecmp(a3, "PERF") == 0)    ui_lvgl_test_perf();
-            else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
-            else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
-            // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
-            else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
-            // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).
-            else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
-            // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
-            // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
-            else if (strncasecmp(a3, "NOTIFY", 6) == 0) ui_lvgl_test_notify(a3 + 6);
-            else if (strncasecmp(a3, "WTEST", 5) == 0) {
-              // `UI WTEST [KB]` = ghi thu the (khong qua WiFi) de tach nguyen nhan loi ghi the.
-              unsigned kb = 4096;
-              if (a3[5]) sscanf(a3 + 5, "%u", &kb);
-              cyd_sd_write_test(kb);
-            }
-            else                                     ui_lvgl_show_page_name(a3);
+            /* (da chuyen sang ui_console_dispatch() o duoi - xem ui_lvgl.h) */
           } else
 #endif
           {

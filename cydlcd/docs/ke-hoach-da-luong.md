@@ -237,6 +237,41 @@ Nghĩa là: thất bại do nhường Marlin **không được báo như lỗi t
 đang đọc), 9 lần `Ok` (rơi vào khe giữa 2 lần `M20`, Marlin không đọc) — đúng thiết kế: **chỉ nhường khi Marlin THẬT SỰ
 đang đọc/ghi**. Marlin: 6/6 `M20` OK, `err=0`, `alive=1`, `PING` +1/s, `hoan=16 bo=0`.
 
+### 5.5 B2b + B3 + B4 — TÁCH task `ui` / `net` / `log` (commit sau) ✅ XONG 2026-10-15
+
+**Kiến trúc chốt** (4 task + 1 chẩn đoán):
+
+| Task | Core | Prio | Nhịp | Sở hữu |
+|---|---|---|---|---|
+| `link` | 1 | 20 | 1 ms | UART Marlin + phục vụ sector SD thô |
+| `ui` | 0 | 5 | **30 Hz (33 ms)** | **toàn bộ LVGL** + TFT + cảm ứng + overlay upload |
+| `net` | 0 | 4 | 1 ms | WiFi + WebServer (upload 20–30 s) + thẻ TF + FATFS |
+| `log`/console = **`loop()`** | 0 | 1 (Arduino) | 5 ms | in log từ `logq`, đọc console COM8, **1 Hz diag + heartbeat** |
+| `diag` | 0 | 1 | 1 s | heartbeat từng task + watchdog |
+
+**Việc đã làm:**
+1. `ui_overlay.h/.cpp` (mới): lôp phủ tiến độ upload tách 2 nửa — `ov_*`/`ui_lock()` **chỉ ghi trạng thái** (gọi được từ
+   task `net`), `ui_overlay_update()` **chỉ task `ui`** mới tạo/cập nhật/huỷ widget. Xoá toàn bộ LVGL khỏi `cyd_sd.cpp`
+   (50 lời gọi) + **2 chỗ `lv_timer_handler()`** + 2 chỗ còn sót gọi `cydlcd_link_task()` từ core 0.
+2. `ui_lvgl.cpp`: thêm **hàng đợi lệnh console** (`ui_post_cmd`, 6×40 B) + **task `ui` 30 Hz** (`ui_task_start()`);
+   console COM8 chỉ *gửi* lệnh, task `ui` *thực thi* `ui_console_dispatch()` (chuyển nguyên chuỗi lệnh từ `loop()`).
+3. `main.cpp`: **heartbeat từng task** (`g_hb_link/ui/net/log`, in ở dòng 1 Hz), **task `net`**, tạo task trong
+   `setup()`, `loop()` còn: in log + đọc console + 1 Hz diag (delay 5 ms — không quay nóng).
+4. **Sửa lỗi thật do chính khoá thẻ gây ra** (phát hiện khi đo lại): `cyd_sd_finish_upload()` giữ khoá thẻ trong suốt
+   hàm, kể cả lúc `notify_media_changed()` chờ Marlin mount lại ⇒ task `link` hết trần 300 ms ⇒ Marlin báo
+   `PANEL SD: khong doc duoc sector 0 qua UART` + `No SD card`. Nay **`lk.release()` + hạ `s_busy` TRƯỚC** khi báo
+   Marlin mount lại ⇒ `the SD qua UART san sang` + `SD card ok` ✓.
+
+**Đo được (đã nạp panel):**
+* Heartbeat: `link=+~1000/s`, **`ui=+30/s`** (đúng 30 Hz như đã chốt), `net=+~960/s`, `log=+~190/s`.
+* Lúc **đang upload 4,3 MB**: `net` ĐỨNG (đang xử lý body — đúng dự kiến) nhưng **`link` vẫn +1/s**, **`ui` vẫn +30/s**,
+  `log` vẫn chạy; `UI RX` **trả lời được trong lúc upload** (trước đây console bị chặn).
+* Marlin (COM4) trong lúc upload: `PING` 1856→1861→1866→1871 = **+1/s, không sót frame**, `err=0`, `alive=1`, `hoan=16 bo=0`.
+* Lôp phủ do task `ui` vẽ (kiểm bằng `UI BOX` trong lúc ghi thẻ): `lop tren: 1 vat` + `label: TBT-CYDLCD`,
+  `label: DA GHI VAO THE SD` ✓.
+* Sau upload: Marlin mount lại OK (`the SD qua UART san sang`, `SD card ok`), `SDDATA` tăng, `M20` liệt kê đủ file.
+* `link gap max 6 286 µs`, **0 lần > 50 ms**; khoá thẻ chờ max 1,3 ms, 0 lần hết trần.
+
 ---
 
 ## 6. Tiêu chí nghiệm thu (một câu, đo được)

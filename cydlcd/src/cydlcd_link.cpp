@@ -803,6 +803,7 @@ static void link_task_fn(void *) {
     // task nay thi gap phai ~1-2 ms (tieu chi: < 50 ms).
     ui_lvgl_perf_link_call(prev_end_us ? (uint32_t)(now_us - prev_end_us) : 0, dur);
     prev_end_us = now_us;
+    g_hb_link++;                        // heartbeat cho task chan doan (xem main.cpp: g_hb_*)
     vTaskDelay(1);
   }
 }

@@ -91,6 +91,7 @@
 #include "cyd_sd.h"        // cyd_sd_ready() cho icon the SD (the o khe man hinh)
 #include "net_upload_http.h"        // net_notify_set/clear/dump (thong bao di TRANG /status, khong hien LCD)
 #include "net_upload.h"             // net_wifi_state(): trang thai WiFi de ve icon o header
+#include "ui_overlay.h"             // lop phu tien do upload (task `ui` la noi DUY NHAT ve)
 
 // Trang thai WiFi cho icon o dong tieu de. net_upload.h la "hop dong giao dien" voi nhanh module
 // WiFi (net_wifi.cpp): 0 = WiFi tat/chua cau hinh, 1 = dang ket noi, 2 = da ket noi.
@@ -694,12 +695,72 @@ static void ui_lvgl_task_body(void) {
   }
 
   boxes_update();
+  ui_overlay_update();               // lop phu tien do upload (task `ui` la noi DUY NHAT ve - xem ui_overlay.h)
   cydlcd_link_state_unlock();       // nha khoa trang thai (xem cydlcd_link_state_lock o tren)
 }
 
 // ===========================================================================
+//  DA LUONG (B3): hang doi LENH CONSOLE cho task `ui` + task `ui` 30 Hz
+// ===========================================================================
+// VI SAO: moi lenh `UI ...` tren COM8 deu cham vao LVGL (mo trang, in bo cuc, mo hop, sua thong so...). Tu khi
+// task `ui` la noi DUY NHAT goi LVGL, console (task `log`/vong lap core 0) KHONG duoc thuc thi truc tiep nua
+// ma phai GUI vao hang doi nay; task `ui` lay ra va goi `ui_console_dispatch()` (dinh nghia o main.cpp - giu
+// nguyen chuoi lenh cu, chi doi noi chay).
+#if defined(CYDLCD_BOARD_CYD)
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/queue.h"
+  #define UI_CMD_Q    6
+  #define UI_CMD_LEN  40
+  static QueueHandle_t s_cmd_q = nullptr;
+#endif
+
+void ui_post_cmd(const char *arg) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (!s_cmd_q) s_cmd_q = xQueueCreate(UI_CMD_Q, UI_CMD_LEN);
+  if (!s_cmd_q) return;
+  char b[UI_CMD_LEN];
+  snprintf(b, sizeof(b), "%s", arg ? arg : "");
+  if (xQueueSend(s_cmd_q, b, 0) != pdTRUE)
+    Serial.printf("[UI] CANH BAO: hang doi lenh UI day -> bo \"%s\"\n", b);
+#else
+  ui_console_dispatch(arg);
+#endif
+}
+
+// Lay toi da `max` lenh dang cho va thuc thi (CHI task `ui` goi).
+static void ui_cmd_drain(uint8_t max) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (!s_cmd_q) return;
+  char b[UI_CMD_LEN];
+  while (max--) {
+    if (xQueueReceive(s_cmd_q, b, 0) != pdTRUE) break;
+    ui_console_dispatch(b);
+  }
+#endif
+}
+
+#if defined(CYDLCD_BOARD_CYD)
+// Task `ui`: 30 Hz (33 ms) - nhu da chot voi nguoi dung. `ui_lvgl_task()` tu tinh tick LVGL theo `millis()`
+// nen nhip 33 ms van du (LVGL refresh 30 ms, indev 20 ms) va cham cam ung tre <= 33 ms.
+static void ui_cmd_task(void *) {
+  for (;;) {
+    ui_cmd_drain(3);
+    ui_lvgl_task();
+    g_hb_ui++;                                  // heartbeat cho task chan doan (xem main.cpp: g_hb_*)
+    vTaskDelay(pdMS_TO_TICKS(33));
+  }
+}
+
+bool ui_task_start(void) {
+  if (!s_cmd_q) s_cmd_q = xQueueCreate(UI_CMD_Q, UI_CMD_LEN);
+  return xTaskCreatePinnedToCore(ui_cmd_task, "ui", 8192, nullptr, 5, nullptr, 0) == pdPASS;
+}
+#endif
+
+// ===========================================================================
 //  API CHAN DOAN (khai bao trong ui_lvgl.h) - cho console COM7 o main.cpp
-//
+// ===========================================================================
+
 //  VI SAO CO: khi mot trang UI lam panel treo thi khong the ngoi cham tay vao man hinh de tai hien
 //  (va cung khong biet trang nao). Hai ham duoi day cho phep mo trang bang 1 dong lenh tren COM7
 //  (`UI TRAMMING`, `UI SETTINGS`...) va in danh sach trang (`UI ?`) -> tai hien loi tu PC.

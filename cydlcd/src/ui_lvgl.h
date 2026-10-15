@@ -89,6 +89,21 @@ void ui_lvgl_test_rx(void);
 // LVGL. Goi 2 lan cach nhau N giay: lan 1 xoa bo dem, lan 2 doc so cua khoang do. Xem ui_lvgl_test_perf().
 void ui_lvgl_test_perf(void);
 
+// ===========================================================================
+//  DA LUONG (B3, 2026-10-15 - xem cydlcd/docs/ke-hoach-da-luong.md)
+// ===========================================================================
+// Task `ui` (core 0, uu tien 5, nhip 30 Hz = 33 ms) la noi DUY NHAT goi LVGL, ke tu khi tach task.
+// Vi vay MOI lenh console `UI ...` phai di qua hang doi (`ui_post_cmd`) chu KHONG duoc thuc thi truc tiep
+// tu task console; task `ui` lay ra va goi `ui_console_dispatch()` (dinh nghia o main.cpp, giu nguyen
+// chuoi lenh cu - chi doi NOI CHAY).
+void ui_post_cmd(const char *arg);      // task khac -> hang doi (KHONG chan)
+bool ui_task_start(void);               // tao task `ui`; goi trong setup() SAU ui_lvgl_begin()
+void ui_console_dispatch(const char *a3);   // thuc thi 1 lenh UI (CHI duoc goi tu task `ui`)
+
+// Heartbeat tung task (task chan doan 1 Hz doc de biet task nao treo). Dinh nghia o main.cpp.
+extern volatile uint32_t g_hb_link, g_hb_ui, g_hb_net, g_hb_log;
+
+
 // So lan ui_lvgl_task() chay >= 20 ms KE TU lan goi truoc (do NGAY TRONG ham, doc lap voi dong log o
 // main.cpp) + thoi gian lan goi cuoi (us) + tong so lan cham. Dung de doi chieu khi dong log bao cham.
 uint32_t ui_lvgl_perf_slow_take(void);

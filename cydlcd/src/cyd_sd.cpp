@@ -83,6 +83,7 @@ void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
 #include "ui_lvgl.h"          // UI_LCD_HOR_RES / UI_LCD_VER_RES
 #include "logq.h"             // log KHONG CHAN (xem logq.h): ELOG co the chay trong task `link`
                               // (doc/ghi sector tho cho Marlin) nen KHONG duoc in truc tiep ra UART0
+#include "ui_overlay.h"       // lop phu tien do upload (chi ghi trang thai; task `ui` ve)
 
 #if defined(CYDLCD_CYD_DEBUG)
   #define ELOG(...)   do { logq_post(__VA_ARGS__); } while (0)
@@ -93,8 +94,6 @@ void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
 namespace {
 
 // Mau lop phu: lay DUNG gia tri cua ui_lvgl_int.h (MR_BG/MR_PROGBG/MR_PROGBAR/MR_FRAME/MR_RATE100)
-constexpr uint32_t OV_BG = 0x1E156E, OV_BAR = 0x2A2080, OV_FILL = 0x00E5FF,
-                   OV_TXT = 0xE6E1E5, OV_OK = 0x81C784, OV_ERR = 0xFF8A80;
 
 // ---- the TF ----
 bool     s_sd_ready = false;
@@ -153,6 +152,8 @@ struct CardLock {
   bool ok;
   explicit CardLock(const uint32_t ms) : ok(cyd_sd_lock(ms)) {}
   ~CardLock() { if (ok) cyd_sd_unlock(); }
+  // Nha khoa SOM (khi con phan viec KHONG cham the o cuoi ham, vd cho Marlin mount lai doc sector).
+  void release() { if (ok) { cyd_sd_unlock(); ok = false; } }
 };
 
 // ===========================================================================
@@ -230,9 +231,6 @@ uint32_t s_written = 0;                 // byte da ghi vao the (phien gan nhat)
 char     s_result[48] = "";            // "DONE 1234" / "ERR ..."
 
 // ---- lop phu (pha 2: toan man hinh + khoa UI) ----
-lv_obj_t *ov = nullptr, *ov_state = nullptr, *ov_info = nullptr, *ov_bar = nullptr;
-char      txt_state[48], txt_info[48];
-uint32_t  ov_ms = 0, rate_ms = 0, rate_base = 0, rate_x10 = 0;
 bool      s_busy = false;              // dang ghi vao the (de /status bao "writing")
 
 // ---- UU TIEN MARLIN (xem khoi chu thich o dau file) ----
@@ -278,135 +276,11 @@ void sanitize_name(const char *in, char *out, const size_t cap) {
 }
 
 // ===========================================================================
-// Lop phu LVGL (lv_layer_top) - toan man hinh + khoa moi input device
+// LOP PHU TIEN DO UPLOAD: da CHUYEN sang ui_overlay.cpp (2026-10-15, B3 - da luong).
+// VI SAO: lop phu nay duoc bat/tat tu duong upload (task `net`) nhung LVGL chi duoc goi tu task `ui`
+// => cyd_sd.cpp chi con GOI cac ham `ov_*` / `ui_lock()` (chi ghi trang thai), con viec ve do
+// ui_overlay_update() lam trong nhip cua task `ui`. Xem ui_overlay.h.
 // ===========================================================================
-void ui_lock(const bool lock) {
-  lv_indev_t *i = lv_indev_get_next(nullptr);
-  while (i) {
-    lv_indev_enable(i, !lock);
-    i = lv_indev_get_next(i);
-  }
-  ELOG("[UP] UI %s\n", lock ? "KHOA" : "MO KHOA");
-}
-
-lv_obj_t *ov_label(lv_obj_t *parent, const char *txt, const uint32_t col, const lv_font_t *font) {
-  lv_obj_t *l = lv_label_create(parent);
-  if (!l) return nullptr;
-  lv_label_set_text(l, txt);
-  lv_obj_set_style_text_color(l, lv_color_hex(col), 0);
-  if (font) lv_obj_set_style_text_font(l, font, 0);
-  lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-  return l;
-}
-
-void ov_layout_full(void) {
-  if (!ov) return;
-  const lv_coord_t W = UI_LCD_HOR_RES, H = UI_LCD_VER_RES;
-  lv_obj_set_pos(ov, 0, 0);
-  lv_obj_set_size(ov, W, H);
-  lv_obj_set_style_radius(ov, 0, 0);
-  lv_obj_set_style_border_width(ov, 0, 0);
-  lv_obj_set_style_bg_opa(ov, LV_OPA_90, 0);
-  if (ov_state) {
-    lv_obj_set_width(ov_state, (lv_coord_t)(W - 16));
-    lv_obj_align(ov_state, LV_ALIGN_TOP_MID, 0, 54);      // chu TO (montserrat 20)
-  }
-  if (ov_info) {
-    lv_obj_set_width(ov_info, (lv_coord_t)(W - 16));
-    lv_obj_align(ov_info, LV_ALIGN_TOP_MID, 0, 96);       // "% KB KB/s"
-  }
-  if (ov_bar) {
-    lv_obj_set_size(ov_bar, (lv_coord_t)(W - 32), 16);
-    lv_obj_align(ov_bar, LV_ALIGN_TOP_MID, 0, 128);
-  }
-  lv_obj_invalidate(ov);
-}
-
-bool ov_create_full(void) {
-  lv_obj_t *top = lv_layer_top();
-  if (!top) return false;
-  if (ov) { ov_layout_full(); return true; }
-  ov = lv_obj_create(top);
-  if (!ov) { ELOG("[UP] khong tao duoc lop phu (het LVGL mem)\n"); return false; }
-  lv_obj_set_style_radius(ov, 0, 0);
-  lv_obj_set_style_border_width(ov, 0, 0);
-  lv_obj_set_style_bg_color(ov, lv_color_hex(OV_BG), 0);
-  lv_obj_set_style_bg_opa(ov, LV_OPA_90, 0);
-  lv_obj_set_style_pad_all(ov, 0, 0);
-  lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(ov, LV_OBJ_FLAG_CLICKABLE);        // input bi chan bang ui_lock(), khong can click
-  lv_obj_t *title = ov_label(ov, "TBT-CYDLCD", OV_FILL, nullptr);
-  if (title) {
-    lv_obj_set_width(title, (lv_coord_t)(UI_LCD_HOR_RES - 16));
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-  }
-  ov_state = ov_label(ov, "...", OV_TXT, &lv_font_montserrat_20);
-  ov_info  = ov_label(ov, "", OV_TXT, nullptr);
-  ov_bar = lv_bar_create(ov);
-  if (ov_bar) {
-    lv_bar_set_range(ov_bar, 0, 100);
-    lv_obj_set_style_bg_color(ov_bar, lv_color_hex(OV_BAR), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(ov_bar, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(ov_bar, lv_color_hex(OV_FILL), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_opa(ov_bar, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(ov_bar, 2, LV_PART_MAIN);
-    lv_obj_set_style_radius(ov_bar, 2, LV_PART_INDICATOR);
-  }
-  ov_layout_full();
-  return true;
-}
-
-void ov_destroy(void) {
-  if (ov) lv_obj_del(ov);
-  ov = nullptr;
-  ov_state = ov_info = ov_bar = nullptr;
-  txt_state[0] = txt_info[0] = '\0';
-}
-
-// Dung buffer tinh + text_static -> khong ton them LVGL heap; phai tu invalidate.
-void ov_set(const char *state, const char *info, const bool ok_col) {
-  if (!ov) return;
-  if (state && ov_state) {
-    snprintf(txt_state, sizeof(txt_state), "%s", state);
-    lv_obj_set_style_text_color(ov_state, lv_color_hex(ok_col ? OV_OK : OV_ERR), 0);
-    lv_label_set_text_static(ov_state, txt_state);
-    lv_obj_invalidate(ov_state);
-  }
-  if (info && ov_info) {
-    snprintf(txt_info, sizeof(txt_info), "%s", info);
-    lv_label_set_text_static(ov_info, txt_info);
-    lv_obj_invalidate(ov_info);
-  }
-}
-
-void rate_tick(const uint32_t done) {
-  const uint32_t now = millis();
-  if (rate_ms == 0) { rate_ms = now; rate_base = done; return; }
-  const uint32_t dt = now - rate_ms;
-  if (dt < 1000u) return;
-  rate_x10 = (uint32_t)(((uint64_t)(done - rate_base) * 10000ull) / ((uint64_t)dt * 1024ull));
-  rate_ms = now;
-  rate_base = done;
-}
-
-// Cap nhat tien do (toi da 5 lan/s cho mat nguoi, khong nong CPU)
-void ov_progress(const char *state, const uint32_t done, const uint32_t total) {
-  if (millis() - ov_ms < 200u) return;
-  ov_ms = millis();
-  char info[48];
-  snprintf(info, sizeof(info), "%u%%   %u/%u KB   %u.%u KB/s",
-           (unsigned)(total ? ((uint64_t)done * 100u / total) : 0u),
-           (unsigned)(done / 1024u), (unsigned)(total / 1024u),
-           (unsigned)(rate_x10 / 10u), (unsigned)(rate_x10 % 10u));
-  ov_set(state, info, true);
-  if (ov_bar) lv_bar_set_value(ov_bar, total ? (int32_t)((uint64_t)done * 100u / total) : 0, LV_ANIM_OFF);
-}
-
-// Thong bao ket qua trong cung lop phu (giu toan man hinh cho don gian - chi doi chu)
-void ov_note(const char *state, const bool ok) {
-  if (!ov) return;
-  ov_set(state, "", ok);
-}
 
 // ===========================================================================
 // The TF (VSPI rieng: CS 5 / MOSI 23 / MISO 19 / SCLK 18)
@@ -987,8 +861,7 @@ bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part) 
   // roi moi gianh bus, tranh cat ngang luc Marlin dang doc the.
   const uint32_t tw = millis();
   while (!cydlcd.files_done && (millis() - tw) < 400u) {
-    lv_timer_handler();
-    cydlcd_link_task();
+    // DA LUONG: KHONG goi lv_timer_handler()/cydclcd_link_task() o day (task `ui`/`link` tu chay).
     delay(5);
   }
 #endif
@@ -1499,6 +1372,13 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   // ---------------------------------------------------------------------------
   s_busy = false;
   s_part = 0;
+  // !!! NHA KHOA THE **TRUOC** KHI BAO MARLIN MOUNT LAI !!!
+  // LOI THAT (2026-10-15, do duoc sau khi tach task): `notify_media_changed()` gui M22/M21 roi CHO Marlin
+  // mount lai; trong luc do Marlin DOC SECTOR (boot sector/FAT) qua UART -> task `link` phai lay KHOA THE,
+  // nhung khoa nay dang bi CHINH HAM NAY giu (CardLock o dau ham) => qua tran 300 ms => Marlin bao
+  // "khong doc duoc sector 0 qua UART" / "No SD card" (da gap trong log COM4).
+  // Doan con lai cua ham chi cham chuoi/overlay, khong dung the -> nha khoa som la dung.
+  lk.release();
   #if CYDLCD_SD_SHARED
     sd_release_to_marlin(ok);             // tra bus (+ M22/M21 + xin lai danh sach neu OK)
   #else
@@ -1523,8 +1403,7 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   const uint32_t note_ms = 3000u;
 #endif
   while (millis() - t_note < note_ms) {
-    lv_timer_handler();
-    cydlcd_link_task();
+    // DA LUONG: khong goi LVGL / link task tu day nua.
     delay(10);
   }
   ov_destroy();
