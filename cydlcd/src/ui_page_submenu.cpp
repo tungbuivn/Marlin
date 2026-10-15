@@ -44,6 +44,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu (xem ui_lang.h)
 
 #include <stdio.h>                  // sscanf / snprintf
 #include <stdlib.h>                 // malloc / free (KHONG dung pool LVGL: xem ghi chu o sm_ctx_t)
@@ -91,16 +92,19 @@ enum {
   SMG_COUNT
 };
 
-typedef struct { const char *name; uint8_t kind; uint16_t arg; } sm_item_t;
-typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint8_t n; } sm_group_t;
+// 2026-10-15 (da ngon ngu): `name_id` / `title_id` la ID chuoi (`ui_text_t`, xem src/ui_lang.h) chu KHONG
+// phai con tro chuoi - bang nay la `const` (flash) nen khong the giu con tro toi 2 ban dich; doi 4 B/con
+// tro -> 2 B/ID cung lam bang nho hon (flash tiet kiem ~500 B).
+typedef struct { uint16_t name_id; uint8_t kind; uint16_t arg; } sm_item_t;
+typedef struct { uint16_t title_id; uint8_t parent; const sm_item_t *items; uint8_t n; } sm_group_t;
 
 // Cac macro cho bang duong gon va khong the go sai thu tu tham so:
-#define SM_S(txt, g)  { txt, SM_SUB, (uint16_t)(g) }
-#define SM_V(txt, id) { txt, SM_VAL, (uint16_t)(id) }
-#define SM_A(txt, a)  { txt, SM_ACT, (uint16_t)(a) }
-// Dong vat lieu preheat: `txt` chi la TEN TAM (hien luc moi tao trang, ngay sau do
+#define SM_S(id, g)   { (uint16_t)(id), SM_SUB, (uint16_t)(g) }
+#define SM_V(id, s)   { (uint16_t)(id), SM_VAL, (uint16_t)(s) }
+#define SM_A(id, a)   { (uint16_t)(id), SM_ACT, (uint16_t)(a) }
+// Dong vat lieu preheat: `UI_T_SUB_PRE_MATERIAL` chi la TEN TAM (hien luc moi tao trang, ngay sau do
 // page_submenu_update() ghi ten THAT tu kho preheat vao).
-#define SM_P(slot)    { "Vat lieu", SM_PRE, (uint16_t)(slot) }
+#define SM_P(slot)    { UI_T_SUB_PRE_MATERIAL, SM_PRE, (uint16_t)(slot) }
 
 // ===========================================================================
 //  CAY MENU (thu tu dong y nhu menu Configuration cua 12864)
@@ -108,141 +112,141 @@ typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint
 static const sm_item_t SM_I_ROOT[] = {
   // 2026-10-15 (YEU CAU NGUOI DUNG): "advance setting trong configuration la item dau tien" + "fade height
   // go bo [o cac cho khac] va cho vao configuration, ngay ben duoi z probe offset".
-  SM_S("Advanced Settings",         SMG_ADV),
-  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
-  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),      // M420 Z (chi hien khi co ENABLE_LEVELING_FADE_HEIGHT)
-  SM_S("Controller Fan",            SMG_CTRLFAN),
+  SM_S(UI_T_SUB_ADVANCED_SETTINGS,         SMG_ADV),
+  SM_V(UI_T_SUB_PROBE_Z_OFFSET,            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
+  SM_V(UI_T_SUB_FADE_HEIGHT,               CYDLCD_SET_FADE_HEIGHT),      // M420 Z (chi hien khi co ENABLE_LEVELING_FADE_HEIGHT)
+  SM_S(UI_T_SUB_CONTROLLER_FAN,            SMG_CTRLFAN),
   // 2026-10-15 (YEU CAU NGUOI DUNG: "gom vao 1 menu la preheat, cho phep them bot vat lieu"): 3 dong
   // "Preheat PLA/PETG/ABS Settings" cu -> MOT dong "Preheat" (danh sach dong, toi da 6).
-  SM_S("Preheat",                   SMG_PREHEAT),
-  SM_A("Store Settings (M500)",     A_SAVE),
-  SM_A("Load Settings (M501)",      A_LOAD_SETTINGS),
-  SM_A("Restore Defaults (M502)",   A_EEPROM_RESET),              // xac nhan 2 buoc (xem do_action)
-  SM_A("All settings (table)",      A_GOTO_SETTINGS)              // bang phang cu (giu nguyen chuc nang)
+  SM_S(UI_T_SUB_PREHEAT,                   SMG_PREHEAT),
+  SM_A(UI_T_SUB_STORE_SETTINGS_M500,     A_SAVE),
+  SM_A(UI_T_SUB_LOAD_SETTINGS_M501,      A_LOAD_SETTINGS),
+  SM_A(UI_T_SUB_RESTORE_DEFAULTS_M502,   A_EEPROM_RESET),              // xac nhan 2 buoc (xem do_action)
+  SM_A(UI_T_SUB_ALL_SETTINGS_TABLE,      A_GOTO_SETTINGS)              // bang phang cu (giu nguyen chuc nang)
 };
 
 static const sm_item_t SM_I_ADV[] = {
-  SM_S("Max Speed",                 SMG_SPEED),
-  SM_S("Acceleration",              SMG_ACCEL),
-  SM_S("Jerk",                      SMG_JERK),
-  SM_S("Probe Offsets",             SMG_PROBE),
-  SM_S("Steps/mm",                  SMG_STEPS),
-  SM_S("TMC Drivers",               SMG_TMC),
-  SM_S("Temperature",               SMG_TEMP),
-  SM_S("Filament",                  SMG_FILAMENT),
-  SM_S("Tune (runtime)",            SMG_TUNE),
+  SM_S(UI_T_SUB_MAX_SPEED,                 SMG_SPEED),
+  SM_S(UI_T_SUB_ACCELERATION,              SMG_ACCEL),
+  SM_S(UI_T_SUB_JERK,                      SMG_JERK),
+  SM_S(UI_T_SUB_PROBE_OFFSETS,             SMG_PROBE),
+  SM_S(UI_T_SUB_STEPS_MM,                  SMG_STEPS),
+  SM_S(UI_T_SUB_TMC_DRIVERS,               SMG_TMC),
+  SM_S(UI_T_SUB_TEMPERATURE,               SMG_TEMP),
+  SM_S(UI_T_SUB_FILAMENT,                  SMG_FILAMENT),
+  SM_S(UI_T_SUB_TUNE_RUNTIME,            SMG_TUNE),
   // 2026-10-15: NGON NGU - 2 dong endonym (xem SM_I_LANG). Dat CUOI nhom Advanced Settings (day la
   // tuy chon cua MAN HINH, khong phai thong so Marlin).
-  SM_S("Language",                  SMG_LANG),
+  SM_S(UI_T_SUB_LANGUAGE,                  SMG_LANG),
   // 2026-10-15: "Fade Height" DA CHUYEN ra CONFIGURATION (ngay duoi "Probe Z Offset") theo yeu cau
   // nguoi dung - truoc day dong nay nam o 3 noi (Advanced / UBL / Motion) nen bi lap.
-  SM_V("Home Offset X",             CYDLCD_SET_HOME_OFFSET_X),
-  SM_V("Home Offset Y",             CYDLCD_SET_HOME_OFFSET_Y)
+  SM_V(UI_T_SUB_HOME_OFFSET_X,             CYDLCD_SET_HOME_OFFSET_X),
+  SM_V(UI_T_SUB_HOME_OFFSET_Y,             CYDLCD_SET_HOME_OFFSET_Y)
 };
 
 static const sm_item_t SM_I_SPEED[] = {
-  SM_V("Max X Speed",               CYDLCD_SET_MAXFEED_X),
-  SM_V("Max Y Speed",               CYDLCD_SET_MAXFEED_Y),
-  SM_V("Max Z Speed",               CYDLCD_SET_MAXFEED_Z),
-  SM_V("Max E Speed",               CYDLCD_SET_MAXFEED_E),
-  SM_V("Min Velocity",              CYDLCD_SET_MIN_FEEDRATE),        // M205 S
-  SM_V("Min Travel Speed",          CYDLCD_SET_MIN_TRAVEL_FEEDRATE)  // M205 T
+  SM_V(UI_T_SUB_MAX_X_SPEED,               CYDLCD_SET_MAXFEED_X),
+  SM_V(UI_T_SUB_MAX_Y_SPEED,               CYDLCD_SET_MAXFEED_Y),
+  SM_V(UI_T_SUB_MAX_Z_SPEED,               CYDLCD_SET_MAXFEED_Z),
+  SM_V(UI_T_SUB_MAX_E_SPEED,               CYDLCD_SET_MAXFEED_E),
+  SM_V(UI_T_SUB_MIN_VELOCITY,              CYDLCD_SET_MIN_FEEDRATE),        // M205 S
+  SM_V(UI_T_SUB_MIN_TRAVEL_SPEED,          CYDLCD_SET_MIN_TRAVEL_FEEDRATE)  // M205 T
 };
 
 static const sm_item_t SM_I_ACCEL[] = {
-  SM_V("Accel (print)",             CYDLCD_SET_MAXACCEL_PRINT),      // M204 P
-  SM_V("Retract Accel",             CYDLCD_SET_MAXACCEL_RETRACT),    // M204 R
-  SM_V("Travel Accel",              CYDLCD_SET_MAXACCEL_TRAVEL),     // M204 T
-  SM_V("Max X Accel",               CYDLCD_SET_MAXACCEL_X),
-  SM_V("Max Y Accel",               CYDLCD_SET_MAXACCEL_Y),
-  SM_V("Max Z Accel",               CYDLCD_SET_MAXACCEL_Z),
-  SM_V("Max E Accel",               CYDLCD_SET_MAXACCEL_E)
+  SM_V(UI_T_SUB_ACCEL_PRINT,             CYDLCD_SET_MAXACCEL_PRINT),      // M204 P
+  SM_V(UI_T_SUB_RETRACT_ACCEL,             CYDLCD_SET_MAXACCEL_RETRACT),    // M204 R
+  SM_V(UI_T_SUB_TRAVEL_ACCEL,              CYDLCD_SET_MAXACCEL_TRAVEL),     // M204 T
+  SM_V(UI_T_SUB_MAX_X_ACCEL,               CYDLCD_SET_MAXACCEL_X),
+  SM_V(UI_T_SUB_MAX_Y_ACCEL,               CYDLCD_SET_MAXACCEL_Y),
+  SM_V(UI_T_SUB_MAX_Z_ACCEL,               CYDLCD_SET_MAXACCEL_Z),
+  SM_V(UI_T_SUB_MAX_E_ACCEL,               CYDLCD_SET_MAXACCEL_E)
 };
 
 static const sm_item_t SM_I_JERK[] = {
-  SM_V("Max X Jerk",                CYDLCD_SET_JERK_X),
-  SM_V("Max Y Jerk",                CYDLCD_SET_JERK_Y),
-  SM_V("Max Z Jerk",                CYDLCD_SET_JERK_Z),
-  SM_V("Max E Jerk",                CYDLCD_SET_JERK_E),
-  SM_V("Junction Dev",              CYDLCD_SET_JUNCTION_DEV),        // M205 J (CLASSIC_JERK tat)
-  SM_V("Linear Adv E",              CYDLCD_SET_LINEAR_ADV_E)         // M900 K
+  SM_V(UI_T_SUB_MAX_X_JERK,                CYDLCD_SET_JERK_X),
+  SM_V(UI_T_SUB_MAX_Y_JERK,                CYDLCD_SET_JERK_Y),
+  SM_V(UI_T_SUB_MAX_Z_JERK,                CYDLCD_SET_JERK_Z),
+  SM_V(UI_T_SUB_MAX_E_JERK,                CYDLCD_SET_JERK_E),
+  SM_V(UI_T_SUB_JUNCTION_DEV,              CYDLCD_SET_JUNCTION_DEV),        // M205 J (CLASSIC_JERK tat)
+  SM_V(UI_T_SUB_LINEAR_ADV_E,              CYDLCD_SET_LINEAR_ADV_E)         // M900 K
 };
 
 static const sm_item_t SM_I_PROBE[] = {
-  SM_V("Probe X Offset",            CYDLCD_SET_PROBE_OFFSET_X),
-  SM_V("Probe Y Offset",            CYDLCD_SET_PROBE_OFFSET_Y),
-  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),
-  SM_A("Z Probe Wizard (M851 Z)",   A_EDIT_PROBE_Z)                  // mo lop phu sua M851 Z
+  SM_V(UI_T_SUB_PROBE_X_OFFSET,            CYDLCD_SET_PROBE_OFFSET_X),
+  SM_V(UI_T_SUB_PROBE_Y_OFFSET,            CYDLCD_SET_PROBE_OFFSET_Y),
+  SM_V(UI_T_SUB_PROBE_Z_OFFSET,            CYDLCD_SET_PROBE_OFFSET_Z),
+  SM_A(UI_T_SUB_Z_PROBE_WIZARD_M851_Z,   A_EDIT_PROBE_Z)                  // mo lop phu sua M851 Z
 };
 
 static const sm_item_t SM_I_STEPS[] = {
-  SM_V("X Steps/mm",                CYDLCD_SET_STEPS_MM_X),
-  SM_V("Y Steps/mm",                CYDLCD_SET_STEPS_MM_Y),
-  SM_V("Z Steps/mm",                CYDLCD_SET_STEPS_MM_Z),
-  SM_V("E Steps/mm",                CYDLCD_SET_STEPS_MM_E)
+  SM_V(UI_T_SUB_X_STEPS_MM,                CYDLCD_SET_STEPS_MM_X),
+  SM_V(UI_T_SUB_Y_STEPS_MM,                CYDLCD_SET_STEPS_MM_Y),
+  SM_V(UI_T_SUB_Z_STEPS_MM,                CYDLCD_SET_STEPS_MM_Z),
+  SM_V(UI_T_SUB_E_STEPS_MM,                CYDLCD_SET_STEPS_MM_E)
 };
 
 static const sm_item_t SM_I_TMC[] = {
-  SM_S("Driver Current",            SMG_TMC_CUR),
-  SM_S("Stepping Mode",             SMG_STEPMODE)
+  SM_S(UI_T_SUB_DRIVER_CURRENT,            SMG_TMC_CUR),
+  SM_S(UI_T_SUB_STEPPING_MODE,             SMG_STEPMODE)
 };
 
 static const sm_item_t SM_I_TMC_CUR[] = {
-  SM_V("X Current (mA)",            CYDLCD_SET_TMC_CURRENT_X),       // M906 X
-  SM_V("Y Current (mA)",            CYDLCD_SET_TMC_CURRENT_Y),
-  SM_V("Z Current (mA)",            CYDLCD_SET_TMC_CURRENT_Z),
-  SM_V("Z2 Current (mA)",           CYDLCD_SET_TMC_CURRENT_Z2),      // may co 3 driver Z
-  SM_V("Z3 Current (mA)",           CYDLCD_SET_TMC_CURRENT_Z3),
-  SM_V("E0 Current (mA)",           CYDLCD_SET_TMC_CURRENT_E)
+  SM_V(UI_T_SUB_X_CURRENT_MA,            CYDLCD_SET_TMC_CURRENT_X),       // M906 X
+  SM_V(UI_T_SUB_Y_CURRENT_MA,            CYDLCD_SET_TMC_CURRENT_Y),
+  SM_V(UI_T_SUB_Z_CURRENT_MA,            CYDLCD_SET_TMC_CURRENT_Z),
+  SM_V(UI_T_SUB_Z2_CURRENT_MA,           CYDLCD_SET_TMC_CURRENT_Z2),      // may co 3 driver Z
+  SM_V(UI_T_SUB_Z3_CURRENT_MA,           CYDLCD_SET_TMC_CURRENT_Z3),
+  SM_V(UI_T_SUB_E0_CURRENT_MA,           CYDLCD_SET_TMC_CURRENT_E)
 };
 
 static const sm_item_t SM_I_STEPMODE[] = {
-  SM_V("X StealthChop",             CYDLCD_SET_STEALTH_X),           // M569 S0/S1 X
-  SM_V("Y StealthChop",             CYDLCD_SET_STEALTH_Y),
-  SM_V("Z StealthChop",             CYDLCD_SET_STEALTH_Z),
-  SM_V("Z2 StealthChop",            CYDLCD_SET_STEALTH_Z2),
-  SM_V("Z3 StealthChop",            CYDLCD_SET_STEALTH_Z3),
-  SM_V("E0 StealthChop",            CYDLCD_SET_STEALTH_E)
+  SM_V(UI_T_SUB_X_STEALTHCHOP,             CYDLCD_SET_STEALTH_X),           // M569 S0/S1 X
+  SM_V(UI_T_SUB_Y_STEALTHCHOP,             CYDLCD_SET_STEALTH_Y),
+  SM_V(UI_T_SUB_Z_STEALTHCHOP,             CYDLCD_SET_STEALTH_Z),
+  SM_V(UI_T_SUB_Z2_STEALTHCHOP,            CYDLCD_SET_STEALTH_Z2),
+  SM_V(UI_T_SUB_Z3_STEALTHCHOP,            CYDLCD_SET_STEALTH_Z3),
+  SM_V(UI_T_SUB_E0_STEALTHCHOP,            CYDLCD_SET_STEALTH_E)
 };
 
 static const sm_item_t SM_I_TEMP[] = {
-  SM_V("MPC Heater Power",          CYDLCD_SET_MPC_P),               // M306 P
-  SM_V("MPC Block Heat Cap",        CYDLCD_SET_MPC_C),               // M306 C
-  SM_V("MPC Sensor Resp",           CYDLCD_SET_MPC_R),               // M306 R
-  SM_V("MPC Ambient Xfer",          CYDLCD_SET_MPC_A),               // M306 A
-  SM_V("MPC Ambient + fan",         CYDLCD_SET_MPC_F),               // M306 F
-  SM_V("MPC Filament Heat",         CYDLCD_SET_MPC_H),               // M306 H
-  SM_A("MPC Autotune (M306 T)",     A_MPC_TUNE),
-  SM_V("Bed PID-P",                 CYDLCD_SET_PID_BED_KP),          // M304 P
-  SM_V("Bed PID-I",                 CYDLCD_SET_PID_BED_KI),
-  SM_V("Bed PID-D",                 CYDLCD_SET_PID_BED_KD),
-  SM_A("Bed PID Autotune (M303)",   A_PID_BED),
-  SM_V("Hotend PID-P",              CYDLCD_SET_PID_E_KP),            // M301 P (E0)
-  SM_V("Hotend PID-I",              CYDLCD_SET_PID_E_KI),
-  SM_V("Hotend PID-D",              CYDLCD_SET_PID_E_KD)
+  SM_V(UI_T_SUB_MPC_HEATER_POWER,          CYDLCD_SET_MPC_P),               // M306 P
+  SM_V(UI_T_SUB_MPC_BLOCK_HEAT_CAP,        CYDLCD_SET_MPC_C),               // M306 C
+  SM_V(UI_T_SUB_MPC_SENSOR_RESP,           CYDLCD_SET_MPC_R),               // M306 R
+  SM_V(UI_T_SUB_MPC_AMBIENT_XFER,          CYDLCD_SET_MPC_A),               // M306 A
+  SM_V(UI_T_SUB_MPC_AMBIENT_FAN,         CYDLCD_SET_MPC_F),               // M306 F
+  SM_V(UI_T_SUB_MPC_FILAMENT_HEAT,         CYDLCD_SET_MPC_H),               // M306 H
+  SM_A(UI_T_SUB_MPC_AUTOTUNE_M306_T,     A_MPC_TUNE),
+  SM_V(UI_T_SUB_BED_PID_P,                 CYDLCD_SET_PID_BED_KP),          // M304 P
+  SM_V(UI_T_SUB_BED_PID_I,                 CYDLCD_SET_PID_BED_KI),
+  SM_V(UI_T_SUB_BED_PID_D,                 CYDLCD_SET_PID_BED_KD),
+  SM_A(UI_T_SUB_BED_PID_AUTOTUNE_M303,   A_PID_BED),
+  SM_V(UI_T_SUB_HOTEND_PID_P,              CYDLCD_SET_PID_E_KP),            // M301 P (E0)
+  SM_V(UI_T_SUB_HOTEND_PID_I,              CYDLCD_SET_PID_E_KI),
+  SM_V(UI_T_SUB_HOTEND_PID_D,              CYDLCD_SET_PID_E_KD)
 };
 
 static const sm_item_t SM_I_FILAMENT[] = {
-  SM_V("E in mm3 (volumetric)",     CYDLCD_SET_FILAMENT_VOL),        // M200 S0/S1
-  SM_V("Filament Diameter",         CYDLCD_SET_FILAMENT_DIA),        // M200 D
-  SM_V("Unload Length (mm)",        CYDLCD_SET_FC_UNLOAD),           // M603 U
-  SM_V("Load Length (mm)",          CYDLCD_SET_FC_LOAD),             // M603 L
-  SM_V("Runout Sensor",             CYDLCD_SET_RUNOUT_EN)            // M412 S0/S1
+  SM_V(UI_T_SUB_E_IN_MM3_VOLUMETRIC,     CYDLCD_SET_FILAMENT_VOL),        // M200 S0/S1
+  SM_V(UI_T_SUB_FILAMENT_DIAMETER,         CYDLCD_SET_FILAMENT_DIA),        // M200 D
+  SM_V(UI_T_SUB_UNLOAD_LENGTH_MM,        CYDLCD_SET_FC_UNLOAD),           // M603 U
+  SM_V(UI_T_SUB_LOAD_LENGTH_MM,          CYDLCD_SET_FC_LOAD),             // M603 L
+  SM_V(UI_T_SUB_RUNOUT_SENSOR,             CYDLCD_SET_RUNOUT_EN)            // M412 S0/S1
 };
 
 static const sm_item_t SM_I_TUNE[] = {
-  SM_V("Feed %",                    CYDLCD_SET_FEEDRATE_PCT),        // M220
-  SM_V("Flow %",                    CYDLCD_SET_FLOW_PCT),            // M221
-  SM_V("Fan E0 %",                  CYDLCD_SET_FAN_PCT_E0),          // M106
-  SM_V("Target E0 C",               CYDLCD_SET_TARGET_TEMP_E0),      // M104
-  SM_V("Target bed C",              CYDLCD_SET_TARGET_TEMP_BED)      // M140
+  SM_V(UI_T_SUB_FEED,                    CYDLCD_SET_FEEDRATE_PCT),        // M220
+  SM_V(UI_T_SUB_FLOW,                    CYDLCD_SET_FLOW_PCT),            // M221
+  SM_V(UI_T_SUB_FAN_E0,                  CYDLCD_SET_FAN_PCT_E0),          // M106
+  SM_V(UI_T_SUB_TARGET_E0_C,               CYDLCD_SET_TARGET_TEMP_E0),      // M104
+  SM_V(UI_T_SUB_TARGET_BED_C,              CYDLCD_SET_TARGET_TEMP_BED)      // M140
 };
 
 static const sm_item_t SM_I_CTRLFAN[] = {
-  SM_V("Idle Speed",                CYDLCD_SET_CTRLFAN_IDLE),        // M710 I
-  SM_V("Auto Mode",                 CYDLCD_SET_CTRLFAN_AUTO),        // M710 A
-  SM_V("Active Speed",              CYDLCD_SET_CTRLFAN_ACTIVE),      // M710 S
-  SM_V("Idle Period (s)",           CYDLCD_SET_CTRLFAN_DURATION)     // M710 D
+  SM_V(UI_T_SUB_IDLE_SPEED,                CYDLCD_SET_CTRLFAN_IDLE),        // M710 I
+  SM_V(UI_T_SUB_AUTO_MODE,                 CYDLCD_SET_CTRLFAN_AUTO),        // M710 A
+  SM_V(UI_T_SUB_ACTIVE_SPEED,              CYDLCD_SET_CTRLFAN_ACTIVE),      // M710 S
+  SM_V(UI_T_SUB_IDLE_PERIOD_S,           CYDLCD_SET_CTRLFAN_DURATION)     // M710 D
 };
 
 // PREHEAT: danh sach vat lieu do NGUOI DUNG them/bot (kho o ui_preheat.cpp, NVS "ph2").
@@ -251,7 +255,7 @@ static const sm_item_t SM_I_CTRLFAN[] = {
 // khong phai di qua menu con nua. Dong cuoi de THEM vat lieu (ban phim dat ten; da du 6 thi bao loi).
 static const sm_item_t SM_I_PREHEAT[] = {
   SM_P(0), SM_P(1), SM_P(2), SM_P(3), SM_P(4), SM_P(5),
-  SM_A("+ Them vat lieu",           A_PRE_ADD)
+  SM_A(UI_T_SUB_THEM_VAT_LIEU,           A_PRE_ADD)
 };
 
 // ===========================================================================
@@ -268,37 +272,37 @@ static const sm_item_t SM_I_PREHEAT[] = {
 //   - "Z Align Manual" (man rieng cua 12864), "Worst Point = MAX/MIN" (da co trong trang TRAMMING),
 //     "Bed Leveling" (G29 P1..P4 - da co nguyen trang BED MESH voi cac nut UBL).
 static const sm_item_t SM_I_MOTION[] = {
-  SM_A("Move Axis (JOG)",           A_GOTO_JOG),        // 12864: "Move Axis >" (chon truc + buoc)
+  SM_A(UI_T_SUB_MOVE_AXIS_JOG,           A_GOTO_JOG),        // 12864: "Move Axis >" (chon truc + buoc)
   // 2026-10-15: BO dong "Auto Z-Align (G34)" - YEU CAU NGUOI DUNG "tam an va cam chuc nang G34 do thiet
   // ke truc Z cung, ke ca GCODE cung tat" (xem CYDLCD_NO_G34 trong Marlin/Configuration.h).
-  SM_A("Z Probe Wizard",            A_EDIT_PROBE_Z),    // mo lop phu sua M851 Z (nhu 12864)
-  SM_A("Tramming Wizard",           A_GOTO_TBT),
-  SM_S("Unified Bed Leveling",      SMG_UBL),
-  SM_A("Level Bed (G29 N)",         A_G29_LEVEL),
-  SM_A("Deploy Z-Probe (M401)",     A_PROBE_DEPLOY),
-  SM_A("Stow Z-Probe (M402)",       A_PROBE_STOW),
+  SM_A(UI_T_SUB_Z_PROBE_WIZARD,            A_EDIT_PROBE_Z),    // mo lop phu sua M851 Z (nhu 12864)
+  SM_A(UI_T_SUB_TRAMMING_WIZARD,           A_GOTO_TBT),
+  SM_S(UI_T_SUB_UNIFIED_BED_LEVELING,      SMG_UBL),
+  SM_A(UI_T_SUB_LEVEL_BED_G29_N,         A_G29_LEVEL),
+  SM_A(UI_T_SUB_DEPLOY_Z_PROBE_M401,     A_PROBE_DEPLOY),
+  SM_A(UI_T_SUB_STOW_Z_PROBE_M402,       A_PROBE_STOW),
   // 2026-10-15 (YEU CAU NGUOI DUNG: "cho hien thi endstop (m119) thi hay cho vao motion" + "di chuyen
   // menu 'endstop' xuong ngay sau 'stow probe'"): dong nay o MENU chinh da BO, chuyen vao day DUNG SAU
   // "Stow Z-Probe (M402)" -> mo trang ENDSTOP (doc tin hieu M119 30 lan/giay, KHONG con nut REFRESH;
   // ra khoi man la NGUNG xin frame - xem page_endstop_poll o ui_lvgl.cpp/ui_page_endstop.cpp).
-  SM_A("Endstops (M119)",           A_GOTO_ENDSTOP),
+  SM_A(UI_T_SUB_ENDSTOPS_M119,           A_GOTO_ENDSTOP),
   // 2026-10-15: BO dong "Fade Height" (12864 co) - da chuyen sang CONFIGURATION > ngay duoi Probe Z Offset.
-  SM_A("M48 Probe Test (G28 O+M48)", A_M48),
-  SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
+  SM_A(UI_T_SUB_M48_PROBE_TEST_G28_O_M48, A_M48),
+  SM_A(UI_T_SUB_DISABLE_STEPPERS_M84,    A_STEPPERS_OFF)
 };
 
 static const sm_item_t SM_I_UBL[] = {
-  SM_A("Activate UBL (G29 A)",      A_G29_ON),
-  SM_A("Deactivate UBL (G29 D)",    A_G29_OFF),
-  SM_A("Bed Mesh (luoi)",           A_GOTO_MESH),       // trang BED MESH: luoi + G29 P1/P3/P4/SAVE
-  SM_A("Manually Build Mesh",       A_G29_UBL_MANUAL),  // G29 I999 + G29 P2BT0 (12864)
-  SM_A("Fill-in Mesh (G29 P3)",     A_G29_FILL),
-  SM_A("Fine Tune All (G29 P4RT)",  A_G29_FT),
-  SM_A("Save Bed Mesh (G29 S0)",    A_G29_SAVE),
-  SM_A("Output UBL Info (G29 W)",   A_G29_INFO),
-  SM_A("Output for Host (G29 T0)",  A_UBL_T0),
-  SM_A("Output for CSV (G29 T1)",   A_UBL_T1),
-  SM_A("Off Printer Backup (S-1)",  A_UBL_S1)
+  SM_A(UI_T_SUB_ACTIVATE_UBL_G29_A,      A_G29_ON),
+  SM_A(UI_T_SUB_DEACTIVATE_UBL_G29_D,    A_G29_OFF),
+  SM_A(UI_T_SUB_BED_MESH_LUOI,           A_GOTO_MESH),       // trang BED MESH: luoi + G29 P1/P3/P4/SAVE
+  SM_A(UI_T_SUB_MANUALLY_BUILD_MESH,       A_G29_UBL_MANUAL),  // G29 I999 + G29 P2BT0 (12864)
+  SM_A(UI_T_SUB_FILL_IN_MESH_G29_P3,     A_G29_FILL),
+  SM_A(UI_T_SUB_FINE_TUNE_ALL_G29_P4RT,  A_G29_FT),
+  SM_A(UI_T_SUB_SAVE_BED_MESH_G29_S0,    A_G29_SAVE),
+  SM_A(UI_T_SUB_OUTPUT_UBL_INFO_G29_W,   A_G29_INFO),
+  SM_A(UI_T_SUB_OUTPUT_FOR_HOST_G29_T0,  A_UBL_T0),
+  SM_A(UI_T_SUB_OUTPUT_FOR_CSV_G29_T1,   A_UBL_T1),
+  SM_A(UI_T_SUB_OFF_PRINTER_BACKUP_S_1,  A_UBL_S1)
   // 2026-10-15: BO dong "Fade Height" (12864 co trong nhom UBL) - da chuyen sang CONFIGURATION.
 };
 
@@ -311,32 +315,32 @@ static const sm_item_t SM_I_UBL[] = {
 // Dong cua ngon ngu DANG DUNG khong bi chan: bam lai chi la "khong doi" (A_LANG_* kiem tra truoc khi
 // dung lai man hinh). Nhan biet dang o ngon ngu nao: xem chu tren chinh man hinh (hoac `UI LANG` COM8).
 static const sm_item_t SM_I_LANG[] = {
-  SM_A("Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t", A_LANG_VI),
-  SM_A("English",                          A_LANG_EN)
+  SM_A(UI_T_LANG_VI, A_LANG_VI),
+  SM_A(UI_T_LANG_EN,                          A_LANG_EN)
 };
 
 #define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
 // Thu tu trong bang KHONG quan trong (moi nhom tro bang ten SMG_*), nhung de doc thi xep theo cay.
 static const sm_group_t SM_GROUPS[SMG_COUNT] = {
-  [SMG_ROOT]      = { "CAU HINH",     SM_PARENT_NONE, SM_I_ROOT,      SM_N(SM_I_ROOT) },
-  [SMG_ADV]       = { "ADVANCED",     SMG_ROOT,       SM_I_ADV,       SM_N(SM_I_ADV) },
-  [SMG_SPEED]     = { "MAX SPEED",    SMG_ADV,        SM_I_SPEED,     SM_N(SM_I_SPEED) },
-  [SMG_ACCEL]     = { "ACCEL",        SMG_ADV,        SM_I_ACCEL,     SM_N(SM_I_ACCEL) },
-  [SMG_JERK]      = { "JERK",         SMG_ADV,        SM_I_JERK,      SM_N(SM_I_JERK) },
-  [SMG_PROBE]     = { "PROBE OFFSET", SMG_ADV,        SM_I_PROBE,     SM_N(SM_I_PROBE) },
-  [SMG_STEPS]     = { "STEPS/MM",     SMG_ADV,        SM_I_STEPS,     SM_N(SM_I_STEPS) },
-  [SMG_TMC]       = { "TMC DRIVERS",  SMG_ADV,        SM_I_TMC,       SM_N(SM_I_TMC) },
-  [SMG_TMC_CUR]   = { "DRIVER I",     SMG_TMC,        SM_I_TMC_CUR,   SM_N(SM_I_TMC_CUR) },
-  [SMG_STEPMODE]  = { "STEP MODE",    SMG_TMC,        SM_I_STEPMODE,  SM_N(SM_I_STEPMODE) },
-  [SMG_TEMP]      = { "TEMP (ADV)",   SMG_ADV,        SM_I_TEMP,      SM_N(SM_I_TEMP) },
-  [SMG_FILAMENT]  = { "FILAMENT",     SMG_ADV,        SM_I_FILAMENT,  SM_N(SM_I_FILAMENT) },
-  [SMG_TUNE]      = { "TUNE",         SMG_ADV,        SM_I_TUNE,      SM_N(SM_I_TUNE) },
-  [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
-  [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) },
-  [SMG_MOTION]    = { "MOTION",       SM_PARENT_NONE, SM_I_MOTION,    SM_N(SM_I_MOTION) },
-  [SMG_UBL]       = { "UBL",          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) },
+  [SMG_ROOT]      = { UI_T_SMG_CAU_HINH,     SM_PARENT_NONE, SM_I_ROOT,      SM_N(SM_I_ROOT) },
+  [SMG_ADV]      = { UI_T_SMG_ADVANCED,     SMG_ROOT,       SM_I_ADV,       SM_N(SM_I_ADV) },
+  [SMG_SPEED]      = { UI_T_SMG_MAX_SPEED,    SMG_ADV,        SM_I_SPEED,     SM_N(SM_I_SPEED) },
+  [SMG_ACCEL]      = { UI_T_SMG_ACCEL,        SMG_ADV,        SM_I_ACCEL,     SM_N(SM_I_ACCEL) },
+  [SMG_JERK]      = { UI_T_SMG_JERK,         SMG_ADV,        SM_I_JERK,      SM_N(SM_I_JERK) },
+  [SMG_PROBE]      = { UI_T_SMG_PROBE_OFFSET, SMG_ADV,        SM_I_PROBE,     SM_N(SM_I_PROBE) },
+  [SMG_STEPS]      = { UI_T_SMG_STEPS_MM,     SMG_ADV,        SM_I_STEPS,     SM_N(SM_I_STEPS) },
+  [SMG_TMC]      = { UI_T_SMG_TMC_DRIVERS,  SMG_ADV,        SM_I_TMC,       SM_N(SM_I_TMC) },
+  [SMG_TMC_CUR]      = { UI_T_SMG_DRIVER_I,     SMG_TMC,        SM_I_TMC_CUR,   SM_N(SM_I_TMC_CUR) },
+  [SMG_STEPMODE]      = { UI_T_SMG_STEP_MODE,    SMG_TMC,        SM_I_STEPMODE,  SM_N(SM_I_STEPMODE) },
+  [SMG_TEMP]      = { UI_T_SMG_TEMP_ADV,   SMG_ADV,        SM_I_TEMP,      SM_N(SM_I_TEMP) },
+  [SMG_FILAMENT]      = { UI_T_SMG_FILAMENT,     SMG_ADV,        SM_I_FILAMENT,  SM_N(SM_I_FILAMENT) },
+  [SMG_TUNE]      = { UI_T_SMG_TUNE,         SMG_ADV,        SM_I_TUNE,      SM_N(SM_I_TUNE) },
+  [SMG_CTRLFAN]      = { UI_T_SMG_CTRL_FAN,     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
+  [SMG_PREHEAT]      = { UI_T_SMG_PREHEAT,      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) },
+  [SMG_MOTION]      = { UI_T_SMG_MOTION,       SM_PARENT_NONE, SM_I_MOTION,    SM_N(SM_I_MOTION) },
+  [SMG_UBL]      = { UI_T_SMG_UBL,          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) },
   // Nhom NGON NGU: tieu de "LANGUAGE" giong nhau o ca 2 ngon ngu (giong cac nhom khac: ADVANCED/MOTION/UBL).
-  [SMG_LANG]      = { "LANGUAGE",     SMG_ADV,        SM_I_LANG,      SM_N(SM_I_LANG) }
+  [SMG_LANG]      = { UI_T_SMG_LANGUAGE,     SMG_ADV,        SM_I_LANG,      SM_N(SM_I_LANG) }
 };
 
 // ===========================================================================
@@ -437,7 +441,7 @@ void page_submenu_create(lv_obj_t *p) {
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
     // Dong SM_PRE lay TEN tu kho preheat (khong phai it->name) -> giu con tro nhan de update ghi lai.
-    s_sm->nm[s_sm->n] = mk_label(r, it->name, MR_MENU);
+    s_sm->nm[s_sm->n] = mk_label(r, T((ui_text_t)it->name_id), MR_MENU);
     lv_obj_align(s_sm->nm[s_sm->n], LV_ALIGN_LEFT_MID, 4, 0);
     // Cot phai: nhom con -> ICON chevron (font ICON, KHONG phai chu ">"), dong sua duoc -> gia tri.
     // YEU CAU NGUOI DUNG 2026-10-15: "viec hien thi menu co submenu voi '>' qua xau, hay ve icon font
@@ -588,7 +592,7 @@ uint8_t submenu_parent(void) {
 }
 
 const char *submenu_title(void) {
-  return (s_sm_g < SMG_COUNT) ? SM_GROUPS[s_sm_g].title : "CAU HINH";
+  return (s_sm_g < SMG_COUNT) ? T((ui_text_t)SM_GROUPS[s_sm_g].title_id) : T(UI_T_SMG_CAU_HINH);
 }
 
 void submenu_reset_root(void) {
@@ -628,7 +632,7 @@ void submenu_dump(const char *arg) {
     uint8_t vis = 0;
     for (uint8_t k = 0; k < G->n; k++) if (sm_item_visible(&G->items[k])) vis++;
     Serial.printf("[UI] CFG %*s[%u] %-13s cha=%-3u dong=%u/%u%s\n",
-                  (int)(2 * depth), "", (unsigned)i, G->title, (unsigned)G->parent,
+                  (int)(2 * depth), "", (unsigned)i, T((ui_text_t)G->title_id), (unsigned)G->parent,
                   (unsigned)vis, (unsigned)G->n, vis ? "" : "  (RONG -> dong menu tro toi no bi an)");
     if (!one) continue;
     for (uint8_t k = 0; k < G->n; k++) {
@@ -636,7 +640,7 @@ void submenu_dump(const char *arg) {
       if (!sm_item_visible(it)) continue;
       if (it->kind == SM_VAL) {
         const bool ok = settings_fmt_cur(b, sizeof(b), it->arg);
-        Serial.printf("[UI] CFG     %-24s VAL id=%-3u = %s\n", it->name, (unsigned)it->arg,
+        Serial.printf("[UI] CFG     %-24s VAL id=%-3u = %s\n", T((ui_text_t)it->name_id), (unsigned)it->arg,
                       ok ? b : "(khong co gia tri)");
       }
       else if (it->kind == SM_PRE) {
@@ -651,7 +655,7 @@ void submenu_dump(const char *arg) {
         else Serial.printf("[UI] CFG     %-24s PRE slot=%u = (chua co vat lieu)\n",
                            "-", (unsigned)it->arg);
       }
-      else Serial.printf("[UI] CFG     %-24s %s %u\n", it->name,
+      else Serial.printf("[UI] CFG     %-24s %s %u\n", T((ui_text_t)it->name_id),
                          it->kind == SM_SUB ? "SUB ->" : "ACT", (unsigned)it->arg);
     }
   }

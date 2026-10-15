@@ -10,12 +10,22 @@
  *   - Font: `gfx4_font_text` (Segoe UI 16) DA co ASCII + tieng Viet => VI <-> EN KHONG can sinh lai font.
  *     Ngon ngu co chu moi (Thai/CJK...) thi phai sinh lai font va font se phinh rat nhanh -> khong lam.
  *
- * CACH THEM 1 CHUOI MOI (3 buoc, `tools/check_lang.py` se bao neu thieu):
+ * CACH THEM 1 CHUOI MOI (2 buoc, `tools/check_lang.py` se bao neu thieu):
  *   1) Them 1 dong vao `typedef enum` duoi day (NGAY TRUOC `UI_T_COUNT`);
- *   2) Them `[UI_T_...] = "..."` vao `ui_lang_vi.h`;
- *   3) Them `[UI_T_...] = "..."` vao `ui_lang_en.h`.
- *   Dung KHOI TAO CO TEN (`[ID] =`) nen THU TU trong 2 bang KHONG quan trong; o nao thieu se la NULL
- *   (checker bao loi, va luc chay `ui_t()` tu roi ve tieng Viet).
+ *   2) Them `[UI_T_...] = "..."` vao `ui_lang_vi.h`.
+ *   Dung KHOI TAO CO TEN (`[ID] =`) nen THU TU trong bang KHONG quan trong; o nao thieu se la NULL.
+ *
+ * ⚠️ CHINH SACH 2 BANG (doi 2026-10-15, batch 2 - ly do o duoi):
+ *   - `UI_STR_VI` = **BANG GOC, PHAI DAY DU**. Day la ban dich mac dinh (panel mac dinh tieng Viet) va
+ *     cung la BAN DU PHONG: ID nao thieu o bang khac thi lay chuoi o day.
+ *   - `UI_STR_EN` = **BANG GHI DE, duoc phep THIEU dong**. ID nao KHONG co trong bang EN thi `ui_t()`
+ *     tu lay chuoi tieng Viet -> dung y nghia "chuoi nay giong het o 2 ngon ngu".
+ *   LY DO: phan lon ten trong menu Configuration la THUAT NGU TIENG ANH da dung chung cho ca 2 ngon ngu
+ *   ("Max X Speed", "Stepper Current", "Activate UBL (G29 A)"...) nen chep lai y nguyen vao bang EN chi
+ *   tao ra ~130 dong TRUNG LAP vo nghia. Chi nhung chuoi THAT SU khac moi can ghi vao `ui_lang_en.h`.
+ *   DOI LAI (da biet truoc): checker KHONG the tu phat hien "quen dich" - vi vay co lenh
+ *   `python tools/check_lang.py --fallback` de IN RA danh sach ID dang dung chung ban VI; MOI BATCH phai
+ *   doc danh sach do mot lan de chac chan khong co chu tieng Viet lot vao ban tieng Anh.
  *
  * CHUOI NAO KHONG DICH (giu nguyen trong ca 2 bang):
  *   - G-code, ten frame/khoa NVS, HTML/HTTP, log chan doan `[UI] ...` tren COM8, ten trang cho console
@@ -37,6 +47,12 @@ enum {
 
 // ---------------------------------------------------------------------------
 //  ID chuoi. `UI_T_NONE` = 0 de mang khoi tao bang 0 la NULL het (de phat hien thieu).
+// ---------------------------------------------------------------------------
+//  Kieu 1 dong cua bang GHI DE (xem ui_lang_en.h: bang EN co tinh chi ghi MOT SO dong nen PHAI dung
+//  danh sach cap nay - GCC cua xtensa khong nhan khoi tao co ten khi co khoang trong).
+// ---------------------------------------------------------------------------
+typedef struct { uint16_t id; const char *s; } ui_lang_ovr_t;
+
 // ---------------------------------------------------------------------------
 typedef enum {
   UI_T_NONE = 0,
@@ -95,9 +111,142 @@ typedef enum {
   UI_T_CAL_HOLDING,               // "dang giu"
 
   // ---- ui_lang.cpp: ten ngon ngu (ENDONYM - co tinh KHONG dich: luon hien o dang goc) ----
+
+  // ---- ui_page_submenu.cpp: ten dong menu con (ID sinh tu chinh chuoi tieng Viet) ----
+  UI_T_SUB_ADVANCED_SETTINGS,
+  UI_T_SUB_PROBE_Z_OFFSET,
+  UI_T_SUB_FADE_HEIGHT,
+  UI_T_SUB_CONTROLLER_FAN,
+  UI_T_SUB_PREHEAT,
+  UI_T_SUB_STORE_SETTINGS_M500,
+  UI_T_SUB_LOAD_SETTINGS_M501,
+  UI_T_SUB_RESTORE_DEFAULTS_M502,
+  UI_T_SUB_ALL_SETTINGS_TABLE,
+  UI_T_SUB_MAX_SPEED,
+  UI_T_SUB_ACCELERATION,
+  UI_T_SUB_JERK,
+  UI_T_SUB_PROBE_OFFSETS,
+  UI_T_SUB_STEPS_MM,
+  UI_T_SUB_TMC_DRIVERS,
+  UI_T_SUB_TEMPERATURE,
+  UI_T_SUB_FILAMENT,
+  UI_T_SUB_TUNE_RUNTIME,
+  UI_T_SUB_LANGUAGE,
+  UI_T_SUB_HOME_OFFSET_X,
+  UI_T_SUB_HOME_OFFSET_Y,
+  UI_T_SUB_MAX_X_SPEED,
+  UI_T_SUB_MAX_Y_SPEED,
+  UI_T_SUB_MAX_Z_SPEED,
+  UI_T_SUB_MAX_E_SPEED,
+  UI_T_SUB_MIN_VELOCITY,
+  UI_T_SUB_MIN_TRAVEL_SPEED,
+  UI_T_SUB_ACCEL_PRINT,
+  UI_T_SUB_RETRACT_ACCEL,
+  UI_T_SUB_TRAVEL_ACCEL,
+  UI_T_SUB_MAX_X_ACCEL,
+  UI_T_SUB_MAX_Y_ACCEL,
+  UI_T_SUB_MAX_Z_ACCEL,
+  UI_T_SUB_MAX_E_ACCEL,
+  UI_T_SUB_MAX_X_JERK,
+  UI_T_SUB_MAX_Y_JERK,
+  UI_T_SUB_MAX_Z_JERK,
+  UI_T_SUB_MAX_E_JERK,
+  UI_T_SUB_JUNCTION_DEV,
+  UI_T_SUB_LINEAR_ADV_E,
+  UI_T_SUB_PROBE_X_OFFSET,
+  UI_T_SUB_PROBE_Y_OFFSET,
+  UI_T_SUB_Z_PROBE_WIZARD_M851_Z,
+  UI_T_SUB_X_STEPS_MM,
+  UI_T_SUB_Y_STEPS_MM,
+  UI_T_SUB_Z_STEPS_MM,
+  UI_T_SUB_E_STEPS_MM,
+  UI_T_SUB_DRIVER_CURRENT,
+  UI_T_SUB_STEPPING_MODE,
+  UI_T_SUB_X_CURRENT_MA,
+  UI_T_SUB_Y_CURRENT_MA,
+  UI_T_SUB_Z_CURRENT_MA,
+  UI_T_SUB_Z2_CURRENT_MA,
+  UI_T_SUB_Z3_CURRENT_MA,
+  UI_T_SUB_E0_CURRENT_MA,
+  UI_T_SUB_X_STEALTHCHOP,
+  UI_T_SUB_Y_STEALTHCHOP,
+  UI_T_SUB_Z_STEALTHCHOP,
+  UI_T_SUB_Z2_STEALTHCHOP,
+  UI_T_SUB_Z3_STEALTHCHOP,
+  UI_T_SUB_E0_STEALTHCHOP,
+  UI_T_SUB_MPC_HEATER_POWER,
+  UI_T_SUB_MPC_BLOCK_HEAT_CAP,
+  UI_T_SUB_MPC_SENSOR_RESP,
+  UI_T_SUB_MPC_AMBIENT_XFER,
+  UI_T_SUB_MPC_AMBIENT_FAN,
+  UI_T_SUB_MPC_FILAMENT_HEAT,
+  UI_T_SUB_MPC_AUTOTUNE_M306_T,
+  UI_T_SUB_BED_PID_P,
+  UI_T_SUB_BED_PID_I,
+  UI_T_SUB_BED_PID_D,
+  UI_T_SUB_BED_PID_AUTOTUNE_M303,
+  UI_T_SUB_HOTEND_PID_P,
+  UI_T_SUB_HOTEND_PID_I,
+  UI_T_SUB_HOTEND_PID_D,
+  UI_T_SUB_E_IN_MM3_VOLUMETRIC,
+  UI_T_SUB_FILAMENT_DIAMETER,
+  UI_T_SUB_UNLOAD_LENGTH_MM,
+  UI_T_SUB_LOAD_LENGTH_MM,
+  UI_T_SUB_RUNOUT_SENSOR,
+  UI_T_SUB_FEED,
+  UI_T_SUB_FLOW,
+  UI_T_SUB_FAN_E0,
+  UI_T_SUB_TARGET_E0_C,
+  UI_T_SUB_TARGET_BED_C,
+  UI_T_SUB_IDLE_SPEED,
+  UI_T_SUB_AUTO_MODE,
+  UI_T_SUB_ACTIVE_SPEED,
+  UI_T_SUB_IDLE_PERIOD_S,
+  UI_T_SUB_PRE_MATERIAL,
+  UI_T_SUB_THEM_VAT_LIEU,
+  UI_T_SUB_MOVE_AXIS_JOG,
+  UI_T_SUB_Z_PROBE_WIZARD,
+  UI_T_SUB_TRAMMING_WIZARD,
+  UI_T_SUB_UNIFIED_BED_LEVELING,
+  UI_T_SUB_LEVEL_BED_G29_N,
+  UI_T_SUB_DEPLOY_Z_PROBE_M401,
+  UI_T_SUB_STOW_Z_PROBE_M402,
+  UI_T_SUB_ENDSTOPS_M119,
+  UI_T_SUB_M48_PROBE_TEST_G28_O_M48,
+  UI_T_SUB_DISABLE_STEPPERS_M84,
+  UI_T_SUB_ACTIVATE_UBL_G29_A,
+  UI_T_SUB_DEACTIVATE_UBL_G29_D,
+  UI_T_SUB_BED_MESH_LUOI,
+  UI_T_SUB_MANUALLY_BUILD_MESH,
+  UI_T_SUB_FILL_IN_MESH_G29_P3,
+  UI_T_SUB_FINE_TUNE_ALL_G29_P4RT,
+  UI_T_SUB_SAVE_BED_MESH_G29_S0,
+  UI_T_SUB_OUTPUT_UBL_INFO_G29_W,
+  UI_T_SUB_OUTPUT_FOR_HOST_G29_T0,
+  UI_T_SUB_OUTPUT_FOR_CSV_G29_T1,
+  UI_T_SUB_OFF_PRINTER_BACKUP_S_1,
+  // ---- ui_page_submenu.cpp: TIEU DE cac nhom (ten nhom hien o dong tieu de) ----
+  UI_T_SMG_CAU_HINH,
+  UI_T_SMG_ADVANCED,
+  UI_T_SMG_MAX_SPEED,
+  UI_T_SMG_ACCEL,
+  UI_T_SMG_JERK,
+  UI_T_SMG_PROBE_OFFSET,
+  UI_T_SMG_STEPS_MM,
+  UI_T_SMG_TMC_DRIVERS,
+  UI_T_SMG_DRIVER_I,
+  UI_T_SMG_STEP_MODE,
+  UI_T_SMG_TEMP_ADV,
+  UI_T_SMG_FILAMENT,
+  UI_T_SMG_TUNE,
+  UI_T_SMG_CTRL_FAN,
+  UI_T_SMG_PREHEAT,
+  UI_T_SMG_MOTION,
+  UI_T_SMG_UBL,
+  UI_T_SMG_LANGUAGE,
+
   UI_T_LANG_VI,                   // "Tiếng Việt"
   UI_T_LANG_EN,                   // "English"
-
   UI_T_COUNT
 } ui_text_t;
 
@@ -126,10 +275,14 @@ bool ui_lang_set(uint8_t idx);
 void ui_lang_load(void);
 
 /**
- * CHAN DOAN (lenh `UI LANG?`): chuoi CUA MOT ngon ngu CU THE, va so ID THIEU trong bang do.
- * `ui_lang_str()` tra NULL khi ID do thieu ban dich (khac `ui_t()` - ham do tu roi ve tieng Viet).
- * Dung de kiem tra "bang nao con thieu dong nao" ngay tren may; tren PC thi `tools/check_lang.py`
- * in ra TEN ID (UI_T_...) chu khong chi so.
+ * CHAN DOAN (lenh `UI LANG?`): chuoi CUA MOT ngon ngu CU THE, va so ID KHONG co chuoi rieng trong bang do.
+ * `ui_lang_str()` tra NULL khi ID do khong co ban dich rieng (khac `ui_t()` - ham do tu roi ve tieng Viet).
+ * Y NGHIA `ui_lang_missing()` theo chinh sach 2 bang (xem ghi chu dau file):
+ *   - voi `UI_LANG_VI`: la LOI (bang goc phai day du);
+ *   - voi `UI_LANG_EN`: la HOP LE - so chuoi dung chung ban tieng Viet.
+ * Tren PC thi `tools/check_lang.py` (va `--fallback`) kiem tra/in ra TEN ID.
  */
 const char *ui_lang_str(uint8_t lang, ui_text_t id);
 uint16_t    ui_lang_missing(uint8_t lang);
+/** So ID CO chuoi RIENG trong bang cua ngon ngu do (VI: phai = UI_T_COUNT - 1). */
+uint16_t    ui_lang_str_count(uint8_t lang);

@@ -2234,12 +2234,25 @@ marlin, cách làm như thế nào thì ổn nhất?"* → đã chọn **B1 + B2
 ```c
 // ui_lang.h
 typedef enum { UI_T_NONE = 0, UI_T_CHROME_BACK, /*...*/ UI_T_COUNT } ui_text_t;
+typedef struct { uint16_t id; const char *s; } ui_lang_ovr_t;   // 1 dong cua bang GHI DE
 const char *ui_t(ui_text_t id);          // chuoi theo ngon ngu dang chon, KHONG BAO GIO NULL
 #define T(id) ui_t(id)
 
-// ui_lang_vi.h / ui_lang_en.h  (const -> FLASH; khoi tao CO TEN nen thu tu khong quan trong)
-const char *const UI_STR_VI[UI_T_COUNT] = { [UI_T_CHROME_BACK] = "BACK", /*...*/ };
+// ui_lang_vi.h  = BANG GOC, day du, LIEN MACH theo enum (const -> FLASH, khoi tao co ten)
+const char *const UI_STR_VI[UI_T_COUNT] = { [UI_T_NONE] = nullptr, [UI_T_CHROME_BACK] = "BACK", /*...*/ };
+
+// ui_lang_en.h  = BANG GHI DE: chi nhung chuoi KHAC tieng Viet (VD 24 dong / 175 ID)
+const ui_lang_ovr_t UI_OVR_EN[] = { { UI_T_SUB_THEM_VAT_LIEU, "+ Add material" }, /*...*/ };
 ```
+
+**Chính sách 2 bảng (đổi ở batch 2):** bảng **VI là bảng gốc** (phải đầy đủ — cũng là bản dự phòng); bảng
+**EN chỉ ghi đè** — ID nào không có trong EN thì `ui_t()` tự lấy chuỗi tiếng Việt, đúng nghĩa *"chuỗi này
+giống hệt ở 2 ngôn ngữ"*. Lý do: ~150/175 chuỗi của panel là **thuật ngữ tiếng Anh** dùng chung
+(`Max X Speed`, `Activate UBL (G29 A)`, `Bed PID-P`…), chép lại y nguyên vào bảng EN chỉ tạo ra ~150 dòng
+trùng lặp vô nghĩa. **Đổi lại (đã biết trước):** checker *không* tự phát hiện được "quên dịch" — nên có
+`python tools/check_lang.py --fallback` in ra danh sách ID đang dùng chung bản VI, **mỗi batch phải đọc
+danh sách đó một lần** để chắc không lọt chữ tiếng Việt vào bản tiếng Anh.
+
 * Marlin dùng **struct 1 ngôn ngữ** + `GET_TEXT(MSG)` (tam phân runtime) vì số chuỗi ít; panel có ~600
   chuỗi nên dùng **ID + mảng** — thêm ngôn ngữ = thêm 1 file, và **kiểm tra được** bằng script.
 * Đổi ngôn ngữ: `ui_lang_set()` ghi NVS (`Preferences` namespace **`"ui"`**, khoá **`"lang"`**) rồi
@@ -2251,15 +2264,23 @@ const char *const UI_STR_VI[UI_T_COUNT] = { [UI_T_CHROME_BACK] = "BACK", /*...*/
 * Tên trang cho **console** tách khỏi tên trang **hiển thị**: `PG_KEY[]` (KHÔNG dịch, `UI MENU`/`UI ENDSTOP`/
   `UI ?` giữ nguyên ở mọi ngôn ngữ) vs `PG_TITLE_ID[]` (dịch được). Tên tiếng Anh của trang chọn **NGẮN**
   (`TEMP`/`MEDIA`/`MESH`/`SETTINGS`/`CONFIG`) vì ô tiêu đề rộng **cố định 84 px** (`TITLE_W`).
+* Menu Configuration (`ui_page_submenu.cpp`) cũng đã chuyển sang ID: `sm_item_t.name_id` và
+  `sm_group_t.title_id` là `ui_text_t` (**2 B**) thay cho con trỏ chuỗi (**4 B**) — vừa dịch được, vừa
+  **tiết kiệm flash**.
 * Chuỗi **không** đưa vào bảng: G-code, khoá NVS, log chẩn đoán `[UI] …`, HTML/HTTP, tên frame protocol,
   ký hiệu (`II`/`[]`/`ON`/`OFF`/`TBT`/`PUSH`/`NVS`/`MAX`/`MIN`) và **endonym** (`Tiếng Việt`/`English`).
 
-### ⚠️ 3 cái bẫy đã gặp thật
+### ⚠️ 4 cái bẫy đã gặp thật
 
-1. **GCC (xtensa, `-std=gnu++11`) không nhận khởi tạo có tên nếu THIẾU chỉ số ĐẦU TIÊN**:
-   `sorry, unimplemented: non-trivial designated initializers not supported`. ⇒ Mỗi bảng **phải có dòng
-   `[UI_T_NONE] = nullptr`** ở đầu (đã thử trên compiler thật để xác nhận: có dòng đó thì biên dịch được,
-   bỏ đi là lỗi ngay).
+1. **GCC (xtensa, `-std=gnu++11`) chỉ nhận khởi tạo có tên khi các chỉ số TĂNG DẦN và LIỀN MẠCH**:
+   * thiếu chỉ số **đầu tiên** → `sorry, unimplemented: non-trivial designated initializers not supported`;
+   * **có khoảng trống** (bỏ qua vài chỉ số) → cũng lỗi y vậy;
+   * chỉ số **đi ngược** → cũng lỗi.
+   Đã thử trực tiếp trên compiler thật để chốt: `{ [A0]=0,[A1]="a",[A3]="c" }` ❌ ·
+   `{ [A0]=0,[A1]="a",[A2]="b" }` ✅. ⇒ Bảng gốc (VI) **đầy đủ + liền mạch** nên dùng `[ID] = "..."` được;
+   bảng **ghi đè (EN)** có khoảng trống nên **phải** dùng **danh sách cặp `{id, chuoi}`** (không có khởi
+   tạo có tên ⇒ không bị ràng buộc thứ tự). `check_lang.py` kiểm luôn thứ tự/liền mạch của bảng VI để báo
+   trước khi build.
 2. **Đừng tin log COM8 khi kiểm chữ có dấu**: `System.IO.Ports.SerialPort.ReadExisting()` giải mã
    **ASCII** nên mọi byte ≥ 0x80 thành `?` — log hiện `Ti???ng Vi???t` **không** có nghĩa là màn hình sai.
    Cách kiểm đúng: đọc **byte thô** rồi in hex. Đã đo được đúng chuỗi UTF-8 trên dây:
@@ -2267,37 +2288,40 @@ const char *const UI_STR_VI[UI_T_COUNT] = { [UI_T_CHROME_BACK] = "BACK", /*...*/
 3. `lv_obj_add_flag/clear_flag(HIDDEN)` **luôn** invalidate + đánh dấu layout lại — nếu gọi vô điều kiện
    mỗi lượt vẽ thì **cả trang vẽ lại qua SPI** (xem cảnh báo ở mục ENDSTOP: lượt cập nhật từ 0,1 ms nhảy
    lên 27 ms). Nguyên tắc chung: **luôn so sánh trạng thái trước khi ghi** style/cờ.
+4. Thêm ID mới vào **giữa** enum mà quên dòng trong bảng VI ⇒ mọi chuỗi phía sau **lệch một bậc** (im
+   lặng, không lỗi build). Vì vậy `check_lang.py` so **đúng vị trí** từng dòng với enum (không chỉ đếm).
 
 ### Kiểm tra tự động — `tools/check_lang.py`
 
 ```bash
 cd cydlcd
-python tools/check_lang.py              # 2 bang phai day du (dung truoc khi commit)
+python tools/check_lang.py              # bang GOC phai day du + dung vi tri; bang ghi de phai hop le
+python tools/check_lang.py --fallback   # 🚨 in ra ID dang DUNG CHUNG ban VI (soi "quen dich" moi batch)
 python tools/check_lang.py --hardcoded  # + so do TIEN DO chuyen doi (chuoi hien thi con hard-code)
 ```
-Script đọc `ui_lang.h` (enum) rồi đối chiếu **cả 2 bảng**: thiếu dòng / ID lạ / chuỗi rỗng / khai báo 2 lần
-→ **exit code 1**. `--hardcoded` in bảng xếp hạng theo file (dùng để theo dõi B2).
+Script đọc `ui_lang.h` (enum) rồi kiểm: bảng VI **thiếu dòng / thừa / sai vị trí / chuỗi rỗng / khai 2 lần**
+và bảng EN **ID lạ / trùng / rỗng** → **exit code 1**. `--hardcoded` in bảng xếp hạng theo file (theo dõi B2).
 
 ### Trạng thái (cập nhật mỗi batch)
 
 | Batch | Phạm vi | Trạng thái |
 |---|---|---|
-| **B1** | Khung `ui_lang.*` + `UI LANG` + `check_lang.py` + mục **Language** trong menu + NVS | ✅ **xong, đã kiểm trên máy** (bảng 45/45 chuỗi, cả 2 ngôn ngữ) |
-| **B2** | Chuyển chuỗi hiển thị sang `T(id)`: **ui_chrome.cpp** (BACK/PREV/NEXT/`TRANG %d/%d`), **PG_TITLE**, **ui_page_menu.cpp** (10 dòng + cột giá trị + dòng `Calibrate touch`) | ✅ **xong batch 1** — còn ~15 file (ui_page_submenu 179 · ui_lvgl 152 · ui_page_settings 125 · ui_page_files 77 · …) |
-| **B3** | Bảng **English** đầy đủ + đổi VI/EN trên máy | 🔄 Làm song song từng batch (bảng EN phải đủ 100% ở mỗi batch thì checker mới xanh) |
+| **B1** | Khung `ui_lang.*` + `UI LANG` + `check_lang.py` + mục **Language** trong menu + NVS | ✅ **xong, đã kiểm trên máy** (45/45 chuỗi) |
+| **B2+batch1** | `ui_chrome.cpp` (BACK/PREV/NEXT/`TRANG %d/%d`) · `PG_TITLE` · `ui_page_menu.cpp` (10 dòng + cột giá trị + `Calibrate touch`) | ✅ xong, đã kiểm |
+| **B2+batch2** | **`ui_page_submenu.cpp`** — TOÀN BỘ cây Configuration: 111 tên dòng + 18 tiêu đề nhóm, `sm_item_t.name_id`/`sm_group_t.title_id` = ID 2 B | ✅ **xong, đã kiểm trên máy** (VI y nguyên như trước; EN: `CONFIGURATION`, `TEMP`, `+ Add material`…) |
+| **B3** | Bảng EN: 24 dòng ghi đè (phần còn lại dùng chung bản VI - thuật ngữ tiếng Anh) | ✅ đủ cho tới batch 2 |
+| Còn lại | `ui_lvgl.cpp` (~152) · `ui_page_settings.cpp` (125) · `ui_page_files.cpp` (77) · `ui_page_info.cpp` (45) · `ui_page_wifi.cpp` (42) · `ui_page_mesh.cpp` (40) · `ui_boxes.cpp` (32) · `ui_widgets.cpp` (27) · `ui_page_preheat.cpp` (26) · `ui_page_tbt.cpp` (24) · `ui_page_endstop.cpp` (21) · `ui_page_temp.cpp` (20) · `ui_page_status.cpp` (16) · `ui_page_jog.cpp` (13) · `ui_page_custom.cpp` (8) · `ui_page_rate.cpp` (7) · `ui_overlay.cpp` (6) | 🔄 batch 3… |
 
 **Đã kiểm trên máy thật (COM8):**
 
 | Lệnh | Kết quả |
 |---|---|
-| `UI LANG` | `dang dung 0 = 'Tiếng Việt' (vi) \| CYDLCD_LANG_DEFAULT=0` + danh sách 2 ngôn ngữ (thiếu 0) |
-| `UI LANG?` | `vi: day du (0/45)` · `en: day du (0/45)` |
-| `UI LANG 1` + `UI MENU` + `UI BOX` | `Calibrate touch (hold 1.5s)` và `PAGE 1/2` (đổi cả dòng menu lẫn thanh đáy) |
-| `UI LANG 0` + `UI BOX` | về `Calibrate touch (giu 1.5s)` và `TRANG 1/2` |
-| `UI CFG 1` | `Language SUB -> 17`; `UI CFG 17` → `[17] LANGUAGE dong=2/2`, `Tiếng Việt ACT 47`, `English ACT 48` |
-| `UI CFG 17` + `UI HIT 1` | đổi sang EN **và vẫn ở nhóm LANGUAGE** (`nhom dang mo = 17`) — nhóm đang mở được giữ |
-| `UI LANG 1` → **reset panel** → `UI LANG` | vẫn `English` ⇒ **NVS nhớ đúng** |
-| `UI LANG 1` rồi `UI BOX` trên trang STATUS | các ô nhiệt/quạt/XYZ/tile vẫn đủ (trang dựng lại không mất trạng thái) |
+| `UI CFG 0` (VI) | `[0] CAU HINH dong=9/9` — **y hệt trước khi chuyển i18n** (không hồi quy) |
+| `UI CFG 15` (VI) | `[15] MOTION dong=10/10`, đủ 10 dòng đúng thứ tự (Endstops sau Stow Z-Probe) |
+| `UI LANG 1` + `UI CFG 0` | `[0] CONFIGURATION`, tiêu đề trang `trang 13 'CONFIGURATION'` |
+| `UI LANG 1` + `UI CFG 14` | nhóm Preheat: dòng cuối là **`+ Add material`** (VI: `+ Them vat lieu`) |
+| `UI LANG?` | `vi: day du (0/175)` · `en: chuoi rieng 24/175, dung chung ban VI 151 (hop le)` |
+| `UI LANG` / `UI LANG 0\|1` / reset | giữ nguyên các kết quả của batch 1 (NVS nhớ đúng) |
 
 ## TẮT HẲN G34 (Auto Z-Align) — `CYDLCD_NO_G34` (2026-10-15)
 

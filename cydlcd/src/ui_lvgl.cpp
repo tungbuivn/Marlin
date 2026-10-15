@@ -1005,8 +1005,9 @@ void ui_lvgl_test_lang(const char *arg) {
                   (unsigned)ui_lang_get(), ui_lang_name(ui_lang_get()), ui_lang_code(ui_lang_get()),
                   (unsigned)CYDLCD_LANG_DEFAULT);
     for (uint8_t i = 0; i < UI_LANG_COUNT; i++)
-      Serial.printf("[UI]   %u = %-2s '%s' (thieu %u)\n", (unsigned)i, ui_lang_code(i), ui_lang_name(i),
-                    (unsigned)ui_lang_missing(i));
+      Serial.printf("[UI]   %u = %-2s '%s' (chuoi rieng %u, dung chung ban VI %u)\n",
+                    (unsigned)i, ui_lang_code(i), ui_lang_name(i),
+                    (unsigned)ui_lang_str_count(i), (unsigned)ui_lang_missing(i));
     Serial.println("[UI]   doi: `UI LANG <so>` | kiem tra thieu ban dich: `UI LANG?`");
     return;
   }
@@ -1015,13 +1016,15 @@ void ui_lvgl_test_lang(const char *arg) {
                   (unsigned)UI_T_COUNT, (unsigned)(UI_T_COUNT - 1));
     for (uint8_t l = 0; l < UI_LANG_COUNT; l++) {
       const uint16_t miss = ui_lang_missing(l);
-      Serial.printf("[UI]   %s: %s (%u/%u)\n", ui_lang_code(l),
-                    miss ? "THIEU" : "day du", (unsigned)miss, (unsigned)(UI_T_COUNT - 1));
-      if (!miss) continue;
-      for (uint16_t i = UI_T_NONE + 1; i < UI_T_COUNT; i++)
-        if (!ui_lang_str(l, (ui_text_t)i))
-          Serial.printf("[UI]     thieu id=%u  (VI=\"%s\")\n",
-                        (unsigned)i, ui_lang_str(UI_LANG_VI, (ui_text_t)i));
+      // Chinh sach (xem ui_lang.h): bang VI phai DAY DU; bang EN duoc thieu (dung chung ban VI).
+      if (l == UI_LANG_VI)
+        Serial.printf("[UI]   %s: %s (%u/%u)\n", ui_lang_code(l),
+                      miss ? "THIEU - BANG GOC PHAI DAY DU" : "day du",
+                      (unsigned)miss, (unsigned)(UI_T_COUNT - 1));
+      else
+        Serial.printf("[UI]   %s: chuoi rieng %u/%u, dung chung ban VI %u (hop le)\n",
+                      ui_lang_code(l), (unsigned)ui_lang_str_count(l), (unsigned)(UI_T_COUNT - 1),
+                      (unsigned)miss);
     }
     return;
   }
