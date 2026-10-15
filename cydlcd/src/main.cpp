@@ -83,6 +83,24 @@
         if (stall == 2 || stall == 5 || stall == 10)
           Serial.printf("[CYD] CANH BAO: vong lap KHONG chay %lu s (dang o chang %u)\n",
                         (unsigned long)stall, (unsigned)s_stage);
+        // ---- WATCHDOG THEO HEARTBEAT (B4): task nao KHONG tang trong N giay => task do treo -> khoi dong lai ----
+        // VI SAO: watchdog cu chi nhin `loop()`; sau khi tach task thi `loop()` co the van chay trong khi task
+        // `ui`/`net`/`link` da chet (man hinh dung hinh / khong phuc vu Marlin nua).
+        {
+          static uint32_t hb_l = 0, hb_u = 0, hb_n = 0;
+          static uint16_t n_l = 0, n_u = 0, n_n = 0;
+          if (g_hb_link != hb_l) { hb_l = g_hb_link; n_l = 0; } else if (++n_l >= 5) {
+            Serial.printf("[CYD] task link TREO > 5 s -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          }
+          if (g_hb_ui != hb_u) { hb_u = g_hb_ui; n_u = 0; } else if (++n_u >= 5) {
+            Serial.printf("[CYD] task ui TREO > 5 s -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          }
+          // task `net` duoc MIEN TRU khi dang nhan file (handleClient xu ly CA body, 20-30 s la binh thuong).
+          if (g_hb_net != hb_n) { hb_n = g_hb_net; n_n = 0; }
+          else if (++n_n >= 30 && !net_upload_active()) {
+            Serial.printf("[CYD] task net TREO > 30 s (khong phai upload) -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          }
+        }
         if (stall >= 15) {                         // treo qua lau -> tu phuc hoi
           Serial.printf("[CYD] TREO > 15 s o chang %u -> TU KHOI DONG LAI\n", (unsigned)s_stage);
           Serial.flush();
@@ -101,6 +119,16 @@ volatile uint32_t g_hb_link = 0, g_hb_ui = 0, g_hb_net = 0, g_hb_log = 0;
 
 // Task `net` (core 0, uu tien 4): WiFi + WebServer (nhan file 20-30 s) + the TF (mount/don/xoa) + FATFS.
 // Tach ra de phan upload KHONG con lam dung vong lap UI/console nua; va task `link` (core 1) van duoc phuc vu.
+// Task `log` (core 0, uu tien 2): IN cac dong log dang cho trong hang doi (logq). VI SAO tach: UART0
+// (115200) la tai nguyen CHAM (~43 ms cho 500 B) - de rieng mot task thi khong ai phai cho no.
+static void log_task_fn(void *) {
+  for (;;) {
+    logq_task(8);
+    g_hb_log++;
+    vTaskDelay(2);
+  }
+}
+
 static void net_task_fn(void *) {
   for (;;) {
     net_upload_http_task();
@@ -147,6 +175,8 @@ static void net_task_fn(void *) {
     // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
     // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
     if (!ui_task_start())     Serial.println("[CYD] CANH BAO: khong tao duoc task ui");
+    if (xTaskCreatePinnedToCore(log_task_fn, "log", 3072, nullptr, 2, nullptr, 0) != pdPASS)
+                              Serial.println("[CYD] CANH BAO: khong tao duoc task log");
     if (xTaskCreatePinnedToCore(net_task_fn, "net", 6144, nullptr, 4, nullptr, 0) != pdPASS)
                               Serial.println("[CYD] CANH BAO: khong tao duoc task net");
     DBGLN("cydlcd ready (LVGL, push mode) - da tach task link/ui/net");
@@ -261,8 +291,7 @@ void loop() {
     // WiFi/WebServer/the TF da sang task `net`; LVGL da sang task `ui`; UART Marlin o task `link` (core 1).
     // ===========================================================================
     s_ms[2] = 0;           // (khong con do chang link/http/ui o day nua - xem UI PERF)
-    logq_task(8);
-    g_hb_log++;
+    // Log + heartbeat da sang task `log` (xem log_task_fn).
     s_stage = 1;
     // Nhuong CPU cho cac task khac (vong lap nay uu tien thap nhat): 5 ms -> console van tra loi trong ~5 ms.
     delay(5);

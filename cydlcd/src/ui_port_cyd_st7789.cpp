@@ -503,6 +503,10 @@ void ui_port_input_init(void) {
   pinMode(CYDLCD_CYD_TOUCH_DIN, OUTPUT);
   pinMode(CYDLCD_CYD_TOUCH_DO, INPUT);                  // GPIO39 chi doc
   pinMode(CYDLCD_CYD_TOUCH_IRQ, INPUT);                 // GPIO36 chi doc, co keo len ngoai
+  // NGAT TOUCH_IRQ (thuc day task `ui` ngay khi cham): DA THU va PHAI BO - ttachInterrupt() keo them
+  // ~488 B DRAM tinh cua core Arduino (bang chan ngat), ma dram0 cua ESP32 da KIN (linker bao tran ngay).
+  // Chap nhan tre <= 33 ms (1 nhip task ui) - khong cam nhan duoc tren man 240x320. Neu sau nay co PSRAM/
+  // giam LVGL heap thi gan lai 1 dong: attachInterrupt(digitalPinToInterrupt(CYDLCD_CYD_TOUCH_IRQ), ui_task_wake_isr, FALLING);
   touch_cal_load();                                    // nap hieu chuan da luu (neu co)
   delay(50);
   // GIU TAY tren man hinh luc cap dien -> vao thang che do hieu chuan.

@@ -99,6 +99,8 @@ void ui_lvgl_test_perf(void);
 void ui_post_cmd(const char *arg);      // task khac -> hang doi (KHONG chan)
 bool ui_task_start(void);               // tao task `ui`; goi trong setup() SAU ui_lvgl_begin()
 void ui_console_dispatch(const char *a3);   // thuc thi 1 lenh UI (CHI duoc goi tu task `ui`)
+// Ngat TOUCH_IRQ (GPIO36) goi ham nay -> danh thuc task `ui` NGAY (khong doi het 33 ms). Chi board CYD co cam ung.
+void ui_task_wake_isr(void);
 
 // Heartbeat tung task (task chan doan 1 Hz doc de biet task nao treo). Dinh nghia o main.cpp.
 extern volatile uint32_t g_hb_link, g_hb_ui, g_hb_net, g_hb_log;

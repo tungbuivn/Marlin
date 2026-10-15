@@ -47,6 +47,7 @@ static void state_publish(void) {
   if (!s_state_mtx) { memcpy(&cydlcd, &s_src, sizeof(cydlcd)); return; }   // chua tao khoa (luc setup)
   if (xSemaphoreTake(s_state_mtx, 0) == pdTRUE) {
     memcpy(&cydlcd, &s_src, sizeof(cydlcd));
+    tbt_publish_locked();               // trang thai TRAMMING (`tbt`) cung duoc publish trong CUNG khoa nay
     s_pub_pending = false;
     xSemaphoreGive(s_state_mtx);
   }
@@ -81,7 +82,9 @@ static uint32_t    s_nohello_ms = 0;
 static uint32_t    s_pong_ms = 0;               // lan cuoi nhan PONG
 static uint32_t    s_pong_canh_bao_ms = 0;      // lan cuoi in canh bao "khong co PONG"
 static uint16_t    s_pong_lost = 0;             // so lan phat hien mat PONG (chan doan)
-static uint16_t    s_rx_type[0x50];             // dem frame theo LOAI (chan doan: xem UI RX)
+static uint16_t    s_rx_type[0x20];             // dem frame NHAN DUOC theo LOAI - chi 0x01..0x0F (man hinh
+                                                // khong bao gio nhan type >= 0x40: do la chieu GUI di).
+                                                // Giam tu 0x50 -> 0x20 vi DRAM tinh (dram0) cua ESP32 da kin.
 // Anh cua bo dem loi 16-bit trong cydlcd_protocol.h (cydlcd_rx_t.errors) o lan doc truoc, de biet
 // "VUA co loi moi" ma khong phai sua cydlcd_protocol.h (file do phai giu byte-identical voi ban
 // Marlin). Chi so sanh KHAC NHAU, khong cong don: bo dem 16-bit co the tran ve 0 sau 65 536 loi
@@ -141,7 +144,7 @@ uint32_t cydlcd_link_tx_dropped(void) { return s_tx_drop; }
 uint8_t cydlcd_link_tx_pending(void) { return s_txq_n; }
 
 // ---- chan doan chieu MARLIN -> MAN HINH (khai bao o cydlcd_link.h; lenh `UI RX`) ----
-uint16_t cydlcd_link_rx_count(const uint8_t type) { return (type < 0x50) ? s_rx_type[type] : 0; }
+uint16_t cydlcd_link_rx_count(const uint8_t type) { return (type < 0x20) ? s_rx_type[type] : 0; }
 uint32_t cydlcd_link_pong_age_ms(void) {
   return s_pong_ms ? (uint32_t)(cydlcd_millis() - s_pong_ms) : 0xFFFFFFFFu;
 }
@@ -360,7 +363,7 @@ static void handle_frame() {
   const uint8_t  n = s_rx.len;
   s_src.last_rx_ms = cydlcd_millis();
   s_src.linked = true;
-  if (s_rx.type < 0x50) s_rx_type[s_rx.type]++;    // chan doan: dem frame theo loai (xem UI RX)
+  if (s_rx.type < 0x20) s_rx_type[s_rx.type]++;    // chan doan: dem frame theo loai (xem UI RX)
 
   switch ((cydlcd_frame_t)s_rx.type) {
 

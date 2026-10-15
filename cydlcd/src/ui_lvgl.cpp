@@ -712,6 +712,7 @@ static void ui_lvgl_task_body(void) {
   #define UI_CMD_Q    6
   #define UI_CMD_LEN  40
   static QueueHandle_t s_cmd_q = nullptr;
+  static TaskHandle_t  s_ui_task_h = nullptr;
 #endif
 
 void ui_post_cmd(const char *arg) {
@@ -747,13 +748,27 @@ static void ui_cmd_task(void *) {
     ui_cmd_drain(3);
     ui_lvgl_task();
     g_hb_ui++;                                  // heartbeat cho task chan doan (xem main.cpp: g_hb_*)
-    vTaskDelay(pdMS_TO_TICKS(33));
+    // NHIP 30 Hz (33 ms) + THUC DAY NGAY khi co cham: cam ung bao qua ngat TOUCH_IRQ -> ui_task_wake_isr()
+    // -> ulTaskNotifyTake tra ve ngay => phan hoi cham ~1 ms thay vi cho het 33 ms.
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(33));
   }
 }
 
+// Ngat TOUCH_IRQ (GPIO36) goi ham nay -> danh thuc task `ui` ngay. PHAI co IRAM_ATTR: ngat co the chay khi
+// cache flash dang tat (vd luc ghi NVS) - khong co IRAM_ATTR la crash.
+#if defined(CYDLCD_BOARD_CYD)
+IRAM_ATTR void ui_task_wake_isr(void) {
+  BaseType_t hp = pdFALSE;
+  if (s_ui_task_h) vTaskNotifyGiveFromISR(s_ui_task_h, &hp);
+  portYIELD_FROM_ISR(hp);
+}
+#else
+void ui_task_wake_isr(void) { }
+#endif
+
 bool ui_task_start(void) {
   if (!s_cmd_q) s_cmd_q = xQueueCreate(UI_CMD_Q, UI_CMD_LEN);
-  return xTaskCreatePinnedToCore(ui_cmd_task, "ui", 8192, nullptr, 5, nullptr, 0) == pdPASS;
+  return xTaskCreatePinnedToCore(ui_cmd_task, "ui", 8192, nullptr, 5, &s_ui_task_h, 0) == pdPASS;
 }
 #endif
 

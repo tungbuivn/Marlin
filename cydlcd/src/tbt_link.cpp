@@ -21,7 +21,8 @@
 #include "cydlcd_port.h"
 #include "cydlcd_link.h"     // cydlcd_link_send_tbt_cmd() + `cydlcd` (che do PUSH, 2026-10-13)
 
-tbt_link_data_t tbt;
+tbt_link_data_t tbt;          // BAN CONG KHAI (nguoi doc: UI...)
+static tbt_link_data_t s_tbt;  // BAN GOC - chi task `link` ghi (xem tbt_publish_locked)
 
 // Trang thai bo "sniff"
 enum { TS_IDLE = 0, TS_T, TS_B, TS_T2, TS_LINE };
@@ -37,7 +38,7 @@ void tbt_link_begin(void) {
   s_len = 0;
 }
 
-bool tbt_link_active(void) { return tbt.ever; }
+bool tbt_link_active(void) { return s_tbt.ever; }
 
 // Man Marlin co nhung luc BLOCK vai giay (probe/di chuyen giua cac goc/home Z) - trong luc do cac dong
 // "TBT" co the ngung du LINK VAN TOT. Vi vay:
@@ -46,24 +47,24 @@ bool tbt_link_active(void) { return tbt.ever; }
 //   2) chu dong hoi lai bang 'Q' khi im lang >= 1 s: chieu MAN HINH CYD -> Marlin khong phu thuoc timeout va
 //      Marlin se gui lai trang thai ngay o tick ke tiep (cydlcd_tbt_link: TBT_CMD_QUERY -> s_force).
 void tbt_link_task(void) {
-  if (!tbt.ever) { tbt.linked = false; }
+  if (!s_tbt.ever) { s_tbt.linked = false; }
 
   const uint32_t now = cydlcd_millis();
-  const uint32_t age = now - tbt.last_rx_ms;
+  const uint32_t age = now - s_tbt.last_rx_ms;
 
   // "Con byte toi" = day noi VAN SONG, du byte do co doc duoc thanh dong TBT hay khong.
   // Dung de phan biet 2 kieu hong: (a) khong co byte nao (dut day/sai cong/board tat),
   //                               (b) co byte ma khong thanh dong (sai baud/khung, nhieu, day loi).
-  tbt.rx_active = (now - tbt.last_byte_ms) <= TBT_LINK_RX_ACTIVE_MS;
+  s_tbt.rx_active = (now - s_tbt.last_byte_ms) <= TBT_LINK_RX_ACTIVE_MS;
 
-  if (tbt.ever) {
-    const bool busy_phase = tbt.st.active && tbt.st.phase != TBT_PH_IDLE;
-    tbt.linked = age <= (busy_phase ? TBT_LINK_BUSY_TIMEOUT_MS : TBT_LINK_TIMEOUT_MS);
+  if (s_tbt.ever) {
+    const bool busy_phase = s_tbt.st.active && s_tbt.st.phase != TBT_PH_IDLE;
+    s_tbt.linked = age <= (busy_phase ? TBT_LINK_BUSY_TIMEOUT_MS : TBT_LINK_TIMEOUT_MS);
   }
 
   // Hoi lai khi im lang - CO GIOI HAN 1 lan / TBT_LINK_QUERY_MS (neu khong se gui 'Q' moi vong loop)
   static uint32_t s_query_ms = 0;
-  if (tbt.ever && age >= TBT_LINK_QUERY_MS && (now - s_query_ms) >= TBT_LINK_QUERY_MS) {
+  if (s_tbt.ever && age >= TBT_LINK_QUERY_MS && (now - s_query_ms) >= TBT_LINK_QUERY_MS) {
     s_query_ms = now;
     tbt_link_send(TBT_CMD_QUERY);
   }
@@ -80,28 +81,28 @@ void tbt_link_send(char cmd) {
 
 // Xu ly 1 dong da du (dung chung cho ca 2 duong: sniff byte cua CYDLCD_TBT_LINK va frame CYDLCD_F_TBT)
 static void tbt_parse_line(const char *line) {
-  if (tbt_status_parse(line, &tbt.st)) {
-    tbt.last_rx_ms = cydlcd_millis();
-    tbt.lines++;
-    tbt.ever = true;
-    tbt.linked = true;
+  if (tbt_status_parse(line, &s_tbt.st)) {
+    s_tbt.last_rx_ms = cydlcd_millis();
+    s_tbt.lines++;
+    s_tbt.ever = true;
+    s_tbt.linked = true;
   }
-  else tbt.errors++;
+  else s_tbt.errors++;
 }
 
 // Che do PUSH: cydlcd_link.cpp doc frame CYDLCD_F_TBT roi goi ham nay (khong byte-nao di qua sniffer).
 void tbt_link_line(const char *line) {
   if (!line || !*line) return;
-  tbt.raw_bytes += (uint32_t)strlen(line);
-  tbt.last_byte_ms = cydlcd_millis();
+  s_tbt.raw_bytes += (uint32_t)strlen(line);
+  s_tbt.last_byte_ms = cydlcd_millis();
   tbt_parse_line(line);
 }
 
 // Tra ve so byte can dua cho bo giai frame PUSH (ghi vao out[], toi da 4 byte).
 // 0 = byte nay (va cac byte dang giu) da thuoc dong "TBT ..." -> khong dua cho ai nua.
 uint8_t tbt_link_feed(uint8_t c, uint8_t *out) {
-  tbt.raw_bytes++;                     // chan doan: dem MOI byte UART nhan duoc (ke ca rac)
-  tbt.last_byte_ms = cydlcd_millis();   // ... va ghi nho lan cuoi co byte -> tbt.rx_active
+  s_tbt.raw_bytes++;                     // chan doan: dem MOI byte UART nhan duoc (ke ca rac)
+  s_tbt.last_byte_ms = cydlcd_millis();   // ... va ghi nho lan cuoi co byte -> s_tbt.rx_active
   switch (s_state) {
 
     case TS_IDLE:
@@ -146,9 +147,13 @@ uint8_t tbt_link_feed(uint8_t c, uint8_t *out) {
         s_state = TS_IDLE;
         s_len = 0;
         s_bol = false;
-        tbt.errors++;
+        s_tbt.errors++;
       }
       return 0;                           // byte nay thuoc dong TBT
     }
   }
 }
+
+// CONG BO `s_tbt` -> `tbt` (ban cong khai cho UI doc). CHI duoc goi tu `state_publish()` (cydclcd_link.cpp)
+// khi DA giu khoa trang thai -> nho vay UI khong bao gio doc phai ban ghi dang do (xem ke-hoach da luong).
+void tbt_publish_locked(void) { memcpy(&tbt, &s_tbt, sizeof(tbt)); }

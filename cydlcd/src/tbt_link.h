@@ -42,6 +42,8 @@ typedef struct {
 } tbt_link_data_t;
 
 extern tbt_link_data_t tbt;
+// CONG BO trang thai TRAMMING cho UI: CHI goi tu state_publish() (khi da giu khoa trang thai).
+void tbt_publish_locked(void);
 
 // ---------------------------------------------------------------------------
 // API
