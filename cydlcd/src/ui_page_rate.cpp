@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_rate.cpp -- man FEED/FLOW (M220/M221) cua UI LVGL (man hinh CYD): 2 o FR / FL tren
  * man STATUS mo vao day, dung nhu Marlin.
  *
@@ -10,6 +10,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include "ui_lvgl_icons.h"          // icon 32x32 FR/FL chuyen tu bitmap cua Marlin
 
@@ -88,7 +89,7 @@ void page_rate_create(lv_obj_t *p) {
   rate_row(p, "FLOW", 1, &ui_icon_flowrate, &rt_fl);
   mk_btn(p, "RESET 100% (M220/M221 S100)", PAGE_INN_W, 34, cb_rate_reset, NULL);
   mk_label_w(p, "M220 S<n> = feed rate, M221 S<n> = flow rate", COL_DIM, PAGE_INN_W);
-  mk_label_w(p, "gui ngay khi bam +/-  (xem o FR/FL tren STATUS)", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_RATE_HINT2), COL_DIM, PAGE_INN_W);
   rate_request();                          // hoi NGAY khi mo trang (dung gia tri, khong cho nhip sau)
 }
 

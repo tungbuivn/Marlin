@@ -245,6 +245,24 @@ typedef enum {
   UI_T_SMG_UBL,
   UI_T_SMG_LANGUAGE,
 
+  // ---- batch 3: ui_page_jog / ui_page_custom / ui_page_rate / ui_page_endstop / ui_page_status / ui_boxes ----
+  UI_T_JOG_AXIS,
+  UI_T_JOG_MOVE,
+  UI_T_JOG_HINT,
+  UI_T_CUST_RUNOUT_ON,
+  UI_T_CUST_RUNOUT_OFF,
+  UI_T_CUST_NOTE_M600,
+  UI_T_CUST_NOTE_M412,
+  UI_T_CUST_NOTE_DFU,
+  UI_T_RATE_HINT2,
+  UI_T_ES_HIT,
+  UI_T_ES_OPEN,
+  UI_T_ES_INFO,
+  UI_T_ST_LINK_ERR,
+  UI_T_BOX_AGAIN,
+  UI_T_BOX_TUNE_TITLE,
+  UI_T_BOX_TUNE_TXT,
+
   UI_T_LANG_VI,                   // "Tiếng Việt"
   UI_T_LANG_EN,                   // "English"
   UI_T_COUNT

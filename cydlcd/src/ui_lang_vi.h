@@ -202,6 +202,23 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   [UI_T_SMG_UBL]                  = "UBL",
   [UI_T_SMG_LANGUAGE]             = "LANGUAGE",
 
+  [UI_T_JOG_AXIS]               = "TRUC",
+  [UI_T_JOG_MOVE]               = "DI CHUYEN (mm)",
+  [UI_T_JOG_HINT]               = "bam = G91 + G1 <truc><d> F3000 (X/Y) / F600 (Z) + G90",
+  [UI_T_CUST_RUNOUT_ON]         = "M412: BAT (S1)",
+  [UI_T_CUST_RUNOUT_OFF]        = "M412: TAT (S0)",
+  [UI_T_CUST_NOTE_M600]         = "M600 = doi filament (khong lui dai)",
+  [UI_T_CUST_NOTE_M412]         = "M412 = cam bien het filament ON/OFF",
+  [UI_T_CUST_NOTE_DFU]          = "REBOOT DFU = nap firmware qua USB",
+  [UI_T_RATE_HINT2]             = "gui ngay khi bam +/-  (xem o FR/FL tren STATUS)",
+  [UI_T_ES_HIT]                 = "CHAM (triggered)",
+  [UI_T_ES_OPEN]                = "mo (open)",
+  [UI_T_ES_INFO]                = "M119: %u chan - tu dong doc 30 lan/giay",
+  [UI_T_ST_LINK_ERR]            = "LINK ERR (byte khong hop le)",
+  [UI_T_BOX_AGAIN]              = "Chac chan? Bam OK lan nua",
+  [UI_T_BOX_TUNE_TITLE]         = "TUNE XONG",
+  [UI_T_BOX_TUNE_TXT]           = "Marlin da chay xong M303/M306\nNho SAVE EEPROM neu can",
+
   // ---- ten ngon ngu (endonym) ----
   // "Tiếng Việt" viet bang MA UTF-8 (\x..) de file nguon giu duoc ASCII thuan - dung quy uoc cua
   // project (xem ghi chu o ui_lvgl.cpp). Font Segoe UI 16 co du dau tieng Viet (dai vn1..vn4).

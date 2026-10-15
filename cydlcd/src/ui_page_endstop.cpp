@@ -26,6 +26,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu (xem ui_lang.h)
 
 #include <stdio.h>                  // snprintf
 
@@ -69,10 +70,10 @@ static void es_refresh(void) {
     }
     if (!present) continue;
     const bool hit = (cydlcd.es_hit[ES_ID[i]] != 0);
-    set_text(es_val[i], hit ? "CHAM (triggered)" : "mo (open)");
+    set_text(es_val[i], T(hit ? UI_T_ES_HIT : UI_T_ES_OPEN));
     set_text_color(es_val[i], hit ? COL_ERR : COL_OK);
   }
-  snprintf(b, sizeof(b), "M119: %u chan - tu dong doc 30 lan/giay", (unsigned)cydlcd.n_endstops);
+  snprintf(b, sizeof(b), T(UI_T_ES_INFO), (unsigned)cydlcd.n_endstops);
   set_text(es_info, b);
 }
 

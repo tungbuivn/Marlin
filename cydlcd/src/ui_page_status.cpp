@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_status.cpp -- man STATUS cua UI LVGL (man hinh CYD): bo cuc lay Y NGUYEN toa do tu
  * UI TFT ILI9341 cua Marlin (Marlin/src/lcd/tft/ui_320x240.cpp).
  *
@@ -15,6 +15,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include "ui_lvgl_icons.h"          // icon 64x64/32x32 chuyen tu bitmap cua Marlin
 
@@ -284,7 +285,7 @@ void page_status_update(void) {
 
   // ---- dong trang thai: mat lien ket > "STATE  ten file" ----
   if (!link_ok()) {
-    set_text(st_msg, tbt.rx_active ? "LINK ERR (byte khong hop le)" : "NO LINK");
+    set_text(st_msg, tbt.rx_active ? T(UI_T_ST_LINK_ERR) : T(UI_T_LINK_NONE));
     set_text_color(st_msg, COL_ERR);
   }
   else {

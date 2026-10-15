@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_boxes.cpp -- hop thoai cua UI LVGL (man hinh CYD): prompt cua Marlin, thong bao,
  * hop XAC NHAN dung chung va hop "tune xong".
  *
@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 #include "net_upload_http.h"        // net_notify_set(): thong bao di TRANG /status thay vi hien hop tren LCD
 
 #include <Arduino.h>                // Serial.printf (lenh chan doan `UI TAP K`)
@@ -190,7 +191,7 @@ static void cb_confirm_value(lv_event_t *e) {
   if (ok && s_cf_steps > 1) {                    // con 1 buoc xac nhan nua (Reboot DFU)
     s_cf_steps--;
     lv_obj_t *x = lv_msgbox_get_text(s_cf_box);
-    if (x) set_text(x, "Chac chan? Bam OK lan nua");
+    if (x) set_text(x, T(UI_T_BOX_AGAIN));
     return;
   }
   const uint8_t act = s_cf_action;
@@ -306,7 +307,7 @@ void boxes_update(void) {
     s_pid_seen = cydlcd.pid_done_ms;
     if (!s_prompt_box && !s_msg_box && !s_cf_box && !s_pid_box) {
       static const char *const btns[] = {"OK", ""};
-      s_pid_box = box_make("TUNE XONG", "Marlin da chay xong M303/M306\nNho SAVE EEPROM neu can",
+      s_pid_box = box_make(T(UI_T_BOX_TUNE_TITLE), T(UI_T_BOX_TUNE_TXT),
                            COL_OK, btns);
       lv_obj_add_event_cb(s_pid_box, cb_pid_value, LV_EVENT_VALUE_CHANGED, NULL);
     }

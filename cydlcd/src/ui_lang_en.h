@@ -52,6 +52,24 @@ const ui_lang_ovr_t UI_OVR_EN[] = {
   { UI_T_CAL_HOLDING,         "holding" },
   { UI_T_MENU_CALTOUCH,       "Calibrate touch (hold 1.5s)" },
 
+  // ---- batch 3: cac trang JOG/CUSTOM/RATE/ENDSTOP/STATUS + hop thoai ----
+  { UI_T_JOG_AXIS,              "AXIS" },
+  { UI_T_JOG_MOVE,              "MOVE (mm)" },
+  { UI_T_JOG_HINT,              "press = G91 + G1 <axis><d> F3000 (X/Y) / F600 (Z) + G90" },
+  { UI_T_CUST_RUNOUT_ON,        "M412: ON (S1)" },
+  { UI_T_CUST_RUNOUT_OFF,       "M412: OFF (S0)" },
+  { UI_T_CUST_NOTE_M600,        "M600 = change filament (no long retract)" },
+  { UI_T_CUST_NOTE_M412,        "M412 = filament runout sensor ON/OFF" },
+  { UI_T_CUST_NOTE_DFU,         "REBOOT DFU = flash firmware over USB" },
+  { UI_T_RATE_HINT2,            "sent right after pressing +/-  (see FR/FL on STATUS)" },
+  { UI_T_ES_HIT,                "TRIGGERED" },
+  { UI_T_ES_OPEN,               "open" },
+  { UI_T_ES_INFO,               "M119: %u pins - auto refresh 30 Hz" },
+  { UI_T_ST_LINK_ERR,           "LINK ERR (bad bytes)" },
+  { UI_T_BOX_AGAIN,             "Are you sure? Press OK again" },
+  { UI_T_BOX_TUNE_TITLE,        "TUNE DONE" },
+  { UI_T_BOX_TUNE_TXT,          "Marlin finished M303/M306\nRemember SAVE EEPROM if needed" },
+
   // ---- endonym (ten ngon ngu viet bang chinh ngon ngu do - KHONG dich) ----
   // Bang EN co ghi 2 dong nay cho DAY DU, du chuoi y het bang VI (xem `--fallback`).
   { UI_T_LANG_VI,             "Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t" },

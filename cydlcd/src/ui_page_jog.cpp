@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_jog.cpp -- man JOG cua UI LVGL (man hinh CYD): chon truc + cac buoc nhich + HOME/M84
  * + G28 tung truc + lop phu sua M851 Z.
  *
@@ -12,6 +12,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 
@@ -77,7 +78,7 @@ static void cb_jog_move(lv_event_t *e) {
 
 void page_jog_create(lv_obj_t *p) {
   lv_obj_t *ra = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, JG_ROW_H, 0, GAP);
-  mk_label_w(ra, "TRUC", COL_DIM, 44);
+  mk_label_w(ra, T(UI_T_JOG_AXIS), COL_DIM, 44);
   jg_axis[0] = mk_btn_grow(ra, "X", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)0);
   jg_axis[1] = mk_btn_grow(ra, "Y", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)1);
   jg_axis[2] = mk_btn_grow(ra, "Z", JG_ROW_H - 2, cb_jog_axis, (void *)(intptr_t)2);
@@ -86,7 +87,7 @@ void page_jog_create(lv_obj_t *p) {
   for (uint8_t i = 0; i < 3; i++) lv_obj_add_flag(jg_axis[i], LV_OBJ_FLAG_USER_1);
   jog_axis_mark();                                // to nhat truc dang chon (s_axis = 0 luc tao man)
 
-  mk_label_w(p, "DI CHUYEN (mm)", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_JOG_MOVE), COL_DIM, PAGE_INN_W);
 
   lv_obj_t *rs = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, JG_STEP_H, 0, GAP);
   mk_btn_grow(rs, "-0.1", JG_STEP_H - 2, cb_jog_move, JOG_ARG(2, true));
@@ -113,7 +114,7 @@ void page_jog_create(lv_obj_t *p) {
   mk_btn_grow(rb, "G28 Z",  JG_BTN_H, cb_action, (void *)(intptr_t)A_HOME_Z);
   mk_btn_grow(rb, "M851 Z", JG_BTN_H, cb_action, (void *)(intptr_t)A_EDIT_PROBE_Z);
 
-  mk_label_w(p, "bam = G91 + G1 <truc><d> F3000 (X/Y) / F600 (Z) + G90", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_JOG_HINT), COL_DIM, PAGE_INN_W);
 }
 
 void page_jog_update(void) {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ui_page_custom.cpp -- man CUSTOM cua UI LVGL (man hinh CYD): G34 / Init SD /
  * M119 endstop / M412 filament / reboot DFU - cac muc khong con cho o MENU.
  *
@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
@@ -28,7 +29,7 @@ static bool s_runout_on = true;
 // invalidate vat -> goi vo dieu kien se ton bang thong SPI.
 static void runout_mark(void) {
   if (!cu_runout) return;
-  set_text(lv_obj_get_child(cu_runout, 0), s_runout_on ? "M412: BAT (S1)" : "M412: TAT (S0)");
+  set_text(lv_obj_get_child(cu_runout, 0), T(s_runout_on ? UI_T_CUST_RUNOUT_ON : UI_T_CUST_RUNOUT_OFF));
   const lv_color_t want = s_runout_on ? COL_OK : COL_BTN;
   if (lv_obj_get_style_bg_color(cu_runout, 0).full != want.full)
     lv_obj_set_style_bg_color(cu_runout, want, 0);
@@ -52,15 +53,15 @@ void page_custom_create(lv_obj_t *p) {
   // P6: doi filament (M600) + cong tac cam bien het filament (M412)
   lv_obj_t *rf = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 30, 0, GAP);
   mk_btn_grow(rf, "M600 B0", 30, cb_action, (void *)(intptr_t)A_FILAMENT_CHANGE);
-  cu_runout = mk_btn_grow(rf, "M412: BAT (S1)", 30, cb_runout_toggle, NULL);
+  cu_runout = mk_btn_grow(rf, T(UI_T_CUST_RUNOUT_ON), 30, cb_runout_toggle, NULL);
 
   // P8: nhay vao ROM DFU bootloader (2 buoc xac nhan)
   lv_obj_t *rd = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 30, 0, GAP);
   mk_btn_grow(rd, "REBOOT DFU", 30, cb_action, (void *)(intptr_t)A_REBOOT_DFU);
 
-  mk_label_w(p, "M600 = doi filament (khong lui dai)", COL_DIM, PAGE_INN_W);
-  mk_label_w(p, "M412 = cam bien het filament ON/OFF", COL_DIM, PAGE_INN_W);
-  mk_label_w(p, "REBOOT DFU = nap firmware qua USB", COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_CUST_NOTE_M600), COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_CUST_NOTE_M412), COL_DIM, PAGE_INN_W);
+  mk_label_w(p, T(UI_T_CUST_NOTE_DFU), COL_DIM, PAGE_INN_W);
   // Tong: 40 + 30 + 30 + 4*16 + 6*GAP = 176 <= 206
 }
 

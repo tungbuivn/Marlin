@@ -2309,8 +2309,10 @@ và bảng EN **ID lạ / trùng / rỗng** → **exit code 1**. `--hardcoded` i
 | **B1** | Khung `ui_lang.*` + `UI LANG` + `check_lang.py` + mục **Language** trong menu + NVS | ✅ **xong, đã kiểm trên máy** (45/45 chuỗi) |
 | **B2+batch1** | `ui_chrome.cpp` (BACK/PREV/NEXT/`TRANG %d/%d`) · `PG_TITLE` · `ui_page_menu.cpp` (10 dòng + cột giá trị + `Calibrate touch`) | ✅ xong, đã kiểm |
 | **B2+batch2** | **`ui_page_submenu.cpp`** — TOÀN BỘ cây Configuration: 111 tên dòng + 18 tiêu đề nhóm, `sm_item_t.name_id`/`sm_group_t.title_id` = ID 2 B | ✅ **xong, đã kiểm trên máy** (VI y nguyên như trước; EN: `CONFIGURATION`, `TEMP`, `+ Add material`…) |
-| **B3** | Bảng EN: 24 dòng ghi đè (phần còn lại dùng chung bản VI - thuật ngữ tiếng Anh) | ✅ đủ cho tới batch 2 |
-| Còn lại | `ui_lvgl.cpp` (~152) · `ui_page_settings.cpp` (125) · `ui_page_files.cpp` (77) · `ui_page_info.cpp` (45) · `ui_page_wifi.cpp` (42) · `ui_page_mesh.cpp` (40) · `ui_boxes.cpp` (32) · `ui_widgets.cpp` (27) · `ui_page_preheat.cpp` (26) · `ui_page_tbt.cpp` (24) · `ui_page_endstop.cpp` (21) · `ui_page_temp.cpp` (20) · `ui_page_status.cpp` (16) · `ui_page_jog.cpp` (13) · `ui_page_custom.cpp` (8) · `ui_page_rate.cpp` (7) · `ui_overlay.cpp` (6) | 🔄 batch 3… |
+| **B2+batch3** | `ui_page_jog.cpp` (`TRUC`/`DI CHUYEN (mm)`/hint G91) · `ui_page_custom.cpp` (`M412: BAT/TAT`, 3 dòng ghi chú) · `ui_page_rate.cpp` (dòng gợi ý) · `ui_page_endstop.cpp` (`CHAM`/`mo (open)` + dòng `M119: %u chan…`) · `ui_page_status.cpp` (`LINK ERR (byte khong hop le)`) · `ui_boxes.cpp` (`Chac chan? Bam OK lan nua`, `TUNE XONG`) | ✅ **xong, đã kiểm trên máy** (VI y nguyên; EN: `AXIS`, `MOVE (mm)`, `press = G91…`, `M119: 3 pins - auto refresh 30 Hz`) |
+| **Quy tắc chọn có ID hay không** | Chỉ cấp ID cho chuỗi **có tiếng Việt** hoặc **câu/đoạn** mà bản EN sẽ khác. Chuỗi **một từ kỹ thuật / ký hiệu giống hệt ở 2 ngôn ngữ** thì để nguyên trong code (`FAN`, `OFF`, `MAX`, `COOLDOWN`, `NOZZLE`, `BED`, `PROBE`, `X min`, `INIT SD`, `M84`, `G28 X`, `%-số`, `mm`, `%`) — thêm ID chỉ tạo dòng trùng lặp vô nghĩa | 📌 ghi tại đây + ở đầu mỗi file khi cần |
+| **B3** | Bảng EN: 40 dòng ghi đè (phần còn lại dùng chung bản VI - thuật ngữ tiếng Anh) | 🔄 đủ cho tới batch 3 |
+| Còn lại | `ui_page_files.cpp` (~25 thông báo/hộp thoại) · `ui_page_settings.cpp` (5) · `ui_page_wifi.cpp` (9) · `ui_page_preheat.cpp` (7) · `ui_page_mesh.cpp` (6) · `ui_page_info.cpp` (3) · `ui_page_tbt.cpp` (2) · `ui_lvgl.cpp` (hộp xác nhận `DUNG IN`/`M502 RESET`…) | 🔄 batch 4… |
 
 **Đã kiểm trên máy thật (COM8):**
 
