@@ -137,6 +137,21 @@ void settings_test_edit(const char *arg);
 // tra tu PC xem Marlin co day thong so nao va man hinh dang hien gi (bang nam tren LCD, khong doc nguoc duoc).
 void page_settings_dump(void);
 
+// CHAN DOAN menu CONFIGURATION (lenh `UI CFG [nhom]` tren COM8): khong tham so = in CA CAY menu (moi
+// nhom + so dong hien duoc, dong nao bi an); co so = MO nhom do (di dung duong bam tay vao dong menu)
+// roi in cac dong dang hien + gia tri tung dong. Day la cach DUY NHAT kiem tra cay menu / viec loc
+// dong khong co du lieu tu PC (khong cham duoc vao LCD). Xem ui_page_submenu.cpp.
+void submenu_dump(const char *arg);
+
+// CHAN DOAN su kien cham (lenh `UI HIT <k>` tren COM8): ban LV_EVENT_CLICKED vao vat bam duoc thu k
+// (0-based, thu tu giong focus_first_in) cua TRANG dang mo -> di DUNG duong su kien that cua dong menu
+// / nut bam. Dung de kiem tra "bam dong menu co mo dung man/nhom khong" tu PC (khong cham duoc LCD).
+void ui_lvgl_test_hit(const char *arg);
+
+// CHAN DOAN nut BACK (lenh `UI BACK` tren COM8): goi DUNG do_action(A_BACK) nhu bam nut BACK o goc phai
+// dong tieu de. Can de kiem tra chong man hinh (menu CONFIGURATION -> nhom cha -> MENU/STATUS) tu PC.
+void ui_lvgl_test_back(void);
+
 // CHAN DOAN THONG BAO trang /status (lenh `UI NOTIFY [ms] <text>` tren COM8, ms=0 -> giu mai):
 // day 1 thong bao vao kho cua trang /status (KHONG hien hop tren LCD) de kiem tra tu PC; khong tham so ->
 // in thong bao dang luu + thoi gian con lai; text rong ("UI NOTIFY 0") -> xoa thong bao dang luu.

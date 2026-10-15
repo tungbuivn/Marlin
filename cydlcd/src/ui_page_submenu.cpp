@@ -1,0 +1,468 @@
+/**
+ * ui_page_submenu.cpp -- man MENU CON cua UI LVGL (man hinh CYD): menu "Configuration" kieu 12864.
+ *
+ * YEU CAU NGUOI DUNG 2026-10-15: "phan configuration toi thay lam giong 12864 tien hon" -> thay vi
+ * MOT BANG PHANG 75 dong (trang SETTINGS cu, van con nguyen o muc "All settings"), thong so duoc xep
+ * thanh CAY nhieu cap giong menu Configuration cua Marlin 12864 (xem docs/12864-menu-map.md):
+ *
+ *   CAU HINH (root)
+ *     |- Probe Z Offset                     (dong SUA duoc)
+ *     |- Controller Fan >                   (M710 I/A/S/D)
+ *     |- Preheat PLA/PETG/ABS Settings >    (9 preset cua man hinh, luu NVS)
+ *     |- Advanced Settings >
+ *     |    |- Max Speed >      Max X/Y/Z/E Speed, Min Velocity, Min Travel Speed
+ *     |    |- Acceleration >   Accel print/retract/travel + Max X/Y/Z/E Accel
+ *     |    |- Jerk >           Max X/Y/Z/E Jerk + Junction Dev + Linear Adv
+ *     |    |- Probe Offsets >  Probe X/Y/Z + Z Probe Wizard (M851 Z)
+ *     |    |- Steps/mm >       X/Y/Z/E
+ *     |    |- TMC Drivers >    Driver Current > (X/Y/Z/Z2/Z3/E0), Stepping Mode > (StealthChop)
+ *     |    |- Temperature >    MPC P/C/R/A/F/H + MPC Autotune, Bed PID, Bed PID Autotune, Hotend PID
+ *     |    |- Filament >       Filament D, E in mm3, Load/Unload Length, Runout Sensor
+ *     |    |- Tune (runtime) > Feed %, Flow %, Fan %, Target E0, Target bed
+ *     |    |- Fade Height, Home Offset X/Y
+ *     |- Store Settings (M500) / Load Settings (M501) / Restore Defaults (M502)
+ *     |- All settings (table)               (mo lai TRANG SETTINGS bang phang cu)
+ *
+ * VI SAO CHI 1 TRANG (PG_SUBMENU) CHO CA CAY:
+ *   - Moi trang LVGL ton ~5-10 KB pool (xem ghi chu page_release() o ui_lvgl.cpp); 17 nhom = 17 trang
+ *     la het pool 48 KB => panel treo. O day NOI DUNG cua trang do `s_sm_g` quyet dinh, doi nhom thi
+ *     dung lai noi dung (page_rebuild), nen bo nho chi con trang dang mo nhu cu.
+ *   - Bang SM_GROUPS/SM_ITEMS la `const` -> nam o FLASH (DRAM cua panel da full).
+ *
+ * DONG `SM_VAL` KHONG tu format/gui gia tri: no tro vao bang SET_ROWS[] cua ui_page_settings.cpp theo
+ * ID thong so (CYDLCD_SET_*) -> dung lai nguyen lop phu SUA (-/+/OK + 4 muc buoc) va se_send_mcode().
+ * Nho vay them 1 dong vao cay chi la: them 1 dong SET_ROWS + 1 dong SM_ITEMS.
+ *
+ * DONG NAO KHONG CO DU LIEU THI TU AN (settings_has_value): Marlin chi gui thong so ma ban build CO
+ * (MPC khi co MPCTEMP, Z2/Z3 khi co driver, StealthChop khi driver ho tro, M710 khi USE_CONTROLLER_FAN)
+ * -> cay giong 12864 nhung khong bao gio hien dong trong.
+ */
+#include "ui_lvgl.h"
+#include "ui_lvgl_int.h"
+
+#include <stdio.h>                  // sscanf / snprintf
+#include <stdlib.h>                 // malloc / free (KHONG dung pool LVGL: xem ghi chu o sm_ctx_t)
+#include <Arduino.h>                // Serial.printf (lenh chan doan `UI CFG`)
+
+#if CYDLCD_USE_LVGL
+
+// ===========================================================================
+//  Kieu dong / kieu nhom
+// ===========================================================================
+#define SM_SUB 0     // arg = chi so NHOM con (mo tiep)
+#define SM_VAL 1     // arg = ID thong so (CYDLCD_SET_*) -> cham vao mo lop phu SUA
+#define SM_ACT 2     // arg = hanh dong A_* (do_action)
+
+// SM_PARENT_NONE (255 = nhom GOC) nam trong ui_lvgl_int.h vi do_action() cua ui_lvgl.cpp cung dung.
+
+// Chi so cac nhom (dung lam `parent` va lam tham so SM_S/SMG_*). Thu tu o day chi de doc.
+enum {
+  SMG_ROOT = 0,     // Configuration
+  SMG_ADV,          // Advanced Settings
+  SMG_SPEED,        //   Max Speed
+  SMG_ACCEL,        //   Acceleration
+  SMG_JERK,         //   Jerk
+  SMG_PROBE,        //   Probe Offsets
+  SMG_STEPS,        //   Steps/mm
+  SMG_TMC,          //   TMC Drivers
+  SMG_TMC_CUR,      //     Driver Current
+  SMG_STEPMODE,     //     Stepping Mode
+  SMG_TEMP,         //   Temperature (MPC/PID)
+  SMG_FILAMENT,     //   Filament
+  SMG_TUNE,         //   Tune (runtime)
+  SMG_CTRLFAN,      // Controller Fan (ngang cap Advanced Settings)
+  SMG_PRE_PLA,      // Preheat PLA Settings
+  SMG_PRE_PETG,     // Preheat PETG Settings
+  SMG_PRE_ABS,      // Preheat ABS Settings
+  SMG_COUNT
+};
+
+typedef struct { const char *name; uint8_t kind; uint16_t arg; } sm_item_t;
+typedef struct { const char *title; uint8_t parent; const sm_item_t *items; uint8_t n; } sm_group_t;
+
+// Cac macro cho bang duoi gon va khong the go sai thu tu tham so:
+#define SM_S(txt, g)  { txt, SM_SUB, (uint16_t)(g) }
+#define SM_V(txt, id) { txt, SM_VAL, (uint16_t)(id) }
+#define SM_A(txt, a)  { txt, SM_ACT, (uint16_t)(a) }
+
+// ===========================================================================
+//  CAY MENU (thu tu dong y nhu menu Configuration cua 12864)
+// ===========================================================================
+static const sm_item_t SM_I_ROOT[] = {
+  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),   // 12864: SUBMENU Z Probe Offset
+  SM_S("Controller Fan",            SMG_CTRLFAN),
+  SM_S("Preheat PLA Settings",      SMG_PRE_PLA),
+  SM_S("Preheat PETG Settings",     SMG_PRE_PETG),
+  SM_S("Preheat ABS Settings",      SMG_PRE_ABS),
+  SM_S("Advanced Settings",         SMG_ADV),
+  SM_A("Store Settings (M500)",     A_SAVE),
+  SM_A("Load Settings (M501)",      A_LOAD_SETTINGS),
+  SM_A("Restore Defaults (M502)",   A_EEPROM_RESET),              // xac nhan 2 buoc (xem do_action)
+  SM_A("All settings (table)",      A_GOTO_SETTINGS)              // bang phang cu (giu nguyen chuc nang)
+};
+
+static const sm_item_t SM_I_ADV[] = {
+  SM_S("Max Speed",                 SMG_SPEED),
+  SM_S("Acceleration",              SMG_ACCEL),
+  SM_S("Jerk",                      SMG_JERK),
+  SM_S("Probe Offsets",             SMG_PROBE),
+  SM_S("Steps/mm",                  SMG_STEPS),
+  SM_S("TMC Drivers",               SMG_TMC),
+  SM_S("Temperature",               SMG_TEMP),
+  SM_S("Filament",                  SMG_FILAMENT),
+  SM_S("Tune (runtime)",            SMG_TUNE),
+  // 2 dong duoi day 12864 de trong menu Motion/UBL; o day de trong Advanced Settings cho de tim.
+  SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),
+  SM_V("Home Offset X",             CYDLCD_SET_HOME_OFFSET_X),
+  SM_V("Home Offset Y",             CYDLCD_SET_HOME_OFFSET_Y)
+};
+
+static const sm_item_t SM_I_SPEED[] = {
+  SM_V("Max X Speed",               CYDLCD_SET_MAXFEED_X),
+  SM_V("Max Y Speed",               CYDLCD_SET_MAXFEED_Y),
+  SM_V("Max Z Speed",               CYDLCD_SET_MAXFEED_Z),
+  SM_V("Max E Speed",               CYDLCD_SET_MAXFEED_E),
+  SM_V("Min Velocity",              CYDLCD_SET_MIN_FEEDRATE),        // M205 S
+  SM_V("Min Travel Speed",          CYDLCD_SET_MIN_TRAVEL_FEEDRATE)  // M205 T
+};
+
+static const sm_item_t SM_I_ACCEL[] = {
+  SM_V("Accel (print)",             CYDLCD_SET_MAXACCEL_PRINT),      // M204 P
+  SM_V("Retract Accel",             CYDLCD_SET_MAXACCEL_RETRACT),    // M204 R
+  SM_V("Travel Accel",              CYDLCD_SET_MAXACCEL_TRAVEL),     // M204 T
+  SM_V("Max X Accel",               CYDLCD_SET_MAXACCEL_X),
+  SM_V("Max Y Accel",               CYDLCD_SET_MAXACCEL_Y),
+  SM_V("Max Z Accel",               CYDLCD_SET_MAXACCEL_Z),
+  SM_V("Max E Accel",               CYDLCD_SET_MAXACCEL_E)
+};
+
+static const sm_item_t SM_I_JERK[] = {
+  SM_V("Max X Jerk",                CYDLCD_SET_JERK_X),
+  SM_V("Max Y Jerk",                CYDLCD_SET_JERK_Y),
+  SM_V("Max Z Jerk",                CYDLCD_SET_JERK_Z),
+  SM_V("Max E Jerk",                CYDLCD_SET_JERK_E),
+  SM_V("Junction Dev",              CYDLCD_SET_JUNCTION_DEV),        // M205 J (CLASSIC_JERK tat)
+  SM_V("Linear Adv E",              CYDLCD_SET_LINEAR_ADV_E)         // M900 K
+};
+
+static const sm_item_t SM_I_PROBE[] = {
+  SM_V("Probe X Offset",            CYDLCD_SET_PROBE_OFFSET_X),
+  SM_V("Probe Y Offset",            CYDLCD_SET_PROBE_OFFSET_Y),
+  SM_V("Probe Z Offset",            CYDLCD_SET_PROBE_OFFSET_Z),
+  SM_A("Z Probe Wizard (M851 Z)",   A_EDIT_PROBE_Z)                  // mo lop phu sua M851 Z
+};
+
+static const sm_item_t SM_I_STEPS[] = {
+  SM_V("X Steps/mm",                CYDLCD_SET_STEPS_MM_X),
+  SM_V("Y Steps/mm",                CYDLCD_SET_STEPS_MM_Y),
+  SM_V("Z Steps/mm",                CYDLCD_SET_STEPS_MM_Z),
+  SM_V("E Steps/mm",                CYDLCD_SET_STEPS_MM_E)
+};
+
+static const sm_item_t SM_I_TMC[] = {
+  SM_S("Driver Current",            SMG_TMC_CUR),
+  SM_S("Stepping Mode",             SMG_STEPMODE)
+};
+
+static const sm_item_t SM_I_TMC_CUR[] = {
+  SM_V("X Current (mA)",            CYDLCD_SET_TMC_CURRENT_X),       // M906 X
+  SM_V("Y Current (mA)",            CYDLCD_SET_TMC_CURRENT_Y),
+  SM_V("Z Current (mA)",            CYDLCD_SET_TMC_CURRENT_Z),
+  SM_V("Z2 Current (mA)",           CYDLCD_SET_TMC_CURRENT_Z2),      // may co 3 driver Z
+  SM_V("Z3 Current (mA)",           CYDLCD_SET_TMC_CURRENT_Z3),
+  SM_V("E0 Current (mA)",           CYDLCD_SET_TMC_CURRENT_E)
+};
+
+static const sm_item_t SM_I_STEPMODE[] = {
+  SM_V("X StealthChop",             CYDLCD_SET_STEALTH_X),           // M569 S0/S1 X
+  SM_V("Y StealthChop",             CYDLCD_SET_STEALTH_Y),
+  SM_V("Z StealthChop",             CYDLCD_SET_STEALTH_Z),
+  SM_V("Z2 StealthChop",            CYDLCD_SET_STEALTH_Z2),
+  SM_V("Z3 StealthChop",            CYDLCD_SET_STEALTH_Z3),
+  SM_V("E0 StealthChop",            CYDLCD_SET_STEALTH_E)
+};
+
+static const sm_item_t SM_I_TEMP[] = {
+  SM_V("MPC Heater Power",          CYDLCD_SET_MPC_P),               // M306 P
+  SM_V("MPC Block Heat Cap",        CYDLCD_SET_MPC_C),               // M306 C
+  SM_V("MPC Sensor Resp",           CYDLCD_SET_MPC_R),               // M306 R
+  SM_V("MPC Ambient Xfer",          CYDLCD_SET_MPC_A),               // M306 A
+  SM_V("MPC Ambient + fan",         CYDLCD_SET_MPC_F),               // M306 F
+  SM_V("MPC Filament Heat",         CYDLCD_SET_MPC_H),               // M306 H
+  SM_A("MPC Autotune (M306 T)",     A_MPC_TUNE),
+  SM_V("Bed PID-P",                 CYDLCD_SET_PID_BED_KP),          // M304 P
+  SM_V("Bed PID-I",                 CYDLCD_SET_PID_BED_KI),
+  SM_V("Bed PID-D",                 CYDLCD_SET_PID_BED_KD),
+  SM_A("Bed PID Autotune (M303)",   A_PID_BED),
+  SM_V("Hotend PID-P",              CYDLCD_SET_PID_E_KP),            // M301 P (E0)
+  SM_V("Hotend PID-I",              CYDLCD_SET_PID_E_KI),
+  SM_V("Hotend PID-D",              CYDLCD_SET_PID_E_KD)
+};
+
+static const sm_item_t SM_I_FILAMENT[] = {
+  SM_V("E in mm3 (volumetric)",     CYDLCD_SET_FILAMENT_VOL),        // M200 S0/S1
+  SM_V("Filament Diameter",         CYDLCD_SET_FILAMENT_DIA),        // M200 D
+  SM_V("Unload Length (mm)",        CYDLCD_SET_FC_UNLOAD),           // M603 U
+  SM_V("Load Length (mm)",          CYDLCD_SET_FC_LOAD),             // M603 L
+  SM_V("Runout Sensor",             CYDLCD_SET_RUNOUT_EN)            // M412 S0/S1
+};
+
+static const sm_item_t SM_I_TUNE[] = {
+  SM_V("Feed %",                    CYDLCD_SET_FEEDRATE_PCT),        // M220
+  SM_V("Flow %",                    CYDLCD_SET_FLOW_PCT),            // M221
+  SM_V("Fan E0 %",                  CYDLCD_SET_FAN_PCT_E0),          // M106
+  SM_V("Target E0 C",               CYDLCD_SET_TARGET_TEMP_E0),      // M104
+  SM_V("Target bed C",              CYDLCD_SET_TARGET_TEMP_BED)      // M140
+};
+
+static const sm_item_t SM_I_CTRLFAN[] = {
+  SM_V("Idle Speed",                CYDLCD_SET_CTRLFAN_IDLE),        // M710 I
+  SM_V("Auto Mode",                 CYDLCD_SET_CTRLFAN_AUTO),        // M710 A
+  SM_V("Active Speed",              CYDLCD_SET_CTRLFAN_ACTIVE),      // M710 S
+  SM_V("Idle Period (s)",           CYDLCD_SET_CTRLFAN_DURATION)     // M710 D
+};
+
+// 9 preset preheat do MAN HINH CYD luu trong NVS (id 0x40xx) - xem ui_preheat.cpp.
+static const sm_item_t SM_I_PRE_PLA[] = {
+  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 1),
+  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 2),
+  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 3)
+};
+static const sm_item_t SM_I_PRE_PETG[] = {
+  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 4),
+  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 5),
+  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 6)
+};
+static const sm_item_t SM_I_PRE_ABS[] = {
+  SM_V("Nozzle Temp",               CYDLCD_PRE_ID_BASE + 7),
+  SM_V("Bed Temp",                  CYDLCD_PRE_ID_BASE + 8),
+  SM_V("Fan Speed",                 CYDLCD_PRE_ID_BASE + 9)
+};
+
+#define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
+
+// Thu tu trong bang KHONG quan trong (moi nhom tro bang ten SMG_*), nhung de doc thi xep theo cay.
+static const sm_group_t SM_GROUPS[SMG_COUNT] = {
+  [SMG_ROOT]      = { "CAU HINH",     SM_PARENT_NONE, SM_I_ROOT,      SM_N(SM_I_ROOT) },
+  [SMG_ADV]       = { "ADVANCED",     SMG_ROOT,       SM_I_ADV,       SM_N(SM_I_ADV) },
+  [SMG_SPEED]     = { "MAX SPEED",    SMG_ADV,        SM_I_SPEED,     SM_N(SM_I_SPEED) },
+  [SMG_ACCEL]     = { "ACCEL",        SMG_ADV,        SM_I_ACCEL,     SM_N(SM_I_ACCEL) },
+  [SMG_JERK]      = { "JERK",         SMG_ADV,        SM_I_JERK,      SM_N(SM_I_JERK) },
+  [SMG_PROBE]     = { "PROBE OFFSET", SMG_ADV,        SM_I_PROBE,     SM_N(SM_I_PROBE) },
+  [SMG_STEPS]     = { "STEPS/MM",     SMG_ADV,        SM_I_STEPS,     SM_N(SM_I_STEPS) },
+  [SMG_TMC]       = { "TMC DRIVERS",  SMG_ADV,        SM_I_TMC,       SM_N(SM_I_TMC) },
+  [SMG_TMC_CUR]   = { "DRIVER I",     SMG_TMC,        SM_I_TMC_CUR,   SM_N(SM_I_TMC_CUR) },
+  [SMG_STEPMODE]  = { "STEP MODE",    SMG_TMC,        SM_I_STEPMODE,  SM_N(SM_I_STEPMODE) },
+  [SMG_TEMP]      = { "TEMP (ADV)",   SMG_ADV,        SM_I_TEMP,      SM_N(SM_I_TEMP) },
+  [SMG_FILAMENT]  = { "FILAMENT",     SMG_ADV,        SM_I_FILAMENT,  SM_N(SM_I_FILAMENT) },
+  [SMG_TUNE]      = { "TUNE",         SMG_ADV,        SM_I_TUNE,      SM_N(SM_I_TUNE) },
+  [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
+  [SMG_PRE_PLA]   = { "PREHEAT PLA",  SMG_ROOT,       SM_I_PRE_PLA,   SM_N(SM_I_PRE_PLA) },
+  [SMG_PRE_PETG]  = { "PREHEAT PETG", SMG_ROOT,       SM_I_PRE_PETG,  SM_N(SM_I_PRE_PETG) },
+  [SMG_PRE_ABS]   = { "PREHEAT ABS",  SMG_ROOT,       SM_I_PRE_ABS,   SM_N(SM_I_PRE_ABS) }
+};
+
+// ===========================================================================
+//  Trang thai cua trang
+// ===========================================================================
+// So dong TOI DA ve duoc: nhom lon nhat (Temperature) co 14 dong => 16 la du; thanh day PREV/NEXT
+// (bot_sync) lo phan trang khi noi dung cao hon 206 px (9 dong dau hien cung luc).
+#define SM_ROWS 16
+
+// Cap phat bang malloc() (heap ESP32) chu KHONG bang lv_mem_alloc(): pool LVGL chi 48 KB va dang
+// dung cho widget cac trang (xem page_release o ui_lvgl.cpp) - mang con tro nay khong phai widget.
+typedef struct {
+  lv_obj_t *val[SM_ROWS];      // nhan COT GIA TRI cua tung dong dang ve
+  uint8_t   vis[SM_ROWS];      // chi so THAT trong SM_GROUPS[g].items[] cua dong dang ve
+  uint8_t   n;                 // so dong dang ve
+  uint8_t   g;                 // nhom dang ve (chup lai luc tao)
+} sm_ctx_t;
+
+static sm_ctx_t *s_sm = NULL;
+// Nhom dang mo: PHAI nam ngoai s_sm vi submenu_title()/submenu_parent() duoc goi CA KHI trang chua
+// duoc tao (show_page dat tieu de cho trang MOI) va page_submenu_destroy() xoa s_sm.
+static uint8_t s_sm_g = SMG_ROOT;
+
+// ===========================================================================
+//  Loc dong khong co du lieu (de quy qua cac nhom con)
+// ===========================================================================
+static bool sm_group_visible(const uint8_t g);      // forward: sm_item_visible() goi xuong nhom con
+
+static bool sm_item_visible(const sm_item_t *it) {
+  switch (it->kind) {
+    case SM_SUB: return sm_group_visible((uint8_t)it->arg);
+    case SM_VAL: return settings_has_value(it->arg);
+    default:     return true;      // SM_ACT: lenh luon chay duoc, khong phu thuoc du lieu Marlin
+  }
+}
+
+// true = nhom con co it nhat 1 dong hien duoc (nhom RONG thi dong menu tro toi no bi an luon).
+static bool sm_group_visible(const uint8_t g) {
+  if (g >= SMG_COUNT) return false;
+  const sm_group_t *G = &SM_GROUPS[g];
+  for (uint8_t i = 0; i < G->n; i++)
+    if (sm_item_visible(&G->items[i])) return true;
+  return false;
+}
+
+// ===========================================================================
+//  Ve / cap nhat man
+// ===========================================================================
+static void cb_sm_row(lv_event_t *e) {
+  if (!s_sm) return;
+  const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+  if (k >= s_sm->n || s_sm->g >= SMG_COUNT) return;
+  const sm_item_t *it = &SM_GROUPS[s_sm->g].items[s_sm->vis[k]];
+  switch (it->kind) {
+    case SM_SUB: submenu_open((uint8_t)it->arg); break;   // vao nhom con (dung lai noi dung trang nay)
+    case SM_VAL: ov_open_id(it->arg); break;              // mo lop phu SUA cua dong thong so do
+    case SM_ACT: do_action((int)it->arg); break;          // lenh M500/M501/M502/mo trang bang...
+    default: break;
+  }
+}
+
+void page_submenu_create(lv_obj_t *p) {
+  // 9 dong preheat do MAN HINH tu quan ly (khong phai Marlin) -> bom lai truoc khi loc dong,
+  // nho vay 3 nhom "Preheat ... Settings" luon co gia tri ke ca ngay sau khi moi ket noi.
+  preheat_inject();
+
+  // Cac dong la o DAC lien nhau (giong danh sach menu cua Marlin / man MENU cua man hinh).
+  lv_obj_set_style_pad_row(p, 0, 0);
+
+  if (!s_sm) s_sm = (sm_ctx_t *)malloc(sizeof(sm_ctx_t));
+  if (!s_sm) return;                       // het RAM: trang trong (khong crash) - xem ghi chu o sm_ctx_t
+
+  if (s_sm_g >= SMG_COUNT) s_sm_g = SMG_ROOT;
+  s_sm->g = s_sm_g;
+  s_sm->n = 0;
+
+  const sm_group_t *G = &SM_GROUPS[s_sm->g];
+  for (uint8_t i = 0; i < G->n && s_sm->n < SM_ROWS; i++) {
+    const sm_item_t *it = &G->items[i];
+    if (!sm_item_visible(it)) continue;    // dong khong co du lieu -> KHONG ve (khong hien dong rong)
+
+    lv_obj_t *r = mk_hit(p, 0, 0, PAGE_INN_W, MENU_ROW_H - 2,
+                         cb_sm_row, (void *)(intptr_t)s_sm->n);
+    lv_obj_set_style_bg_color(r, COL_BTN, 0);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_t *n = mk_label(r, it->name, MR_MENU);
+    lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
+    // Cot phai: nhom con -> ">" (bao con nua), dong sua duoc -> gia tri (dien o page_submenu_update).
+    s_sm->val[s_sm->n] = mk_label(r, it->kind == SM_SUB ? ">" : "", MR_MENUVAL);
+    lv_obj_align(s_sm->val[s_sm->n], LV_ALIGN_RIGHT_MID, -4, 0);
+    s_sm->vis[s_sm->n] = i;
+    s_sm->n++;
+  }
+
+  page_submenu_update();                   // dien gia tri ngay (khong doi 400 ms dau tien)
+}
+
+void page_submenu_update(void) {
+  if (!s_sm || s_sm->g >= SMG_COUNT) return;
+
+  // So thong so Marlin gui DOI (moi ket noi lai / vua sua) -> co the co dong VUA hien duoc: dung lai
+  // noi dung de loc lai (giong trang SETTINGS).
+  //
+  // !!! CHI dung lai khi trang DA HIEN (s_page_act == PG_SUBMENU) !!!
+  // LOI THAT 2026-10-15 (panel panic "Guru Meditation ... LoadProhibited" ngay khi bam `UI CFG 0`):
+  // page_submenu_create() goi ham nay o CUOI, ma luc do create_page() (tu show_page) CHUA dat
+  // s_page_act = PG_SUBMENU -> page_rebuild() thay "trang KHONG mo" nen no THU HOI trang vua tao roi
+  // return NGAY (khong tao lai, xem page_rebuild) => s_page[PG_SUBMENU] = NULL => create_page() goi
+  // tiep lv_obj_add_flag(NULL) -> panic. Lan tao dau da ve du dong theo `cydclcd.n_settings` hien tai
+  // nen bo qua o day la dung; cac lan sau (nhip 400 ms) s_page_act da la PG_SUBMENU -> dung lai binh thuong.
+  static uint8_t last_n = 255;
+  if (last_n != cydlcd.n_settings) {
+    last_n = cydlcd.n_settings;
+    if (s_sm->n && s_page_act == PG_SUBMENU) { page_rebuild(PG_SUBMENU); return; }
+  }
+
+  const sm_group_t *G = &SM_GROUPS[s_sm->g];
+  char b[20];
+  for (uint8_t k = 0; k < s_sm->n; k++) {
+    const sm_item_t *it = &G->items[s_sm->vis[k]];
+    if (it->kind != SM_VAL || !s_sm->val[k]) continue;
+    // set_text() chi ghi khi chu DOI -> khong nhay, khong day SPI vo ich.
+    if (settings_fmt_cur(b, sizeof(b), it->arg)) set_text(s_sm->val[k], b);
+  }
+}
+
+void page_submenu_destroy(void) {
+  if (s_sm) { free(s_sm); s_sm = NULL; }
+}
+
+// ===========================================================================
+//  Dieu huong (goi tu do_action / show_page)
+// ===========================================================================
+void submenu_open(uint8_t g) {
+  if (g >= SMG_COUNT) g = SMG_ROOT;
+  s_sm_g = g;
+  // Dang o TRONG trang nay (bam 1 dong nhom con): chi dung lai noi dung, KHONG tao trang moi
+  // (tao trang moi se ton them bo nho LVGL va page cu van nam do).
+  if (s_page_act == PG_SUBMENU && s_page[PG_SUBMENU]) page_rebuild(PG_SUBMENU);
+  else show_page(PG_SUBMENU);
+}
+
+uint8_t submenu_parent(void) {
+  return (s_sm_g < SMG_COUNT) ? SM_GROUPS[s_sm_g].parent : SM_PARENT_NONE;
+}
+
+const char *submenu_title(void) {
+  return (s_sm_g < SMG_COUNT) ? SM_GROUPS[s_sm_g].title : "CAU HINH";
+}
+
+void submenu_reset_root(void) {
+  s_sm_g = SMG_ROOT;
+}
+
+// ===========================================================================
+//  CHAN DOAN: `UI CFG` (in ca cay) / `UI CFG <nhom>` (mo nhom do roi in cac dong dang hien)
+//  VI SAO CAN: khong the cham tay vao LCD tu PC - day la cach DUY NHAT kiem tra cay menu + viec loc
+//  dong (dong nao dang an vi Marlin khong gui) va gia tri tung dong.
+// ===========================================================================
+void submenu_dump(const char *arg) {
+  int g = -1;
+  if (arg && *arg) sscanf(arg, "%d", &g);
+
+  if (g >= 0) {
+    if (g >= (int)SMG_COUNT) {
+      Serial.printf("[UI] CFG: chi co nhom 0..%u\n", (unsigned)(SMG_COUNT - 1));
+      return;
+    }
+    submenu_open((uint8_t)g);
+  }
+
+  char b[20];
+  Serial.printf("[UI] CFG: nhom dang mo = %u (%s), cha = %u | Marlin gui %u thong so\n",
+                (unsigned)s_sm_g, submenu_title(), (unsigned)submenu_parent(),
+                (unsigned)cydlcd.n_settings);
+
+  const bool one = (g >= 0);
+  for (uint8_t i = 0; i < SMG_COUNT; i++) {
+    const sm_group_t *G = &SM_GROUPS[i];
+    if (one && i != s_sm_g) continue;
+    // Do sau = so lan di len cha (chi de thut le cho de doc).
+    uint8_t depth = 0;
+    for (uint8_t p = G->parent; p != SM_PARENT_NONE && p < SMG_COUNT && depth < SMG_COUNT; p = SM_GROUPS[p].parent)
+      depth++;
+    uint8_t vis = 0;
+    for (uint8_t k = 0; k < G->n; k++) if (sm_item_visible(&G->items[k])) vis++;
+    Serial.printf("[UI] CFG %*s[%u] %-13s cha=%-3u dong=%u/%u%s\n",
+                  (int)(2 * depth), "", (unsigned)i, G->title, (unsigned)G->parent,
+                  (unsigned)vis, (unsigned)G->n, vis ? "" : "  (RONG -> dong menu tro toi no bi an)");
+    if (!one) continue;
+    for (uint8_t k = 0; k < G->n; k++) {
+      const sm_item_t *it = &G->items[k];
+      if (!sm_item_visible(it)) continue;
+      if (it->kind == SM_VAL) {
+        const bool ok = settings_fmt_cur(b, sizeof(b), it->arg);
+        Serial.printf("[UI] CFG     %-24s VAL id=%-3u = %s\n", it->name, (unsigned)it->arg,
+                      ok ? b : "(khong co gia tri)");
+      }
+      else Serial.printf("[UI] CFG     %-24s %s %u\n", it->name,
+                         it->kind == SM_SUB ? "SUB ->" : "ACT", (unsigned)it->arg);
+    }
+  }
+  Serial.printf("[UI] CFG: SM_ROWS=%u (so dong ve duoc cua 1 nhom)\n", (unsigned)SM_ROWS);
+}
+
+#endif  // CYDLCD_USE_LVGL

@@ -177,7 +177,14 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 
 static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
                                                "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
-                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI", "TUNING MPC"};
+                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI", "TUNING MPC",
+                                               "CAU HINH"};
+// Ten cua trang MENU CON khong lay tu bang tren: CA cay menu Configuration dung CHUNG 1 trang
+// (PG_SUBMENU) nen tieu de la ten NHOM dang mo -> xem page_title() duoi day.
+const char *page_title(uint8_t p) {
+  if (p == PG_SUBMENU) return submenu_title();
+  return (p < PG_COUNT) ? PG_TITLE[p] : PG_TITLE[0];
+}
 
 // ---------------------------------------------------------------------------
 //  Bien toan cuc DUNG CHUNG giua cac file: bo `static` + khai bao `extern` o ui_lvgl_int.h
@@ -198,6 +205,10 @@ lv_indev_t *s_indev;
 // ---------------------------------------------------------------------------
 static uint8_t    s_link_state = 255;      // 255 = chua set lan nao (`link_state_now()` tra 0/1/2)
 static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
+// Trang TRUOC do (khac s_page_act o cho: no duoc cap nhat trong show_page). Nut BACK cua TRANG BANG
+// PHANG (THONG SO) can biet no duoc mo TU DAU - tu MENU (-> ve MENU) hay tu menu CONFIGURATION
+// (-> tra ve dung menu do).
+static uint8_t    s_prev_page = PG_STATUS;
 
 static void create_page(uint8_t p);          // forward
 // do_action() la API chung (khai bao o ui_lvgl_int.h) vi man FILE (ui_page_files.cpp) cung goi no
@@ -234,8 +245,20 @@ void cb_action(lv_event_t *e) {
 
 void do_action(const int a) {
   switch (a) {
-    // BACK: tu man con -> MENU, tu MENU -> STATUS (giong "up" trong menu Marlin)
-    case A_BACK:          show_page(s_page_act == PG_MENU ? PG_STATUS : PG_MENU); break;
+    // BACK (giong "up" trong menu Marlin):
+    //   1) dang mo lop phu SUA so  -> chi DONG hop, khong doi trang;
+    //   2) dang o menu CONFIGURATION -> len NHOM CHA, het cap thi ve MENU;
+    //   3) trang bang phang (THONG SO) mo TU menu CONFIGURATION -> tra ve dung menu do;
+    //   4) con lai: man con -> MENU, MENU -> STATUS.
+    case A_BACK:
+      if (ov_close_open()) break;
+      if (s_page_act == PG_SUBMENU) {
+        const uint8_t par = submenu_parent();
+        if (par == SM_PARENT_NONE) show_page(PG_MENU); else submenu_open(par);
+      }
+      else if (s_page_act == PG_SETTINGS && s_prev_page == PG_SUBMENU) show_page(PG_SUBMENU);
+      else show_page(s_page_act == PG_MENU ? PG_STATUS : PG_MENU);
+      break;
     case A_GOTO_MENU:     show_page(PG_MENU); break;
     case A_GOTO_TEMP:     show_page(PG_TEMP); break;
     case A_GOTO_JOG:      show_page(PG_JOG); break;
@@ -257,6 +280,11 @@ void do_action(const int a) {
     case A_STOP_NOW:      stop_request(); break;                   // gui lai M524 toi khi dung (xem stop_retry_task)
     case A_COOLDOWN:      cydlcd_link_send_gcode("M104 S0"); cydlcd_link_send_gcode("M140 S0"); break;
     case A_SAVE:          cydlcd_link_request((uint8_t)CYDLCD_REQ_SAVE_SETTINGS); break;
+    // M501: nap lai thong so tu EEPROM vao RAM (muc "Load Settings" cua menu Configuration).
+    // KHONG xac nhan 2 buoc: lenh nay chi DOC EEPROM, hoan tac duoc (sua lai roi SAVE) - khac M502.
+    // Sau khi nap thi gia tri trong RAM doi -> xin Marlin gui lai bang thong so cho man hinh.
+    case A_LOAD_SETTINGS: cydlcd_link_send_gcode("M501");
+                          cydlcd_link_request((uint8_t)CYDLCD_REQ_SETTINGS); break;
     case A_INITSD:        cydlcd_link_send_gcode2("M22", "M21"); break;   // nha the SD roi init lai
     case A_G34:           cydlcd_link_send_gcode("G34 Q99"); break;
     case A_REQ_FILES:     cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES); break;
@@ -342,9 +370,12 @@ static void create_page(uint8_t p) {
     case PG_ENDSTOP:  page_endstop_create(s_page[p]);  break;
     case PG_WIFI:     page_wifi_create(s_page[p]);     break;
     case PG_MPC:      page_mpc_create(s_page[p]);      break;
+    case PG_SUBMENU:  page_submenu_create(s_page[p]);  break;
     default: break;
   }
-  lv_obj_add_flag(s_page[p], LV_OBJ_FLAG_HIDDEN);      // se duoc hien boi show_page()
+  // Phong xa: neu ham create cua trang lam mat container (s_page[p] = NULL - vd page_rebuild() bi goi
+  // sai thoi diem, xem ui_page_submenu.cpp) thi KHONG goi lv_obj_add_flag(NULL) -> panic.
+  if (s_page[p]) lv_obj_add_flag(s_page[p], LV_OBJ_FLAG_HIDDEN);   // se duoc hien boi show_page()
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +432,7 @@ static void page_release(uint8_t p) {
     case PG_ENDSTOP:  page_endstop_destroy();  break;
     case PG_WIFI:     page_wifi_destroy();     break;
     case PG_MPC:      page_mpc_destroy();      break;
+    case PG_SUBMENU:  page_submenu_destroy();  break;
     case PG_STATUS:   break;                 // khong bao gio toi day (da return o tren)
     default: break;
   }
@@ -409,16 +441,36 @@ static void page_release(uint8_t p) {
   s_page[p] = NULL;
 }
 
+// Dung lai noi dung cua 1 trang DANG MO: thu hoi (page_release) roi tao lai, sau do cap nhat tieu de /
+// focus / thanh day y nhu show_page().
+//
+// VI SAO CAN: noi dung cua trang MENU CON (PG_SUBMENU) phu thuoc BIEN TOAN CUC `s_sm_g` (nhom dang mo)
+// chu khong chi du lieu Marlin -> doi nhom ma van o trong trang thi phai dung lai noi dung. show_page()
+// khong lam duoc viec nay vi no thay `p == s_page_act` nen khong thu hoi/tao lai (xem show_page).
+// Dung cho CA truong hop: so thong so Marlin gui DOI -> co dong vua hien duoc -> loc lai danh sach.
+void page_rebuild(uint8_t p) {
+  if (p >= PG_COUNT || !s_page[p]) return;
+  const bool active = (s_page_act == p);
+  page_release(p);                           // -> page_<ten>_destroy() + lv_obj_del(container)
+  if (!active) return;                       // goi cho trang KHONG mo: chi don cho sach
+  create_page(p);
+  lv_obj_clear_flag(s_page[p], LV_OBJ_FLAG_HIDDEN);
+  set_text(s_title, page_title(p));
+  if (s_group && s_page[p] && !focus_first_in(s_page[p]) && s_bar) lv_group_focus_obj(s_bar);
+  bot_sync(true);                            // do lai chieu cao: thanh day PREV/NEXT co the doi
+}
+
 void show_page(uint8_t p) {
   if (p >= PG_COUNT) p = PG_STATUS;
 
   const uint8_t prev = s_page_act;           // trang CU - phai doc TRUOC khi bi ghi de o cuoi ham
 
   // ---- 1) Dong cac lop phu KHONG thuoc trang (con cua lv_scr_act) ----
-  // Lop phu SUA thong so (ov_*) chi thuoc man SETTINGS -> doi man thi dong luon. PHAI lam TRUOC khi
-  // thu hoi trang: lop phu nam tren lv_scr_act nen neu con mo ma trang SETTINGS bi xoa thi no van
-  // nam de len trang moi (xem page_settings_destroy).
-  if (p != PG_SETTINGS) ov_hide();
+  // Lop phu SUA thong so (ov_*) chi thuoc man SETTINGS va man MENU CON (PG_SUBMENU - xem
+  // ui_page_submenu.cpp) -> doi sang trang KHAC thi dong luon. PHAI lam TRUOC khi thu hoi trang:
+  // lop phu nam tren lv_scr_act nen neu con mo ma trang bi xoa thi no van nam de len trang moi
+  // (xem page_settings_destroy).
+  if (p != PG_SETTINGS && p != PG_SUBMENU) ov_hide();
 
   // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
   // con cua trang) va KHONG dung toi WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
@@ -434,6 +486,9 @@ void show_page(uint8_t p) {
   if (prev != p) page_release(prev);
 
   // ---- 3) Tao (neu chua co) + hien trang moi ----
+  // MO trang MENU CON tu mot man KHAC -> luon vao tu NHOM GOC (giong Marlin: menu luon mo tu dau).
+  // Khi dang O TRONG trang nay ma doi nhom (submenu_open -> page_rebuild) thi khong di qua day.
+  if (p == PG_SUBMENU && prev != PG_SUBMENU) submenu_reset_root();
   if (!s_page[p]) create_page(p);
 
   for (uint8_t i = 0; i < PG_COUNT; i++) {
@@ -458,11 +513,13 @@ void show_page(uint8_t p) {
   // moi doc/in duoc, truoc day nguoi dung phai tu bam "Init SD" truoc khi in.
   if (p == PG_FILES) files_init_sd();
 
-  set_text(s_title, PG_TITLE[p]);
+  set_text(s_title, page_title(p));
   s_page_act = p;
+  s_prev_page = prev;                        // cho nut BACK cua trang bang phang (xem do_action A_BACK)
 
   // encoder: focus vao vat dau tien cua man vua mo
-  if (s_group && !focus_first_in(s_page[p]) && s_bar) lv_group_focus_obj(s_bar);
+  // (kiem tra s_page[p] truoc: focus_first_in(NULL) se cham vao assert cua LVGL - xem create_page)
+  if (s_group && s_page[p] && !focus_first_in(s_page[p]) && s_bar) lv_group_focus_obj(s_bar);
 
   // Thanh day: do noi dung SAU khi trang da duoc HIEN (xem canh bao o bot_sync)
   bot_sync(true);
@@ -682,6 +739,9 @@ static void ui_lvgl_task_body(void) {
       case PG_CUSTOM:   page_custom_update();   break;
       case PG_WIFI:     page_wifi_update();     break;
       case PG_MPC:      page_mpc_update();      break;
+      // Menu CONFIGURATION (PG_SUBMENU): cot gia tri chi doi khi Marlin gui thong so -> nhip CHAM
+      // 400 ms la du (giong trang THONG SO), khong ton SPI.
+      case PG_SUBMENU:  page_submenu_update();  break;
       default: break;
     }
     // Noi dung man co the doi do (vd SETTINGS loc lai / MENU doi gia tri) -> cap nhat nhan thanh day.
@@ -841,10 +901,80 @@ static void dump_obj(lv_obj_t *o, const uint8_t depth) {
 // tft_ili9341.h) nen khong the "chup anh" man hinh tu PC. Khi can kiem tra mot man co bi tran,
 // nut co nam sat day khong, roller cao bao nhieu dong, hay NHAN nao dang hien chu gi thi doc
 // bang `UI BOX` tren COM7 (in theo cay, thut le theo do sau).
+// ---------------------------------------------------------------------------
+//  CHAN DOAN: ban su kien CHAM vao vat bam duoc thu k cua TRANG dang mo (`UI HIT <k>` tren COM8).
+//
+//  VI SAO CAN: khong the cham tay vao LCD tu PC, ma duong SU KIEN lai la phan de hong nhat (quen
+//  `lv_obj_add_event_cb`, sai ma su kien, ud sai...). Lenh nay di DUNG duong su kien that
+//  (LV_EVENT_CLICKED -> cb_menu_row / cb_sm_row / ...) nen kiem tra duoc tu PC, giong nhu `UI TAP`
+//  cua man FILE va `UI PRE` cua man NHIET DO.
+//
+//  Thu tu vat duoc danh so GIONG focus_first_in() (duyet sau, theo thu tu tao) -> k = 0 la dong dau
+//  tien cua trang (hoac nut dau tien tren dong tieu de neu trang khong co vat bam duoc).
+// ---------------------------------------------------------------------------
+static lv_obj_t *hit_nth(lv_obj_t *o, uint16_t *k) {
+  const uint32_t n = lv_obj_get_child_cnt(o);
+  for (uint32_t i = 0; i < n; i++) {
+    lv_obj_t *c = lv_obj_get_child(o, i);
+    // CHI dem vat la NUT (lv_btn): do la cac vat bam duoc THAT (mk_hit/mk_btn deu la lv_btn). Neu dem
+    // moi vat co co CLICK_FOCUSABLE thi ca NHAN cung bi dem (do that 2026-10-15: `UI HIT 1` "bam" vao
+    // nhan "Probe Z Offset" -> khong co gi xay ra, chi so lech het so voi dong menu dang thay tren LCD).
+    if (lv_obj_check_type(c, &lv_btn_class) &&
+        lv_obj_has_flag(c, LV_OBJ_FLAG_CLICK_FOCUSABLE) && !lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN)) {
+      if ((*k)-- == 0) return c;
+    }
+    lv_obj_t *r = hit_nth(c, k);
+    if (r) return r;
+  }
+  return NULL;
+}
+
+// CHAN DOAN nut BACK (`UI BACK` tren COM8): goi DUNG do_action(A_BACK) nhu bam nut BACK o goc phai
+// dong tieu de -> kiem tra duoc chong man hinh (menu CONFIGURATION -> nhom cha -> MENU/STATUS) tu PC.
+void ui_lvgl_test_back(void) {
+  Serial.printf("[UI] BACK (tu trang %u '%s')\n", (unsigned)s_page_act, page_title(s_page_act));
+  do_action((int)A_BACK);
+  Serial.printf("[UI] BACK -> trang %u '%s' | lop phu SUA: %s\n",
+                (unsigned)s_page_act, page_title(s_page_act), ov_is_open() ? "DANG MO" : "dong");
+}
+
+void ui_lvgl_test_hit(const char *arg) {
+  int k = 0;
+  if (arg && *arg) sscanf(arg, "%d", &k);
+  if (k < 0) k = 0;
+  lv_obj_t *pg = s_page[s_page_act];
+  if (!pg) { Serial.println("[UI] HIT: trang dang mo khong co noi dung"); return; }
+  const uint8_t page0 = s_page_act;
+  // LOP PHU SUA dang mo: cac nut cua no nam tren lv_layer_top() (KHONG phai con cua trang) -> tim o do
+  // truoc. Chi so: 0..3 = nut buoc 0.01/0.1/1/10, 4 = '-', 5 = '+', 6 = OK, 7 = Huy -> bam duoc CA
+  // duong sua + gui M-code tu PC (khong cham duoc vao LCD).
+  lv_obj_t *root = ov_is_open() ? lv_layer_top() : pg;
+  uint16_t idx = (uint16_t)k;
+  lv_obj_t *o = hit_nth(root, &idx);
+  if (!o) {
+    Serial.printf("[UI] HIT: %s chi co %u vat bam duoc (k=%d qua lon)\n",
+                  root == pg ? "trang dang mo" : "lop phu SUA", (unsigned)(k - (int)idx), k);
+    return;
+  }
+  // In TEN cua vat sap bam (nhan dau tien cua no): de biet CHAC dang bam vao dong nao, khong phai
+  // suy tu chi so (chi so dem theo thu tu tao - xem hit_nth).
+  const char *nm = "-";
+  if (lv_obj_get_child_cnt(o)) {
+    lv_obj_t *l0 = lv_obj_get_child(o, 0);
+    if (lv_obj_check_type(l0, &lv_label_class)) nm = lv_label_get_text(l0);
+  }
+  Serial.printf("[UI] HIT %d -> CLICKED vao vat %d '%s' cua trang %u '%s'\n",
+                k, k, nm, (unsigned)page0, page_title(page0));
+  lv_event_send(o, LV_EVENT_CLICKED, NULL);
+  // Sau su kien: trang/tieu de co the DOI (dong menu mo man khac) hoac lop phu SUA mo ra.
+  Serial.printf("[UI] HIT -> trang %u '%s' | lop phu SUA: %s\n",
+                (unsigned)s_page_act, page_title(s_page_act), ov_is_open() ? "DANG MO" : "dong");
+}
+
 void ui_lvgl_dump_layout(void) {
   lv_obj_t *pg = s_page[s_page_act];
   Serial.printf("[UI] trang %u '%s' | vung noi dung %dx%d | thanh day %s\n",
-                (unsigned)s_page_act, PG_TITLE[s_page_act], (int)PAGE_INN_W, (int)PAGE_INN_H,
+                (unsigned)s_page_act, page_title(s_page_act), (int)PAGE_INN_W, (int)PAGE_INN_H,
                 bot_shown() ? "HIEN (noi dung tran)" : "an (noi dung gon)");
   if (pg) {
     const uint32_t n = lv_obj_get_child_cnt(pg);

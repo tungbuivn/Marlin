@@ -422,12 +422,12 @@ python cydlcd/tools/make_lvgl_icons.py
 | Màn | Nội dung / lệnh gửi |
 |---|---|
 | **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
-| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · Settings · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n/33`, LINK…). Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · Motion (JOG) · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
 | **FILES** | danh sách file từ SD (Marlin đẩy xuống): **chạm 1 dòng = CHỌN + tô sáng dòng đó — chỉ nút `PRINT` mới in** (trước đây chạm vào danh sách là in luôn: hợp với encoder nhưng trên màn cảm ứng thì rất dễ in nhầm); `PRINT` → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15, vòng 2):** danh sách là **5 dòng cố định (18 px/dòng, mỗi dòng 1 nút)** + **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)`; **KHÔNG cuộn** — lật trang bằng **`PREV`/`NEXT`** ở hàng nút cuối (kèm `T x/y` + **tên mục đang chọn** ở dòng info, nút nào hết trang thì **khoá thật** bằng `LV_STATE_DISABLED`: `lv_indev.c:412` chặn chạm, `lv_group.c:434` chặn encoder). **Vì sao bỏ `lv_roller` cũ:** (1) cuộn bằng ngón tay rất khó — phải kéo đúng cự ly mới đổi được dòng; (2) **lỗi nặng hơn:** chạm vào 1 dòng roller **không** làm `lv_roller_get_selected()` đổi theo dòng vừa chạm (roller chỉ đổi khi kéo rồi thắng lại) ⇒ `files_selected()` trả về dòng chọn **cũ** ⇒ bấm `XOA` trên 1 file lại đi xoá **thư mục** đang chọn trước đó (triệu chứng: *"chọn 1 file mà báo Không xoá thư mục"*). Nay mỗi dòng là 1 nút giữ **chỉ số tuyệt đối** `s_sel` + **tên** (`s_sel_name`, để giữ lựa chọn qua lần `REFRESH`/xoá xong vì thứ tự file do FAT quyết định). **Nút `XOA` xoá CẢ file LẪN thư mục** (2026-10-15, vòng 3), luôn hỏi xác nhận **2 bước** (xem §8b cho hộp thoại): **file** → `net_sd_delete_file()` (`SD.remove()` = FATFS `f_unlink`) hoặc lùi về `M30`; **thư mục** → `net_sd_delete_dir()` = **`SD.rmdir()`** và **chỉ khi thư mục RỖNG** (FATFS `rmdir` không xoá được thư mục còn mục con) — còn mục con thì chỉ hiện ghi chú `Thu muc con file - xoa file ben trong truoc`. ⚠️ **KHÔNG dùng `M30` cho thư mục**: `M30` → `CardReader::removeFile()` → `SdBaseFile::remove()` → `truncate(0)` không xoá được thư mục (chính Marlin ghi trong `SdBaseFile.cpp`), nên đường thư mục **chỉ chạy khi thẻ ở khe màn hình CYD** (§12). ⚠️ `SD.remove()` của ESP32 **từ chối thư mục** (`vfs_api.cpp`: *"does not exists or is directory"*) — đã gặp thật: xoá thư mục rỗng mà báo "Khong xoa duoc"; **phải** dùng `SD.rmdir()`. **Đã kiểm end-to-end (COM7):** chọn `cydlcd_tmp` → `XOA` → OK ×2 → log `[UP] da xoa thu muc RONG /cydlcd_tmp`, danh sách còn 6 mục, không reboot (`cydlcd_tmp` là thư mục tạm của màn hình, `cyd_sd.cpp` **tự tạo lại** khi cần upload). **KHOÁ NÚT THEO TRẠNG THÁI MÁY (2026-10-15, vòng 4):** `PRINT` và `XOA` bị **khoá thật** (`LV_STATE_DISABLED`) khi **đang in / tạm dừng** (`files_actions_mark()`); `PRINT` còn bị khoá khi mục đang chọn **không phải file G-code** (`.gcode/.gco/.gc/.g`) hoặc là **thư mục** — trước đây bấm PRINT không thấy gì và cũng không có phản hồi nào. Đã kiểm: đang in → `PRINT=khoa XOA=khoa | DANG IN`; sau khi huỷ → `PRINT=mo XOA=mo`. **GỬI LỆNH BẰNG TÊN 8.3 (proto 4, §12.4):** `M23`/`changeDir` dùng **tên 8.3** (`sfn`) chứ không dùng tên dài, vì SdFat của Marlin chỉ giữ LFN trong **27 byte** (tên > 26 ký tự bị cắt, mất cả phần mở rộng ⇒ `M23 <tên dài>` **không bao giờ mở được file** ⇒ bấm PRINT không in). **Đã kiểm:** `M23 V300_C~1.GCO` mở đúng `V300_case-esp-2432s208_no-text.gcode` (36 ký tự) và `M23 V300__~1.GC` mở `V300_[a]_xy_joint_cable_bridge_3hole.gc` (39 ký tự) → Marlin `st=1`, `fl=0x26/0xA7` (bit `SD_PRINTING`), `file="..."`. **THƯ MỤC HỆ THỐNG CHỈ BỊ ẨN KHI HIỂN THỊ (2026-10-15, vòng 5):** `cydlcd_tmp` (thư mục tạm của **chính màn hình** — `cyd_sd.cpp` tự tạo) và `BTUP` (thư mục cũ của đường upload **Bluetooth** đã xoá 2026-10-14) nằm trong `CYDLCD_HIDE_DIRS` (`cydlcd_config.h`). ⚠️ **Danh sách Marlin gửi xuống VẪN GIỮ NGUYÊN ĐỦ** (`cydlcd.files[]` + `cydlcd.n_files`, đúng chỉ số như Marlin — Marlin vẫn dùng danh sách đó để in/xoá, ẩn đi là hỏng): màn hình chỉ **ẩn lúc HIỂN THỊ** và **sắp xếp lại** bằng một **VIEW** riêng (`s_view[]`, `files_view_build()` trong `ui_page_files.cpp`; `s_sel` luôn là chỉ số THẬT). **Sắp xếp: THƯ MỤC trước, rồi theo TÊN** (không phân biệt hoa/thường) — nhờ vậy thứ tự **ỔN ĐỊNH**: thêm/bớt 1 file (upload/xoá xong) thì các dòng cũ **không nhảy chỗ**, người dùng không chạm nhầm (thứ tự FAT/Marlin thì mỗi lần đổi danh sách là xáo). Đã kiểm: `UI TAP` in `5/6 muc hien thi (Marlin gui 6)` + dòng `(an) muc #2 <<cydlcd_tmp>> ... van co trong danh sach Marlin`. **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống; dòng được **căn trái** và **cắt bằng `...`** khi quá dài; **tên dài bị cắt quá 24 ký tự thì nối thêm phần mở rộng lấy từ tên 8.3** (vd `V300_case-esp-2432s208_no-.GCO`) để biết đó là file in được. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
-| **SETTINGS** | bảng thông số (steps/mm · max feed · max accel · jerk · PID · probe offset · z-offset · feed/flow %); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS` |
+| **SETTINGS** (`THONG SO`) | bảng phẳng **76 dòng** (steps/mm · max feed · max accel · jerk · PID · probe offset · MPC · TMC · M710…); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS`. Từ 2026-10-15 **không còn là màn chính của cấu hình**: vào bằng `Configuration` → `Advanced Settings` → `All settings (table)` (xem mục *"Menu CONFIGURATION kiểu 12864"*) |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
 | **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
 | **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
@@ -2084,6 +2084,80 @@ hình hiện **43%** (đã trả lại `M220 S100`).
 **Sửa kèm (dòng MENU):** mục `SD card` **không còn đếm số file** (yêu cầu người dùng: *"bỏ phần đếm số lượng file ở
 menu file"*) và mục `Settings` không còn ghi `58/33` (tổng 33 là con số cũ; Marlin gửi 58 dòng) mà ghi **`58 muc`**
 — màn hình không biết tổng số thật vì Marlin không gửi frame "hết danh sách" cho SETTING.
+
+## Menu CONFIGURATION kiểu 12864 (2026-10-15) — `src/ui_page_submenu.cpp`
+
+**Yêu cầu người dùng:** *"phần configuration tôi thấy làm giống 12864 tiện hơn"*. Trước đây dòng `Settings`
+trong MENU mở **một bảng phẳng 76 dòng** phải cuộn; nay nó mở **cây menu nhiều cấp** giống menu
+`Configuration` của Marlin 12864 (`docs/12864-menu-map.md`). Bảng phẳng **vẫn còn**: mục
+`Advanced Settings` → `All settings (table)` (trang `THONG SO` cũ, giữ nguyên `UP`/`DOWN`/`SAVE EEPROM`/`M502`).
+
+```
+CAU HINH
+├─ Probe Z Offset                    M851 Z (mở lớp phủ sửa)
+├─ Controller Fan >                  Idle Speed · Auto Mode · Active Speed · Idle Period      M710 I/A/S/D
+├─ Preheat PLA/PETG/ABS Settings >   Nozzle · Bed · Fan   (9 preset màn hình tự lưu ở NVS)
+├─ Advanced Settings >
+│   ├─ Max Speed >        Max X/Y/Z/E Speed · Min Velocity (M205 S) · Min Travel Speed (M205 T)
+│   ├─ Acceleration >     Accel print/retract/travel (M204 P/R/T) · Max X/Y/Z/E Accel (M201)
+│   ├─ Jerk >             Max X/Y/Z/E Jerk (M205) · Junction Dev · Linear Adv (M900 K)
+│   ├─ Probe Offsets >    Probe X/Y/Z (M851) + dòng "Z Probe Wizard"
+│   ├─ Steps/mm >         X/Y/Z/E (M92)
+│   ├─ TMC Drivers >      Driver Current > X/Y/Z/Z2/Z3/E0 (M906) · Stepping Mode > StealthChop 6 trục (M569)
+│   ├─ Temperature >      MPC P/C/R/A/F/H (M306) + MPC Autotune · Bed PID (M304) + Bed PID Autotune · Hotend PID (M301)
+│   ├─ Filament >         E in mm3 + Filament Diameter (M200) · Load/Unload Length (M603) · Runout Sensor (M412)
+│   ├─ Tune (runtime) >   Feed % (M220) · Flow % (M221) · Fan % (M106) · Target E0 (M104) · Target bed (M140)
+│   └─ Fade Height (M420 Z) · Home Offset X/Y (M206)
+├─ Store Settings (M500) · Load Settings (M501) · Restore Defaults (M502 — xác nhận 2 bước)
+└─ All settings (table)              mở lại BẢNG PHẲNG cũ (trang `THONG SO`)
+```
+
+**Cách làm (vì sao KHÔNG phải 17 trang):**
+
+* **MỘT trang `PG_SUBMENU` cho cả cây**: `SM_GROUPS`/`SM_ITEMS` trong `ui_page_submenu.cpp` là `const` →
+  nằm ở **FLASH**; nhóm đang mở giữ ở `s_sm_g`, đổi nhóm thì `page_rebuild()` dựng lại nội dung trang
+  (KHÔNG tạo trang mới). Mỗi trang LVGL tốn ~5–10 KB pool nên 17 trang là hết pool 48 KB.
+* Dòng `SM_VAL` **không tự format/gửi giá trị**: nó trỏ vào `SET_ROWS[]` của `ui_page_settings.cpp` **theo
+  ID thông số** ⇒ **dùng lại nguyên lớp phủ sửa** (`-`/`+`/4 mức bước/`OK`) và `se_send_mcode()`.
+* **Dòng nào không có dữ liệu thì TỰ ẨN** (`settings_has_value`): Marlin chỉ gửi thông số mà bản build có
+  (MPC khi `MPCTEMP`, Z2/Z3 khi có driver, StealthChop khi driver hỗ trợ, M710 khi `USE_CONTROLLER_FAN`) ⇒
+  cây giống 12864 nhưng không bao giờ hiện dòng rỗng. Máy này: `Jerk 4/6` (ẩn `Junction Dev`/`Linear Adv` vì
+  build dùng `CLASSIC_JERK`), `TEMP (ADV) 11/14` (ẩn `Hotend PID` vì hotend chạy `MPCTEMP`).
+* **BACK đi theo nhóm CHA** (`submenu_parent()`); đang mở lớp phủ sửa thì BACK **chỉ đóng lớp phủ**; trang
+  bảng phẳng mở từ trong cây thì BACK trả về đúng cây (`s_prev_page`).
+
+**14 thông số mới** (phải nạp **CẢ HAI** firmware: enum `cydlcd_setting_t` trong 2 bản `cydlcd_protocol.h`
+phải khớp y nguyên thứ tự — proto vẫn là 4): `MIN_FEEDRATE` (M205 S) · `MIN_TRAVEL_FEEDRATE` (M205 T) ·
+`TMC_CURRENT_Z2/Z3` · `STEALTH_X/Y/Z/Z2/Z3/E` (M569 S0/S1) · `CTRLFAN_IDLE/AUTO/ACTIVE/DURATION` (M710 I/A/S/D).
+
+⚠️ **Z2/Z3 KHÔNG có chữ cái riêng**: Marlin dùng tham số **`I<chỉ số phụ>`** (`M906.cpp`: *"I[index] … 1 for
+X2/Y2/Z2; 2 for Z3"*) nên phải gửi **`M906 Z600 I1`** (Z2) / **`I2`** (Z3) và **`M569 S1 Z I1`** (Z2) /
+**`I2`** (Z3). Viết `M906 Z2 600` sẽ bị parser đọc thành **`Z` = 2 mA** mà **KHÔNG báo lỗi**.
+
+**DRAM (panel đã full — `dram0_0_seg`):** thêm 14 thông số ⇒ nâng `CYDLCD_SETTINGS_MAX` 72 → **80**
+(+8 mục × 8 B × **2 bản** `s_src` + `cydlcd` = +128 B) nên linker báo *overflow 160 byte*; đã bù bằng cách
+giảm `CYDLCD_MESH_MAX` 16 → **12** (`mesh[16][16]` = 512 B → `[12][12]` = 288 B, tiết kiệm 448 B; mesh máy này
+7×7, vẫn đủ cho 10×10 sau này). `SET_ROWS`/`SM_GROUPS`/`SM_ITEMS` là `const` → **flash**, không tốn DRAM.
+(Hàng đợi log `logq` nằm trên **heap** — `xQueueCreate` — nên giảm số dòng ở đó KHÔNG cứu được DRAM tĩnh.)
+
+**Lệnh chẩn đoán mới (COM8):**
+
+| Lệnh | Việc |
+|---|---|
+| `UI CFG` | in **cả cây**: mỗi nhóm (thụt lề theo nhóm cha) + `dong=hiện/tổng` + nhóm nào RỖNG (dòng trỏ tới nó sẽ bị ẩn) |
+| `UI CFG <nhóm>` | **MỞ** nhóm đó (đi đúng `submenu_open()` như bấm tay) rồi in từng dòng + giá trị |
+| `UI HIT <k>` | bắn `LV_EVENT_CLICKED` vào **nút thứ k** của trang đang mở → đi đúng đường sự kiện thật; khi lớp phủ sửa đang mở thì tìm trên `lv_layer_top()`: `0..3` = nút bước, `4` = `-`, `5` = `+`, `6` = `OK`, `7` = `Hủy` |
+| `UI BACK` | bấm nút BACK ở dòng tiêu đề (đi đúng `do_action(A_BACK)`) |
+
+⚠️ `UI HIT` chỉ đếm **nút** (`lv_btn`) — đếm mọi vật có cờ `CLICK_FOCUSABLE` thì **nhãn chữ cũng bị đếm** và
+chỉ số lệch hết so với dòng đang thấy trên LCD (đã gặp thật).
+
+**Đã kiểm trên máy thật (2026-10-15):** `UI CFG 0` → 10/10 dòng, `Probe Z Offset = 0.750`;
+`UI HIT 5` (`Advanced Settings`) → `ADVANCED`, `UI HIT 0` (`Max Speed`) → `MAX SPEED`; `UI HIT 1` ở gốc
+(`Controller Fan`) → `CTRL FAN` (idle 100 · auto 1 · active 255 · kỳ nghỉ 60 s); `UI CFG 8` → X/Y/Z/**Z2/Z3**/E0
+= 600 mA; `UI CFG 9` → 6 × StealthChop = 1; sửa `Min Travel Speed` bằng `+`/`OK` **từ console** ⇒ Marlin nhận
+`M205 T0.10` và màn hình đọc lại **0.10** (đã trả về `M205 T0`); `UI HIT 9` (`All settings`) → trang `THONG SO`
+(71/76 dòng có giá trị, Marlin gửi 72 thông số) rồi BACK về đúng cây.
 
 ## Vì sao màn hình chạy chậm (2026-10-15) — đo bằng `UI PERF`
 

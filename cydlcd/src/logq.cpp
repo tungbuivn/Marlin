@@ -10,7 +10,9 @@
   #include <stdarg.h>
   #include <stdio.h>
 
-  // 12 dong x 96 byte = 1,2 KB RAM - du cho cac dot log ngan (log chan doan 1 Hz + vai dong su kien).
+  // 12 dong x 96 byte = 1,2 KB - du cho cac dot log ngan (log chan doan 1 Hz + vai dong su kien).
+  // LUU Y: bo dem nay nam tren HEAP (xQueueCreate) chu KHONG phai .bss -> giam so dong o day KHONG
+  // giai phong duoc DRAM tinh (dram0_0_seg). Muon cuu DRAM tinh thi phai giam mang trong cydlcd_link.h.
   #define LOGQ_LINES  12
   #define LOGQ_LEN    96
 

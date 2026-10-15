@@ -276,7 +276,26 @@ enum cydlcd_setting_t : uint16_t {
   CYDLCD_SET_FILAMENT_DIA,        // mm (planner.filament_size[0] - M200 D, duong kinh filament)
   CYDLCD_SET_FILAMENT_VOL,        // 1/0 (M200 S: bu bang the tich dang BAT hay TAT)
   CYDLCD_SET_FC_LOAD,             // mm (fc_settings[0].load_length - M603 L, chieu dai nap filament)
-  CYDLCD_SET_FC_UNLOAD            // mm (fc_settings[0].unload_length - M603 U, chieu dai rut filament)
+  CYDLCD_SET_FC_UNLOAD,           // mm (fc_settings[0].unload_length - M603 U, chieu dai rut filament)
+  // ---- 2026-10-15: them cho menu CONFIGURATION kieu 12864 (M205 S/T, M906 Z2/Z3, M569, M710) ----
+  // !!! THU TU NAY PHAI Y NGUYEN O CA HAI FILE cydlcd_protocol.h (panel + Marlin): id = chi so enum,
+  //     lech 1 cai la panel hieu sai thong so va KHONG co gi phat hien duoc.
+  // May nay co 3 driver Z (Z/Z2/Z3 - Configuration.h: Z2_DRIVER_TYPE/Z3_DRIVER_TYPE = TMC2209) nen co
+  // ca dong dien lan StealthChop rieng cho Z2/Z3 nhu menu TMC cua 12864.
+  CYDLCD_SET_MIN_FEEDRATE,        // mm/s (planner.settings.min_feedrate_mm_s - M205 S)
+  CYDLCD_SET_MIN_TRAVEL_FEEDRATE, // mm/s (planner.settings.min_travel_feedrate_mm_s - M205 T)
+  CYDLCD_SET_TMC_CURRENT_Z2,      // mA (stepperZ2.val_mA - M906 Z2)
+  CYDLCD_SET_TMC_CURRENT_Z3,      // mA (stepperZ3.val_mA - M906 Z3)
+  CYDLCD_SET_STEALTH_X,           // 1/0 (stepperX.stored.stealthChop_enabled - M569 S1/S0)
+  CYDLCD_SET_STEALTH_Y,           // 1/0
+  CYDLCD_SET_STEALTH_Z,           // 1/0
+  CYDLCD_SET_STEALTH_Z2,          // 1/0
+  CYDLCD_SET_STEALTH_Z3,          // 1/0
+  CYDLCD_SET_STEALTH_E,           // 1/0 (E0)
+  CYDLCD_SET_CTRLFAN_IDLE,        // 0..255 (controllerFan.settings.idle_speed - M710 I)
+  CYDLCD_SET_CTRLFAN_AUTO,        // 1/0 (controllerFan.settings.auto_mode - M710 A)
+  CYDLCD_SET_CTRLFAN_ACTIVE,      // 0..255 (controllerFan.settings.active_speed - M710 S)
+  CYDLCD_SET_CTRLFAN_DURATION     // giay 0..4800 (controllerFan.settings.duration - M710 D)
   // GHI CHU: 3 preset preheat (PLA/PETG/ABS) KHONG nam o day vi ban nay khong co M145/HAS_PREHEAT.
   // MAN HINH CYD tu luu chung trong NVS voi "id cuc bo" 0x40xx (xem ui_preheat.cpp va ui_page_settings.cpp - bang SET_ROWS).
 };

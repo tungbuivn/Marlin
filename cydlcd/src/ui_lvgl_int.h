@@ -226,6 +226,9 @@ enum {
   PG_TBT, PG_INFO, PG_ENDSTOP,
   PG_WIFI,                 // trang WIFI (mo tu icon WiFi o header/man STATUS hoac muc "WiFi" MENU)
   PG_MPC,                  // trang TUNING (MPC/PID) - 6 tham so M306 + nut tune (mo tu man NHIET DO/MENU)
+  PG_SUBMENU,              // trang MENU CON (menu "Configuration" kieu 12864): NOI DUNG do bang
+                           // SM_GROUPS/SM_ITEMS trong ui_page_submenu.cpp quyet dinh theo `s_sm_g` ->
+                           // MOT trang dung chung cho ca cay (khong phai 1 trang cho moi nhom).
   PG_COUNT
 };
 // ===========================================================================
@@ -245,6 +248,9 @@ enum {
   A_STEPPERS_OFF, A_HOME_X, A_HOME_Y, A_HOME_Z, A_EDIT_PROBE_Z,
   // P3/P8/P9 - EEPROM + xac nhan + DFU (A_STOP_NOW la buoc da xac nhan cua A_STOP)
   A_EEPROM_RESET, A_STOP_NOW, A_REBOOT_DFU,
+  // 2026-10-15: nap lai thong so tu EEPROM (M501) - muc "Load Settings" cua menu Configuration.
+  // KHONG co xac nhan 2 buoc: M501 chi doc EEPROM vao RAM (hoan tac thay doi CHUA luu), vo hai.
+  A_LOAD_SETTINGS,
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning tren man TEMP
@@ -536,6 +542,14 @@ const char *wifi_ip_now(void);
 int8_t wifi_rssi_now(void);
 /** Hien 1 man (tao neu chua co), cap nhat dong tieu de + focus + thanh day. */
 void show_page(uint8_t p);
+/** Ten trang cho dong tieu de: PG_TITLE[p], rieng PG_SUBMENU lay theo NHOM dang mo. */
+const char *page_title(uint8_t p);
+/**
+ * Dung lai noi dung cua 1 trang DANG MO (thu hoi roi tao lai + cap nhat tieu de/focus/thanh day).
+ * Can cho cac trang ma noi dung phu thuoc BIEN TOAN CUC chu khong chi du lieu Marlin: hien tai la
+ * PG_SUBMENU (doi nhom menu khi dang o trong trang do).
+ */
+void page_rebuild(uint8_t p);
 /** Chay lenh THAT SU cua cac muc phai xac nhon (M502 / reboot DFU / xoa file SD). */
 void do_confirmed(const uint8_t act);
 /** Chay 1 hanh dong A_*: gui G-code / mo man / mo lop phu SUA (dung cho ca nut bam lan lop phu). */
@@ -621,6 +635,39 @@ void page_settings_update(void);
 void ov_hide(void);
 /** Mo lop phu SUA cho 1 dong thong so theo id (CYDLCD_SET_* / CYDLCD_PRE_ID_BASE + n). */
 void ov_open_id(const uint16_t id);
+/** true = Marlin DA GUI gia tri cho id nay - dung de AN cac dong/dong menu khong co du lieu. */
+bool settings_has_value(uint16_t id);
+/** Format gia tri HIEN TAI cua `id` theo dung so le cua bang (false = khong co dong/gia tri). */
+bool settings_fmt_cur(char *b, size_t n, uint16_t id);
+/**
+ * Dung lop phu SUA neu dang mo (nut BACK bam khi hop dang mo thi chi DONG HOP, khong doi trang).
+ * true = vua dong -> noi goi KHONG duoc lam gi them.
+ */
+bool ov_close_open(void);
+/** Lop phu SUA so co dang MO khong (chan doan `UI HIT`). */
+bool ov_is_open(void);
+// ---------------------------------------------------------------------------
+//  Dinh nghia trong ui_page_submenu.cpp (chang 3/4) - MENU CON kieu 12864
+// ---------------------------------------------------------------------------
+//  MOT trang (PG_SUBMENU) dung chung cho ca cay menu "Configuration": bang SM_GROUPS/SM_ITEMS
+//  (const -> nam o FLASH) quyet dinh nhom nao co dong nao. Dong `SM_VAL` tro vao bang SET_ROWS cua
+//  ui_page_settings.cpp theo ID -> dung lai nguyen lop phu SUA (-/+/OK/buoc) khong phai viet lai.
+/** Man MENU CON: ve cac dong cua nhom `s_sm_g` (dong nao khong co gia tri thi tu an). */
+void page_submenu_create(lv_obj_t *p);
+/** Cap nhat cot gia tri cua cac dong dang hien (nhip CHAM 400 ms nhu trang SETTINGS). */
+void page_submenu_update(void);
+/** Huy man MENU CON (dat NULL cac con tro widget cua trang - xem quy uoc o cuoi file nay). */
+void page_submenu_destroy(void);
+/** Mo 1 NHOM cua cay (dang o chinh trang nay thi DUNG LAI noi dung, khong tao trang moi). */
+void submenu_open(uint8_t g);
+/** Nhom CHA cua nhom dang mo; 255 = dang o nhom GOC -> BACK phai ve MENU. */
+uint8_t submenu_parent(void);
+/** Gia tri `parent` bao "KHONG co nhom cha" (nhom GOC) - tra ve boi submenu_parent(). */
+#define SM_PARENT_NONE 255
+/** Ten nhom dang mo, dung cho dong tieu de chung (thay PG_TITLE[PG_SUBMENU]). */
+const char *submenu_title(void);
+/** Dua trang ve nhom GOC - show_page() goi khi MO trang nay tu mot man KHAC (giong Marlin). */
+void submenu_reset_root(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_mesh.cpp / ui_page_custom.cpp / ui_page_endstop.cpp /
 //  ui_page_info.cpp / ui_page_wifi.cpp / ui_page_tbt.cpp (chang 4/4)

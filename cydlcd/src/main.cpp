@@ -205,6 +205,15 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strcasecmp(a3, "PERF") == 0)    ui_lvgl_test_perf();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
+            // `UI CFG` = in CA CAY menu Configuration (moi nhom + so dong hien duoc);
+            // `UI CFG <nhom>` = MO nhom do (nhu bam tay vao dong menu) roi in cac dong dang hien + gia
+            // tri tung dong. Day la cach DUY NHAT kiem tra cay menu tu PC - xem ui_page_submenu.cpp.
+            else if (strncasecmp(a3, "CFG", 3) == 0) submenu_dump(a3 + 3);
+            // `UI HIT <k>` = ban su kien CHAM vao vat bam duoc thu k cua trang dang mo (di dung duong
+            // su kien that) - kiem tra "bam dong menu/nut co chay dung khong" tu PC. Xem ui_lvgl.cpp.
+            else if (strncasecmp(a3, "HIT", 3) == 0) ui_lvgl_test_hit(a3 + 3);
+            // `UI BACK` = bam nut BACK o dong tieu de (di dung do_action) - kiem tra chong man hinh.
+            else if (strcasecmp(a3, "BACK") == 0)    ui_lvgl_test_back();
             // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).
             else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
             // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).

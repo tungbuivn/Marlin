@@ -36,6 +36,9 @@
 #if ENABLED(ADVANCED_PAUSE_FEATURE)
   #include "../../../feature/pause.h"              // fc_settings[] (M603 L/U)
 #endif
+#if ENABLED(USE_CONTROLLER_FAN)
+  #include "../../../feature/controllerfan.h"      // controllerFan.settings (M710 - menu Controller Fan)
+#endif
 
 using namespace ExtUI;
 
@@ -545,6 +548,50 @@ namespace {
       // doc trang thai S tu day roi gui kem (`M200 D<v> S<s>` - xem ui_page_settings.cpp).
       push_setting(CYDLCD_SET_FILAMENT_DIA, scaled(planner.filament_size[0], CYDLCD_VAL_SCALE));
       push_setting(CYDLCD_SET_FILAMENT_VOL, parser.volumetric_enabled ? 1 : 0);
+    #endif
+    // ---- 2026-10-15: them cho menu CONFIGURATION kieu 12864 (Max Speed / TMC Drivers / Controller Fan) ----
+    // M205 S/T = van toc TOI THIEU (planner.settings.min_feedrate_mm_s / min_travel_feedrate_mm_s).
+    // 2 dong nay luon co (khong phu thuoc macro nao) nen menu "Max Speed" luon du 6 dong nhu 12864.
+    push_setting(CYDLCD_SET_MIN_FEEDRATE, scaled(planner.settings.min_feedrate_mm_s, CYDLCD_VAL_SCALE));
+    push_setting(CYDLCD_SET_MIN_TRAVEL_FEEDRATE, scaled(planner.settings.min_travel_feedrate_mm_s, CYDLCD_VAL_SCALE));
+    #if HAS_TRINAMIC_CONFIG
+      // Z2/Z3: may Voron 2.1 nay co 3 driver Z (Z2_DRIVER_TYPE/Z3_DRIVER_TYPE = TMC2209) -> co dong rieng
+      // nhu menu "Driver Current" cua 12864. AXIS_IS_TMC() tu loai truong hop khong co driver do.
+      #if AXIS_IS_TMC(Z2)
+        push_setting(CYDLCD_SET_TMC_CURRENT_Z2, (int32_t)stepperZ2.val_mA);
+      #endif
+      #if AXIS_IS_TMC(Z3)
+        push_setting(CYDLCD_SET_TMC_CURRENT_Z3, (int32_t)stepperZ3.val_mA);
+      #endif
+      // Stepping Mode (StealthChop): doc dung bien ma menu TMC cua Marlin sua
+      // (menu_tmc.cpp: stepper##ST.stored.stealthChop_enabled + stepper##ST.refresh_stepping_mode()).
+      // Man hinh CYD chi gui M569 S1/S0 <truc> - Marlin tu goi refresh_stepping_mode() trong M569.
+      #if X_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_X, stepperX.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+      #if Y_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_Y, stepperY.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+      #if Z_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_Z, stepperZ.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+      #if Z2_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_Z2, stepperZ2.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+      #if Z3_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_Z3, stepperZ3.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+      #if E0_HAS_STEALTHCHOP
+        push_setting(CYDLCD_SET_STEALTH_E, stepperE0.stored.stealthChop_enabled ? 1 : 0);
+      #endif
+    #endif
+    #if ENABLED(USE_CONTROLLER_FAN)
+      // Controller Fan (M710 - CONTROLLER_FAN_EDITABLE): 4 dong giong menu "Controller Fan" cua 12864.
+      // Menu 12864 ghi truc tiep vao controllerFan.settings; man hinh CYD gui M710 I/A/S/D (idempotent).
+      push_setting(CYDLCD_SET_CTRLFAN_IDLE, (int32_t)controllerFan.settings.idle_speed);      // M710 I (0..255)
+      push_setting(CYDLCD_SET_CTRLFAN_AUTO, controllerFan.settings.auto_mode ? 1 : 0);        // M710 A
+      push_setting(CYDLCD_SET_CTRLFAN_ACTIVE, (int32_t)controllerFan.settings.active_speed);  // M710 S (0..255)
+      push_setting(CYDLCD_SET_CTRLFAN_DURATION, (int32_t)controllerFan.settings.duration);    // M710 D (giay)
     #endif
     // GHI CHU (2026-10-14): KHONG gui preheat presets tu day. Ban nay khong co menu MarlinUI 12864
     // nen `HAS_PREHEAT = 0` => `M145` khong duoc bien dich va bang preheat khong nam trong

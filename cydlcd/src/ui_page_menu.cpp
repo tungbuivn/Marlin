@@ -30,7 +30,10 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "SD card",         PG_FILES },
   { "Bed mesh",        PG_MESH },
   { "Custom G34/SD",   PG_CUSTOM },
-  { "Settings",        PG_SETTINGS },
+  // 2026-10-15 (yeu cau nguoi dung: "phan configuration toi thay lam giong 12864 tien hon"): dong nay
+  // KHONG con mo THANG bang phang nua ma mo CAY menu Configuration (PG_SUBMENU, xem ui_page_submenu.cpp)
+  // giong menu Configuration cua Marlin 12864. Bang phang cu van con: "Advanced Settings > All settings".
+  { "Configuration",   PG_SUBMENU },
   { "Tuning (MPC/PID)",PG_MPC },     // 2026-10-15: 6 tham so MPC (M306) + nut tune, giong Marlin 12864
   { "Tramming wizard", PG_TBT },
   { "Info",            PG_INFO },

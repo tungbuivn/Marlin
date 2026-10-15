@@ -114,7 +114,30 @@ static const set_row_t SET_ROWS[] = {
   { CYDLCD_SET_TMC_CURRENT_X,    "TMC I X mA",       1, 0 },
   { CYDLCD_SET_TMC_CURRENT_Y,    "TMC I Y mA",       1, 0 },
   { CYDLCD_SET_TMC_CURRENT_Z,    "TMC I Z mA",       1, 0 },
-  { CYDLCD_SET_TMC_CURRENT_E,    "TMC I E mA",       1, 0 }
+  { CYDLCD_SET_TMC_CURRENT_E,    "TMC I E mA",       1, 0 },
+  // ---- 2026-10-15: them cho menu CONFIGURATION kieu 12864 ----
+  // Marlin chi gui nhung dong ma ban build CO tinh nang tuong ung (Z2/Z3 driver, STEALTHCHOP,
+  // USE_CONTROLLER_FAN, cam bien filament) -> dong nao khong co gia tri thi `settings_build_list()`
+  // (bang phang) va trang MENU CON (settings_has_value) tu AN, khong bao gio hien dong rong.
+  { CYDLCD_SET_MIN_FEEDRATE,     "Min velocity",     1000, 1 },   // M205 S
+  { CYDLCD_SET_MIN_TRAVEL_FEEDRATE, "Min travel",    1000, 1 },   // M205 T
+  { CYDLCD_SET_TMC_CURRENT_Z2,   "TMC I Z2 mA",         1, 0 },   // M906 Z2 (may co 3 driver Z)
+  { CYDLCD_SET_TMC_CURRENT_Z3,   "TMC I Z3 mA",         1, 0 },   // M906 Z3
+  // StealthChop: gia tri la 0/1 (M569 S0/S1 <truc>) -> scale 1, 0 chu so thap phan.
+  { CYDLCD_SET_STEALTH_X,        "StealthChop X",       1, 0 },
+  { CYDLCD_SET_STEALTH_Y,        "StealthChop Y",       1, 0 },
+  { CYDLCD_SET_STEALTH_Z,        "StealthChop Z",       1, 0 },
+  { CYDLCD_SET_STEALTH_Z2,       "StealthChop Z2",      1, 0 },
+  { CYDLCD_SET_STEALTH_Z3,       "StealthChop Z3",      1, 0 },
+  { CYDLCD_SET_STEALTH_E,        "StealthChop E",       1, 0 },
+  // Controller Fan (M710 - CONTROLLER_FAN_EDITABLE): toc do khi nghi / che do tu dong / toc do khi chay
+  // / thoi gian nghi. Menu 12864 sua thang bien controllerFan.settings; o day gui M710 I/A/S/D.
+  { CYDLCD_SET_CTRLFAN_IDLE,     "CF idle speed",       1, 0 },   // M710 I (0..255)
+  { CYDLCD_SET_CTRLFAN_AUTO,     "CF auto mode",        1, 0 },   // M710 A (0/1)
+  { CYDLCD_SET_CTRLFAN_ACTIVE,   "CF active speed",     1, 0 },   // M710 S (0..255)
+  { CYDLCD_SET_CTRLFAN_DURATION, "CF idle period s",    1, 0 },   // M710 D (giay)
+  // Cam bien het filament: Marlin DA GUI tu truoc (CYDLCD_SET_RUNOUT_EN) nhung bang phang chua co dong.
+  { CYDLCD_SET_RUNOUT_EN,        "Runout sensor",       1, 0 }    // M412 S0/S1
 };
 #define SET_NROWS ((uint8_t)(sizeof(SET_ROWS) / sizeof(SET_ROWS[0])))
 
@@ -276,6 +299,34 @@ static bool se_send_mcode(const uint8_t i, const int32_t raw) {
     snprintf(cmd, sizeof(cmd), "M851 %c%s", ax, v);
   else if ((ax = se_axis_char(id, CYDLCD_SET_TMC_CURRENT_X, 4)) != 0)   // P8: M906 X/Y/Z/E <mA>
     snprintf(cmd, sizeof(cmd), "M906 %c%s", ax, v);
+  // ---- 2026-10-15: menu CONFIGURATION kieu 12864 (Max Speed / TMC Drivers / Controller Fan) ----
+  // Z2/Z3 KHONG co chu cai rieng trong M906/M569: Marlin dung tham so `I<chi so phu>`
+  // (M906.cpp: "I[index] - Axis sub-index ... 1 for X2/Y2/Z2; 2 for Z3; 3 for Z4") nen phai gui
+  // `M906 Z600 I1` chu KHONG phai `M906 Z2 600` - viet sai thi parser doc 'Z' = 2 (dat dong dien
+  // 2 mA cho CA cum Z!) chu khong bao loi.
+  else if (id == CYDLCD_SET_TMC_CURRENT_Z2) snprintf(cmd, sizeof(cmd), "M906 Z%s I1", v);
+  else if (id == CYDLCD_SET_TMC_CURRENT_Z3) snprintf(cmd, sizeof(cmd), "M906 Z%s I2", v);
+  else if (id == CYDLCD_SET_MIN_FEEDRATE)   snprintf(cmd, sizeof(cmd), "M205 S%s", v);
+  else if (id == CYDLCD_SET_MIN_TRAVEL_FEEDRATE) snprintf(cmd, sizeof(cmd), "M205 T%s", v);
+  else if (id == CYDLCD_SET_RUNOUT_EN) {
+    // M412 S0/S1 = bat/tat cam bien het filament. `raw` cua dong nay la 0/1 (scale 1) -> chan ve 0/1.
+    snprintf(cmd, sizeof(cmd), "M412 S%ld", (long)(raw ? 1 : 0));
+  }
+  else if (id >= CYDLCD_SET_STEALTH_X && id <= CYDLCD_SET_STEALTH_E) {
+    // Stepping Mode (StealthChop) tung truc: M569 S<0/1> <truc> [I<chi so phu>]. Z2/Z3 dung 'Z' + I1/I2
+    // giong M906 (xem ghi chu tren). Marlin tu goi refresh_stepping_mode() trong M569.
+    static const char   AX_LET[6] = { 'X', 'Y', 'Z', 'Z', 'Z', 'E' };
+    static const int8_t AX_SUB[6] = {  0,   0,   0,   1,   2,   0  };
+    const uint8_t a = (uint8_t)(id - CYDLCD_SET_STEALTH_X);
+    if (AX_SUB[a])
+      snprintf(cmd, sizeof(cmd), "M569 S%ld %c I%d", (long)(raw ? 1 : 0), AX_LET[a], (int)AX_SUB[a]);
+    else
+      snprintf(cmd, sizeof(cmd), "M569 S%ld %c", (long)(raw ? 1 : 0), AX_LET[a]);
+  }
+  else if (id == CYDLCD_SET_CTRLFAN_IDLE)     snprintf(cmd, sizeof(cmd), "M710 I%ld", (long)raw);
+  else if (id == CYDLCD_SET_CTRLFAN_AUTO)     snprintf(cmd, sizeof(cmd), "M710 A%ld", (long)(raw ? 1 : 0));
+  else if (id == CYDLCD_SET_CTRLFAN_ACTIVE)   snprintf(cmd, sizeof(cmd), "M710 S%ld", (long)raw);
+  else if (id == CYDLCD_SET_CTRLFAN_DURATION) snprintf(cmd, sizeof(cmd), "M710 D%ld", (long)raw);
   else if (id == CYDLCD_SET_MAXACCEL_PRINT)      // P8: M204 P (gia toc in)
     snprintf(cmd, sizeof(cmd), "M204 P%s", v);
   else if (id == CYDLCD_SET_MAXACCEL_RETRACT)    //     M204 R (gia toc lui dao)
@@ -555,6 +606,41 @@ void ov_open_id(const uint16_t id) {
   const set_row_t *r = se_find(id);
   if (r) ov_open_edit((uint8_t)(r - SET_ROWS));
 }
+
+// ---------------------------------------------------------------------------
+//  API cho trang MENU CON (ui_page_submenu.cpp) + nut BACK
+// ---------------------------------------------------------------------------
+// true = Marlin DA GUI gia tri cho id nay. Dung de AN cac dong/dong menu khong co du lieu
+// (vd MPC khi ban build khong co MPCTEMP, StealthChop khi driver khong ho tro) - nho vay cay menu
+// giong het 12864 nhung khong bao gio hien dong trong / dong 0 vo nghia.
+bool settings_has_value(const uint16_t id) {
+  // `se_find` truoc: loai id KHONG co trong bang (go sai trong SM_ITEMS) - neu khong se hien
+  // dong menu ma bam vao khong mo duoc lop phu sua.
+  return se_find(id) != NULL && cydlcd_setting(id, INT32_MIN) != INT32_MIN;
+}
+
+// Format gia tri HIEN TAI cua `id` theo dung so le cua bang SETTINGS. false = khong co dong/gia tri.
+bool settings_fmt_cur(char *b, size_t n, const uint16_t id) {
+  const set_row_t *r = se_find(id);
+  if (!r) return false;
+  const int32_t v = cydlcd_setting(id, INT32_MIN);
+  if (v == INT32_MIN) return false;
+  se_fmt_id(b, n, id, v);          // dung lai cach format cua bang (ke ca "du so le" khi dang sua)
+  return true;
+}
+
+// Nut BACK bam trong luc lop phu SUA dang mo -> CHI dong lop phu, khong doi trang.
+// (Truoc day BACK luon roi trang; nay hop sua la lop tren cung nen BACK phai tat lop truoc - giong
+//  cach Marlin thoat khoi man sua gia tri.)
+bool ov_close_open(void) {
+  if (!ov_open) return false;
+  ov_hide();
+  refocus_page();
+  return true;
+}
+
+// Lop phu SUA dang mo hay khong (chan doan `UI HIT` - xem ui_lvgl_test_hit o ui_lvgl.cpp).
+bool ov_is_open(void) { return ov_open; }
 
 // Cham 1 o cua bang -> mo lop phu (hang 0 la dong tieu de nen bo qua)
 static void cb_se_cell(lv_event_t *e) {
