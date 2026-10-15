@@ -1,6 +1,6 @@
 # Hướng dẫn màn hình CYD cho Marlin trên MKS Monster8 V2
 
-Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `9d6a107282a0127e834a5479a0c23dc08600cfaf`.
+Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `e655ee2f`.
 
 Tên project màn hình hiện nay là **`cydlcd/`**. Tên cũ `lcd_panel/`, các macro `PANEL_*` và các công cụ `panel_*` đã được đổi sang `cydlcd/`, `CYDLCD_*` và `cydlcd_*`.
 
@@ -39,6 +39,21 @@ ESP32 / màn hình CYD
 ```
 
 Marlin vẫn dùng toàn bộ lớp SD/FAT và các lệnh `M23`, `M24`, `M25`, `M28`, `M29`, `M30`, `M524`. Khác biệt là thao tác block 512 byte không đi tới SPI trên mainboard mà đi qua `DiskIODriver_CydlcdUART` đến khe SD của màn hình.
+
+### Đa luồng trong firmware màn hình (từ 2026-10-15)
+
+ESP32 có hai nhân. Firmware chia việc thành 4 task FreeRTOS để đường serial tới Marlin **không bao giờ bị chặn** — trước đây mọi thứ chạy trong một vòng lặp, một lần upload WiFi (20–30 giây) là serial chết hẳn:
+
+| Task | Nhân | Ưu tiên | Việc duy nhất nó làm |
+|---|---|---|---|
+| `link` | 1 (một mình) | 20 | UART tới Marlin: nhận frame, gửi PONG/G-code, phục vụ sector SD cho Marlin |
+| `ui` | 0 | 5 | **Nơi duy nhất** được gọi LVGL — vẽ màn hình 30 lần/giây, đọc cảm ứng |
+| `net` | 0 | 4 | WiFi, web server (nhận file upload), thẻ TF |
+| `log` | 0 | 2 | In log ra cổng USB (UART0) qua hàng đợi, không chặn ai |
+
+Nhân 1 chỉ chạy mỗi task `link` nên dù UI đang vẽ hay WiFi đang bận, serial vẫn thông. Các task giao tiếp qua hàng đợi không chặn (queue): lệnh G-code, hành động UI, dòng log. Thẻ SD dùng chung qua một mutex — xem mục 8.
+
+Giám sát treo: mỗi task tăng một bộ đếm heartbeat riêng. Task chẩn đoán 1 Hz kiểm tra — `link`/`ui` đứng quá 5 giây hoặc `net` đứng quá 30 giây (trừ lúc đang upload) thì board tự khởi động lại. Dòng log `[CYD] hb: link=… ui=… net=… log=…` cho biết nhịp của từng task.
 
 ### Ba kiểu giao tiếp có trong code
 
@@ -276,7 +291,7 @@ MENU có 12 mục chính và một dòng hiệu chuẩn cảm ứng:
 4. `SD card`
 5. `Bed mesh`
 6. `Custom G34/SD`
-7. `Settings`
+7. `Configuration`
 8. `Tuning (MPC/PID)`
 9. `Tramming wizard`
 10. `Info`
@@ -288,7 +303,7 @@ Chi tiết hiển thị hiện tại:
 
 - dòng `SD card` **không còn đếm số file**;
 - dòng `Bed mesh` cho biết kích thước lưới và `ON/OFF`;
-- dòng `Settings` chỉ ghi số mục đã nhận, ví dụ `58 muc`, không ghi dạng `58/33`;
+- dòng `Configuration` mở cây menu con kiểu 12864 (xem 7.10), không còn là bảng phẳng;
 - `Tuning` hiển thị giá trị MPC P nếu có;
 - `Tramming wizard` hiển thị trạng thái phiên;
 - `WiFi` hiển thị tắt, đang nối hoặc đã nối.
@@ -300,11 +315,10 @@ Trang này chỉnh:
 - target đầu in bằng các nút `-10`, `-1`, `+1`, `+10` → `M104`;
 - target bàn nhiệt → `M140`;
 - tốc độ quạt từ OFF đến MAX → `M106`;
-- preset `PLA`, `PETG`, `ABS`;
-- `COOLDOWN` → `M104 S0` và `M140 S0`;
-- `TUNING (MPC/PID)` mở trang tuning riêng.
+- 6 nút vật liệu preheat xếp 2 hàng × 3 cột (chỉ hiện tên; bấm vào gửi nhiệt theo vật liệu đó);
+- `COOLDOWN` → `M104 S0` và `M140 S0`.
 
-Preset preheat có thể sửa trong SETTINGS và lưu trong NVS của màn hình. Dòng `Profile` cho biết preset đang dùng. Đây là bộ preset của UI CYD, tách khỏi EEPROM của Marlin.
+Danh sách vật liệu preheat (tối đa 6) do người dùng tự thêm/bớt/đổi tên, mỗi vật liệu gồm tên (tối đa 8 ký tự) + nhiệt nozzle/bed/fan. Sửa trong `Configuration` → `Preheat`: chạm một vật liệu để mở hộp sửa 3-trong-1 (3 ô NOZ/BED/FAN trên cùng một hàng, chạm ô nào thì `-`/`+` chỉnh ô đó), có nút thêm vật liệu mới và xóa (không cho xóa hết). Dòng `Profile` cho biết vật liệu đang dùng. Toàn bộ lưu trong NVS của màn hình, tách khỏi EEPROM của Marlin.
 
 ### 7.4 MOTION (JOG)
 
@@ -335,7 +349,7 @@ Trang tự xin lại settings định kỳ nên thay đổi từ console hoặc 
 
 ### 7.6 SD CARD / FILES
 
-Danh sách cố định **5 dòng mỗi trang**. PREV/NEXT lật trang; chạm một dòng chỉ chọn và tô sáng, chưa in ngay.
+Danh sách cố định **4 dòng mỗi trang**. PREV/NEXT lật trang; chạm một dòng chỉ chọn và tô sáng, chưa in ngay.
 
 Thứ tự hiển thị:
 
@@ -428,31 +442,15 @@ Hiển thị sáu trạng thái:
 
 Bấm `REFRESH (M119)` để yêu cầu dữ liệu mới. Với cấu hình dùng probe chung chân Z min, `Z min` có thể luôn mở còn `PROBE` mới là trạng thái cần xem.
 
-### 7.10 SETTINGS
+### 7.10 CONFIGURATION (cây menu kiểu 12864)
 
-Bảng có hai cột `THONG SO` và `GIA TRI`. Vuốt để cuộn hoặc dùng UP/DOWN; chạm một dòng để mở hộp sửa. Hộp sửa cho chọn bước, `-`, `+`, `OK`, `Hủy`; giá trị và bước luôn hiện đủ số lẻ cần thiết.
+Mục `Configuration` trong MENU mở một cây menu con giống màn 12864, thay cho bảng phẳng trước đây. Các nhóm:
 
-`Fade height mm` được đưa lên dòng 4 để nhìn thấy sớm. Bảng định nghĩa có **61 dòng có thể sửa**, gồm 52 loại nhận từ Marlin và 9 giá trị preset PLA/PETG/ABS lưu cục bộ. Trang chỉ hiện dòng đang có giá trị; MENU ghi riêng số setting Marlin đã gửi, nên con số đó có thể khác số dòng đang thấy trong bảng.
+- `Preheat`: danh sách vật liệu (xem 7.3);
+- các nhóm thông số Marlin (Motion, Temperature, …);
+- `Advanced Settings` → `All settings`: bảng phẳng cũ (trang THONG SO) với UP/DOWN, SAVE EEPROM, M502.
 
-Các nhóm thông số:
-
-- probe offset X/Y/Z và fade height;
-- feed, flow, quạt, target đầu in và bàn nhiệt;
-- MPC P/C/R/A/F/H;
-- home offset X/Y;
-- đường kính filament, volumetric extrusion, load/unload;
-- preset PLA/PETG/ABS: nozzle, bed, fan;
-- steps/mm X/Y/Z/E;
-- max feed X/Y/Z/E;
-- max acceleration X/Y/Z/E;
-- jerk X/Y/Z/E hoặc junction deviation;
-- linear advance;
-- PID đầu in Kp/Ki/Kd;
-- PID bàn nhiệt Kp/Ki/Kd;
-- acceleration print/retract/travel;
-- dòng TMC X/Y/Z/E tính bằng mA.
-
-Các lệnh tương ứng gồm `M92`, `M203`, `M201`, `M205`, `M851`, `M420 Z`, `M906`, `M204`, `M220`, `M221`, `M104`, `M140`, `M306`, `M206`, `M200`, `M603`, `M106`, `M301`, `M304`.
+Trong bảng `All settings`: hai cột `THONG SO` và `GIA TRI`; chạm một dòng để mở hộp sửa với bước, `-`, `+`, `OK`, `Hủy`. Dòng nào Marlin không gửi giá trị thì tự ẩn. Các thông số mới gồm Min Velocity/Min Travel Speed (`M205`), dòng TMC cho Z2/Z3 (`M906`), StealthChop 6 trục (`M569`), quạt điều khiển (`M710`).
 
 - `SAVE EEPROM` yêu cầu Marlin chạy `M500`;
 - `M502 RESET (ve mac dinh)` có xác nhận, chạy `M502` rồi lưu lại;
@@ -555,9 +553,19 @@ Số đo trên máy thật của nhánh này:
 
 - đọc sector qua UART khoảng **11–13 KB/s**;
 - upload WiFi vào thẻ khoảng **150–210 KB/s**;
-- thời gian boot loop khoảng **0,7–0,9 giây**.
+- vòng lặp chính của firmware khoảng **11 300 vòng/giây** (trước khi tối ưu đa luồng chỉ 0,5 vòng/giây vì bị chặn ở thẻ và WiFi).
 
 Tốc độ SD qua UART thấp hơn SPI trực tiếp, nhưng vẫn đủ cho G-code thông thường. Nếu file có rất nhiều đoạn cực ngắn và planner bị đói dữ liệu, giảm độ chi tiết của G-code hoặc kiểm tra chất lượng link UART.
+
+### 8.1a Thẻ dùng chung giữa các task — Marlin được ưu tiên
+
+Thẻ SD ở khe màn hình vừa phục vụ Marlin (đọc sector khi in) vừa phục vụ màn hình (liệt kê file, web upload). Hai bên không được chạm thẻ cùng lúc nên có một mutex — mỗi lần chỉ một bên giữ thẻ.
+
+Luật ưu tiên (theo yêu cầu người dùng):
+
+- Khi Marlin đang dùng thẻ (có request sector trong 400 ms vừa qua), **màn hình tự nhường**: các thao tác thẻ của màn hình (liệt kê, xóa, web `/files`) bị hủy hoặc thử lại sau. Ngoại lệ duy nhất: đang có phiên upload thì upload chạy tiếp cho xong.
+- Firmware phân biệt hai trạng thái trả về: `BUSY` (bận vì Marlin đang đọc/ghi → thử lại sau, **không phải lỗi**) và `ERR` (lỗi thật). Gặp `BUSY` thì đợi rồi thử lại, đừng coi như hỏng thẻ.
+- Khi thẻ bị rút/mất, firmware thử mount lại với nhịp thưa dần: 2,5 → 5 → 10 → 20 → **30 giây** (thay vì thử dồn dập như trước). Cắm thẻ lại hoặc bấm REFRESH thì thử ngay lập tức.
 
 ### 8.2 Rút/cắm thẻ
 
@@ -627,7 +635,16 @@ pwsh cydlcd/tools/cydlcd-upload.ps1 -File .\benchy.gcode -Host <ip-hoac-hostname
 
 Đổi tên đích bằng `-Name`. Nếu token đã đổi, truyền giá trị bằng tham số `-Token` theo cách an toàn tại máy cục bộ, không ghi token vào tài liệu hoặc lịch sử chia sẻ.
 
-Script thử cache IP, mDNS, gateway rồi quét LAN. Khi upload xong, màn hình tự gửi `M22` + `M21`; bình thường không cần `-InitSd`.
+Script tự dò thiết bị theo thứ tự: `-Host` (nếu có) → **địa chỉ MAC của màn hình** → mDNS → gateway → quét LAN → danh sách cố định. Từ 2026-10-15 script **dò theo MAC thay vì cache IP** (theo yêu cầu người dùng): IP do DHCP cấp có thể đổi, còn MAC WiFi thì cố định.
+
+```powershell
+# Đổi MAC nếu màn hình của bạn khác (mặc định 48-AF-F3-70-B1-F8)
+pwsh cydlcd/tools/cydlcd-upload.ps1 -File .\benchy.gcode -Mac 48-AF-F3-70-B1-F8
+```
+
+Đo MAC thật của màn hình bằng: `arp -a | findstr <IP của màn hình>` (hoặc xem trên router). Tham số `-NoCache` vẫn giữ để tương thích nhưng không còn tác dụng.
+
+Khi upload xong, màn hình tự gửi `M22` + `M21`; bình thường không cần `-InitSd`.
 
 ### 9.3 Quy tắc tên file
 
@@ -685,8 +702,12 @@ Không thử lệnh chuyển động hoặc gia nhiệt nếu chưa đứng cạ
 | `UI EDIT <id>` | mở hộp sửa setting theo ID |
 | `UI MCELL <cot> <hang>` | mở hộp sửa một ô mesh |
 | `UI TAP ...` | mô phỏng chọn file, PREV/NEXT, PRINT, STOP, XOA |
+| `UI PERF` | đo hiệu năng: số vòng UI/giây, thời gian vẽ, pixel đã đẩy qua SPI, thời gian các chặng WiFi/thẻ/log |
+| `UI CFG [nhom]` | in cây menu Configuration / mở một nhóm và liệt kê các dòng |
+| `UI HIT <k>` | bấm nút thứ k (mô phỏng chạm) — dùng khi hộp sửa đang mở |
+| `UI BACK` | nút BACK (đóng lớp phủ đang mở trước, rồi mới lùi nhóm) |
 | `WIFI?` | trạng thái WiFi, IP, RSSI và heap |
-| `PRE?` | in ba preset preheat |
+| `PRE?` | in danh sách vật liệu preheat |
 
 `UI RX` là lệnh quan trọng nhất khi màn vẫn cập nhật nhiệt nhưng bấm nút không chạy:
 
@@ -695,7 +716,7 @@ Không thử lệnh chuyển động hoặc gia nhiệt nếu chưa đứng cạ
 - `err` tăng → nghi sai baud hoặc nhiễu dây;
 - PONG bình thường dưới khoảng 1,5 giây → đường hai chiều đang khỏe.
 
-Marlin có watchdog RX: quá 10 giây không nhận frame sẽ khởi tạo lại UART. Màn hình cũng tiếp tục xin HELLO cho đến khi nhận được, thay vì chỉ thử vài lần rồi bỏ.
+Marlin có watchdog RX: quá 10 giây không nhận frame sẽ khởi tạo lại UART, **tối đa 1 lần mỗi 60 giây** (giới hạn này để tránh khởi tạo lại liên tục ngay sau khi nạp lại firmware màn hình). Màn hình cũng tiếp tục xin HELLO cho đến khi nhận được, thay vì chỉ thử vài lần rồi bỏ.
 
 ### 10.3 Log 1 Hz của CYD
 
@@ -706,14 +727,16 @@ link PUSH=...
 rx=...
 err=...
 heap=...
+hb: link=... ui=... net=... log=...
 ```
 
 - `link PUSH=1`: đã nhận frame PUSH hợp lệ;
 - `rx` phải tăng đều khi Marlin chạy;
 - `err` không nên tăng;
-- `heap` phải ổn định qua thời gian.
+- `heap` phải ổn định qua thời gian;
+- `hb:` là heartbeat của từng task (số lần mỗi task chạy trong 1 giây) — task nào đứng yên quá 5 giây (link/ui) hoặc 30 giây (net, trừ lúc upload) thì board tự khởi động lại.
 
-Cờ debug đang phục vụ chẩn đoán. Khi máy đã ổn định, có thể tắt để giảm log và kích thước firmware.
+Thời gian các chặng trong log đo bằng **micro giây** (µs), không phải mili giây như trước. Cờ debug đang phục vụ chẩn đoán. Khi máy đã ổn định, có thể tắt để giảm log và kích thước firmware.
 
 ## 11. Dừng in an toàn
 
