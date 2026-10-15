@@ -205,15 +205,22 @@ lv_indev_t *s_indev;
 // ---------------------------------------------------------------------------
 static uint8_t    s_link_state = 255;      // 255 = chua set lan nao (`link_state_now()` tra 0/1/2)
 static uint32_t   s_tick_ms, s_upd_ms, s_slow_ms;
-// Trang TRUOC do (khac s_page_act o cho: no duoc cap nhat trong show_page). Nut BACK cua TRANG BANG
-// PHANG (THONG SO) can biet no duoc mo TU DAU - tu MENU (-> ve MENU) hay tu menu CONFIGURATION
-// (-> tra ve dung menu do).
-static uint8_t    s_prev_page = PG_STATUS;
 // Vi tri cuon (scroll_top, px) da luu cua TUNG trang: roi trang thi nho, vao lai thi tra lai dung cho
 // dang xem. 0 = dau danh sach. (Trang MENU CON khong dung mang nay - xem submenu_save_scroll.)
 // uint16_t (khong phai lv_coord_t): noi dung 1 trang chi vai tram px -> du, va DRAM cua panel da full
 // (lan dau dung int32 lam linker bao overflow 48 byte).
 static uint16_t   s_scroll_y[PG_COUNT];
+// ---- NGAN XEP "QUAY LAI" (BACK) ----
+// VI SAO: BACK phai tra ve DUNG NOI VUA ROI, khong phai luon ve MENU. Truoc day chi co 1 truong hop dac
+// biet (trang THONG SO mo tu menu CONFIGURATION). Nay moi lan DOI TRANG thi day "noi vua roi" vao ngan
+// xep: (trang, NHOM menu con neu dang o menu con, DONG vua bam trong nhom do). BACK lay ra va tra ve
+// dung cho - kem TO SANG dong vua bam (yeu cau nguoi dung 2026-10-15: tu MOTION > "Move Axis (JOG)",
+// BACK phai ve MOTION va to sang dong "Move Axis (JOG)").
+#define BACK_STACK_N 6
+typedef struct { uint8_t page, sm_g, sm_hi; } back_ent_t;
+static back_ent_t s_back[BACK_STACK_N];
+static uint8_t    s_back_n = 0;
+static bool       s_back_nav = false;      // dang THUC HIEN lenh BACK -> khong day lai ngan xep
 
 static void create_page(uint8_t p);          // forward
 static void page_after_show(uint8_t p);      // forward (dinh nghia ngay truoc show_page)
@@ -263,12 +270,22 @@ void do_action(const int a) {
       if (preheat_kb_active())   { preheat_kb_hide();   break; }
       if (preheat_edit_active()) { preheat_edit_hide(); break; }
       if (ov_close_open()) break;
-      if (s_page_act == PG_SUBMENU) {
-        const uint8_t par = submenu_parent();
-        if (par == SM_PARENT_NONE) show_page(PG_MENU); else submenu_open(par);
+      // 2) Trong menu CON: len NHOM CHA neu con cap (truoc khi dung ngan xep).
+      if (s_page_act == PG_SUBMENU && submenu_parent() != SM_PARENT_NONE) {
+        submenu_open(submenu_parent());
+        break;
       }
-      else if (s_page_act == PG_SETTINGS && s_prev_page == PG_SUBMENU) show_page(PG_SUBMENU);
-      else show_page(s_page_act == PG_MENU ? PG_STATUS : PG_MENU);
+      // 3) NGAN XEP: tra ve DUNG NOI VUA ROI (trang + NHOM menu con + DONG vua bam -> duoc to sang).
+      if (s_back_n) {
+        const back_ent_t e = s_back[--s_back_n];
+        s_back_nav = true;                     // khong day lai ngan xep trong luc tra ve
+        if (e.page == PG_SUBMENU) submenu_open_restore(e.sm_g, e.sm_hi);
+        else                      show_page(e.page);
+        s_back_nav = false;
+        break;
+      }
+      // 4) Ngan xep rong: hanh vi cu (tu MENU -> STATUS, tu trang khac -> MENU).
+      show_page(s_page_act == PG_MENU ? PG_STATUS : PG_MENU);
       break;
     case A_GOTO_MENU:     show_page(PG_MENU); break;
     case A_GOTO_TEMP:     show_page(PG_TEMP); break;
@@ -514,6 +531,19 @@ void show_page(uint8_t p) {
 
   const uint8_t prev = s_page_act;           // trang CU - phai doc TRUOC khi bi ghi de o cuoi ham
 
+  // ---- 0) DAY "NOI VUA ROI" VAO NGAN XEP BACK (tru khi chinh lenh BACK dang goi show_page) ----
+  // Ghi ca NHOM + DONG vua bam khi dang o menu CON, de BACK quay lai dung nhom va to sang dung dong.
+  if (p != prev && !s_back_nav) {
+    if (s_back_n >= BACK_STACK_N) {          // ngan xep day -> bo muc CU NHAT (giu chuoi gan nhat)
+      memmove(&s_back[0], &s_back[1], sizeof(back_ent_t) * (BACK_STACK_N - 1));
+      s_back_n = BACK_STACK_N - 1;
+    }
+    s_back[s_back_n].page  = prev;
+    s_back[s_back_n].sm_g  = (prev == PG_SUBMENU) ? submenu_group() : 0;
+    s_back[s_back_n].sm_hi = (prev == PG_SUBMENU) ? submenu_last_item() : 0;
+    s_back_n++;
+  }
+
   // ---- 1) Dong cac lop phu KHONG thuoc trang (con cua lv_scr_act) ----
   // Lop phu SUA thong so (ov_*) chi thuoc man SETTINGS va man MENU CON (PG_SUBMENU - xem
   // ui_page_submenu.cpp) -> doi sang trang KHAC thi dong luon. PHAI lam TRUOC khi thu hoi trang:
@@ -577,7 +607,6 @@ void show_page(uint8_t p) {
 
   set_text(s_title, page_title(p));
   s_page_act = p;
-  s_prev_page = prev;                        // cho nut BACK cua trang bang phang (xem do_action A_BACK)
 
   // encoder: focus vao vat dau tien cua man vua mo
   // (kiem tra s_page[p] truoc: focus_first_in(NULL) se cham vao assert cua LVGL - xem create_page)

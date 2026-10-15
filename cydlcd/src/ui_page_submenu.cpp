@@ -79,7 +79,6 @@ enum {
   // 2026-10-15: menu MOTION giong so do 12864 (docs/12864-menu-map.md, nut m20 "Motion"). Day la nhom
   // NGANG CAP CONFIGURATION (parent = SM_PARENT_NONE -> BACK ve MENU, giong 12864: Motion nam trong Main).
   SMG_MOTION,
-  SMG_HOMING,       //   Homing >
   SMG_UBL,          //   Unified Bed Leveling >
   SMG_COUNT
 };
@@ -244,14 +243,16 @@ static const sm_item_t SM_I_PREHEAT[] = {
 // ===========================================================================
 //  MENU MOTION (2026-10-15) - giong menu "Motion" cua 12864 (docs/12864-menu-map.md, nut m20)
 // ===========================================================================
-// Thu tu dong bam theo so do 12864: Move Axis -> Homing -> Auto Z-Align -> (Z Align Manual) ->
+// Thu tu dong bam theo so do 12864: Move Axis -> (Homing) -> Auto Z-Align -> (Z Align Manual) ->
 // Deploy/Stow Z-Probe -> Z Probe Wizard -> Tramming Wizard -> (Worst Point) -> Unified Bed Leveling ->
 // Level Bed -> Bed Leveling -> Fade Height -> M48 Probe Test -> Disable Steppers.
-// KHONG lam 3 muc cua 12864: "Z Align Manual" (man phep do rieng), "Worst Point = MAX/MIN" (da co trong
-// trang TRAMMING) va "Bed Leveling" (G29 P1..P4 - da co nguyen trang BED MESH voi cac nut UBL).
+// KHONG lam 4 muc cua 12864:
+//   - "Homing >": YEU CAU NGUOI DUNG 2026-10-15 ("an menu Homing vi da co het trong JOG roi") - trang
+//     JOG da co HOME ALL + home tung truc + M84 nen menu con nay la thua;
+//   - "Z Align Manual" (man rieng cua 12864), "Worst Point = MAX/MIN" (da co trong trang TRAMMING),
+//     "Bed Leveling" (G29 P1..P4 - da co nguyen trang BED MESH voi cac nut UBL).
 static const sm_item_t SM_I_MOTION[] = {
   SM_A("Move Axis (JOG)",           A_GOTO_JOG),        // 12864: "Move Axis >" (chon truc + buoc)
-  SM_S("Homing",                    SMG_HOMING),
   SM_A("Auto Z-Align (G34)",        A_G34),
   SM_A("Z Probe Wizard",            A_EDIT_PROBE_Z),    // mo lop phu sua M851 Z (nhu 12864)
   SM_A("Tramming Wizard",           A_GOTO_TBT),
@@ -261,14 +262,6 @@ static const sm_item_t SM_I_MOTION[] = {
   SM_A("Stow Z-Probe (M402)",       A_PROBE_STOW),
   SM_V("Fade Height",               CYDLCD_SET_FADE_HEIGHT),
   SM_A("M48 Probe Test (G28 O+M48)", A_M48),
-  SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
-};
-
-static const sm_item_t SM_I_HOMING[] = {
-  SM_A("Auto Home (G28)",           A_HOME),
-  SM_A("Home X (G28 X)",            A_HOME_X),
-  SM_A("Home Y (G28 Y)",            A_HOME_Y),
-  SM_A("Home Z (G28 Z)",            A_HOME_Z),
   SM_A("Disable Steppers (M84)",    A_STEPPERS_OFF)
 };
 
@@ -307,7 +300,6 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
   [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
   [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) },
   [SMG_MOTION]    = { "MOTION",       SM_PARENT_NONE, SM_I_MOTION,    SM_N(SM_I_MOTION) },
-  [SMG_HOMING]    = { "HOMING",       SMG_MOTION,     SM_I_HOMING,    SM_N(SM_I_HOMING) },
   [SMG_UBL]       = { "UBL",          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) }
 };
 
@@ -371,7 +363,12 @@ static void cb_sm_row(lv_event_t *e) {
   if (!s_sm) return;
   const uint8_t k = (uint8_t)(intptr_t)lv_event_get_user_data(e);
   if (k >= s_sm->n || s_sm->g >= SMG_COUNT) return;
-  const sm_item_t *it = &SM_GROUPS[s_sm->g].items[s_sm->vis[k]];
+  const uint8_t it_idx = s_sm->vis[k];
+  // NHO DONG VUA BAM (item trong NHOM dang mo): khi BACK quay lai nhom nay (tu trang JOG/BED MESH/...)
+  // thi dong do duoc FOCUS + to sang - yeu cau nguoi dung 2026-10-15 ("chon Motion, Move Axis (JOG),
+  // bam Back le ra phai highlight 'Move Axis (JOG)'").
+  s_sm_hi = it_idx;
+  const sm_item_t *it = &SM_GROUPS[s_sm->g].items[it_idx];
   switch (it->kind) {
     case SM_SUB: submenu_open((uint8_t)it->arg); break;   // vao nhom con (dung lai noi dung trang nay)
     case SM_VAL: ov_open_id(it->arg); break;              // mo lop phu SUA cua dong thong so do
@@ -466,21 +463,25 @@ void page_submenu_destroy(void) {
 // ===========================================================================
 //  Dieu huong (goi tu do_action / show_page)
 // ===========================================================================
-void submenu_open(uint8_t g) {
+// Mo 1 nhom. `keep_hi` = GIU `s_sm_hi` da dat truoc (dung khi quay lai tu NGAN XEP BACK: luc do khong
+// con quan he cha/con de suy ra dong can to sang, phai dung dong da ghi trong ngan xep).
+static void submenu_open_ex(uint8_t g, const bool keep_hi) {
   if (g >= SMG_COUNT) g = SMG_ROOT;
 
   // NHO CHO CUA NHOM DANG XEM + DONG VUA DUNG (yeu cau nguoi dung 2026-10-15):
   //   - luu `scroll_top` cua nhom dang mo de lan quay lai dung cho (moi nhom 1 vi tri rieng);
   //   - tim DONG trong NHOM DICH co arg == nhom dang mo: do chinh la dong nguoi dung vua bam (di xuong)
   //     hoac dong vua quay lui (BACK len nhom cha) -> se duoc FOCUS + to sang khi nhom dich hien lai.
-  s_sm_hi = 255;
-  if (s_sm_g < SMG_COUNT) {
-    const sm_group_t *G = &SM_GROUPS[g];
-    for (uint8_t i = 0; i < G->n; i++)
-      if (G->items[i].kind == SM_SUB && (uint8_t)G->items[i].arg == s_sm_g) { s_sm_hi = i; break; }
-    // Luu vi tri cuon cua nhom dang xem TRUOC khi doi nhom (trang con dang hien nen doc duoc).
-    submenu_save_scroll();
+  if (!keep_hi) {
+    s_sm_hi = 255;
+    if (s_sm_g < SMG_COUNT) {
+      const sm_group_t *G = &SM_GROUPS[g];
+      for (uint8_t i = 0; i < G->n; i++)
+        if (G->items[i].kind == SM_SUB && (uint8_t)G->items[i].arg == s_sm_g) { s_sm_hi = i; break; }
+    }
   }
+  // Luu vi tri cuon cua nhom dang xem TRUOC khi doi nhom (trang con dang hien nen doc duoc).
+  if (s_sm_g < SMG_COUNT) submenu_save_scroll();
 
   s_sm_g = g;
   // Dang o TRONG trang nay (bam 1 dong nhom con): chi dung lai noi dung, KHONG tao trang moi
@@ -496,6 +497,18 @@ void submenu_open(uint8_t g) {
     page_rebuild(PG_SUBMENU);
   }
 }
+
+void submenu_open(uint8_t g) { submenu_open_ex(g, false); }
+
+// Quay lai 1 nhom tu NGAN XEP BACK (xem back_pop/do_action A_BACK o ui_lvgl.cpp) + TO SANG dong `hi`
+// (dong nguoi dung da bam de roi khoi nhom do - vd "Move Axis (JOG)" khi BACK tu trang JOG).
+void submenu_open_restore(uint8_t g, uint8_t hi) {
+  s_sm_hi = hi;
+  submenu_open_ex(g, true);
+}
+
+uint8_t submenu_group(void)     { return s_sm_g; }
+uint8_t submenu_last_item(void) { return s_sm_hi; }
 
 // Mo menu MOTION (muc "Motion" trong MENU - xem ui_page_menu.cpp; 12864 de Motion ngang cap
 // Configuration trong Main menu nen nhom nay co parent = SM_PARENT_NONE -> BACK tu day ve MENU).

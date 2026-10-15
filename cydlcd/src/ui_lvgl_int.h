@@ -736,6 +736,15 @@ void submenu_focus_parent(void);
 void page_menu_focus_sel(void);
 /** Mo menu MOTION (nhom ngang cap CONFIGURATION, giong muc "Motion" trong Main menu cua 12864). */
 void submenu_open_motion(void);
+/** NHOM menu con dang mo (show_page day vao ngan xep BACK). */
+uint8_t submenu_group(void);
+/** DONG (chi so item) vua duoc bam trong nhom dang mo; 255 = khong co (de BACK ve thi to sang dong do). */
+uint8_t submenu_last_item(void);
+/**
+ * Mo lai 1 NHOM tu NGAN XEP BACK va TO SANG dong `hi` (dong nguoi dung da bam de roi khoi nhom do).
+ * Khac submenu_open(): khong tu tinh lai dong can to sang (vi luc quay lai khong con quan he cha/con).
+ */
+void submenu_open_restore(uint8_t g, uint8_t hi);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_page_preheat.cpp (chang 3/4) - HOP SUA PREHEAT 3-TRONG-1 + ban phim dat ten
 // ---------------------------------------------------------------------------

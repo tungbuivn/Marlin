@@ -2138,7 +2138,6 @@ nên BACK từ MOTION về thẳng MENU — giống 12864 (Motion nằm trong Ma
 ```
 MOTION
 ├─ Move Axis (JOG)          mở trang JOG (chọn trục + bước 0.1/1/10 mm như cũ)
-├─ Homing >                 Auto Home (G28) · Home X/Y/Z · Disable Steppers (M84)
 ├─ Auto Z-Align (G34)       G34 Q99
 ├─ Z Probe Wizard           mở lớp phủ sửa M851 Z (như 12864)
 ├─ Tramming Wizard          mở trang TRAMMING (Bed Tramming Wizard)
@@ -2153,6 +2152,9 @@ MOTION
 ├─ M48 Probe Test           gửi `G28 O` rồi `M48 P10` (đúng như 12864: `G28O\nM48 P10`)
 └─ Disable Steppers (M84)
 ```
+
+* **KHÔNG có mục `Homing >`** như 12864 (yêu cầu người dùng 2026-10-15: *"ẩn menu Homing vì đã có hết
+  trong JOG rồi"*): trang JOG đã có `HOME ALL (G28)`, home từng trục X/Y/Z và `M84` — thêm menu con nữa là thừa.
 
 * **Hành động mới** (thêm vào enum `A_*` trong `ui_lvgl_int.h`, xử lý ở `do_action()`): `A_GOTO_MOTION`
   (mở nhóm MOTION), `A_GOTO_MESH` / `A_GOTO_TBT` (mở trang BED MESH / TRAMMING từ trong menu — MENU mở
@@ -2209,8 +2211,13 @@ CAU HINH
   (MPC khi `MPCTEMP`, Z2/Z3 khi có driver, StealthChop khi driver hỗ trợ, M710 khi `USE_CONTROLLER_FAN`) ⇒
   cây giống 12864 nhưng không bao giờ hiện dòng rỗng. Máy này: `Jerk 4/6` (ẩn `Junction Dev`/`Linear Adv` vì
   build dùng `CLASSIC_JERK`), `TEMP (ADV) 11/14` (ẩn `Hotend PID` vì hotend chạy `MPCTEMP`).
-* **BACK đi theo nhóm CHA** (`submenu_parent()`); đang mở lớp phủ sửa thì BACK **chỉ đóng lớp phủ**; trang
-  bảng phẳng mở từ trong cây thì BACK trả về đúng cây (`s_prev_page`).
+* **BACK đi theo nhóm CHA** (`submenu_parent()`); đang mở lớp phủ sửa thì BACK **chỉ đóng lớp phủ**; và
+  **NGĂN XẾP BACK** (2026-10-15, `s_back[]` trong `ui_lvgl.cpp`) ghi "nơi vừa rời" mỗi lần **đổi trang**:
+  `{trang, NHÓM menu con, DÒNG vừa bấm}` (sâu 6, đầy thì bỏ mục cũ nhất). BACK lấy ra và trả về **đúng nơi
+  vừa rời** + **tô sáng dòng vừa bấm** — nhờ vậy `MOTION > Move Axis (JOG)` → BACK về **MOTION** (không
+  phải MENU) và focus đúng dòng `Move Axis (JOG)`; trang bảng phẳng mở từ trong cây cũng vậy (trước đây
+  chỉ có 1 trường hợp đặc biệt cho trang THONG SO). Yêu cầu người dùng: *"chọn Motion, Move Axis (JOG),
+  bấm Back lẽ ra phải highlight 'Move Axis (JOG)'"*.
 * 🔙 **BACK nhớ CHỖ ĐANG XEM + tô sáng dòng vừa dùng** (2026-10-15 — yêu cầu người dùng: *"đối với menu có
   phân trang, khi bấm back chưa quay về trang trước đó, và cũng chưa highlight item đã trigger open
   sub-menu đó"*): vị trí cuộn lưu **theo từng trang** (`s_scroll_y[]`, `ui_lvgl.cpp`) và **theo từng NHÓM**
