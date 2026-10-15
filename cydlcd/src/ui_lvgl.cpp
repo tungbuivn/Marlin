@@ -748,9 +748,12 @@ static void ui_cmd_task(void *) {
     ui_cmd_drain(3);
     ui_lvgl_task();
     g_hb_ui++;                                  // heartbeat cho task chan doan (xem main.cpp: g_hb_*)
-    // NHIP 30 Hz (33 ms) + THUC DAY NGAY khi co cham: cam ung bao qua ngat TOUCH_IRQ -> ui_task_wake_isr()
-    // -> ulTaskNotifyTake tra ve ngay => phan hoi cham ~1 ms thay vi cho het 33 ms.
-    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(33));
+    // NHIP 60 Hz (16 ms) - yeu cau nguoi dung 2026-10-15 ("render ui sua thanh 60Hz").
+    // LUU Y: phai ha ca LV_DISP_DEF_REFR_PERIOD xuong 16 ms (lv_conf_cydlcd.h), neu khong thi task thuc day
+    // 60 lan/s ma LVGL van chi ve theo timer 30 ms cua no (= 33 Hz).
+    // `ulTaskNotifyTake` thay cho delay: task khac co the danh thuc NGAY (ui_post_cmd -> xTaskNotifyGive;
+    // sau nay co the la ngat TOUCH_IRQ -> ui_task_wake_isr) => lenh console tra loi ngay, khong doi het nhip.
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(16));
   }
 }
 

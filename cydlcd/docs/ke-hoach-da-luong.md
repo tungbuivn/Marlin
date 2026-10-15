@@ -244,7 +244,7 @@ Nghĩa là: thất bại do nhường Marlin **không được báo như lỗi t
 | Task | Core | Prio | Nhịp | Sở hữu |
 |---|---|---|---|---|
 | `link` | 1 | 20 | 1 ms | UART Marlin + phục vụ sector SD thô |
-| `ui` | 0 | 5 | **30 Hz (33 ms)** | **toàn bộ LVGL** + TFT + cảm ứng + overlay upload |
+| `ui` | 0 | 5 | **60 Hz (16 ms)** (chốt 2026-10-15: "render ui sửa thành 60Hz") | **toàn bộ LVGL** + TFT + cảm ứng + overlay upload |
 | `net` | 0 | 4 | 1 ms | WiFi + WebServer (upload 20–30 s) + thẻ TF + FATFS |
 | `log`/console = **`loop()`** | 0 | 1 (Arduino) | 5 ms | in log từ `logq`, đọc console COM8, **1 Hz diag + heartbeat** |
 | `diag` | 0 | 1 | 1 s | heartbeat từng task + watchdog |
@@ -263,7 +263,7 @@ Nghĩa là: thất bại do nhường Marlin **không được báo như lỗi t
    Marlin mount lại ⇒ `the SD qua UART san sang` + `SD card ok` ✓.
 
 **Đo được (đã nạp panel):**
-* Heartbeat: `link=+~1000/s`, **`ui=+30/s`** (đúng 30 Hz như đã chốt), `net=+~960/s`, `log=+~190/s`.
+* Heartbeat: `link=+~1000/s`, **`ui=+60/s`** (60 Hz), `net=+~960/s`, `log=+~470/s`.
 * Lúc **đang upload 4,3 MB**: `net` ĐỨNG (đang xử lý body — đúng dự kiến) nhưng **`link` vẫn +1/s**, **`ui` vẫn +30/s**,
   `log` vẫn chạy; `UI RX` **trả lời được trong lúc upload** (trước đây console bị chặn).
 * Marlin (COM4) trong lúc upload: `PING` 1856→1861→1866→1871 = **+1/s, không sót frame**, `err=0`, `alive=1`, `hoan=16 bo=0`.

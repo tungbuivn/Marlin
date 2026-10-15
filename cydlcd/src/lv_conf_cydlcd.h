@@ -81,3 +81,14 @@
 #define LV_USE_KEYBOARD 1
 #undef  LV_USE_TEXTAREA
 #define LV_USE_TEXTAREA 1
+
+/* NHIP VE 60 Hz (yeu cau nguoi dung 2026-10-15: "render ui sua thanh 60Hz"):
+ * task `ui` thuc day moi 16 ms (60 Hz) - xem ui_cmd_task() o ui_lvgl.cpp. NHUNG LVGL chi ve khi timer
+ * refresh cua no "den han": lv_conf.h (dung chung) dat LV_DISP_DEF_REFR_PERIOD 30 ms (= 33 Hz) nen phai
+ * ha xuong 16 ms o day, neu khong task thuc day 60 lan/s ma van chi ve 33 lan/s.
+ * LV_INDEV_DEF_READ_PERIOD 20 -> 16 ms: doc cam ung moi nhip => cham theo tay muot hon.
+ * Chi anh huong env CYD (env nay truyen -DLV_CONF_PATH=lv_conf_cydlcd.h). */
+#undef  LV_DISP_DEF_REFR_PERIOD
+#define LV_DISP_DEF_REFR_PERIOD 16
+#undef  LV_INDEV_DEF_READ_PERIOD
+#define LV_INDEV_DEF_READ_PERIOD 16
