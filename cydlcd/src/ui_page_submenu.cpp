@@ -253,7 +253,8 @@ static const sm_item_t SM_I_PREHEAT[] = {
 //     "Bed Leveling" (G29 P1..P4 - da co nguyen trang BED MESH voi cac nut UBL).
 static const sm_item_t SM_I_MOTION[] = {
   SM_A("Move Axis (JOG)",           A_GOTO_JOG),        // 12864: "Move Axis >" (chon truc + buoc)
-  SM_A("Auto Z-Align (G34)",        A_G34),
+  // 2026-10-15: BO dong "Auto Z-Align (G34)" - YEU CAU NGUOI DUNG "tam an va cam chuc nang G34 do thiet
+  // ke truc Z cung, ke ca GCODE cung tat" (xem CYDLCD_NO_G34 trong Marlin/Configuration.h).
   SM_A("Z Probe Wizard",            A_EDIT_PROBE_Z),    // mo lop phu sua M851 Z (nhu 12864)
   SM_A("Tramming Wizard",           A_GOTO_TBT),
   SM_S("Unified Bed Leveling",      SMG_UBL),

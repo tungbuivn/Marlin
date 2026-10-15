@@ -3170,6 +3170,24 @@
 #define CYDLCD_SERIAL_UI
 
 /**
+ * CYDLCD_NO_G34 -- TAT HAN G34 (Auto Z-Align) tren may nay.
+ *
+ * YEU CAU NGUOI DUNG 2026-10-15: "doi voi may cua toi, hay tam an va cam chuc nang G34 do thiet ke truc
+ * Z cung, ke ca GCODE cung tat, g34 khong lam gi ca" (Voron 2.1 nay truc Z cung, KHONG co vit chinh
+ * nghieng rieng cho tung truc -> ket qua G34 vo nghia, chi ton thoi gian va co the lam lech mesh).
+ *
+ * CACH LAM (QUAN TRONG): KHONG duoc comment `Z_STEPPER_AUTO_ALIGN` trong Configuration_adv.h!
+ * Lam vay se BO `z_stepper_align` khoi `settings_t` => DOI kich thuoc/CRC EEPROM => Marlin NAP MAC DINH
+ * (mat M851 probe Z offset, PID, M92/M201/M203/M205/M906 va luoi UBL dang luu). Thay vao do: giu nguyen
+ * config, chi cho `GcodeSuite::G34()` THOAT NGAY (xem Marlin/src/gcode/calibrate/G34.cpp) -> G34 khong
+ * lam gi ca, ke ca khi mot host khac (PC / file tren the SD) gui lenh; Marlin van tra loi 1 dong
+ * "echo:G34 da TAT..." de ben gui biet lenh da bi bo qua.
+ *
+ * Muon BAT LAI G34: comment dong duoi day roi nap lai Marlin (khong can doi gi khac).
+ */
+#define CYDLCD_NO_G34
+
+/**
  * CYDLCD_TBT_LINK -- man hinh CYD rieng hien & dieu khien TRAMMING WIZARD qua USART1 (PA9/PA10)
  *
  * KHAC CYDLCD_SERIAL_UI: KHONG dung ExtUI -> MarlinUI (man 12864) van chay binh thuong va

@@ -331,7 +331,10 @@ void do_action(const int a) {
     // Mo BAN PHIM dat ten vat lieu moi (muc "+ Them vat lieu" trong menu CONFIGURATION > Preheat).
     case A_PRE_ADD:       preheat_add_open(); break;
     case A_INITSD:        cydlcd_link_send_gcode2("M22", "M21"); break;   // nha the SD roi init lai
-    case A_G34:           cydlcd_link_send_gcode("G34 Q99"); break;
+    // 2026-10-15: G34 DA TAT tren may nay (thiet ke truc Z cung - xem CYDLCD_NO_G34 trong
+    // Marlin/Configuration.h). Khong con nut nao gui lenh nay, nhung giu nhanh nay de KHONG BAO GIO gui
+    // G34 nua ke ca khi co code cu goi A_G34.
+    case A_G34:           WIFILOG("[UI] G34 da TAT tren may nay (truc Z cung) - khong gui lenh\n"); break;
     case A_REQ_FILES:     cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES); break;
     case A_REQ_UP:        cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES_UP); break;
     case A_REQ_MESH:      cydlcd_link_request((uint8_t)CYDLCD_REQ_MESH); break;

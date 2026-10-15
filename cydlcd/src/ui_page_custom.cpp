@@ -42,8 +42,10 @@ static void cb_runout_toggle(lv_event_t *e) {
 }
 
 void page_custom_create(lv_obj_t *p) {
+  // 2026-10-15 (yeu cau nguoi dung: "tam an va cam chuc nang G34 do thiet ke truc Z cung, ke ca GCODE
+  // cung tat, g34 khong lam gi ca"): nut "G34 Bed" DA BO khoi trang nay. Phia Marlin cung da tat
+  // (`CYDLCD_NO_G34` trong Configuration.h -> GcodeSuite::G34() thoat ngay, xem Marlin G34.cpp).
   lv_obj_t *r = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 40, 0, GAP);
-  mk_btn_grow(r, "G34 Bed", 40, cb_action, (void *)(intptr_t)A_G34);
   mk_btn_grow(r, "Init SD", 40, cb_action, (void *)(intptr_t)A_INITSD);
   mk_btn_grow(r, "ENDSTOP", 40, cb_action, (void *)(intptr_t)A_GOTO_ENDSTOP);   // P4 -> man M119
 
@@ -56,7 +58,6 @@ void page_custom_create(lv_obj_t *p) {
   lv_obj_t *rd = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 30, 0, GAP);
   mk_btn_grow(rd, "REBOOT DFU", 30, cb_action, (void *)(intptr_t)A_REBOOT_DFU);
 
-  mk_label_w(p, "G34 Q99 - can bang 2 truc Z", COL_DIM, PAGE_INN_W);
   mk_label_w(p, "M600 = doi filament (khong lui dai)", COL_DIM, PAGE_INN_W);
   mk_label_w(p, "M412 = cam bien het filament ON/OFF", COL_DIM, PAGE_INN_W);
   mk_label_w(p, "REBOOT DFU = nap firmware qua USB", COL_DIM, PAGE_INN_W);

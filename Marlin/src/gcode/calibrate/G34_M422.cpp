@@ -92,6 +92,22 @@
 // #define MEASURED_HARDCODE_Z4 1.31
 
 void GcodeSuite::G34() {
+  // -------------------------------------------------------------------------
+  //  TAT HAN G34 tren may nay (CYDLCD_NO_G34 trong Configuration.h).
+  //  YEU CAU NGUOI DUNG 2026-10-15: truc Z cung (khong co vit chinh nghieng rieng cho tung truc) nen
+  //  G34 vo nghia -> "ke ca GCODE cung tat, g34 khong lam gi ca".
+  //  VI SAO KHONG COMMENT `Z_STEPPER_AUTO_ALIGN` (Configuration_adv.h): lam vay se bo `z_stepper_align`
+  //  khoi `settings_t` -> doi kich thuoc/CRC EEPROM -> Marlin NAP MAC DINH (mat M851/PID/M92/M201/M203/
+  //  M205/M906 + MESH UBL). Thoat ngay o day: KHONG home, KHONG keo probe, KHONG doi leveling; van tra
+  //  loi de ben gui biet lenh da bi bo qua (khong im lang nhu "Unknown command").
+  //  CHU Y: G34 cua Z_STEPPER_AUTO_ALIGN nam o FILE NAY (G34_M422.cpp); `G34.cpp` la ban
+  //  MECHANICAL_GANTRY_CALIBRATION (may nay khong bat) - dung sua nham file.
+  // -------------------------------------------------------------------------
+  #if ENABLED(CYDLCD_NO_G34)
+    SERIAL_ECHOLNPGM("echo:G34 da TAT tren may nay (thiet ke truc Z cung) - khong lam gi");
+    return;
+  #endif
+
   int8_t isInf=parser.intval('Q', 1);
   const ProbePtRaise raise_after = parser.boolval('E') ? PROBE_PT_STOW : PROBE_PT_RAISE;
   if (parser.intval('U', 0) ) {

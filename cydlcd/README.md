@@ -422,14 +422,14 @@ python cydlcd/tools/make_lvgl_icons.py
 | Màn | Nội dung / lệnh gửi |
 |---|---|
 | **STATUS** | bố cục y nguyên Marlin — §5.1 (màn gốc, không có BACK) |
-| **MENU** | menu dọc kiểu Marlin: Temperature · **Motion** · Feed/Flow rate · SD card · Bed mesh · Custom G34/SD · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Motion`** mở **menu MOTION** kiểu 12864 (Move Axis (JOG) · Homing · Auto Z-Align · Z Probe Wizard · Tramming Wizard · Unified Bed Leveling · Level Bed · Deploy/Stow Z-Probe · Fade Height · M48 Probe Test · Disable Steppers — trước 2026-10-15 dòng này tên `Motion (JOG)` và mở thẳng trang JOG). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
+| **MENU** | menu dọc kiểu Marlin: Temperature · **Motion** · Feed/Flow rate · SD card · Bed mesh · **Custom/Init SD** · **Configuration** · Info; cột phải mỗi dòng là **giá trị tóm tắt** (nhiệt E0, X/Y/Z đã home, feed/flow %, cỡ mesh, `n muc`, LINK…). Dòng **`Motion`** mở **menu MOTION** kiểu 12864 (Move Axis (JOG) · Homing · Auto Z-Align · Z Probe Wizard · Tramming Wizard · Unified Bed Leveling · Level Bed · Deploy/Stow Z-Probe · Fade Height · M48 Probe Test · Disable Steppers — trước 2026-10-15 dòng này tên `Motion (JOG)` và mở thẳng trang JOG). Dòng **`Configuration`** mở **cây menu kiểu 12864** (xem mục *"Menu CONFIGURATION kiểu 12864"* ở cuối file) — trước 2026-10-15 dòng này tên `Settings` và mở thẳng bảng phẳng. Dòng **`SD card` KHÔNG hiện số file** nữa (yêu cầu người dùng 2026-10-15: *"bỏ phần đếm số lượng file ở menu file"* — trước là `12 file`, nay để trống như mục `Card` của Marlin: thẻ đọc được hay không đã có **icon thẻ** ở thanh trên, còn danh sách thì thấy ngay khi mở trang) |
 | **FEED/FLOW** | chỉnh feed/flow bằng **`M220 S…` / `M221 S…`** (nút −10/−1/+1/+10, giới hạn 10…999 %, gửi ngay khi bấm); nút `RESET 100%` → `M220 S100` + `M221 S100`. **Tự xin lại trạng thái (2026-10-15):** FR/FL lấy từ gói `SETTING` mà Marlin **chỉ gửi khi được hỏi** (`CYDLCD_REQ_SETTINGS`) — trang hoi **ngay khi mở** và **định kỳ 2 s** trong lúc đang mở, nên giá trị đổi từ **chỗ khác** (console COM7, `M220/M221` trong G-code bản in…) cũng hiện đúng ngay (trước đây nhãn đứng yên ở giá trị cũ cho tới khi rời trang rồi vào lại) |
 | **TEMP** | +/- 1 và 10 °C cho nozzle & bed → `M104 S…` / `M140 S…`; **hàng FAN** → `M106 S0…255`; `COOLDOWN` → `M104 S0` + `M140 S0` |
 | **JOG** | chọn trục X/Y/Z, ±0.1/±1/±10 mm (`G91` → `G1 <trục><d> F600` → `G90`), `HOME ALL (G28)` |
 | **FILES** | danh sách file từ SD (Marlin đẩy xuống): **chạm 1 dòng = CHỌN + tô sáng dòng đó — chỉ nút `PRINT` mới in** (trước đây chạm vào danh sách là in luôn: hợp với encoder nhưng trên màn cảm ứng thì rất dễ in nhầm); `PRINT` → `M23` + `M24`; `DIR` = vào thư mục; `UP`/`REFRESH` gửi `REQUEST`; PAUSE `M25`, RESUME `M24`, STOP `M524`. **Bố cục (2026-10-15, vòng 2):** danh sách là **4 dòng cố định (21 px/dòng — tăng từ 18 px khi font mono lên size 15, xem mục *Font chữ*; mỗi dòng 1 nút)** + **3 hàng nút được đẩy xuống SÁT ĐÁY** bằng `mk_spacer(grow)`; **KHÔNG cuộn** — lật trang bằng **`PREV`/`NEXT`** ở hàng nút cuối (kèm `T x/y` + **tên mục đang chọn** ở dòng info, nút nào hết trang thì **khoá thật** bằng `LV_STATE_DISABLED`: `lv_indev.c:412` chặn chạm, `lv_group.c:434` chặn encoder). **Vì sao bỏ `lv_roller` cũ:** (1) cuộn bằng ngón tay rất khó — phải kéo đúng cự ly mới đổi được dòng; (2) **lỗi nặng hơn:** chạm vào 1 dòng roller **không** làm `lv_roller_get_selected()` đổi theo dòng vừa chạm (roller chỉ đổi khi kéo rồi thắng lại) ⇒ `files_selected()` trả về dòng chọn **cũ** ⇒ bấm `XOA` trên 1 file lại đi xoá **thư mục** đang chọn trước đó (triệu chứng: *"chọn 1 file mà báo Không xoá thư mục"*). Nay mỗi dòng là 1 nút giữ **chỉ số tuyệt đối** `s_sel` + **tên** (`s_sel_name`, để giữ lựa chọn qua lần `REFRESH`/xoá xong vì thứ tự file do FAT quyết định). **Nút `XOA` xoá CẢ file LẪN thư mục** (2026-10-15, vòng 3), luôn hỏi xác nhận **2 bước** (xem §8b cho hộp thoại): **file** → `net_sd_delete_file()` (`SD.remove()` = FATFS `f_unlink`) hoặc lùi về `M30`; **thư mục** → `net_sd_delete_dir()` = **`SD.rmdir()`** và **chỉ khi thư mục RỖNG** (FATFS `rmdir` không xoá được thư mục còn mục con) — còn mục con thì chỉ hiện ghi chú `Thu muc con file - xoa file ben trong truoc`. ⚠️ **KHÔNG dùng `M30` cho thư mục**: `M30` → `CardReader::removeFile()` → `SdBaseFile::remove()` → `truncate(0)` không xoá được thư mục (chính Marlin ghi trong `SdBaseFile.cpp`), nên đường thư mục **chỉ chạy khi thẻ ở khe màn hình CYD** (§12). ⚠️ `SD.remove()` của ESP32 **từ chối thư mục** (`vfs_api.cpp`: *"does not exists or is directory"*) — đã gặp thật: xoá thư mục rỗng mà báo "Khong xoa duoc"; **phải** dùng `SD.rmdir()`. **Đã kiểm end-to-end (COM7):** chọn `cydlcd_tmp` → `XOA` → OK ×2 → log `[UP] da xoa thu muc RONG /cydlcd_tmp`, danh sách còn 6 mục, không reboot (`cydlcd_tmp` là thư mục tạm của màn hình, `cyd_sd.cpp` **tự tạo lại** khi cần upload). **KHOÁ NÚT THEO TRẠNG THÁI MÁY (2026-10-15, vòng 4):** `PRINT` và `XOA` bị **khoá thật** (`LV_STATE_DISABLED`) khi **đang in / tạm dừng** (`files_actions_mark()`); `PRINT` còn bị khoá khi mục đang chọn **không phải file G-code** (`.gcode/.gco/.gc/.g`) hoặc là **thư mục** — trước đây bấm PRINT không thấy gì và cũng không có phản hồi nào. Đã kiểm: đang in → `PRINT=khoa XOA=khoa | DANG IN`; sau khi huỷ → `PRINT=mo XOA=mo`. **GỬI LỆNH BẰNG TÊN 8.3 (proto 4, §12.4):** `M23`/`changeDir` dùng **tên 8.3** (`sfn`) chứ không dùng tên dài, vì SdFat của Marlin chỉ giữ LFN trong **27 byte** (tên > 26 ký tự bị cắt, mất cả phần mở rộng ⇒ `M23 <tên dài>` **không bao giờ mở được file** ⇒ bấm PRINT không in). **Đã kiểm:** `M23 V300_C~1.GCO` mở đúng `V300_case-esp-2432s208_no-text.gcode` (36 ký tự) và `M23 V300__~1.GC` mở `V300_[a]_xy_joint_cable_bridge_3hole.gc` (39 ký tự) → Marlin `st=1`, `fl=0x26/0xA7` (bit `SD_PRINTING`), `file="..."`. **THƯ MỤC HỆ THỐNG CHỈ BỊ ẨN KHI HIỂN THỊ (2026-10-15, vòng 5):** `cydlcd_tmp` (thư mục tạm của **chính màn hình** — `cyd_sd.cpp` tự tạo) và `BTUP` (thư mục cũ của đường upload **Bluetooth** đã xoá 2026-10-14) nằm trong `CYDLCD_HIDE_DIRS` (`cydlcd_config.h`). ⚠️ **Danh sách Marlin gửi xuống VẪN GIỮ NGUYÊN ĐỦ** (`cydlcd.files[]` + `cydlcd.n_files`, đúng chỉ số như Marlin — Marlin vẫn dùng danh sách đó để in/xoá, ẩn đi là hỏng): màn hình chỉ **ẩn lúc HIỂN THỊ** và **sắp xếp lại** bằng một **VIEW** riêng (`s_view[]`, `files_view_build()` trong `ui_page_files.cpp`; `s_sel` luôn là chỉ số THẬT). **Sắp xếp: THƯ MỤC trước, rồi theo TÊN** (không phân biệt hoa/thường) — nhờ vậy thứ tự **ỔN ĐỊNH**: thêm/bớt 1 file (upload/xoá xong) thì các dòng cũ **không nhảy chỗ**, người dùng không chạm nhầm (thứ tự FAT/Marlin thì mỗi lần đổi danh sách là xáo). Đã kiểm: `UI TAP` in `5/6 muc hien thi (Marlin gui 6)` + dòng `(an) muc #2 <<cydlcd_tmp>> ... van co trong danh sach Marlin`. **Tên file**: ưu tiên tên dài (LFN), **thiếu LFN thì lùi về tên 8.3** (`cydlcd_serial.cpp`); entry không có tên nào vẫn hiện `(khong ten)` chứ không để dòng trống; dòng được **căn trái** và **cắt bằng `...`** khi quá dài; **tên dài bị cắt quá 24 ký tự thì nối thêm phần mở rộng lấy từ tên 8.3** (vd `V300_case-esp-2432s208_no-.GCO`) để biết đó là file in được. Mục `.` và `..` của FAT **không** xuất hiện (`SdBaseFile::readDir()` đã bỏ qua) |
 | **SETTINGS** (`THONG SO`) | bảng phẳng **76 dòng** (steps/mm · max feed · max accel · jerk · PID · probe offset · MPC · TMC · M710…); `SAVE EEPROM` → `CYDLCD_REQ_SAVE_SETTINGS`. Từ 2026-10-15 **không còn là màn chính của cấu hình**: vào bằng `Configuration` → `Advanced Settings` → `All settings (table)` (xem mục *"Menu CONFIGURATION kiểu 12864"*) |
 | **MESH** | lưới bed mesh (7×7 UBL) đọc từ Marlin, ô cao/thấp tô màu; `REFRESH` → `CYDLCD_REQ_MESH` |
-| **CUSTOM** | `G34 Bed` (`G34 Q99`) và `Init SD` (`M22`+`M21`) — đúng 2 mục menu cũ |
+| **CUSTOM** | `Init SD` (`M22`+`M21`) · `ENDSTOP` (trang M119) · `M600 B0` (đổi filament) · `M412` (cảm biến hết filament ON/OFF) · `REBOOT DFU` (2 bước xác nhận). 🆕 Nút `G34 Bed` **đã bỏ** 2026-10-15 vì G34 bị tắt hẳn trên máy này — xem mục *"TẮT HẲN G34"* |
 | **TRAMMING** | Bed Tramming Wizard của Marlin (kiểu TRAM, **không cần ExtUI**): 4 số của 4 góc, dấu `*` góc đang đứng, dòng hướng dẫn `CW/CCW…`/`DAT`, mode `MAX`/`MIN`, 5 nút **HOME+PROBE · PROBE · MAX/MIN · BACK · DONE** → xem **§5.6** |
 
 > 🆕 **Cập nhật 2026-10-13 (UI LVGL sau khi chuyển sang PUSH):**
@@ -2138,7 +2138,6 @@ nên BACK từ MOTION về thẳng MENU — giống 12864 (Motion nằm trong Ma
 ```
 MOTION
 ├─ Move Axis (JOG)          mở trang JOG (chọn trục + bước 0.1/1/10 mm như cũ)
-├─ Auto Z-Align (G34)       G34 Q99
 ├─ Z Probe Wizard           mở lớp phủ sửa M851 Z (như 12864)
 ├─ Tramming Wizard          mở trang TRAMMING (Bed Tramming Wizard)
 ├─ Unified Bed Leveling >   Activate (G29 A) · Deactivate (G29 D) · Bed Mesh (trang lưới) ·
@@ -2155,6 +2154,38 @@ MOTION
 
 * **KHÔNG có mục `Homing >`** như 12864 (yêu cầu người dùng 2026-10-15: *"ẩn menu Homing vì đã có hết
   trong JOG rồi"*): trang JOG đã có `HOME ALL (G28)`, home từng trục X/Y/Z và `M84` — thêm menu con nữa là thừa.
+* **KHÔNG có `Auto Z-Align (G34)`** — G34 **bị tắt hẳn** trên máy này (trục Z cứng), xem mục
+  *"TẮT HẲN G34"* bên dưới.
+
+## TẮT HẲN G34 (Auto Z-Align) — `CYDLCD_NO_G34` (2026-10-15)
+
+**Yêu cầu người dùng:** *"đối với máy của tôi, hãy tạm ẩn và cấm chức năng G34 do thiết kế trục Z cứng,
+kể cả GCODE cũng tắt, g34 không làm gì cả"*.
+
+| Việc | Ở đâu |
+|---|---|
+| Công tắc | `#define CYDLCD_NO_G34` trong **`Marlin/Configuration.h`** (ngay sau `CYDLCD_SERIAL_UI`). Muốn bật lại G34: comment dòng đó rồi nạp lại Marlin |
+| Chặn G-code | `Marlin/src/gcode/calibrate/G34_M422.cpp` → `GcodeSuite::G34()` **thoát ngay** khi bật công tắc: **không home, không kéo probe, không đổi trạng thái leveling**, chỉ trả lời `echo:G34 da TAT tren may nay (thiet ke truc Z cung) - khong lam gi` |
+| Ẩn trên panel | bỏ dòng `Auto Z-Align (G34)` trong menu MOTION, bỏ nút `G34 Bed` ở trang CUSTOM (còn `Init SD` + `ENDSTOP`), đổi tên dòng MENU `Custom G34/SD` → **`Custom/Init SD`** (cột giá trị `G34/M22` → `M22`), và `A_G34` thành no-op (chỉ ghi log, KHÔNG gửi G-code) |
+
+⚠️ **VÌ SAO KHÔNG comment `Z_STEPPER_AUTO_ALIGN` trong `Configuration_adv.h`** (cách "sạch" theo kiểu Marlin):
+làm vậy sẽ bỏ `z_stepper_align` khỏi `settings_t` ⇒ **đổi kích thước/CRC EEPROM** ⇒ Marlin **nạp lại mặc định**,
+mất `M851` (probe Z offset), PID, `M92/M201/M203/M205/M906` và **lưới UBL** đang lưu. Cách ở trên giữ nguyên
+config nên **không mất gì**.
+
+⚠️ **Sửa đúng file**: G34 của `Z_STEPPER_AUTO_ALIGN` nằm ở **`G34_M422.cpp`**; `G34.cpp` là bản
+`MECHANICAL_GANTRY_CALIBRATION` (máy này không bật, file đó **không được biên dịch** — sửa vào đó thì
+`grep` không thấy chuỗi trong `firmware.elf`, đã gặp đúng lỗi này).
+
+**Đã kiểm trên máy thật (nạp lại CẢ Marlin + panel):**
+* COM4 gửi `G34` → `echo:G34 da TAT tren may nay (thiet ke truc Z cung) - khong lam gi` + `ok`, **không chuyển động**;
+* **giá trị đã hiệu chuẩn còn nguyên** (đây là điểm quan trọng nhất của cách làm này): `M851 X0.00 Y0.00 Z0.75`
+  và `M906` X/Y/Z/Z2/Z3/E = 600 mA — EEPROM KHÔNG bị nạp lại mặc định;
+* panel: `UI CFG 15` → MOTION **10/10 dòng** (không còn Auto Z-Align), trang CUSTOM chỉ còn `Init SD` +
+  `ENDSTOP` + `M600` + `M412` + `REBOOT DFU`, dòng MENU hiện `Custom/Init SD` … `M22`, và **không còn chuỗi
+  `G34` nào** trong bố cục mọi trang (`UI BOX`).
+
+*(Chưa đụng tới `M422` — nó chỉ đặt vị trí align cho G34; G34 đã chết nên M422 vô hại. Muốn chặn luôn thì nói.)*
 
 * **Hành động mới** (thêm vào enum `A_*` trong `ui_lvgl_int.h`, xử lý ở `do_action()`): `A_GOTO_MOTION`
   (mở nhóm MOTION), `A_GOTO_MESH` / `A_GOTO_TBT` (mở trang BED MESH / TRAMMING từ trong menu — MENU mở

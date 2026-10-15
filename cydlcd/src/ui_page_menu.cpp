@@ -36,7 +36,7 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   { "Feed/Flow rate",  PG_RATE,   0 },
   { "SD card",         PG_FILES,  0 },
   { "Bed mesh",        PG_MESH,   0 },
-  { "Custom G34/SD",   PG_CUSTOM, 0 },
+  { "Custom/Init SD",  PG_CUSTOM, 0 },
   // 2026-10-15 (yeu cau nguoi dung: "phan configuration toi thay lam giong 12864 tien hon"): dong nay
   // KHONG con mo THANG bang phang nua ma mo CAY menu Configuration (PG_SUBMENU, xem ui_page_submenu.cpp)
   // giong menu Configuration cua Marlin 12864. Bang phang cu van con: "Advanced Settings > All settings".
@@ -184,7 +184,9 @@ void page_menu_update(void) {
   else snprintf(b, sizeof(b), "n/a");
   set_text(mn_val[4], b);
 
-  set_text(mn_val[5], "G34/M22");
+  // (2026-10-15: doi tu "G34/M22" -> "M22" vi G34 da TAT tren may nay - thiet ke truc Z cung, xem
+  //  CYDLCD_NO_G34 trong Marlin/Configuration.h; nut "G34 Bed" o trang CUSTOM cung da bo.)
+  set_text(mn_val[5], "M22");
   // So dong thong so da nhan tu Marlin. KHONG con ghi "58/33": tong so 33 la con so CU (Marlin gui 58 dong
   // tu 2026-10-15) nen dong do thanh vo nghia/kho hieu. Man hinh KHONG biet tong so that (Marlin khong gui
   // frame "het danh sach" cho SETTING) -> chi ghi so da nhan.
