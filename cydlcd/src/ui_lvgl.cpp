@@ -91,6 +91,7 @@
 #include "cyd_sd.h"        // cyd_sd_ready() cho icon the SD (the o khe man hinh)
 #include "net_upload_http.h"        // net_notify_set/clear/dump (thong bao di TRANG /status, khong hien LCD)
 #include "net_upload.h"             // net_wifi_state(): trang thai WiFi de ve icon o header
+#include "ui_lang.h"                // T() + ui_lang_* (da ngon ngu, xem src/ui_lang.h)
 #include "ui_overlay.h"             // lop phu tien do upload (task `ui` la noi DUY NHAT ve)
 
 // Trang thai WiFi cho icon o dong tieu de. net_upload.h la "hop dong giao dien" voi nhanh module
@@ -175,15 +176,24 @@ static_assert(sizeof(lv_color_t) == 2, "lv_color_t phai la 2 byte");
 //  Man hinh
 // ===========================================================================
 
-static const char *const PG_TITLE[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
-                                               "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
-                                               "TRAMMING", "INFO", "ENDSTOP", "WIFI",
-                                               "CAU HINH"};
+// TEN TRANG cho CONSOLE (`UI MENU`, `UI ENDSTOP`, `UI ?`...) - KHONG DICH, giu y nguyen nhu truoc de
+// cac lenh chan doan khong phu thuoc ngon ngu dang chon (2026-10-15, da ngon ngu).
+static const char *const PG_KEY[PG_COUNT] = {"STATUS", "MENU", "FEED/FLOW", "NHIET DO", "JOG",
+                                             "FILE SD", "THONG SO", "BED MESH", "CUSTOM",
+                                             "TRAMMING", "INFO", "ENDSTOP", "WIFI",
+                                             "CAU HINH"};
+// TEN TRANG HIEN TREN DONG TIEU DE (dich duoc - xem ui_lang_vi.h/ui_lang_en.h, ID UI_T_PT_*).
+static const uint8_t PG_TITLE_ID[PG_COUNT] = {
+  UI_T_PT_STATUS, UI_T_PT_MENU, UI_T_PT_RATE, UI_T_PT_TEMP, UI_T_PT_JOG,
+  UI_T_PT_FILES, UI_T_PT_SETTINGS, UI_T_PT_MESH, UI_T_PT_CUSTOM,
+  UI_T_PT_TBT, UI_T_PT_INFO, UI_T_PT_ENDSTOP, UI_T_PT_WIFI,
+  UI_T_PT_SUBMENU
+};
 // Ten cua trang MENU CON khong lay tu bang tren: CA cay menu Configuration dung CHUNG 1 trang
 // (PG_SUBMENU) nen tieu de la ten NHOM dang mo -> xem page_title() duoi day.
 const char *page_title(uint8_t p) {
   if (p == PG_SUBMENU) return submenu_title();
-  return (p < PG_COUNT) ? PG_TITLE[p] : PG_TITLE[0];
+  return (p < PG_COUNT) ? T((ui_text_t)PG_TITLE_ID[p]) : T(UI_T_PT_STATUS);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +380,12 @@ void do_action(const int a) {
     // ---- thanh day: lui/toi 1 trang noi dung (xem bot_sync de biet khi nao co thanh nay) ----
     case A_PAGE_PREV: page_scroll(-1); break;
     case A_PAGE_NEXT: page_scroll(+1); break;
+
+    // ---- NGON NGU (2026-10-15): 2 dong trong Configuration > Advanced Settings > Language ----
+    // `ui_lang_set()` ghi NVS luon; `ui_lang_apply_ui()` dung lai chrome + trang dang mo (chu da duoc
+    // LVGL copy vao nhan luc tao). Doi ngon ngu KHONG dong cham gi den Marlin.
+    case A_LANG_VI: if (ui_lang_set(UI_LANG_VI)) ui_lang_apply_ui(); break;
+    case A_LANG_EN: if (ui_lang_set(UI_LANG_EN)) ui_lang_apply_ui(); break;
     default: break;
   }
 }
@@ -691,6 +707,7 @@ void ui_lvgl_begin(void) {
   if (indev && ui_port_input_is_encoder()) lv_indev_set_group(indev, s_group);
   s_indev = indev;                        // + de KHOA/MO input khi quet WiFi (xem cb_wifi_scan)
 
+  ui_lang_load();                         // ngon ngu da luu (NVS "ui"/"lang") - PHAI truoc build_chrome
   build_chrome();
   // Kho preset preheat cua MAN HINH CYD (NVS "ph2"; ban cu "ph" duoc di tru mot lan) - doc 1 lan luc boot.
   // Tu 2026-10-15 danh sach nay KHONG bom vao bang thong so nua (khong con 9 dong preheat o bang
@@ -804,7 +821,7 @@ static void ui_lvgl_task_body(void) {
   // CYDLCD_MACHINE_NAME) thay cho chu "LINK OK"; chi khi co loi moi hien LINK ERR / NO LINK.
   const uint8_t lst = link_state_now();
   const char *const nm = cydlcd.name[0] ? cydlcd.name : CYDLCD_MACHINE_NAME;
-  set_text(s_link, lst == 1 ? nm : (lst == 2 ? "LINK ERR" : "NO LINK"));
+  set_text(s_link, lst == 1 ? nm : (lst == 2 ? T(UI_T_LINK_ERR) : T(UI_T_LINK_NONE)));
   if (lst != s_link_state) {
     s_link_state = lst;
     lv_obj_set_style_text_color(s_link, lst == 1 ? COL_OK : (lst == 2 ? COL_ACCENT : COL_ERR), 0);
@@ -960,16 +977,82 @@ bool ui_task_start(void) {
 // ===========================================================================
 uint8_t ui_lvgl_page_count(void) { return (uint8_t)PG_COUNT; }
 
+// ===========================================================================
+//  DOI NGON NGU: dung lai phan HIEN THI (2026-10-15)
+// ===========================================================================
+// Chu da duoc LVGL COPY vao tung nhan luc TAO trang/vat, nen sau khi doi `s_lang` phai tao lai moi thu
+// co chu: chrome (nut BACK/PREV/NEXT + ten man) va NOI DUNG trang dang mo.
+//   - `page_rebuild()` thu hoi + tao lai TRANG DANG MO; voi menu CON (PG_SUBMENU) no giu nguyen NHOM
+//     dang mo (`s_sm_g`) nen nguoi dung khong bi nhay ve nhom goc.
+//   - Lop phu dang mo (hop thoai/ban phim) co chu rieng -> dong het cho gon; doi ngon ngu la hanh dong
+//     hiem nen khong can dung lai chung.
+// Ngay sau do luot cap nhat (<=150 ms) se tu dat lai chu dong (ten may/LINK ERR, "TRANG x/y").
+void ui_lang_apply_ui(void) {
+  chrome_lang_retext();
+  ov_hide();
+  preheat_edit_hide();
+  preheat_kb_hide();
+  page_rebuild(s_page_act);
+}
+
+// `UI LANG` = in ngon ngu dang dung + danh sach; `UI LANG <so>` = doi (luu NVS luon);
+// `UI LANG?` = kiem tra THIEU BAN DICH (in tung ID thieu kem chuoi tieng Viet de tim nhanh trong bang).
+void ui_lvgl_test_lang(const char *arg) {
+  const char *a = arg;
+  while (a && *a == ' ') a++;
+  if (!a || !*a) {
+    Serial.printf("[UI] LANG: dang dung %u = '%s' (%s) | CYDLCD_LANG_DEFAULT=%u\n",
+                  (unsigned)ui_lang_get(), ui_lang_name(ui_lang_get()), ui_lang_code(ui_lang_get()),
+                  (unsigned)CYDLCD_LANG_DEFAULT);
+    for (uint8_t i = 0; i < UI_LANG_COUNT; i++)
+      Serial.printf("[UI]   %u = %-2s '%s' (thieu %u)\n", (unsigned)i, ui_lang_code(i), ui_lang_name(i),
+                    (unsigned)ui_lang_missing(i));
+    Serial.println("[UI]   doi: `UI LANG <so>` | kiem tra thieu ban dich: `UI LANG?`");
+    return;
+  }
+  if (*a == '?') {
+    Serial.printf("[UI] LANG bang chuoi: UI_T_COUNT=%u (id 1..%u)\n",
+                  (unsigned)UI_T_COUNT, (unsigned)(UI_T_COUNT - 1));
+    for (uint8_t l = 0; l < UI_LANG_COUNT; l++) {
+      const uint16_t miss = ui_lang_missing(l);
+      Serial.printf("[UI]   %s: %s (%u/%u)\n", ui_lang_code(l),
+                    miss ? "THIEU" : "day du", (unsigned)miss, (unsigned)(UI_T_COUNT - 1));
+      if (!miss) continue;
+      for (uint16_t i = UI_T_NONE + 1; i < UI_T_COUNT; i++)
+        if (!ui_lang_str(l, (ui_text_t)i))
+          Serial.printf("[UI]     thieu id=%u  (VI=\"%s\")\n",
+                        (unsigned)i, ui_lang_str(UI_LANG_VI, (ui_text_t)i));
+    }
+    return;
+  }
+  unsigned v = 255;
+  if (sscanf(a, "%u", &v) != 1 || v >= UI_LANG_COUNT) {
+    Serial.printf("[UI] LANG: so ngon ngu khong hop le ('%s') - chi co 0..%u\n",
+                  a, (unsigned)(UI_LANG_COUNT - 1));
+    return;
+  }
+  const bool changed = ui_lang_set((uint8_t)v);
+  if (changed) ui_lang_apply_ui();
+  Serial.printf("[UI] LANG -> %u '%s' (%s)%s\n", (unsigned)ui_lang_get(), ui_lang_name(ui_lang_get()),
+                ui_lang_code(ui_lang_get()), changed ? " - da dung lai man hinh" : " (khong doi)");
+}
+
 void ui_lvgl_show_page_name(const char *name) {
   if (!name || !name[0] || name[0] == '?') {          // khong co ten -> in danh sach
+    // In KHOA (PG_KEY, khong dich) kem ten dang hien trong ngoac khi 2 thu khac nhau: lenh `UI <ten>`
+    // luon nhan KHOA (on dinh giua cac ngon ngu), con man hinh thi hien ban dich.
     Serial.print("[UI] cac trang:");
-    for (uint8_t i = 0; i < PG_COUNT; i++) Serial.printf(" %u=%s", (unsigned)i, PG_TITLE[i]);
+    for (uint8_t i = 0; i < PG_COUNT; i++) {
+      const char *disp = T((ui_text_t)PG_TITLE_ID[i]);
+      if (strcmp(disp, PG_KEY[i]) == 0) Serial.printf(" %u=%s", (unsigned)i, PG_KEY[i]);
+      else                              Serial.printf(" %u=%s(%s)", (unsigned)i, PG_KEY[i], disp);
+    }
     Serial.println();
     return;
   }
   for (uint8_t i = 0; i < PG_COUNT; i++) {
-    if (strcasecmp(name, PG_TITLE[i]) == 0) {
-      Serial.printf("[UI] mo trang %u: %s\n", (unsigned)i, PG_TITLE[i]);
+    if (strcasecmp(name, PG_KEY[i]) == 0) {
+      Serial.printf("[UI] mo trang %u: %s\n", (unsigned)i, PG_KEY[i]);
       show_page(i);
       return;
     }

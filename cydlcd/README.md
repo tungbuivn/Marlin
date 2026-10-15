@@ -2215,6 +2215,90 @@ Marlin. Đã nạp `mks_monster8.bin` qua `M997` + `dfu-util` (bản sao ở `D:
 | `UI HELLO` (hàng đợi TX của màn hình) | `tx cho=0 bo=0` ⇒ 30 frame/s **không** làm rớt frame nào |
 | `PANEL DIAG` phía Marlin | `err=0`, `hoan=18 bo=2` (tích luỹ từ lúc boot), `sd_busy=0 defer=0` |
 
+## Đa ngôn ngữ (i18n) kiểu Marlin (2026-10-15) — `src/ui_lang.h`, `src/ui_lang.cpp`
+
+**Yêu cầu người dùng:** *"các text trong project chưa sử dụng kiểu language cho multiple language giống
+marlin, cách làm như thế nào thì ổn nhất?"* → đã chọn **B1 + B2 + B3, Việt + English**.
+
+### Vì sao chọn "enum + bảng `const`" (chứ không `lv_i18n`/gettext/JSON trên thẻ)
+
+| Ràng buộc thật của panel | Hệ quả |
+|---|---|
+| **DRAM tĩnh (`dram0_0_seg`) đã ĐẦY** (mấy lần trước thêm vài chục byte là linker báo overflow) | Bảng chuỗi **buộc phải `const`** → nằm ở **FLASH**. RAM chỉ tốn **1 byte** (`s_lang`) + 1 con trỏ nút BACK. KHÔNG copy chuỗi vào RAM, KHÔNG `String`/`std::map` |
+| Flash còn ~1,8 MB | Thêm 1 bảng (~50–600 chuỗi × ~30 B) là không đáng kể. Đo sau B1: **+2,4 KB flash, +8 B RAM** |
+| `gfx4_font_text` = Segoe UI 16 **đã có ASCII + tiếng Việt** (`vn1..vn4`) | **VI ↔ EN miễn phí font**. Ngôn ngữ có chữ mới (Thái/CJK…) phải sinh lại font ⇒ font phình rất nhanh ⇒ **không làm** |
+| `lv_i18n`/gettext/JSON cần **RAM để giữ bảng đã parse** + filesystem | Với DRAM đã đầy là tự sát; thêm nữa chuỗi mất tính `const` ⇒ không kiểm tra được lúc biên dịch |
+
+### Cách làm (đúng "linh hồn" `multi_language.h` của Marlin)
+
+```c
+// ui_lang.h
+typedef enum { UI_T_NONE = 0, UI_T_CHROME_BACK, /*...*/ UI_T_COUNT } ui_text_t;
+const char *ui_t(ui_text_t id);          // chuoi theo ngon ngu dang chon, KHONG BAO GIO NULL
+#define T(id) ui_t(id)
+
+// ui_lang_vi.h / ui_lang_en.h  (const -> FLASH; khoi tao CO TEN nen thu tu khong quan trong)
+const char *const UI_STR_VI[UI_T_COUNT] = { [UI_T_CHROME_BACK] = "BACK", /*...*/ };
+```
+* Marlin dùng **struct 1 ngôn ngữ** + `GET_TEXT(MSG)` (tam phân runtime) vì số chuỗi ít; panel có ~600
+  chuỗi nên dùng **ID + mảng** — thêm ngôn ngữ = thêm 1 file, và **kiểm tra được** bằng script.
+* Đổi ngôn ngữ: `ui_lang_set()` ghi NVS (`Preferences` namespace **`"ui"`**, khoá **`"lang"`**) rồi
+  `ui_lang_apply_ui()` (**ui_lvgl.cpp**) đặt lại chữ chrome + **thu hồi/tạo lại trang đang mở**
+  (`page_rebuild()` — với menu con thì GIỮ NGUYÊN nhóm đang mở) và đóng lớp phủ đang mở. Chuỗi đã được
+  LVGL **copy vào từng nhãn lúc tạo** nên bắt buộc phải dựng lại.
+* Chỉ số ngôn ngữ lưu NVS ⇒ **nhớ qua lần tắt máy** (đã đo: `UI LANG 1` rồi **reset panel**, sau khi boot
+  `UI LANG` → `dang dung 1 = 'English'`).
+* Tên trang cho **console** tách khỏi tên trang **hiển thị**: `PG_KEY[]` (KHÔNG dịch, `UI MENU`/`UI ENDSTOP`/
+  `UI ?` giữ nguyên ở mọi ngôn ngữ) vs `PG_TITLE_ID[]` (dịch được). Tên tiếng Anh của trang chọn **NGẮN**
+  (`TEMP`/`MEDIA`/`MESH`/`SETTINGS`/`CONFIG`) vì ô tiêu đề rộng **cố định 84 px** (`TITLE_W`).
+* Chuỗi **không** đưa vào bảng: G-code, khoá NVS, log chẩn đoán `[UI] …`, HTML/HTTP, tên frame protocol,
+  ký hiệu (`II`/`[]`/`ON`/`OFF`/`TBT`/`PUSH`/`NVS`/`MAX`/`MIN`) và **endonym** (`Tiếng Việt`/`English`).
+
+### ⚠️ 3 cái bẫy đã gặp thật
+
+1. **GCC (xtensa, `-std=gnu++11`) không nhận khởi tạo có tên nếu THIẾU chỉ số ĐẦU TIÊN**:
+   `sorry, unimplemented: non-trivial designated initializers not supported`. ⇒ Mỗi bảng **phải có dòng
+   `[UI_T_NONE] = nullptr`** ở đầu (đã thử trên compiler thật để xác nhận: có dòng đó thì biên dịch được,
+   bỏ đi là lỗi ngay).
+2. **Đừng tin log COM8 khi kiểm chữ có dấu**: `System.IO.Ports.SerialPort.ReadExisting()` giải mã
+   **ASCII** nên mọi byte ≥ 0x80 thành `?` — log hiện `Ti???ng Vi???t` **không** có nghĩa là màn hình sai.
+   Cách kiểm đúng: đọc **byte thô** rồi in hex. Đã đo được đúng chuỗi UTF-8 trên dây:
+   `54 69 E1 BA BF 6E 67 20 56 69 E1 BB 87 74` = `T i ế n g   V i ệ t` ✓.
+3. `lv_obj_add_flag/clear_flag(HIDDEN)` **luôn** invalidate + đánh dấu layout lại — nếu gọi vô điều kiện
+   mỗi lượt vẽ thì **cả trang vẽ lại qua SPI** (xem cảnh báo ở mục ENDSTOP: lượt cập nhật từ 0,1 ms nhảy
+   lên 27 ms). Nguyên tắc chung: **luôn so sánh trạng thái trước khi ghi** style/cờ.
+
+### Kiểm tra tự động — `tools/check_lang.py`
+
+```bash
+cd cydlcd
+python tools/check_lang.py              # 2 bang phai day du (dung truoc khi commit)
+python tools/check_lang.py --hardcoded  # + so do TIEN DO chuyen doi (chuoi hien thi con hard-code)
+```
+Script đọc `ui_lang.h` (enum) rồi đối chiếu **cả 2 bảng**: thiếu dòng / ID lạ / chuỗi rỗng / khai báo 2 lần
+→ **exit code 1**. `--hardcoded` in bảng xếp hạng theo file (dùng để theo dõi B2).
+
+### Trạng thái (cập nhật mỗi batch)
+
+| Batch | Phạm vi | Trạng thái |
+|---|---|---|
+| **B1** | Khung `ui_lang.*` + `UI LANG` + `check_lang.py` + mục **Language** trong menu + NVS | ✅ **xong, đã kiểm trên máy** (bảng 45/45 chuỗi, cả 2 ngôn ngữ) |
+| **B2** | Chuyển chuỗi hiển thị sang `T(id)`: **ui_chrome.cpp** (BACK/PREV/NEXT/`TRANG %d/%d`), **PG_TITLE**, **ui_page_menu.cpp** (10 dòng + cột giá trị + dòng `Calibrate touch`) | ✅ **xong batch 1** — còn ~15 file (ui_page_submenu 179 · ui_lvgl 152 · ui_page_settings 125 · ui_page_files 77 · …) |
+| **B3** | Bảng **English** đầy đủ + đổi VI/EN trên máy | 🔄 Làm song song từng batch (bảng EN phải đủ 100% ở mỗi batch thì checker mới xanh) |
+
+**Đã kiểm trên máy thật (COM8):**
+
+| Lệnh | Kết quả |
+|---|---|
+| `UI LANG` | `dang dung 0 = 'Tiếng Việt' (vi) \| CYDLCD_LANG_DEFAULT=0` + danh sách 2 ngôn ngữ (thiếu 0) |
+| `UI LANG?` | `vi: day du (0/45)` · `en: day du (0/45)` |
+| `UI LANG 1` + `UI MENU` + `UI BOX` | `Calibrate touch (hold 1.5s)` và `PAGE 1/2` (đổi cả dòng menu lẫn thanh đáy) |
+| `UI LANG 0` + `UI BOX` | về `Calibrate touch (giu 1.5s)` và `TRANG 1/2` |
+| `UI CFG 1` | `Language SUB -> 17`; `UI CFG 17` → `[17] LANGUAGE dong=2/2`, `Tiếng Việt ACT 47`, `English ACT 48` |
+| `UI CFG 17` + `UI HIT 1` | đổi sang EN **và vẫn ở nhóm LANGUAGE** (`nhom dang mo = 17`) — nhóm đang mở được giữ |
+| `UI LANG 1` → **reset panel** → `UI LANG` | vẫn `English` ⇒ **NVS nhớ đúng** |
+| `UI LANG 1` rồi `UI BOX` trên trang STATUS | các ô nhiệt/quạt/XYZ/tile vẫn đủ (trang dựng lại không mất trạng thái) |
+
 ## TẮT HẲN G34 (Auto Z-Align) — `CYDLCD_NO_G34` (2026-10-15)
 
 **Yêu cầu người dùng:** *"đối với máy của tôi, hãy tạm ẩn và cấm chức năng G34 do thiết kế trục Z cứng,
@@ -2280,6 +2364,7 @@ CAU HINH
 │   ├─ Temperature >      MPC P/C/R/A/F/H (M306) + MPC Autotune · Bed PID (M304) + Bed PID Autotune · Hotend PID (M301)
 │   ├─ Filament >         E in mm3 + Filament Diameter (M200) · Load/Unload Length (M603) · Runout Sensor (M412)
 │   ├─ Tune (runtime) >   Feed % (M220) · Flow % (M221) · Fan % (M106) · Target E0 (M104) · Target bed (M140)
+│   ├─ Language >         Tiếng Việt · English  (đổi ngôn ngữ MÀN HÌNH, lưu NVS "ui"/"lang")
 │   └─ Home Offset X/Y    (M206)
 ├─ Probe Z Offset                     M851 Z (mở lớp phủ sửa)
 ├─ Fade Height                        M420 Z (0.94) — ★ NGAY DƯỚI "Probe Z Offset", xem ghi chú dưới
@@ -2358,6 +2443,7 @@ giảm `CYDLCD_MESH_MAX` 16 → **12** (`mesh[16][16]` = 512 B → `[12][12]` = 
 | `UI CFG <nhóm>` | **MỞ** nhóm đó (đi đúng `submenu_open()` như bấm tay) rồi in từng dòng + giá trị |
 | `UI HIT <k>` | bắn `LV_EVENT_CLICKED` vào **nút thứ k** của trang đang mở → đi đúng đường sự kiện thật; khi lớp phủ sửa đang mở thì tìm trên `lv_layer_top()`: `0..3` = nút bước, `4` = `-`, `5` = `+`, `6` = `OK`, `7` = `Hủy` |
 | `UI BACK` | bấm nút BACK ở dòng tiêu đề (đi đúng `do_action(A_BACK)`) |
+| `UI LANG` / `UI LANG <0\|1>` / `UI LANG?` | 🆕 **đa ngôn ngữ** (2026-10-15): in ngôn ngữ đang dùng + danh sách · **đổi** ngôn ngữ (ghi NVS luôn, dựng lại màn hình) · in các ID còn **thiếu bản dịch**. Xem mục *"Đa ngôn ngữ (i18n)"* |
 
 ⚠️ `UI HIT` chỉ đếm **nút** (`lv_btn`) — đếm mọi vật có cờ `CLICK_FOCUSABLE` thì **nhãn chữ cũng bị đếm** và
 chỉ số lệch hết so với dòng đang thấy trên LCD (đã gặp thật).

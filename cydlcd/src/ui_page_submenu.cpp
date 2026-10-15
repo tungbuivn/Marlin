@@ -85,6 +85,9 @@ enum {
   // NGANG CAP CONFIGURATION (parent = SM_PARENT_NONE -> BACK ve MENU, giong 12864: Motion nam trong Main).
   SMG_MOTION,
   SMG_UBL,          //   Unified Bed Leveling >
+  // 2026-10-15: NGON NGU (da ngon ngu kieu Marlin - xem src/ui_lang.h): 2 dong ENDONYM (ten ngon ngu
+  // viet bang chinh ngon ngu do nen KHONG dich) -> chon la ghi NVS luon + dung lai man hinh.
+  SMG_LANG,
   SMG_COUNT
 };
 
@@ -128,6 +131,9 @@ static const sm_item_t SM_I_ADV[] = {
   SM_S("Temperature",               SMG_TEMP),
   SM_S("Filament",                  SMG_FILAMENT),
   SM_S("Tune (runtime)",            SMG_TUNE),
+  // 2026-10-15: NGON NGU - 2 dong endonym (xem SM_I_LANG). Dat CUOI nhom Advanced Settings (day la
+  // tuy chon cua MAN HINH, khong phai thong so Marlin).
+  SM_S("Language",                  SMG_LANG),
   // 2026-10-15: "Fade Height" DA CHUYEN ra CONFIGURATION (ngay duoi "Probe Z Offset") theo yeu cau
   // nguoi dung - truoc day dong nay nam o 3 noi (Advanced / UBL / Motion) nen bi lap.
   SM_V("Home Offset X",             CYDLCD_SET_HOME_OFFSET_X),
@@ -296,8 +302,20 @@ static const sm_item_t SM_I_UBL[] = {
   // 2026-10-15: BO dong "Fade Height" (12864 co trong nhom UBL) - da chuyen sang CONFIGURATION.
 };
 
-#define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
+// ===========================================================================
+//  NGON NGU (2026-10-15) - nhom SMG_LANG trong "Advanced Settings"
+// ===========================================================================
+// 2 dong la ENDONYM (ten ngon ngu viet bang chinh ngon ngu do) nen CO TINH KHONG dich: nguoi dung dang
+// o ngon ngu nao cung tim thay duong doi lai. Chuoi viet bang MA UTF-8 (\x..) cho file nguon ASCII thuan
+// (font Segoe UI 16 co du day du dau tieng Viet - dai vn1..vn4).
+// Dong cua ngon ngu DANG DUNG khong bi chan: bam lai chi la "khong doi" (A_LANG_* kiem tra truoc khi
+// dung lai man hinh). Nhan biet dang o ngon ngu nao: xem chu tren chinh man hinh (hoac `UI LANG` COM8).
+static const sm_item_t SM_I_LANG[] = {
+  SM_A("Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t", A_LANG_VI),
+  SM_A("English",                          A_LANG_EN)
+};
 
+#define SM_N(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
 // Thu tu trong bang KHONG quan trong (moi nhom tro bang ten SMG_*), nhung de doc thi xep theo cay.
 static const sm_group_t SM_GROUPS[SMG_COUNT] = {
   [SMG_ROOT]      = { "CAU HINH",     SM_PARENT_NONE, SM_I_ROOT,      SM_N(SM_I_ROOT) },
@@ -316,7 +334,9 @@ static const sm_group_t SM_GROUPS[SMG_COUNT] = {
   [SMG_CTRLFAN]   = { "CTRL FAN",     SMG_ROOT,       SM_I_CTRLFAN,   SM_N(SM_I_CTRLFAN) },
   [SMG_PREHEAT]   = { "PREHEAT",      SMG_ROOT,       SM_I_PREHEAT,   SM_N(SM_I_PREHEAT) },
   [SMG_MOTION]    = { "MOTION",       SM_PARENT_NONE, SM_I_MOTION,    SM_N(SM_I_MOTION) },
-  [SMG_UBL]       = { "UBL",          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) }
+  [SMG_UBL]       = { "UBL",          SMG_MOTION,     SM_I_UBL,       SM_N(SM_I_UBL) },
+  // Nhom NGON NGU: tieu de "LANGUAGE" giong nhau o ca 2 ngon ngu (giong cac nhom khac: ADVANCED/MOTION/UBL).
+  [SMG_LANG]      = { "LANGUAGE",     SMG_ADV,        SM_I_LANG,      SM_N(SM_I_LANG) }
 };
 
 // ===========================================================================

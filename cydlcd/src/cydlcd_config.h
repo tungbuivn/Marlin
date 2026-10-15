@@ -178,6 +178,15 @@
 #define UI_REFRESH_MS   150          // redraw period for changed values
 
 // ===========================================================================
+// NGON NGU (da ngon ngu kieu Marlin - xem src/ui_lang.h)
+//   0 = UI_LANG_VI (mac dinh), 1 = UI_LANG_EN
+// Day chi la MAC DINH khi NVS (Preferences "ui", khoa "lang") chua co gi; doi tren man hinh
+// (Configuration > Advanced Settings > Language) hoac lenh `UI LANG 0|1` tren COM8 la ghi NVS luon.
+// Bang chuoi nam o src/ui_lang_vi.h + src/ui_lang_en.h (const -> FLASH, khong ton DRAM).
+// ===========================================================================
+#define CYDLCD_LANG_DEFAULT  0       // 0 = tieng Viet, 1 = English
+
+// ===========================================================================
 // QUAN LY WiFi (net_wifi.cpp) -- xem README 9.20
 //   CYD: mac dinh 1 (co module WiFi). Board khac: 0 => net_wifi.cpp chi con stub
 //   (moi ham tra 0/rong/false) nen nhanh UI van build binh thuong.

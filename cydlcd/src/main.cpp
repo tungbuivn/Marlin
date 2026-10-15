@@ -223,7 +223,10 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
             // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
             // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
-            else if (strncasecmp(a3, "NOTIFY", 6) == 0) ui_lvgl_test_notify(a3 + 6);
+            else if (strcasecmp(a3, "NOTIFY") == 0) ui_lvgl_test_notify(a3 + 6);
+            // `UI LANG` = in ngon ngu dang dung + danh sach; `UI LANG 0|1` = doi ngon ngu (luu NVS);
+            // `UI LANG?` = in cac ID con THIEU ban dich. Xem src/ui_lang.h + ui_lvgl_test_lang().
+            else if (strncasecmp(a3, "LANG", 4) == 0) ui_lvgl_test_lang(a3 + 4);
             else if (strncasecmp(a3, "WTEST", 5) == 0) {
               // `UI WTEST [KB]` = ghi thu the (khong qua WiFi) de tach nguyen nhan loi ghi the.
               unsigned kb = 4096;

@@ -262,6 +262,9 @@ enum {
   // 2026-10-15: A_GOTO_MPC da BO cung trang PG_MPC (muc "Tuning (MPC/PID)" o MENU).
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
+  // 2026-10-15: NGON NGU (da ngon ngu kieu Marlin - xem src/ui_lang.h). 2 dong cua nhom
+  // Configuration > Advanced Settings > Language; chi doi chu cua MAN HINH, khong gui gi sang Marlin.
+  A_LANG_VI, A_LANG_EN,
   // 2026-10-15: menu MOTION giong so do 12864 (xem docs/12864-menu-map.md, nut m20):
   //   A_GOTO_MESH / A_GOTO_TBT = mo trang BED MESH / TRAMMING tu trong menu (MENU mo bang chi so trang,
   //   con menu CON thi phai qua hanh dong);
@@ -558,6 +561,16 @@ int8_t ui_wifi_rssi(void);
 void status_sd_icon_mark(void);
 /** Tao dong tieu de chung [HOME][ten man]...[ten may][wifi][II][][BACK] + thanh day. */
 void build_chrome(void);
+/**
+ * Doi ngon ngu: dat lai CHU cua cac vat CO DINH tren chrome (nut BACK / PREV / NEXT). Ten man do
+ * `page_rebuild()` dat lai, con "TRANG x/y" va o ten may/LINK ERR thi luot cap nhat tu dat lai.
+ */
+void chrome_lang_retext(void);
+/**
+ * Doi ngon ngu (goi SAU `ui_lang_set()`): dat lai chu chrome + THU HOI/TAO LAI trang dang mo va dong
+ * cac lop phu dang mo. Dinh nghia o ui_lvgl.cpp (xem ghi chu o do).
+ */
+void ui_lang_apply_ui(void);
 // ---------------------------------------------------------------------------
 //  Dinh nghia trong ui_boxes.cpp
 // ---------------------------------------------------------------------------

@@ -504,6 +504,21 @@ Các nút:
 Muốn lưu kết quả: quay ra `Configuration` → `Store Settings (M500)`. Làm autotune khi máy an toàn, đầu in nguội
 theo yêu cầu của Marlin và không có bản in đang chạy.
 
+### 7.11b NGÔN NGỮ (đa ngôn ngữ)
+
+Màn hình có **2 ngôn ngữ: Tiếng Việt và English** (mặc định là Tiếng Việt).
+
+Đổi ngôn ngữ: **`Configuration` → `Advanced Settings` → `Language`** → bấm `Tiếng Việt` hoặc `English`.
+Màn hình dựng lại ngay; lựa chọn được **lưu vào bộ nhớ trong** nên lần sau bật máy vẫn giữ nguyên.
+
+- Hai dòng trong menu luôn ghi bằng **chính tên ngôn ngữ đó** (`Tiếng Việt`, `English`) — không dịch — để
+  người đang ở ngôn ngữ nào cũng tìm được đường đổi lại.
+- Đổi ngôn ngữ **không** ảnh hưởng máy in: không gửi lệnh nào sang Marlin, không đổi thông số.
+- Vài chữ **cố ý không dịch** vì là ký hiệu/mã: `II`, `[]`, `ON`/`OFF`, `TBT`/`PUSH`, `NVS`, `MAX`/`MIN`, hay
+  tên lệnh G-code (`M119`, `M500`…).
+- Muốn kiểm tra từ PC: lệnh `UI LANG` (xem đang ở ngôn ngữ nào), `UI LANG 0|1` (đổi), `UI LANG?` (kiểm tra
+  bảng chữ có thiếu dòng dịch nào không).
+
 ### 7.12 TRAMMING WIZARD
 
 Trang hiển thị bốn góc theo thứ tự:

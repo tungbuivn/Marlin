@@ -14,6 +14,7 @@
 #include "ui_lvgl_int.h"
 
 #include <stdio.h>                  // snprintf
+#include "ui_lang.h"                // T() - da ngon ngu (xem ui_lang.h)
 
 #if CYDLCD_USE_LVGL
 
@@ -26,37 +27,40 @@
 // 2026-10-15: dong "Motion" khong mo mot TRANG nao ma mo NHOM menu MOTION (giong 12864: Motion la muc
 // trong Main menu) -> phai di qua do_action(A_GOTO_MOTION).
 #define MENU_ACT_PAGE 0xFF
-typedef struct { const char *name; uint8_t page; uint8_t act; } menu_item_t;
+// `name_id` = ID chuoi (ui_text_t, xem src/ui_lang.h) chu KHONG phai con tro chuoi: ten dong phai DOI
+// DUOC theo ngon ngu, ma bang nay la `const` (flash) nen khong the giu con tro toi 2 ban dich.
+// Doi 4 B/con tro -> 2 B/ID cung lam bang nho hon.
+typedef struct { uint16_t name_id; uint8_t page; uint8_t act; } menu_item_t;
 static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
-  { "Temperature",     PG_TEMP,   0 },
+  { UI_T_MENU_TEMP,     PG_TEMP,   0 },
   // 2026-10-15 (yeu cau nguoi dung: "sua not menu motion giong so do menu cua 12864"): dong nay
   // truoc la "Motion (JOG)" mo THANG trang JOG; nay mo menu MOTION (Move Axis/Homing/Z-Align/UBL/
   // Tramming/M48...) - trong do co dong "Move Axis (JOG)" mo lai trang JOG cu.
-  { "Motion",          MENU_ACT_PAGE, A_GOTO_MOTION },
-  { "Feed/Flow rate",  PG_RATE,   0 },
+  { UI_T_MENU_MOTION,   MENU_ACT_PAGE, A_GOTO_MOTION },
+  { UI_T_MENU_RATE,     PG_RATE,   0 },
   // 2026-10-15 (YEU CAU NGUOI DUNG: "thay text sd card o menu thanh 'Print from media' giong marlin"):
   // lay DUNG chuoi cua Marlin (`language_en.h`: MSG_MEDIA_MENU = "Print from " MEDIA_TYPE_EN, voi
   // MEDIA_TYPE_EN = "Media" khi LCD du rong >= 20 ky tu) -> "Print from Media". Trang van la PG_FILES.
-  { "Print from Media",PG_FILES,  0 },
-  { "Bed mesh",        PG_MESH,   0 },
-  { "Custom/Init SD",  PG_CUSTOM, 0 },
+  { UI_T_MENU_FILES,    PG_FILES,  0 },
+  { UI_T_MENU_MESH,     PG_MESH,   0 },
+  { UI_T_MENU_CUSTOM,   PG_CUSTOM, 0 },
   // 2026-10-15 (yeu cau nguoi dung: "phan configuration toi thay lam giong 12864 tien hon"): dong nay
   // KHONG con mo THANG bang phang nua ma mo CAY menu Configuration (PG_SUBMENU, xem ui_page_submenu.cpp)
   // giong menu Configuration cua Marlin 12864. Bang phang cu van con: "Advanced Settings > All settings".
-  { "Configuration",   PG_SUBMENU, 0 },
+  { UI_T_MENU_CONFIG,   PG_SUBMENU, 0 },
   // 2026-10-15 (yeu cau nguoi dung: "'turning MPC' da co o trong phan Configuration->advance
   // setting->temperature roi, bo nhung cho khac di"): dong "Tuning (MPC/PID)" (PG_MPC) da BO -
   // 6 tham so M306 + nut "MPC Autotune (M306 T)" + "Bed PID Autotune (M303)" deu da co trong
   // Configuration > Advanced Settings > Temperature (xem SM_I_TEMP o ui_page_submenu.cpp).
-  { "Tramming wizard", PG_TBT,    0 },
-  { "Info",            PG_INFO,   0 },
+  { UI_T_MENU_TBT,      PG_TBT,    0 },
+  { UI_T_MENU_INFO,     PG_INFO,   0 },
   // 2026-10-15 (YEU CAU NGUOI DUNG: "cho hien thi endstop (m119) thi hay cho vao motion"): dong
   // "Endstops (M119)" (PG_ENDSTOP) da BO khoi MENU chinh -> nam trong menu MOTION
   // (Configuration khong lien quan; xem SM_I_MOTION o ui_page_submenu.cpp).
   // Muc 10: WIFI (mo tu day HOAC bam icon WiFi o header/man STATUS).
   // MENU gio 10 muc + dong "Calibrate touch" = 11 hang x 23 px = 253 > 206 -> thanh day
   // PREV/NEXT xuat hien va phan trang.
-  { "WiFi",            PG_WIFI,   0 }
+  { UI_T_MENU_WIFI,     PG_WIFI,   0 }
 };
 static lv_obj_t *mn_val[MENU_ROWS];
 static lv_obj_t *mn_val_cal;                 // dong "Calibrate touch" (chi co tren board co touch)
@@ -132,7 +136,7 @@ void page_menu_create(lv_obj_t *p) {
                          cb_menu_row, (void *)(intptr_t)i);   // user_data = CHI SO DONG (xem cb_menu_row)
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-    lv_obj_t *n = mk_label(r, MENU_ITEMS[i].name, MR_MENU);
+    lv_obj_t *n = mk_label(r, T((ui_text_t)MENU_ITEMS[i].name_id), MR_MENU);
     lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
     mn_val[i] = mk_label(r, "", MR_MENUVAL);
     lv_obj_align(mn_val[i], LV_ALIGN_RIGHT_MID, -4, 0);
@@ -147,7 +151,7 @@ void page_menu_create(lv_obj_t *p) {
     lv_obj_add_event_cb(r, cb_cal_touch, LV_EVENT_PRESS_LOST, NULL);
     lv_obj_set_style_bg_color(r, COL_BTN, 0);
     lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-    lv_obj_t *n = mk_label(r, "Calibrate touch (giu 1.5s)", MR_MENU);
+    lv_obj_t *n = mk_label(r, T(UI_T_MENU_CALTOUCH), MR_MENU);
     lv_obj_align(n, LV_ALIGN_LEFT_MID, 4, 0);
     mn_val_cal = mk_label(r, "4 goc", MR_MENUVAL);
     lv_obj_align(mn_val_cal, LV_ALIGN_RIGHT_MID, -4, 0);
@@ -190,7 +194,7 @@ void page_menu_update(void) {
     // biet da an hay chua) - nhi`n tu MENU cung thay, khong phai vao man BED MESH.
     snprintf(b, sizeof(b), "%ux%u %s", (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
              cydlcd.mesh_on ? "ON" : "OFF");
-  else snprintf(b, sizeof(b), "n/a");
+  else snprintf(b, sizeof(b), "%s", T(UI_T_VALUE_NA));
   set_text(mn_val[4], b);
 
   // (2026-10-15: doi tu "G34/M22" -> "M22" vi G34 da TAT tren may nay - thiet ke truc Z cung, xem
@@ -199,7 +203,7 @@ void page_menu_update(void) {
   // So dong thong so da nhan tu Marlin. KHONG con ghi "58/33": tong so 33 la con so CU (Marlin gui 58 dong
   // tu 2026-10-15) nen dong do thanh vo nghia/kho hieu. Man hinh KHONG biet tong so that (Marlin khong gui
   // frame "het danh sach" cho SETTING) -> chi ghi so da nhan.
-  snprintf(b, sizeof(b), "%u muc", (unsigned)cydlcd.n_settings);
+  snprintf(b, sizeof(b), T(UI_T_VALUE_ITEMS), (unsigned)cydlcd.n_settings);
   set_text(mn_val[6], b);
 
   // (2026-10-15: dong "Tuning (MPC/PID)" da BO - xem ghi chu o MENU_ITEMS. Sau do dong "Endstops (M119)"
@@ -207,29 +211,31 @@ void page_menu_update(void) {
 
   // Tramming wizard: hien trang thai WIZARD (khong phai chi bao link - chi bao link o THANH TREN).
   // Chua co dong TBT nao / mat link thi ghi ro de biet duong nao chua thong.
-  if (!link_ok()) snprintf(b, sizeof(b), "%s", tbt.ever ? "mat link" : "chua bat");
-  else if (!tbt.st.active) snprintf(b, sizeof(b), "san sang");
+  if (!link_ok()) snprintf(b, sizeof(b), "%s", T(tbt.ever ? UI_T_MENU_TBT_NOLINK : UI_T_MENU_TBT_OFF));
+  else if (!tbt.st.active) snprintf(b, sizeof(b), "%s", T(UI_T_MENU_TBT_READY));
   else snprintf(b, sizeof(b), "%s %s", tbt.st.mode_max ? "MAX" : "MIN", tbt_phase_name(tbt.st.phase));
   set_text(mn_val[7], b);
 
   // Duong dang dung (PUSH / TRAM / chua co) - KHONG hien lai trang thai link o day,
   // vi chi bao link chi nam o THANH TREN (xem link_ok()).
+  // ("TBT"/"PUSH"/"-" la ma KY HIEU cua duong truyen -> khong dich.)
   snprintf(b, sizeof(b), "%s", tbt.ever ? "TBT" : (cydlcd.linked ? "PUSH" : "-"));
   set_text(mn_val[8], b);
 
   // Muc "WiFi": hien trang thai ngan (TAT / DANG KET NOI / DA KET NOI / khong ho tro)
-  if (!wifi_api_ok()) set_text(mn_val[9], "n/a");
+  if (!wifi_api_ok()) set_text(mn_val[9], T(UI_T_VALUE_NA));
   else {
-    static const char *const WST[3] = { "TAT", "dang noi", "DA NOI" };
+    static const uint8_t WST[3] = { UI_T_MENU_WIFI_OFF, UI_T_MENU_WIFI_CONN, UI_T_MENU_WIFI_OK };
     const uint8_t ws = wifi_state_now();
-    set_text(mn_val[9], WST[ws <= 2 ? ws : 0]);
+    set_text(mn_val[9], T((ui_text_t)WST[ws <= 2 ? ws : 0]));
   }
   // Dong "Calibrate touch": thuong hien nguon gia tri (NVS / mac dinh); khi dang GIU tay thi
   // hien tien do de nguoi dung biet da du 1.5s chua.
   if (s_cal_hold_ms)
-    set_text(mn_val_cal, (ui_port_millis() - s_cal_hold_ms) >= CAL_TOUCH_HOLD_MS ? "NHAC TAY" : "dang giu");
+    set_text(mn_val_cal, T((ui_port_millis() - s_cal_hold_ms) >= CAL_TOUCH_HOLD_MS ? UI_T_CAL_RELEASE
+                                                                                  : UI_T_CAL_HOLDING));
   else
-    set_text(mn_val_cal, ui_port_touch_cal_is_saved() ? "NVS" : "mac dinh");
+    set_text(mn_val_cal, T(ui_port_touch_cal_is_saved() ? UI_T_CAL_NVS : UI_T_CAL_DEFAULT));
 }
 
 // Huy man MENU (xem quy uoc o ui_lvgl_int.h): dat NULL cot gia tri tung dong + dong "Calibrate

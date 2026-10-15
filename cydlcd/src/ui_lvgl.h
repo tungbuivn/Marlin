@@ -75,6 +75,12 @@ void ui_lvgl_dump_temps(void);
 // "khi nhiet do tang dan thi mau co chuyen dan sang do khong" ma KHONG phai dot nong may.
 void ui_lvgl_test_grad(void);
 
+// CHAN DOAN NGON NGU (lenh `UI LANG` tren COM8, 2026-10-15 - da ngon ngu kieu Marlin):
+//   `UI LANG`     -> in ngon ngu dang dung + danh sach ngon ngu (kem so chuoi con thieu ban dich);
+//   `UI LANG <n>` -> DOI ngon ngu (ghi NVS luon) va dung lai man hinh dang mo;
+//   `UI LANG?`    -> in TUNG ID con thieu ban dich (kem chuoi tieng Viet de tim nhanh trong bang).
+void ui_lvgl_test_lang(const char *arg);
+
 // CHAN DOAN duong PANEL -> MARLIN (lenh `UI HELLO` tren COM7): in `hello_flags` + so tham so/danh sach dang co
 // roi xin lai REQ_FULL/SETTINGS/MESH. Dung khi flash lai panel ma `hello_flags` = 0 (trang BED MESH bao "khong
 // ho tro", `n_settings` tut) - de biet panel co gui duoc REQUEST sang Marlin hay khong.

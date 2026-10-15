@@ -17,6 +17,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_lang.h"                // T() - da ngon ngu (xem ui_lang.h)
 
 #include <stdio.h>                  // snprintf (chu dBm canh icon WiFi)
 
@@ -28,6 +29,9 @@
 // Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT]. CHI hien khi noi dung
 // cua man dang mo BI TRAN theo chieu doc (xem bot_sync()); man nao gon thi giu nguyen bo cuc 206 px.
 static lv_obj_t  *s_bot, *s_bot_prev, *s_bot_next, *s_bot_info;
+// Nut BACK o goc phai dong tieu de: GIU CON TRO de con doi duoc CHU khi doi ngon ngu (2026-10-15 -
+// xem chrome_lang_retext). Truoc day nut nay tao "truc tiep" khong luu con tro.
+static lv_obj_t  *s_btn_back;
 static bool       s_bot_shown = false;      // trang thai hien tai cua s_bot (tranh goi an/hien vo ich)
 // Trang thai hien/an cua 2 nut PREV/NEXT: bit0 = PREV, bit1 = NEXT. 0xFF = chua set lan nao.
 // Nut nao KHONG the di theo huong do thi AN HAN (khong lam mo), va chi doi CO khi trang thai doi.
@@ -187,7 +191,7 @@ void bot_sync(const bool remeasure) {
   const lv_coord_t top = lv_obj_get_scroll_top(pg), bot = lv_obj_get_scroll_bottom(pg);
   const int npg = (vis > 0) ? (1 + (int)((top + bot + vis - 1) / vis)) : 1;
   const int cur = (vis > 0) ? (1 + (int)((top       + vis - 1) / vis)) : 1;
-  char b[24]; snprintf(b, sizeof(b), "TRANG %d/%d", cur, npg);
+  char b[24]; snprintf(b, sizeof(b), T(UI_T_CHROME_PAGE_OF), cur, npg);
   set_text(s_bot_info, b);
 
   // Chi doi CO khi trang thai doi (bit0 = PREV hien, bit1 = NEXT hien) -> khong relayout moi 400 ms.
@@ -469,7 +473,7 @@ void build_chrome(void) {
 
   // ---- Ten man: o be rong CO DINH (TITLE_W) de tong be rong thanh tieu de la con so chac chan
   // (xem bang o tren). Ten dai hon o thi tu cuon trong o, khong day cac nut ra ngoai.
-  s_title = mk_label_w(s_bar, "STATUS", COL_TXT, TITLE_W);
+  s_title = mk_label_w(s_bar, T(UI_T_PT_STATUS), COL_TXT, TITLE_W);
 #if UI_MONO_FONT == 4
   // DOI CHUNG cho phep thu mono: giu TEN MAN o font Montserrat. Neu man hinh chi con doc duoc ten
   // man ma moi chu khac mat => font mono khong ve duoc. Neu chu khac hien binh thuong => font tot.
@@ -493,11 +497,12 @@ void build_chrome(void) {
   // Dung font icon BAN NHO (14 px) - thanh tieu de chi cao 26 px; ban to (30 px) danh cho STATUS.
   s_wifi = mk_wifi_icon(s_bar, wifi_icon_font(false));
   // P9: 2 nut nho PAUSE / STOP - mac dinh AN, chi hien khi dang in (xem ui_lvgl_task)
+  // "II" / "[]" la KY HIEU (khong phai chu) -> CO TINH khong dich, giu nguyen o MOI ngon ngu.
   s_btn_pause = mk_btn(s_bar, "II", 26, 20, cb_action, (void *)(intptr_t)A_PAUSE);
   s_btn_stop  = mk_btn(s_bar, "[]", 26, 20, cb_action, (void *)(intptr_t)A_STOP);
   lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
-  mk_btn(s_bar, "BACK", 48, 20, cb_action, (void *)(intptr_t)A_BACK);
+  s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 48, 20, cb_action, (void *)(intptr_t)A_BACK);
 
   // --- Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT] ---
   // CHI hien khi noi dung man dang mo BI TRAN theo chieu doc (xem bot_sync()).
@@ -514,15 +519,32 @@ void build_chrome(void) {
   lv_obj_set_flex_align(s_bot, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   // Chu "PREV"/"NEXT"/"TRANG x/y" deu la ASCII -> dung Montserrat mac dinh (KHONG vn_font*)
-  s_bot_prev = mk_btn(s_bot, "PREV", 56, 18, cb_action, (void *)(intptr_t)A_PAGE_PREV);
+  s_bot_prev = mk_btn(s_bot, T(UI_T_CHROME_PREV), 56, 18, cb_action, (void *)(intptr_t)A_PAGE_PREV);
   s_bot_info = mk_label(s_bot, "", COL_DIM);
   lv_obj_set_flex_grow(s_bot_info, 1);                                        // gian het cho trong giua
   lv_obj_set_style_text_align(s_bot_info, LV_TEXT_ALIGN_CENTER, 0);
-  s_bot_next = mk_btn(s_bot, "NEXT", 56, 18, cb_action, (void *)(intptr_t)A_PAGE_NEXT);
+  s_bot_next = mk_btn(s_bot, T(UI_T_CHROME_NEXT), 56, 18, cb_action, (void *)(intptr_t)A_PAGE_NEXT);
 
   lv_obj_update_layout(s_bot);                    // do xong (luc dang HIEN) roi moi an
   lv_obj_add_flag(s_bot, LV_OBJ_FLAG_HIDDEN);
   s_bot_shown = false;
+}
+
+// ===========================================================================
+//  DOI NGON NGU: ve lai CHU cua "chrome" (dong tieu de + thanh day)
+// ===========================================================================
+// Chrome duoc dung MOT LAN luc khoi dong (build_chrome) nen khi doi ngon ngu phai tu dat lai chu cho
+// cac vat co chu CO DINH:
+//   - ten man (s_title): do `page_rebuild()` lo (no goi page_title()) - xem ui_lang_apply_ui();
+//   - nut BACK / PREV / NEXT: o day;
+//   - nhan "TRANG x/y": `bot_sync()` tu tinh lai (chay dinh ky 400 ms, `set_text` chi ve khi chu doi);
+//   - o ten may / LINK ERR / NO LINK: luot cap nhat (ui_lvgl_task) tu dat lai;
+//   - nut HOME khi KHONG co font icon (chu "H") va 2 nut "II"/"[]": KY HIEU, khong dich.
+// Khong dung lai chrome tu dau: build_chrome() xoa/tim lai group + bo cuc, de vo hon muc can thiet.
+void chrome_lang_retext(void) {
+  if (s_btn_back)  set_text(lv_obj_get_child(s_btn_back, 0),  T(UI_T_CHROME_BACK));
+  if (s_bot_prev)  set_text(lv_obj_get_child(s_bot_prev, 0),  T(UI_T_CHROME_PREV));
+  if (s_bot_next)  set_text(lv_obj_get_child(s_bot_next, 0),  T(UI_T_CHROME_NEXT));
 }
 
 #endif  // CYDLCD_USE_LVGL
