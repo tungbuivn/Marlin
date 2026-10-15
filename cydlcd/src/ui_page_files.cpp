@@ -421,8 +421,8 @@ void files_init_sd(void) {
   }
   if (files_sd_busy()) {
     files_note("Dang in - khong init lai the", true);
-    cydlcd.files_done = false;
-    cydlcd.n_files    = 0;
+    // DA LUONG: chi YEU CAU task `link` xoa danh sach (khong ghi thang vao `cydlcd` - xem ke hoach).
+    cydlcd_link_reset_files();
     do_action((int)A_REQ_FILES);
     return;
   }
@@ -540,8 +540,8 @@ void files_job_task(void) {
 
   // Xoa dem TRUOC khi xin: neu thu muc chi con 0 file thi Marlin chi gui frame KET THUC (0xFF)
   // -> handle_frame() khong tu reset n_files, danh sach se van hien file vua xoa.
-  cydlcd.files_done = false;
-  cydlcd.n_files    = 0;
+  // DA LUONG: chi YEU CAU task `link` lam (khong ghi thang vao `cydlcd`).
+  cydlcd_link_reset_files();
   do_action((int)A_REQ_FILES);           // xin lai danh sach -> page_files_update() ve lai cac dong
 }
 

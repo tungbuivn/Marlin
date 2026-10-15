@@ -95,6 +95,14 @@ uint32_t ui_lvgl_perf_slow_take(void);
 uint32_t ui_lvgl_perf_slow_all(void);
 uint32_t ui_lvgl_perf_last_us(void);
 
+// ---- DO DO TRE CUA DUONG SERIAL (muc tieu so 1 cua ke hoach da luong: "serial khong bi gian doan") ----
+// main.cpp goi ham nay MOI lan chay `cydlcd_link_task()` de bao: `gap_us` = khoang nghi tu lan KET THUC truoc
+// den lan BAT DAU nay (thoi gian bi cac chang khac chan), `dur_us` = thoi gian chay cua chinh no.
+// `ui_lvgl_perf_link_take()` tra ve gap LON NHAT + so lan gap > 50 ms trong khoang tu lan goi truoc (roi xoa).
+// Truoc khi tach task: day la MOC SO SANH; sau khi tach: la bang chung dat/khong dat.
+void     ui_lvgl_perf_link_call(uint32_t gap_us, uint32_t dur_us);
+uint32_t ui_lvgl_perf_link_take(uint32_t *slow_n);
+
 // CHAN DOAN trang thai may: in `st`/`fl`/file dang in/tien do + **co cho nhan file upload khong**
 // (lenh `UI BUSY` tren COM7, cung in kem trong `UI BOX`). Tra loi "lam sao biet may dang in?":
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.

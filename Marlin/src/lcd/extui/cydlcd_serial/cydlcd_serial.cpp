@@ -1021,18 +1021,24 @@ namespace ExtUI {
     //   - man hinh reset xong thi khong bao gio nhan duoc HELLO -> trang BED MESH "khong ho tro" (mat mesh),
     //     n_settings tut (49 -> 9), n_files = 0.
     // Reset mainboard thi het => khong phai day long, ma la RX cua Marlin bi KET (STM32: loi OverRun/ORE
-    // khong duoc xoa thi RXNE khong bao gio bat lai). Nay tu phat hien va tu `begin()` lai UART - khong can
-    // reset may, khong mat gi (frame PUSH tu dong bo lai sau 1-2 frame).
+    // khong duoc xoa thi RXNE khong bao gio bat lai).
+    //
+    // !! GIOI HAN TAN SUAT (sua 2026-10-15 sau khi panel "mat link" ngay sau khi nap lai panel) !!
+    // VI SAO: moi lan nap lai PANEL, panel im ~30 s -> watchdog nay chay 3 lan lien tiep, ma
+    // `CYDLCD_SERIAL.begin()` lai UART ngay giua luc driver dang chay co the de RX o trang thai hong (nghi van
+    // dang mo). Nen: chi thu lai TOI DA 1 LAN MOI 60 s, va in ro tung lan de con doi chieu duoc tren COM4.
     // ---------------------------------------------------------------------------
     static millis_t next_rx_wd_ms = 0;
+    static millis_t last_rx_wd_try = 0;
     static uint16_t s_rx_wd = 0;
     if (!next_rx_wd_ms || ELAPSED(now, next_rx_wd_ms)) {
       next_rx_wd_ms = now + 10000;
-      if (last_rx_ms && ELAPSED(now, last_rx_ms + 10000)) {
+      if (last_rx_ms && ELAPSED(now, last_rx_ms + 10000)
+          && (!last_rx_wd_try || ELAPSED(now, last_rx_wd_try + 60000))) {
+        last_rx_wd_try = now;
         s_rx_wd++;
-        if (s_rx_wd <= 5 || (s_rx_wd % 6) == 0)     // 5 lan dau in het, sau do 1 phut/lan (the nho rut ra)
-          SERIAL_ECHOLNPGM("PANEL: khong nhan duoc frame nao tu man hinh > 10 s -> khoi tao lai UART (lan ",
-                           s_rx_wd, ")");
+        SERIAL_ECHOLNPGM("PANEL: khong nhan duoc frame nao tu man hinh > 10 s -> khoi tao lai UART (lan ",
+                         s_rx_wd, ")");
         CYDLCD_SERIAL.begin(CYDLCD_BAUD);
         rx.state = CYDLCD_RXS_SYNC0;                // bo nua frame dang do
         last_rx_ms = now;                           // lan sau dem lai tu day

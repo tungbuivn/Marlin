@@ -115,7 +115,27 @@ extern cydlcd_data_t cydlcd;
 // API
 // ---------------------------------------------------------------------------
 void cydlcd_link_begin(const uint32_t baud);
-void cydlcd_link_task();                                  // goi lien tuc trong loop()
+void cydlcd_link_task();                                  // 1 vong phuc vu serial (goi tu task `link`)
+
+// ---------------------------------------------------------------------------
+// DA LUONG (2026-10-15, xem cydlcd/docs/ke-hoach-da-luong.md):
+//  - `cydlcd_link_start_task()`: tao task `link` (core 1, uu tien 20) - task DUY NHAT cham vao UART Marlin
+//    va phuc vu sector SD cho Marlin. Goi 1 lan trong setup(). Tra false neu khong tao duoc task.
+//  - `cydlcd` (struct trang thai) la BAN CONG KHAI cho nguoi doc: task `link` ghi vao ban rieng cua no roi
+//    "publish" sang `cydlcd`. `cydlcd_link_state_lock()`/`unlock()` giu khoa trong luc nguoi doc doc nhieu
+//    truong lien tiep (vd ca 1 lan cap nhat man hinh) - task `link` KHONG BAO GIO cho khoa nay (timeout 0,
+//    ban ghi van nam o ban rieng nen khong mat du lieu, chi cham vai ms).
+// ---------------------------------------------------------------------------
+#if defined(CYDLCD_BOARD_CYD)
+  bool cydlcd_link_start_task(void);
+#else
+  static inline bool cydlcd_link_start_task(void) { return true; }
+#endif
+void cydlcd_link_state_lock(void);
+void cydlcd_link_state_unlock(void);
+// YEU CAU (tu task khac, KHONG BAO GIO chan): xoa danh sach file de xin lai tu dau. Thay cho viec ghi thang
+// `cydlcd.files_done = false; cydlcd.n_files = 0;` (task `link` la chu so huu trang thai - xem ke hoach).
+void cydlcd_link_reset_files(void);
 bool cydlcd_link_connected();
 
 // Hang doi TX (xem cydlcd_link.cpp): frame duoc gui NGAY khi TX ring du cho, con lai xep hang doi

@@ -7,15 +7,65 @@
 #include "cydlcd_port.h"
 #include "tbt_link.h"        // duong TRAMMING (ASCII) dung CHUNG UART - xem tbt_link.h
 #include "cyd_sd.h"        // doc sector tho cho Marlin (che do CYDLCD_SD_UART)
+#include "logq.h"          // log KHONG CHAN: task `link` khong duoc `Serial.print` (xem logq.h)
+#include "ui_lvgl.h"       // ui_lvgl_perf_link_call(): do do tre duong serial (chi board CYD co LVGL)
 
 // Log chan doan cho phan the SD (chi tren board that; ban chay tren may tinh khong co Serial)
+// TU 2026-10-15 (da luong): KHONG in truc tiep nua ma day vao hang doi (`logq_post` - timeout 0).
+// LY DO: in 700 byte o 115200 mat ~60 ms; do duoc `link gap max 63 549 us` khi log in truc tiep trong
+// task `link` => duong serial Marlin bi chan moi giay. Xem logq.h + ke-hoach-da-luong.md.
 #if defined(CYDLCD_BOARD_CYD)
-  #define SDLOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
+  #define SDLOG(...)   do { logq_post(__VA_ARGS__); } while (0)
 #else
   #define SDLOG(...)   do { } while (0)
 #endif
 
-cydlcd_data_t cydlcd;
+// ===========================================================================
+//  TRANG THAI: ban RIENG cua task `link` (s_src) va ban CONG KHAI cho nguoi doc (cydlcd)
+// ===========================================================================
+// DA LUONG (2026-10-15, xem cydlcd/docs/ke-hoach-da-luong.md): task `link` la CHU SO HUU duy nhat cua trang
+// thai - ghi vao `s_src` (khong khoa, khong cho ai), roi "publish" sang `cydlcd` (ban ma MOI code khac dang
+// doc, nho vay khong phai sua cho nao doc). Publish dung mutex voi `xSemaphoreTake(..., 0)`:
+//  - nguoi doc (task `ui`, core 0) giu khoa trong luc doc nhieu truong lien tiep;
+//  - task `link` KHONG BAO GIO cho: khoa dang bi giu thi BO QUA lan publish nay (du lieu van nguyen o
+//    `s_src`, lan sau publish lai) => duong serial khong bao gio bi man hinh chan.
+cydlcd_data_t cydlcd;                  // ban CONG KHAI (moi code khac doc)
+static cydlcd_data_t s_src;            // ban GOC, chi task `link` ghi
+
+#if defined(CYDLCD_BOARD_CYD)
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/task.h"
+  #include "freertos/semphr.h"
+  static SemaphoreHandle_t s_state_mtx = nullptr;
+  static volatile bool     s_pub_pending = false;   // co thay doi chua publish duoc (khoa dang bi giu)
+  static void link_task_fn(void *);
+#endif
+
+// Publish `s_src` -> `cydlcd` (KHONG BAO GIO cho khoa). Goi o cuoi moi vong `cydlcd_link_task()`.
+static void state_publish(void) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (!s_state_mtx) { memcpy(&cydlcd, &s_src, sizeof(cydlcd)); return; }   // chua tao khoa (luc setup)
+  if (xSemaphoreTake(s_state_mtx, 0) == pdTRUE) {
+    memcpy(&cydlcd, &s_src, sizeof(cydlcd));
+    s_pub_pending = false;
+    xSemaphoreGive(s_state_mtx);
+  }
+  else s_pub_pending = true;          // nguoi doc dang doc -> lan sau publish (khong mat du lieu)
+#else
+  memcpy(&cydlcd, &s_src, sizeof(cydlcd));
+#endif
+}
+
+void cydlcd_link_state_lock(void) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (s_state_mtx) xSemaphoreTake(s_state_mtx, pdMS_TO_TICKS(20));
+#endif
+}
+void cydlcd_link_state_unlock(void) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (s_state_mtx) xSemaphoreGive(s_state_mtx);
+#endif
+}
 
 static cydlcd_rx_t  s_rx;
 static cydlcd_tx_t  s_tx;
@@ -35,7 +85,7 @@ static uint16_t    s_rx_type[0x50];             // dem frame theo LOAI (chan doa
 // Anh cua bo dem loi 16-bit trong cydlcd_protocol.h (cydlcd_rx_t.errors) o lan doc truoc, de biet
 // "VUA co loi moi" ma khong phai sua cydlcd_protocol.h (file do phai giu byte-identical voi ban
 // Marlin). Chi so sanh KHAC NHAU, khong cong don: bo dem 16-bit co the tran ve 0 sau 65 536 loi
-// nhung 65535 -> 0 van la "khac" -> van bat duoc co cydlcd.rx_errors.
+// nhung 65535 -> 0 van la "khac" -> van bat duoc co s_src.rx_errors.
 static uint16_t    s_err_seen = 0;
 
 // ---------------------------------------------------------------------------
@@ -236,12 +286,12 @@ void cydlcd_link_request_dir(const char *dirname) {
 }
 
 void cydlcd_link_answer(const uint8_t answer) {
-  if (!cydlcd.prompt_active) return;
+  if (!s_src.prompt_active) return;
   cydlcd_tx_begin(&s_tx, CYDLCD_F_ANSWER);
-  cydlcd_tx_u8(&s_tx, cydlcd.prompt_id);
+  cydlcd_tx_u8(&s_tx, s_src.prompt_id);
   cydlcd_tx_u8(&s_tx, answer);
   send_frame(cydlcd_tx_finish(&s_tx));
-  cydlcd.prompt_active = false;
+  s_src.prompt_active = false;
 }
 
 void cydlcd_link_send_tbt_cmd(char cmd) {
@@ -252,21 +302,21 @@ void cydlcd_link_send_tbt_cmd(char cmd) {
 }
 
 int32_t cydlcd_setting(const uint16_t id, const int32_t def) {
-  for (uint8_t i = 0; i < cydlcd.n_settings; i++)
-    if (cydlcd.settings[i].id == id) return cydlcd.settings[i].value;
+  for (uint8_t i = 0; i < s_src.n_settings; i++)
+    if (s_src.settings[i].id == id) return s_src.settings[i].value;
   return def;
 }
 
-// Ghi 1 thong so vao bang `cydlcd.settings[]` (them neu chua co). Dung cho cac thong so do CHINH MAN HINH CYD
+// Ghi 1 thong so vao bang `s_src.settings[]` (them neu chua co). Dung cho cac thong so do CHINH MAN HINH CYD
 // quan ly - Marlin khong bao gio gui chung, vd 9 preset preheat (id 0x40xx, xem ui_preheat.cpp).
 // Marlin gui frame CYDLCD_F_SETTING thi di qua duong rieng o handle_frame (logic y het).
 void cydlcd_setting_set(const uint16_t id, const int32_t value) {
-  for (uint8_t i = 0; i < cydlcd.n_settings; i++)
-    if (cydlcd.settings[i].id == id) { cydlcd.settings[i].value = value; return; }
-  if (cydlcd.n_settings < CYDLCD_SETTINGS_MAX) {
-    cydlcd.settings[cydlcd.n_settings].id = id;
-    cydlcd.settings[cydlcd.n_settings].value = value;
-    cydlcd.n_settings++;
+  for (uint8_t i = 0; i < s_src.n_settings; i++)
+    if (s_src.settings[i].id == id) { s_src.settings[i].value = value; return; }
+  if (s_src.n_settings < CYDLCD_SETTINGS_MAX) {
+    s_src.settings[s_src.n_settings].id = id;
+    s_src.settings[s_src.n_settings].value = value;
+    s_src.n_settings++;
   }
 }
 
@@ -289,7 +339,7 @@ static uint8_t str_at(const uint8_t *p, const uint8_t len, const uint8_t off, ch
 //   cydlcd_tmp = thu muc file tam cua MAN HINH (cyd_sd.cpp tu tao khi nhan file qua WiFi);
 //   BTUP       = thu muc cu cua duong upload qua BLUETOOTH (da xoa khoi firmware 2026-10-14).
 // LUU Y: day chi la "co phai muc he thong" - danh sach Marlin gui xuong VAN GIU NGUYEN DU
-// (cydlcd.files[] + cydlcd.n_files), chi MAN HINH an khi hien (ui_page_files.cpp: files_view_build()).
+// (s_src.files[] + s_src.n_files), chi MAN HINH an khi hien (ui_page_files.cpp: files_view_build()).
 bool cydlcd_hidden_dir(const char *name, const uint8_t flags) {
   if (!(flags & 0x01U) || !name || !name[0]) return false;
   const char *list = CYDLCD_HIDE_DIRS;
@@ -308,8 +358,8 @@ bool cydlcd_hidden_dir(const char *name, const uint8_t flags) {
 static void handle_frame() {
   const uint8_t *p = s_rx.payload;
   const uint8_t  n = s_rx.len;
-  cydlcd.last_rx_ms = cydlcd_millis();
-  cydlcd.linked = true;
+  s_src.last_rx_ms = cydlcd_millis();
+  s_src.linked = true;
   if (s_rx.type < 0x50) s_rx_type[s_rx.type]++;    // chan doan: dem frame theo loai (xem UI RX)
 
   switch ((cydlcd_frame_t)s_rx.type) {
@@ -320,43 +370,43 @@ static void handle_frame() {
       // reset qua kenh nay) - dung de chan doan cac loi kieu "bam STOP thi Marlin restart".
       if (++s_hello_count > 1)
         SDLOG("[UP] *** MARLIN VUA KHOI DONG LAI (HELLO lan %u) - truoc do link=%u, ly do reset khong ro ***\n",
-              (unsigned)s_hello_count, (unsigned)cydlcd.linked);
-      cydlcd.marlin_ver[0] = '\0';
+              (unsigned)s_hello_count, (unsigned)s_src.linked);
+      s_src.marlin_ver[0] = '\0';
       if (n >= 6) {
-        cydlcd.marlin_fw   = (uint16_t)(p[0] | (p[1] << 8));
-        cydlcd.proto       = p[2];
-        cydlcd.hello_flags = p[3];
-        cydlcd.n_heaters   = p[4];
-        cydlcd.n_fans_max  = p[5];
-        const uint8_t used = str_at(p, n, 6, cydlcd.name, sizeof(cydlcd.name));
+        s_src.marlin_fw   = (uint16_t)(p[0] | (p[1] << 8));
+        s_src.proto       = p[2];
+        s_src.hello_flags = p[3];
+        s_src.n_heaters   = p[4];
+        s_src.n_fans_max  = p[5];
+        const uint8_t used = str_at(p, n, 6, s_src.name, sizeof(s_src.name));
         // Proto >= 2: Marlin gui them 1 str SHORT_BUILD_VERSION ngay SAU `name`.
         // Doc kieu "neu con byte thi doc" -> HELLO cua Marlin ban cu (proto 1) van doc duoc:
         // het payload thi chuoi rong, khong loi gi.
         if ((uint8_t)(6 + used) < n)
-          str_at(p, n, (uint8_t)(6 + used), cydlcd.marlin_ver, sizeof(cydlcd.marlin_ver));
+          str_at(p, n, (uint8_t)(6 + used), s_src.marlin_ver, sizeof(s_src.marlin_ver));
       }
       // Sau HELLO xin ngay du lieu day du (ten file, thong so, mesh)
-      cydlcd.files_pending = true;
+      s_src.files_pending = true;
       cydlcd_link_request(CYDLCD_REQ_SETTINGS);
-      if (cydlcd.hello_flags & CYDLCD_HAS_MESH) cydlcd_link_request(CYDLCD_REQ_MESH);
+      if (s_src.hello_flags & CYDLCD_HAS_MESH) cydlcd_link_request(CYDLCD_REQ_MESH);
       break;
 
     case CYDLCD_F_STATUS:
-      if (n >= 3) { cydlcd.state = p[0]; cydlcd.flags = p[1]; cydlcd.progress_pct = p[2]; }
+      if (n >= 3) { s_src.state = p[0]; s_src.flags = p[1]; s_src.progress_pct = p[2]; }
       // Byte thu 4 (2026-10-15): mesh/leveling dang BAT hay TAT. Marlin cu chi gui 3 byte -> giu gia tri
       // cu (khong doan bua); chi cap nhat khi frame co du 4 byte.
-      if (n >= 4) cydlcd.mesh_on = (p[3] != 0);
+      if (n >= 4) s_src.mesh_on = (p[3] != 0);
       break;
 
     case CYDLCD_F_TEMPS: {
-      cydlcd.n_temps = 0;
+      s_src.n_temps = 0;
       if (n >= 1) {
         uint8_t cnt = p[0], off = 1;
-        for (uint8_t i = 0; i < cnt && off + 4 < n && cydlcd.n_temps < 8; i++, off += 5) {
-          cydlcd.temps[cydlcd.n_temps].id  = p[off];
-          cydlcd.temps[cydlcd.n_temps].cur = (int16_t)(p[off + 1] | (p[off + 2] << 8));
-          cydlcd.temps[cydlcd.n_temps].tgt = (int16_t)(p[off + 3] | (p[off + 4] << 8));
-          cydlcd.n_temps++;
+        for (uint8_t i = 0; i < cnt && off + 4 < n && s_src.n_temps < 8; i++, off += 5) {
+          s_src.temps[s_src.n_temps].id  = p[off];
+          s_src.temps[s_src.n_temps].cur = (int16_t)(p[off + 1] | (p[off + 2] << 8));
+          s_src.temps[s_src.n_temps].tgt = (int16_t)(p[off + 3] | (p[off + 4] << 8));
+          s_src.n_temps++;
         }
       }
       break;
@@ -364,22 +414,22 @@ static void handle_frame() {
 
     case CYDLCD_F_POSITION:
       if (n >= 22) {
-        cydlcd.pos.x = cydlcd_i32(&p[0]);
-        cydlcd.pos.y = cydlcd_i32(&p[4]);
-        cydlcd.pos.z = cydlcd_i32(&p[8]);
-        cydlcd.pos.e = cydlcd_i32(&p[12]);
+        s_src.pos.x = cydlcd_i32(&p[0]);
+        s_src.pos.y = cydlcd_i32(&p[4]);
+        s_src.pos.z = cydlcd_i32(&p[8]);
+        s_src.pos.e = cydlcd_i32(&p[12]);
         // p[16..17] = feed mm/s*10 (chua dung), roi moi den 2 phan tbt
-        cydlcd.pos.feed_pct = cydlcd_i16(&p[18]);
-        cydlcd.pos.flow_pct = cydlcd_i16(&p[20]);
+        s_src.pos.feed_pct = cydlcd_i16(&p[18]);
+        s_src.pos.flow_pct = cydlcd_i16(&p[20]);
       }
       break;
 
     case CYDLCD_F_PROGRESS:
       if (n >= 9) {
-        cydlcd.prog.pct         = p[0];
-        cydlcd.prog.elapsed_s   = cydlcd_u32(&p[1]);
-        cydlcd.prog.remaining_s = cydlcd_u32(&p[5]);
-        str_at(p, n, 9, cydlcd.prog.file, sizeof(cydlcd.prog.file));
+        s_src.prog.pct         = p[0];
+        s_src.prog.elapsed_s   = cydlcd_u32(&p[1]);
+        s_src.prog.remaining_s = cydlcd_u32(&p[5]);
+        str_at(p, n, 9, s_src.prog.file, sizeof(s_src.prog.file));
       }
       break;
 
@@ -394,21 +444,21 @@ static void handle_frame() {
 
     case CYDLCD_F_MESSAGE:
       if (n >= 1) {
-        cydlcd.message_sev = p[0];
-        str_at(p, n, 1, cydlcd.message, sizeof(cydlcd.message));
-        cydlcd.message_ms = cydlcd_millis();
+        s_src.message_sev = p[0];
+        str_at(p, n, 1, s_src.message, sizeof(s_src.message));
+        s_src.message_ms = cydlcd_millis();
       }
       break;
 
     case CYDLCD_F_FANS: {
-      cydlcd.n_fans = 0;
+      s_src.n_fans = 0;
       if (n >= 1) {
         const uint8_t cnt = p[0];
         uint8_t off = 1;
-        for (uint8_t i = 0; i < cnt && off + 2 < n && cydlcd.n_fans < 4; i++, off += 3) {
-          cydlcd.fans[cydlcd.n_fans].idx = p[off];
-          cydlcd.fans[cydlcd.n_fans].pct = (int16_t)(p[off + 1] | (p[off + 2] << 8));
-          cydlcd.n_fans++;
+        for (uint8_t i = 0; i < cnt && off + 2 < n && s_src.n_fans < 4; i++, off += 3) {
+          s_src.fans[s_src.n_fans].idx = p[off];
+          s_src.fans[s_src.n_fans].pct = (int16_t)(p[off + 1] | (p[off + 2] << 8));
+          s_src.n_fans++;
         }
       }
       break;
@@ -417,15 +467,15 @@ static void handle_frame() {
     case CYDLCD_F_ENDSTOPS: {
       // u8 n, n * (u8 id, u8 hit). Xoa truoc roi nap -> id nao Marlin khong bao (vi du Z_MIN
       // khi da bao la PROBE) coi nhu khong cham.
-      cydlcd.n_endstops = 0;
-      for (uint8_t i = 0; i < CYDLCD_ENDSTOP_MAX; i++) cydlcd.es_hit[i] = 0;
+      s_src.n_endstops = 0;
+      for (uint8_t i = 0; i < CYDLCD_ENDSTOP_MAX; i++) s_src.es_hit[i] = 0;
       if (n >= 1) {
         const uint8_t cnt = p[0];
         uint8_t off = 1;
         for (uint8_t i = 0; i < cnt && off + 1 < n; i++, off += 2) {
           const uint8_t id = p[off];
-          if (id < CYDLCD_ENDSTOP_MAX) cydlcd.es_hit[id] = p[off + 1] ? 1 : 0;
-          if (cydlcd.n_endstops < CYDLCD_ENDSTOP_MAX) cydlcd.n_endstops++;
+          if (id < CYDLCD_ENDSTOP_MAX) s_src.es_hit[id] = p[off + 1] ? 1 : 0;
+          if (s_src.n_endstops < CYDLCD_ENDSTOP_MAX) s_src.n_endstops++;
         }
       }
       break;
@@ -436,41 +486,41 @@ static void handle_frame() {
         const uint16_t id = (uint16_t)(p[0] | (p[1] << 8));
         const int32_t  v  = cydlcd_i32(&p[2]);
         bool found = false;
-        for (uint8_t i = 0; i < cydlcd.n_settings; i++)
-          if (cydlcd.settings[i].id == id) { cydlcd.settings[i].value = v; found = true; break; }
-        if (!found && cydlcd.n_settings < CYDLCD_SETTINGS_MAX) {
-          cydlcd.settings[cydlcd.n_settings].id = id;
-          cydlcd.settings[cydlcd.n_settings].value = v;
-          cydlcd.n_settings++;
+        for (uint8_t i = 0; i < s_src.n_settings; i++)
+          if (s_src.settings[i].id == id) { s_src.settings[i].value = v; found = true; break; }
+        if (!found && s_src.n_settings < CYDLCD_SETTINGS_MAX) {
+          s_src.settings[s_src.n_settings].id = id;
+          s_src.settings[s_src.n_settings].value = v;
+          s_src.n_settings++;
         }
       }
       break;
 
     case CYDLCD_F_MESH:
       if (n >= 3) {
-        cydlcd.mesh_ny = p[0];
+        s_src.mesh_ny = p[0];
         const uint8_t row = p[1];
-        cydlcd.mesh_nx = p[2];
-        if (row < CYDLCD_MESH_MAX && cydlcd.mesh_nx <= CYDLCD_MESH_MAX) {
+        s_src.mesh_nx = p[2];
+        if (row < CYDLCD_MESH_MAX && s_src.mesh_nx <= CYDLCD_MESH_MAX) {
           const uint8_t cnt = (uint8_t)((n - 3) / 2);
           // Hang 0 = BAT DAU 1 luoi moi -> dem lai tu dau. Neu khong, moi lan Marlin day lai ca luoi (sau
           // reboot / sau G29 / khi link hoi phuc) thi `mesh_rows` CONG DON mai (da thay "7x7 rows 14").
-          if (row == 0) cydlcd.mesh_rows = 0;
-          for (uint8_t c = 0; c < cnt && c < cydlcd.mesh_nx; c++)
-            cydlcd.mesh[c][row] = cydlcd_i16(&p[3 + c * 2]);
-          cydlcd.mesh_rows++;
-          cydlcd.mesh_valid = true;
+          if (row == 0) s_src.mesh_rows = 0;
+          for (uint8_t c = 0; c < cnt && c < s_src.mesh_nx; c++)
+            s_src.mesh[c][row] = cydlcd_i16(&p[3 + c * 2]);
+          s_src.mesh_rows++;
+          s_src.mesh_valid = true;
         }
       }
       break;
 
     case CYDLCD_F_FILES:
       if (n >= 5) {
-        if (p[0] == 0xFF) { cydlcd.files_done = true; cydlcd.files_pending = false; }
+        if (p[0] == 0xFF) { s_src.files_done = true; s_src.files_pending = false; }
         else {
-          if (cydlcd.files_done) { cydlcd.files_done = false; cydlcd.n_files = 0; }   // bat dau danh sach moi
-          if (cydlcd.n_files < CYDLCD_MAX_FILES) {
-            cydlcd_file_t *f = &cydlcd.files[cydlcd.n_files];
+          if (s_src.files_done) { s_src.files_done = false; s_src.n_files = 0; }   // bat dau danh sach moi
+          if (s_src.n_files < CYDLCD_MAX_FILES) {
+            cydlcd_file_t *f = &s_src.files[s_src.n_files];
             f->flags = p[0];
             const uint8_t used = str_at(p, n, 5, f->name, CYDLCD_FILE_NAME_LEN);
             // Proto >= 4: Marlin gui them 1 str = TEN 8.3 (shortFilename) ngay SAU `name`.
@@ -481,7 +531,7 @@ static void handle_frame() {
             if ((uint8_t)(5 + used) < n) str_at(p, n, (uint8_t)(5 + used), f->sfn, sizeof(f->sfn));
             // GIU NGUYEN CA DANH SACH Marlin gui (ke ca thu muc he thong): day la du lieu Marlin dung
             // de in/xoa nen phai du va dung chi so; MAN HINH tu an khi hien (xem cydlcd_hidden_dir).
-            cydlcd.n_files++;
+            s_src.n_files++;
           }
         }
       }
@@ -489,30 +539,30 @@ static void handle_frame() {
 
     case CYDLCD_F_EVENT:
       if (n >= 5) {
-        cydlcd.event    = p[0];
-        cydlcd.event_v1 = (uint16_t)(p[1] | (p[2] << 8));
-        cydlcd.event_v2 = (uint16_t)(p[3] | (p[4] << 8));
-        cydlcd.event_ms = cydlcd_millis();
+        s_src.event    = p[0];
+        s_src.event_v1 = (uint16_t)(p[1] | (p[2] << 8));
+        s_src.event_v2 = (uint16_t)(p[3] | (p[4] << 8));
+        s_src.event_ms = cydlcd_millis();
         // Su kien lam thay doi du lieu -> xin lai cho chac
-        switch ((cydlcd_event_t)cydlcd.event) {
+        switch ((cydlcd_event_t)s_src.event) {
           case CYDLCD_EV_PRINT_START:
           case CYDLCD_EV_PRINT_STOP:
           case CYDLCD_EV_MEDIA_INSERTED:
           case CYDLCD_EV_MEDIA_REMOVED:
-            cydlcd.files_done = false; cydlcd.files_pending = true;
+            s_src.files_done = false; s_src.files_pending = true;
             break;
           case CYDLCD_EV_LEVELING_DONE:
-            cydlcd.mesh_rows = 0;
+            s_src.mesh_rows = 0;
             cydlcd_link_request(CYDLCD_REQ_MESH);
             break;
           case CYDLCD_EV_PID_DONE:
             // Marlin da chay xong M303 (v1 = result_t: 0 = thanh cong). UI doc moc nay de
             // hien hop "da xong" mot lan (so sanh voi lan truoc), khong hien lai mai.
-            cydlcd.pid_done_ms = cydlcd_millis();
+            s_src.pid_done_ms = cydlcd_millis();
             break;
           case CYDLCD_EV_SETTINGS_LOADED:
           case CYDLCD_EV_FACTORY_RESET:
-            cydlcd.n_settings = 0;
+            s_src.n_settings = 0;
             cydlcd_link_request(CYDLCD_REQ_SETTINGS);
             cydlcd_link_request(CYDLCD_REQ_MESH);
             break;
@@ -523,10 +573,10 @@ static void handle_frame() {
 
     case CYDLCD_F_PROMPT:
       if (n >= 2) {
-        cydlcd.prompt_id   = p[0];
-        cydlcd.prompt_type = p[1];
-        str_at(p, n, 2, cydlcd.prompt_text, sizeof(cydlcd.prompt_text));
-        cydlcd.prompt_active = true;
+        s_src.prompt_id   = p[0];
+        s_src.prompt_type = p[1];
+        str_at(p, n, 2, s_src.prompt_text, sizeof(s_src.prompt_text));
+        s_src.prompt_active = true;
       }
       break;
 
@@ -567,16 +617,22 @@ static void handle_frame() {
   // handle_frame() CHI duoc goi khi cydlcd_rx_byte() da kiem CRC OK -> day la 1 frame HOP LE.
   // Bat CO MOT CHIEU (khong bao gio ve false): vua de man INFO hien "RX: OK", vua de TAT SNIFFER
   // TRAM vinh vien trong cydlcd_link_task() - xem cydlcd_data_t.rx_frames.
-  cydlcd.rx_frames = true;
+  s_src.rx_frames = true;
 }
 
 // ---------------------------------------------------------------------------
 // API chung
 // ---------------------------------------------------------------------------
 void cydlcd_link_begin(const uint32_t baud) {
+#if defined(CYDLCD_BOARD_CYD)
+  // Tao KHOA trang thai TRUOC khi bat UART/task (task `link` publish ngay o vong dau).
+  if (!s_state_mtx) s_state_mtx = xSemaphoreCreateMutex();
+#endif
   CYDLCD_LINK_BEGIN(baud);
   cydlcd_rx_init(&s_rx);
-  memset(&cydlcd, 0, sizeof(cydlcd));    // xoa ca 2 CO cydlcd.rx_frames / cydlcd.rx_errors ve false
+  // Xoa CA ban goc (s_src) LAN ban cong khai (cydlcd): 2 CO s_src.rx_frames / s_src.rx_errors ve false.
+  memset(&s_src, 0, sizeof(s_src));
+  memset(&cydlcd, 0, sizeof(cydlcd));
   s_err_seen = 0;                      // anh bo dem loi cua cydlcd_protocol.h cung phai ve 0
   tbt_link_begin();                 // duong TRAMMING: reset trang thai (khong mo lai UART)
   s_want_full = true;
@@ -585,7 +641,14 @@ void cydlcd_link_begin(const uint32_t baud) {
   s_pong_ms = 0; s_pong_canh_bao_ms = 0; s_pong_lost = 0;
 }
 
-bool cydlcd_link_connected() { return cydlcd.linked; }
+bool cydlcd_link_connected() { return s_src.linked; }
+
+// YEU CAU tu task khac (khong duoc tu ghi vao trang thai): xoa danh sach file de xin lai tu dau.
+// VI SAO: 6 cho ngoai task `link` (cyd_sd.cpp, ui_page_files.cpp) dang ghi thang `cydlcd.files_done=false;
+// n_files=0;` - voi da luong thi do la ghi tran vao du lieu cua task khac (va se bi lan publish sau ghi de).
+// Nay chi BAT CO (khong khoa, khong cho) roi task `link` tu lam o vong ke tiep.
+static volatile bool s_reset_files_req = false;
+void cydlcd_link_reset_files(void) { s_reset_files_req = true; }
 
 void cydlcd_link_task() {
   uint8_t fwd[4];
@@ -597,11 +660,11 @@ void cydlcd_link_task() {
     //
     // 2026-10-13: che do PUSH (CYDLCD_SERIAL_UI) gui dong TBT trong frame CYDLCD_F_TBT -> payload
     // CUA FRAME chua chinh chuoi "TBT ...". Neu van chay bo sniff thi no se "an" cac byte do lam
-    // frame hong (da gap that: byte tang ~500 B/s nhung cydlcd.linked=0, khong nhan duoc frame nao).
+    // frame hong (da gap that: byte tang ~500 B/s nhung s_src.linked=0, khong nhan duoc frame nao).
     // => Da nhan duoc frame PUSH hop le dau tien thi TAT sniff VINH VIEN. Dung CO MOT CHIEU
-    //    cydlcd.rx_frames (KHONG dung bo dem nhu truoc: bo dem tran ve 0 se bat lai sniff giua chung).
+    //    s_src.rx_frames (KHONG dung bo dem nhu truoc: bo dem tran ve 0 se bat lai sniff giua chung).
     uint8_t n;
-    if (cydlcd.rx_frames) { fwd[0] = c; n = 1; }
+    if (s_src.rx_frames) { fwd[0] = c; n = 1; }
     else                 n = tbt_link_feed(c, fwd);
     for (uint8_t k = 0; k < n; k++)
       if (cydlcd_rx_byte(&s_rx, fwd[k])) handle_frame();
@@ -610,7 +673,7 @@ void cydlcd_link_task() {
   // BAT CO LOI MOT CHIEU: cydlcd_protocol.h tang `errors` khi CRC sai hoac payload qua dai
   // (cydlcd_rx_byte), nhung bo dem do la uint16_t nen khong dung lam tong duoc. Ta chi can biet
   // "da tung co loi" -> so sanh voi gia tri lan truoc, khac la bat co (tran cung khong sai).
-  if (s_rx.errors != s_err_seen) { s_err_seen = s_rx.errors; cydlcd.rx_errors = true; }
+  if (s_rx.errors != s_err_seen) { s_err_seen = s_rx.errors; s_src.rx_errors = true; }
 
   #if CYDLCD_SD_UART
     // Phien GHI bi bo do: het gio cho du lieu -> huy (Marlin se het cho va bao loi ghi).
@@ -625,8 +688,8 @@ void cydlcd_link_task() {
 
   const uint32_t now = cydlcd_millis();
 
-  if (cydlcd.linked && (now - cydlcd.last_rx_ms) > CYDLCD_LINK_TIMEOUT_MS) {
-    cydlcd.linked = false;
+  if (s_src.linked && (now - s_src.last_rx_ms) > CYDLCD_LINK_TIMEOUT_MS) {
+    s_src.linked = false;
     s_want_full = true;                        // khi noi lai thi xin lai tu dau
   }
 
@@ -638,16 +701,16 @@ void cydlcd_link_task() {
   // VIEN. Hau qua: Marlin khong bao gio biet man hinh con song, va man hinh khong bao gio biet Marlin co nhan
   // duoc lenh khong (ben Marlin ket RX ma khong ai bao - xem pong_task()).
   // Nay chi BO PING khi THAT SU dang o che do TRAM ASCII tho: da nhan dong TBT MA CHUA bao gio nhan duoc
-  // frame PUSH hop le nao (`cydlcd.rx_frames` = false). Che do PUSH: nhan frame dau tien la PING bat lai.
-  if (!(tbt_link_active() && !cydlcd.rx_frames) && (!s_next_ping_ms || now >= s_next_ping_ms)) {
+  // frame PUSH hop le nao (`s_src.rx_frames` = false). Che do PUSH: nhan frame dau tien la PING bat lai.
+  if (!(tbt_link_active() && !s_src.rx_frames) && (!s_next_ping_ms || now >= s_next_ping_ms)) {
     s_next_ping_ms = now + CYDLCD_LINK_PING_MS;
     cydlcd_link_ping();
   }
 
-  if (s_want_full && cydlcd.linked) {
+  if (s_want_full && s_src.linked) {
     s_want_full = false;
-    cydlcd.files_done = false;
-    cydlcd.n_files = 0;
+    s_src.files_done = false;
+    s_src.n_files = 0;
     cydlcd_link_request(CYDLCD_REQ_FULL);
     cydlcd_link_request(CYDLCD_REQ_FILES);
   }
@@ -665,7 +728,7 @@ void cydlcd_link_task() {
   // la panel het co hoi xin lai. Nay XIN MAI: 2 s/lan trong 10 s dau, sau do 10 s/lan (co dem + log thua dan),
   // va khi MAT link thi bo dem ve 0. Chi khi nao nhan duoc HELLO moi thoi.
   // ---------------------------------------------------------------------------
-  if (cydlcd.linked && !cydlcd.hello_flags) {
+  if (s_src.linked && !s_src.hello_flags) {
     const uint32_t gap = (s_nohello_req < 6) ? 2000u : 10000u;
     if (!s_nohello_req) { s_nohello_req = 1; s_nohello_ms = now; }
     else if ((uint32_t)(now - s_nohello_ms) >= gap) {
@@ -680,7 +743,7 @@ void cydlcd_link_task() {
       cydlcd_link_request((uint8_t)CYDLCD_REQ_FULL);
     }
   }
-  else if (!cydlcd.linked) s_nohello_req = 0;
+  else if (!s_src.linked) s_nohello_req = 0;
 
   // ---------------------------------------------------------------------------
   // CANH BAO "MARLIN KHONG TRA LOI" - do PONG (loi that 2026-10-15: lenh tu man hinh khong chay).
@@ -689,7 +752,7 @@ void cydlcd_link_task() {
   // hong (RX cua Marlin ket, day sai chan, ...): bao ra log (khong the bao tren man hinh vi man hinh
   // khong co cho hien). Mat link han thi khong bao (khong phai loi PONG).
   // ---------------------------------------------------------------------------
-  if (cydlcd.linked) {
+  if (s_src.linked) {
     if (!s_pong_ms) s_pong_ms = now;                    // chua tung co PONG -> bat dau dem tu day
     if ((uint32_t)(now - s_pong_ms) > 5000u) {
       if (!s_pong_canh_bao_ms || (uint32_t)(now - s_pong_canh_bao_ms) >= 10000u) {
@@ -707,4 +770,51 @@ void cydlcd_link_task() {
   // Trai hang doi TX (frame chua gui duoc vi TX ring day). Goi o CUOI: cac frame sinh ra o tren
   // (PING / REQUEST) van duoc trai ngay trong vong lap nay neu con cho.
   cydlcd_link_tx_task();
+
+  // YEU CAU TU TASK KHAC (khong duoc tu ghi vao trang thai): xoa danh sach file de xin lai tu dau.
+  if (s_reset_files_req) {
+    s_reset_files_req = false;
+    s_src.files_done = false;
+    s_src.n_files    = 0;
+  }
+
+  // CONG BO trang thai ra ban `cydlcd` cho moi task khac doc (KHONG BAO GIO cho khoa - xem state_publish).
+  state_publish();
 }
+
+// ---------------------------------------------------------------------------
+// DA LUONG: task `link` - chay MOT MINH tren core 1, uu tien cao nhat cua firmware.
+// ---------------------------------------------------------------------------
+// VI SAO TACH: `loop()` (core 0) con phai lam WiFi/WebServer (upload 20-30 s), the TF (mount 2 s), LVGL
+// (ve toi 76 ms/khung) va log (UART0 60 ms moi dong) - trong 1 luong thi MOI thu do deu chan duong serial
+// (do duoc `link gap max 63 549 us`). Tach ra + core rieng => du man hinh lam gi cung khong dung toi.
+// Vong lap: `vTaskDelay(1)` (1 tick = 1 ms) -> phuc vu UART moi 1 ms; ring RX 1024 B du ~41 ms @250 kbaud
+// nen khong bao gio mat byte. Uu tien 20 (> moi task khac cua firmware: ui 5, net 4, log 2, diag 1).
+#if defined(CYDLCD_BOARD_CYD)
+static void link_task_fn(void *) {
+  uint32_t prev_end_us = 0;
+  for (;;) {
+    const uint32_t t0 = micros();
+    cydlcd_link_task();
+    const uint32_t dur = (uint32_t)(micros() - t0);
+    const uint32_t now_us = micros();
+    // DO DO TRE DUONG SERIAL (tieu chi nghiem thu cua ke hoach da luong): `gap` = tu luc vong truoc KET THUC
+    // den luc vong nay BAT DAU = 1 tick (vTaskDelay(1)) + thoi gian bi task khac chiem CPU. Voi core 1 chi co
+    // task nay thi gap phai ~1-2 ms (tieu chi: < 50 ms).
+    ui_lvgl_perf_link_call(prev_end_us ? (uint32_t)(now_us - prev_end_us) : 0, dur);
+    prev_end_us = now_us;
+    vTaskDelay(1);
+  }
+}
+
+bool cydlcd_link_start_task(void) {
+  if (!s_state_mtx) s_state_mtx = xSemaphoreCreateMutex();
+  if (!s_state_mtx) { SDLOG("[UP] ERR: khong tao duoc khoa trang thai\n"); return false; }
+  // Core 1 (APP_CPU), uu tien 20, stack 4096: task nay chi parse frame + tra loi sector, khong ve/khong WiFi.
+  const BaseType_t ok = xTaskCreatePinnedToCore(link_task_fn, "link", 4096, nullptr, 20, nullptr, 1);
+  if (ok != pdPASS) { SDLOG("[UP] ERR: khong tao duoc task link\n"); return false; }
+  // Cho task `link` chay 1 vong dau (state_publish dau tien) truoc khi vong lap chinh doc trang thai.
+  vTaskDelay(pdMS_TO_TICKS(5));
+  return true;
+}
+#endif

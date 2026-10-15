@@ -556,6 +556,23 @@ uint32_t ui_lvgl_perf_slow_take(void) { const uint32_t v = s_pf_slow_n; s_pf_slo
 uint32_t ui_lvgl_perf_slow_all(void)  { return s_pf_slow_all; }
 uint32_t ui_lvgl_perf_last_us(void)   { return s_pf_last_us; }
 
+// ---- do do tre duong serial (xem ui_lvgl.h) ----
+static uint32_t s_pf_link_gap_max = 0, s_pf_link_gap_slow = 0, s_pf_link_dur_max = 0, s_pf_link_n = 0;
+
+void ui_lvgl_perf_link_call(const uint32_t gap_us, const uint32_t dur_us) {
+  s_pf_link_n++;
+  if (gap_us > s_pf_link_gap_max) s_pf_link_gap_max = gap_us;
+  if (gap_us > 50000u) s_pf_link_gap_slow++;         // > 50 ms = coi nhu "bi gian doan" (xem tieu chi nghiem thu)
+  if (dur_us > s_pf_link_dur_max) s_pf_link_dur_max = dur_us;
+}
+
+uint32_t ui_lvgl_perf_link_take(uint32_t *slow_n) {
+  const uint32_t g = s_pf_link_gap_max;
+  if (slow_n) *slow_n = s_pf_link_gap_slow;
+  s_pf_link_gap_max = s_pf_link_gap_slow = s_pf_link_dur_max = 0;
+  return g;
+}
+
 // ui_lvgl_task() = do thoi gian CA HAM (khong chi lv_timer_handler) - vong lap ben ngoai chi do bang
 // millis() (do phan giai 1 ms) nen de sai; o day do bang micros() cho chac. Xem ui_lvgl_test_perf().
 void ui_lvgl_task(void) {
@@ -600,6 +617,11 @@ static void ui_lvgl_task_body(void) {
 
   if (now - s_upd_ms < UI_REFRESH_MS) return;      // UI_REFRESH_MS trong cydlcd_config.h
   s_upd_ms = now;
+
+  // DA LUONG: giu KHOA TRANG THAI trong suot lan cap nhat nay de doc duoc mot ban "nguyen ven" (task `link`
+  // publish bang mutex voi timeout 0 -> gap nay no BO QUA lan publish, du lieu van nguyen o ban rieng cua no
+  // nen KHONG mat, chi cham vai ms). Doi lai: duong serial KHONG BAO GIO bi man hinh chan.
+  cydlcd_link_state_lock();
 
   // Thanh tren = NOI DUY NHAT hien chi bao link cho moi man (tru trang STATUS co them dong
   // trang thai + khung XYZ cung bao mat link). 3 muc: TEN MAY / LINK ERR / NO LINK
@@ -672,6 +694,7 @@ static void ui_lvgl_task_body(void) {
   }
 
   boxes_update();
+  cydlcd_link_state_unlock();       // nha khoa trang thai (xem cydlcd_link_state_lock o tren)
 }
 
 // ===========================================================================
@@ -917,6 +940,12 @@ void ui_lvgl_test_perf(void) {
   ui_port_perf_report();
   net_upload_http_perf_report();      // tach chang `http` (wifi / the TF / handleClient) - xem net_upload_http.h
   cyd_sd_perf_report();               // tach tiep phan cham vao the TF (sd_alive / clean_dir)
+  {
+    uint32_t slow = 0;
+    const uint32_t gmax = ui_lvgl_perf_link_take(&slow);
+    Serial.printf("[PERF] link (serial Marlin): gap max %lu us | so lan gap > 50 ms: %lu | so lan goi: %lu\n",
+                  (unsigned long)gmax, (unsigned long)slow, (unsigned long)s_pf_link_n);
+  }
   lv_mem_monitor_t lm;
   lv_mem_monitor(&lm);
   Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap %u B\n",

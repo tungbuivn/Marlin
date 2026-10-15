@@ -81,9 +81,11 @@ void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
 #include "net_wifi.h"
 #include "cydlcd_link.h"
 #include "ui_lvgl.h"          // UI_LCD_HOR_RES / UI_LCD_VER_RES
+#include "logq.h"             // log KHONG CHAN (xem logq.h): ELOG co the chay trong task `link`
+                              // (doc/ghi sector tho cho Marlin) nen KHONG duoc in truc tiep ra UART0
 
 #if defined(CYDLCD_CYD_DEBUG)
-  #define ELOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
+  #define ELOG(...)   do { logq_post(__VA_ARGS__); } while (0)
 #else
   #define ELOG(...)   do { } while (0)
 #endif
@@ -404,8 +406,8 @@ void notify_media_changed(void) {
     cydlcd_link_task();
     delay(10);
   }
-  cydlcd.files_done = false;
-  cydlcd.n_files = 0;
+  // DA LUONG: KHONG ghi thang vao `cydlcd` (do la ban cong khai, task `link` la chu so huu) - chi YEU CAU.
+  cydlcd_link_reset_files();
   cydlcd_link_request((uint8_t)CYDLCD_REQ_FILES);
 }
 

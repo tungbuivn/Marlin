@@ -25,6 +25,7 @@
   #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
   #include "net_upload_http.h"    // web server tren cydlcd: PC/dien thoai gui file qua WiFi
   #include "cyd_sd.h"             // chan doan: cyd_sd_write_test() (lenh `UI WTEST`)
+  #include "logq.h"               // hang doi log KHONG CHAN (moi task day vao, vong lap core 0 in ra)
   #include <lvgl.h>              // lv_mem_monitor(): theo doi pool LVGL trong log 1 Hz
 
   #if defined(CYDLCD_CYD_DEBUG)
@@ -109,11 +110,15 @@
     #endif
     s_stage = 0;
     s_hung_s = 0;
-    DBG_BEGIN();
+    logq_begin();                                   // hang doi log khong chan (PHAI truoc moi task)    DBG_BEGIN();
     cydlcd_link_begin(CYDLCD_MARLIN_BAUD);
     #if defined(CYDLCD_CYD_DEBUG)
       Serial.println("[CYD] da begin Serial2 (GPIO22 TX / GPIO35 RX) @250000");
     #endif
+    // DA LUONG: tach task `link` (core 1, uu tien 20) - task DUY NHAT cham UART Marlin + phuc vu sector SD.
+    // Tu day `loop()` (core 0) KHONG con goi `cydclcd_link_task()` nua. Xem cydlcd/docs/ke-hoach-da-luong.md.
+    if (!cydlcd_link_start_task())
+      Serial.println("[CYD] CANH BAO: khong tao duoc task link -> van chay 1 luong (link trong loop)");
     ui_lvgl_begin();
     #if defined(CYDLCD_CYD_DEBUG)
       Serial.printf("[CYD] ui_lvgl_begin() xong, free heap = %u B\n", (unsigned)ESP.getFreeHeap());
@@ -186,13 +191,14 @@
       s_forward_pending[0] = '\0';
     }
     s_stage = 2;
-    // Do bang MICRO giay (khong phai millis): vong lap binh thuong chi ~2-5 ms nen do phan giai 1 ms cua
-    // millis() cho so VO NGHIA (da gap: dong log bao `ui=67 ms` trong khi do ben trong ui_lvgl_task() chi
-    // 2.1 ms/lan => xem `UI PERF`). In ra us, chia 1000 khi can.
+    // Task `link` (core 1, uu tien 20) da lam viec nay - vong lap nay KHONG con goi `cydclcd_link_task()`.
+    // Do tre duong serial duoc do NGAY TRONG task link (xem link_task_fn + ui_lvgl_perf_link_call).
+    s_ms[2] = 0;
+    // In cac dong log dang cho (do MOI task day vao hang doi - khong ai duoc chan vao UART0):
+    // toi da 8 dong/lan de khong giu core 0 qua lau.
+    logq_task(8);
     uint32_t t_stage = micros();
-    cydlcd_link_task();     // nhan frame tu Marlin + giu PING/lien ket
-    s_ms[2] = micros() - t_stage;
-    s_stage = 3; t_stage = micros();
+    s_stage = 3;
     net_upload_http_task();// web server (nhan file qua WiFi) -> ghi vao the SD cua man hinh
     s_ms[3] = micros() - t_stage;
     s_stage = 4; t_stage = micros();
