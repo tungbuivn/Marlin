@@ -28,6 +28,9 @@ extern "C" {
 void net_upload_http_begin(void);   // bat WiFi (net_wifi) + the TF + WebServer + mDNS
 void net_upload_http_task(void);    // goi MOI vong lap: server.handleClient() + day file khi can
 void net_upload_http_log(void);     // 1 dong log 1 Hz (de doc tren COM7)
+// Do hieu nang (`UI PERF`): tach thoi gian chang `http` thanh 3 phan (wifi / the TF / handleClient) roi
+// XOA bo dem. Dung khi man hinh cham: dong `[CYD] chang: ... http=NN ms` cho biet chang nay chan vong lap.
+void net_upload_http_perf_report(void);
 bool net_upload_http_active(void);  // true = WebServer dang chay (de main.cpp khong goi log 2 lan)
 
 // true = DANG co phien nhan/ghi file (ke tu luc bat dau nhan den luc ghi xong vao the).

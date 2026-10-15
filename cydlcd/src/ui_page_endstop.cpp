@@ -47,7 +47,7 @@ void page_endstop_update(void) {
   for (uint8_t i = 0; i < CYDLCD_ENDSTOP_MAX; i++) {
     const bool hit = (cydlcd.es_hit[ES_ID[i]] != 0);
     set_text(es_val[i], hit ? "CHAM (triggered)" : "mo (open)");
-    lv_obj_set_style_text_color(es_val[i], hit ? COL_ERR : COL_OK, 0);
+    set_text_color(es_val[i], hit ? COL_ERR : COL_OK);
   }
   snprintf(b, sizeof(b), "M119: %u o - bam REFRESH de doc lai", (unsigned)cydlcd.n_endstops);
   set_text(es_info, b);

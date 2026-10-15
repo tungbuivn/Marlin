@@ -539,7 +539,37 @@ void ui_lvgl_begin(void) {
   lv_timer_handler();                     // ve man hinh dau tien
 }
 
+// ---- do hieu nang (`UI PERF`, xem ui_lvgl_test_perf): thoi gian lv_timer_handler() moi vong lap ----
+static uint32_t s_pf_loop_n = 0, s_pf_hdl_us = 0, s_pf_hdl_max_us = 0;
+static uint32_t s_pf_task_n = 0, s_pf_task_us = 0, s_pf_task_max_us = 0;
+
+static void ui_lvgl_task_body(void);    // than cua ui_lvgl_task() (tach ra chi de do thoi gian ca ham)
+
+// Do truc tiep ngay trong ham goi: dem so lan ui_lvgl_task() chay QUA LAU (>= 20 ms) va thoi gian lan cuoi.
+// VI SAO: dong log 1 Hz o main.cpp do bang micros() va bao `ui=67 000 us` gan NHU MOI LAN, trong khi tong
+// thoi gian/thu tu goi lai chi ~2 ms/lan => phai co gi do khong khop. Hai con so nay la bang chung doc lap.
+static uint32_t s_pf_slow_n = 0;        // so lan >= 20 ms (tu lan doc truoc)
+static uint32_t s_pf_slow_all = 0;      // tong so lan >= 20 ms
+static uint32_t s_pf_last_us = 0;       // thoi gian lan goi CUOI
+
+uint32_t ui_lvgl_perf_slow_take(void) { const uint32_t v = s_pf_slow_n; s_pf_slow_n = 0; return v; }
+uint32_t ui_lvgl_perf_slow_all(void)  { return s_pf_slow_all; }
+uint32_t ui_lvgl_perf_last_us(void)   { return s_pf_last_us; }
+
+// ui_lvgl_task() = do thoi gian CA HAM (khong chi lv_timer_handler) - vong lap ben ngoai chi do bang
+// millis() (do phan giai 1 ms) nen de sai; o day do bang micros() cho chac. Xem ui_lvgl_test_perf().
 void ui_lvgl_task(void) {
+  const uint32_t t_task = micros();
+  ui_lvgl_task_body();
+  const uint32_t dt_task = micros() - t_task;
+  s_pf_task_n++;
+  s_pf_task_us += dt_task;
+  if (dt_task > s_pf_task_max_us) s_pf_task_max_us = dt_task;
+  s_pf_last_us = dt_task;
+  if (dt_task >= 20000u) { s_pf_slow_n++; s_pf_slow_all++; }
+}
+
+static void ui_lvgl_task_body(void) {
   // Tick cho LVGL: LVGL 8.3 chi chay lv_timer khi tick da tang, nen KHONG the dung
   // mot lv_timer goi lv_tick_inc() (timer do se khong bao gio chay -> treo).
   // Lay truc tiep tu millis() la cach dung.
@@ -549,7 +579,14 @@ void ui_lvgl_task(void) {
     s_tick_ms = now;
   }
 
+  // Do hieu nang (xem ui_lvgl_test_perf / `UI PERF`): lv_timer_handler() bao gom CA flush SPI (flush_cb
+  // chay dong bo trong do) nen hieu "tong thoi gian ve" va "thoi gian SPI" la tach duoc phan LVGL vs SPI.
+  const uint32_t t_hdl = micros();
   lv_timer_handler();
+  const uint32_t dt_hdl = micros() - t_hdl;
+  s_pf_loop_n++;
+  s_pf_hdl_us += dt_hdl;
+  if (dt_hdl > s_pf_hdl_max_us) s_pf_hdl_max_us = dt_hdl;
 
   // Hieu chuan cam ung: chay NGOAI event callback cua LVGL (blocking, tu ve bang TFT_eSPI),
   // xong xoa lai toan man hinh de LVGL ve lai tu dau.
@@ -859,6 +896,34 @@ void ui_lvgl_test_rx(void) {
                 (long)(cydlcd.pos.e / 1000), (int)cydlcd.pos.feed_pct, (int)cydlcd.pos.flow_pct,
                 (unsigned)cydlcd.n_settings, (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny,
                 (unsigned)cydlcd.mesh_rows);
+}
+
+// CHAN DOAN HIEU NANG man hinh (lenh `UI PERF` tren COM8): goi 2 lan cach nhau N giay - lan 1 de XOA bo dem,
+// lan 2 doc so cua khoang do. VI SAO CAN: "man hinh chay cham" co the do LVGL ve lai qua nhieu (dien tich lon),
+// SPI cham, doc cam ung cham, hay vong lap bi chan o cho khac. Cac so duoi day TACH RA tung phan:
+//   - `lv_timer_handler`: thoi gian ve moi vong lap (bao gom CA flush SPI vi flush_cb chay dong bo trong do),
+//   - `SPI` (ui_port_perf_report): so lan flush + TONG SO PIXEL da day -> biet co phai ve lai CA MAN khong
+//     (1 man = UI_LCD_HOR_RES x UI_LCD_VER_RES = 76 800 px),
+//   - `cam ung`: thoi gian doc XPT2046 (bit-bang) moi lan LVGL hoi (20 ms/lan).
+// Doi chieu voi dong `[CYD] chang: ... ui=NN ms` (1 Hz, in o main.cpp).
+void ui_lvgl_test_perf(void) {
+  const uint32_t n = s_pf_loop_n, tn = s_pf_task_n;
+  Serial.printf("[PERF] ui_lvgl_task: %lu vong | tb %lu us, max %lu us | tong %lu us\n",
+                (unsigned long)tn, (unsigned long)(tn ? s_pf_task_us / tn : 0),
+                (unsigned long)s_pf_task_max_us, (unsigned long)s_pf_task_us);
+  Serial.printf("[PERF] lv_timer_handler: %lu vong lap | tb %lu us, max %lu us | tong %lu us\n",
+                (unsigned long)n, (unsigned long)(n ? s_pf_hdl_us / n : 0),
+                (unsigned long)s_pf_hdl_max_us, (unsigned long)s_pf_hdl_us);
+  ui_port_perf_report();
+  net_upload_http_perf_report();      // tach chang `http` (wifi / the TF / handleClient) - xem net_upload_http.h
+  cyd_sd_perf_report();               // tach tiep phan cham vao the TF (sd_alive / clean_dir)
+  lv_mem_monitor_t lm;
+  lv_mem_monitor(&lm);
+  Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap %u B\n",
+                (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
+                (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size, (unsigned)ESP.getFreeHeap());
+  s_pf_loop_n = s_pf_hdl_us = s_pf_hdl_max_us = 0;
+  s_pf_task_n = s_pf_task_us = s_pf_task_max_us = 0;
 }
 
 // CHAN DOAN: MAY DANG LAM GI + co cho nhan file upload khong - lenh `UI BUSY` tren COM7 (cung in kem

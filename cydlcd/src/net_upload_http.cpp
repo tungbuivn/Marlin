@@ -677,6 +677,13 @@ void net_upload_http_begin(void) {
   server.on("/delete", HTTP_POST, handle_delete);
   server.onNotFound(handle_not_found);
   server.begin();
+  // TAT "delay khi khong co request" cua WebServer ESP32 (mac dinh BAT): `WebServer::handleClient()`
+  // (libraries/WebServer/src/WebServer.cpp:275-283) khi chua co client thi goi `delay(1)` ROI MOI tra ve
+  // => vong lap man hinh bi an 1 ms MOI lan goi (do 2026-10-15 bang `UI PERF`: `handleClient` 1,5 ms/lan,
+  // ~4,5 s trong 9 s = ~50% CPU). Voi vong lap chay ~300 lan/s thi day la 1/3 thoi gian VO ICH, va no lam
+  // man hinh + link Marlin phan hoi cham. Tat di KHONG anh huong phien upload (WebServer van xu ly CA body
+  // trong 1 lan goi nhu cu), chi bo khoang nghi 1 ms khi KHONG co ai ket noi.
+  server.enableDelay(false);
   s_started = true;
   HLOG("[HTTP] web server bat o cong %u (token: %s, mDNS: %s, heap=%u B)\n",
        (unsigned)CYDLCD_HTTP_PORT, CYDLCD_HTTP_TOKEN[0] ? "co" : "KHONG",
@@ -692,11 +699,42 @@ void net_upload_http_begin(void) {
 #endif
 }
 
+// ---- DO HIEU NANG (`UI PERF`): tach thoi gian tung phan cua chang nay ----
+// VI SAO CAN: chang `http` do duoc 2087 ms/vong lap (dong `[CYD] chang: ... http=2087 ms`) => vong lap
+// chay 0.5 Hz => MAN HINH CHAM KHONG PHAI DO VE (ui chi 3-5 ms) MA DO CHO NAY. Phai biet cho nao:
+//   net_wifi_task() (khong chan), cyd_sd_task() (the TF), hay server.handleClient() (WebServer cua ESP32
+//   co the CHO du lieu toi HTTP_MAX_DATA_WAIT khi co client mo ket noi nua voi).
+static uint32_t s_pf_wifi_us = 0, s_pf_sd_us = 0, s_pf_srv_us = 0, s_pf_srv_max_us = 0, s_pf_srv_skip = 0;
+
+static inline uint32_t pf_t0(void) { return micros(); }
+static inline void pf_add(uint32_t *dst, const uint32_t t0) { *dst += micros() - t0; }
+
 void net_upload_http_task(void) {
   if (!s_started) return;
+  uint32_t t = pf_t0();
   net_wifi_task();                     // cap nhat trang thai + tu ket noi lai (khong chan)
+  pf_add(&s_pf_wifi_us, t);
+  t = pf_t0();
   cyd_sd_task();                    // theo doi the TF nong
-  server.handleClient();               // nhan request (khong chan lau)
+  pf_add(&s_pf_sd_us, t);
+  t = pf_t0();
+  // `server.handleClient()` KHONG con ton 1 ms (da `enableDelay(false)`) nhung van ton ~50 us MOI LAN GOI
+  // (do 2026-10-15: 2,7 s trong 10 s = 27% CPU khi vong lap chay ~5000 lan/s) vi no phai hoi lwIP xem co
+  // ket noi moi. Trang web cua man hinh chi duoc bam/poll vai lan moi giay nen goi moi CYDLCD_HTTP_POLL_MS
+  // la du; phien upload KHONG bi anh huong vi WebServer xu ly CA body trong 1 lan goi (xem ghi chu o tren).
+  {
+    static uint32_t s_poll_ms = 0;
+    const uint32_t nms = millis();
+    if (!s_poll_ms || (uint32_t)(nms - s_poll_ms) >= CYDLCD_HTTP_POLL_MS) {
+      s_poll_ms = nms;
+      t = pf_t0();
+      server.handleClient();               // nhan request
+      const uint32_t dsrv = micros() - t;
+      s_pf_srv_us += dsrv;
+      if (dsrv > s_pf_srv_max_us) s_pf_srv_max_us = dsrv;
+    }
+    else s_pf_srv_skip++;
+  }
 
   // The SD nam o khe MAN HINH: khong can WiFi de "chot" phien upload - buoc ghi the chay ngay khi
   // file tam da nhan xong (WiFi chi la duong nhan file tu trinh duyet).
@@ -732,6 +770,14 @@ void net_upload_http_task(void) {
 
 void net_upload_http_log(void) {
   cyd_sd_log();
+}
+
+// In + XOA bo dem thoi gian tung phan cua chang `http` (lenh `UI PERF`, xem net_upload_http.h).
+void net_upload_http_perf_report(void) {
+  Serial.printf("[PERF] http: wifi %lu us | sd_the %lu us | handleClient %lu us (max %lu us, bo qua %lu lan)\n",
+                (unsigned long)s_pf_wifi_us, (unsigned long)s_pf_sd_us,
+                (unsigned long)s_pf_srv_us, (unsigned long)s_pf_srv_max_us, (unsigned long)s_pf_srv_skip);
+  s_pf_wifi_us = s_pf_sd_us = s_pf_srv_us = s_pf_srv_max_us = s_pf_srv_skip = 0;
 }
 
 bool net_upload_http_active(void) { return s_started; }

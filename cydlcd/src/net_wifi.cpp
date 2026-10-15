@@ -418,8 +418,16 @@ void net_wifi_down(void) {
 
 void net_wifi_poll(void) {
   if (!s_started) { s_state = WS_OFF; return; }
-  refresh();
+  // `refresh()` doc WiFi.status() + localIP() + RSSI() - trong do `WiFi.RSSI()` phai hoi driver WiFi
+  // (mutex + query), do bang `UI PERF` 2026-10-15: `net_wifi_task()` an ~300 us MOI VONG LAP (~40% CPU khi
+  // vong lap chay ~300 lan/s) trong khi 3 gia tri do chi duoc HIEN THI o nhip 400 ms (icon WiFi + chu dBm).
+  // Nay chi doc day du moi CYDLCD_WIFI_REFRESH_MS, giua 2 lan do tra ve cache (khong doi gi).
+  static uint32_t s_refresh_ms = 0;
   const uint32_t now = millis();
+  if (!s_refresh_ms || (uint32_t)(now - s_refresh_ms) >= CYDLCD_WIFI_REFRESH_MS) {
+    s_refresh_ms = now;
+    refresh();
+  }
   if (s_state == WS_UP) { s_down_since = 0; return; } // dang ket noi -> khong dung toi gi
   if (!s_want) return;
 

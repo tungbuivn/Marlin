@@ -84,6 +84,17 @@ void ui_lvgl_test_hello(void);
 // hong (trong khi STATUS van den = chieu xuong van tot). Doi chieu voi `PANEL DIAG` in o COM4.
 void ui_lvgl_test_rx(void);
 
+// CHAN DOAN HIEU NANG (lenh `UI PERF` tren COM8): in thoi gian `lv_timer_handler()` moi vong lap (tb/max),
+// so lan flush + TONG SO PIXEL da day ra SPI (biet co ve lai ca man khong), thoi gian doc cam ung, va bo nho
+// LVGL. Goi 2 lan cach nhau N giay: lan 1 xoa bo dem, lan 2 doc so cua khoang do. Xem ui_lvgl_test_perf().
+void ui_lvgl_test_perf(void);
+
+// So lan ui_lvgl_task() chay >= 20 ms KE TU lan goi truoc (do NGAY TRONG ham, doc lap voi dong log o
+// main.cpp) + thoi gian lan goi cuoi (us) + tong so lan cham. Dung de doi chieu khi dong log bao cham.
+uint32_t ui_lvgl_perf_slow_take(void);
+uint32_t ui_lvgl_perf_slow_all(void);
+uint32_t ui_lvgl_perf_last_us(void);
+
 // CHAN DOAN trang thai may: in `st`/`fl`/file dang in/tien do + **co cho nhan file upload khong**
 // (lenh `UI BUSY` tren COM7, cung in kem trong `UI BOX`). Tra loi "lam sao biet may dang in?":
 // upload CHI bi chan khi dang in / tam dung ban in TU THE SD; HOME/PROBE (G35) khong tinh la dang in.
@@ -133,5 +144,13 @@ bool     ui_port_touch_cal_is_saved(void);  // true: dang dung hieu chuan da luu
 // Callback LVGL: UI dang ky 2 ham nay vao lv_disp_drv_t / lv_indev_drv_t
 void ui_port_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *px);
 void ui_port_read_cb(lv_indev_drv_t *indev_drv, lv_indev_data_t *data);
+
+// ---- DO HIEU NANG (lenh `UI PERF` tren COM8) --------------------------------
+// VI SAO CAN: "man hinh chay cham" co the do (a) LVGL ve lai qua nhieu (dien tich lon), (b) SPI cham,
+// (c) doc cam ung cham, (d) vong lap bi chan o cho khac. Phai TACH RA do tung phan, khong doan.
+// Port do giup 2 con so: so lan flush + TONG SO PIXEL da day ra SPI (+ thoi gian), va so lan doc cam ung
+// (+ thoi gian). ui_lvgl_test_perf() in them thoi gian lv_timer_handler() moi vong.
+// ui_port_perf_report() IN ra roi XOA bo dem (do theo tung khoang thoi gian).
+void ui_port_perf_report(void);
 
 #endif // CYDLCD_USE_LVGL

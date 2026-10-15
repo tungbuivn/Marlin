@@ -286,11 +286,46 @@ lv_obj_t *mk_icon(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const lv_img_dsc
 }
 
 // Doi mau icon (Marlin doi mau bitmap theo nhiet do / trang thai)
+// CHI ghi khi mau KHAC: `lv_obj_set_style_img_recolor()` luon lam vat "ban" (invalidate) du gia tri khong
+// doi. Man STATUS cap nhat 150 ms/lan va goi ham nay cho 3 icon -> truoc day cu 150 ms lai ve lai 3 icon
+// (do that 2026-10-15: 7 khung ve ~70 ms MOI GIAY chi vi mau khong doi -> man hinh "chay cham").
 void icon_color(lv_obj_t *im, const lv_color_t col) {
   if (!im) return;
+  if (lv_obj_get_style_img_recolor(im, 0).full == col.full) return;
   lv_obj_set_style_img_recolor(im, col, 0);
   lv_obj_set_style_img_recolor_opa(im, LV_OPA_COVER, 0);
 }
+
+// ---- 3 helper "chi ghi khi DOI" (dong bo voi set_text() o tren) ----
+// VI SAO CAN: LVGL KHONG tu bo qua khi gia tri style giong gia tri cu - `lv_obj_set_style_*` /
+// `lv_img_set_src` deu goi `lv_obj_invalidate()` (xem lv_img.c:74). Man STATUS/ MENU cap nhat 150 ms/lan
+// ma goi chung vo dieu kien => moi 150 ms lai ve lai mot vung lon (do: 7 khung ~70 ms moi giay, SPI ~3,3
+// man hinh/giay) => ton CPU + SPI vo ich va man hinh cham.
+void set_text_color(lv_obj_t *o, const lv_color_t col) {
+  if (!o) return;
+  if (lv_obj_get_style_text_color(o, 0).full == col.full) return;
+  lv_obj_set_style_text_color(o, col, 0);
+}
+
+void set_border_color(lv_obj_t *o, const lv_color_t col) {
+  if (!o) return;
+  if (lv_obj_get_style_border_color(o, 0).full == col.full) return;
+  lv_obj_set_style_border_color(o, col, 0);
+}
+
+void set_bg_color(lv_obj_t *o, const lv_color_t col) {
+  if (!o) return;
+  if (lv_obj_get_style_bg_color(o, 0).full == col.full) return;
+  lv_obj_set_style_bg_color(o, col, 0);
+}
+
+// Doi anh cua icon: `lv_img_set_src()` invalidate VO DIEU KIEN (lv_img.c:74) ke ca khi cung 1 bitmap.
+void set_img_src(lv_obj_t *im, const void *src) {
+  if (!im || !src) return;
+  if (lv_img_get_src(im) == src) return;
+  lv_img_set_src(im, src);
+}
+
 
 // Nhan 1 dong, can phai trong be rong w (Marlin can so theo toa do x phai)
 lv_obj_t *mk_label_right(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w,

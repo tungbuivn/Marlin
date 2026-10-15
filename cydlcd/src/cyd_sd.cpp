@@ -99,7 +99,12 @@ bool     s_sd_ready = false;
 bool     s_sd_was   = false;
 uint32_t s_sd_check_ms = 0, s_sd_retry_ms = 0;
 bool     s_sd_retry_req = false;
+// Nhip thu mount lai HIEN TAI khi dang mat the (gian dan 2.5 -> 30 s, xem cyd_sd_task()).
+uint32_t s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS;
 uint32_t s_cleanup_ms = 0;             // moc lan don file tam dinh ky (CYDLCD_SD_CLEANUP_MS)
+// ---- DO HIEU NANG (`UI PERF`) cua chang cyd_sd_task(): xem cyd_sd_perf_report() ----
+uint32_t s_pf_check_n = 0, s_pf_check_us = 0, s_pf_check_max_us = 0, s_pf_clean_us = 0;
+uint32_t s_pf_log_n = 0, s_pf_log_us = 0;       // dong log 1 Hz (co goi SD.totalBytes/usedBytes)
 File     s_file;
 char     s_tmp[72] = "";               // file DANG mo (1 PART, hoac file .tmp luc merge/doi ten)
 uint32_t s_got = 0;                    // TONG byte da ghi vao the cua CA PHIEN (cong don qua cac part)
@@ -1458,22 +1463,63 @@ void cyd_sd_task(void) {
     s_cleanup_ms = now;
     char why[40];
     snprintf(why, sizeof(why), "dinh ky moi %lu phut", (unsigned long)(CYDLCD_SD_CLEANUP_MS / 60000u));
+    const uint32_t t_cl = micros();
     clean_dir(why, true, CYDLCD_SD_CLEANUP_MS / 1000u);
+    s_pf_clean_us += micros() - t_cl;
   }
   if (s_sd_ready) {
     if (now - s_sd_check_ms < CYDLCD_SD_CHECK_MS) return;
     s_sd_check_ms = now;
-    if (!sd_alive()) sd_lost("kiem tra dinh ky 1 Hz");
+    // Do hieu nang (`UI PERF`): do duoc `cyd_sd_task()` an ~2 s MOI vong lap => vong lap 0.5 Hz => man
+    // hinh cham. Tach tiep xem phan nao: `sd_alive()` (SD.exists("/") = cham vao the) hay `clean_dir()`.
+    const uint32_t t_chk = micros();
+    const bool alive = sd_alive();
+    const uint32_t d_chk = micros() - t_chk;
+    s_pf_check_us += d_chk; s_pf_check_n++;
+    if (d_chk > s_pf_check_max_us) s_pf_check_max_us = d_chk;
+    if (!alive) sd_lost("kiem tra dinh ky 1 Hz");
     return;
   }
-  if (s_sd_retry_req) s_sd_retry_req = false;
-  else if (now - s_sd_retry_ms < CYDLCD_SD_RETRY_MS) return;
+  // ---------------------------------------------------------------------------
+  // THE KHONG MOUNT DUOC -> THU LAI THUA DAN (backoff). LOI THAT 2026-10-15 (nguoi dung: "LCD chay cuc
+  // cham"): do bang `UI PERF` -> `sd_task: sd_alive 0 lan, clean_dir 0 us` nhung `http: sd_the 10 425 880 us`
+  // trong ~12 s, va log day dong `sdcard_mount(): f_mount failed: (3)`.
+  // NGUYEN NHAN: the TF khong mount duoc, ma vong lap cu 2.5 s lai goi `sd_mount()`; moi lan mount thu 3 muc
+  // toc do (20/10/4 MHz) -> moi muc ton ~0.7-1 s (SD.begin that bai + delay 30 ms + log cua core) => ~2 s.
+  // => VONG LAP BI CHAN 2 s MOI VONG => man hinh cap nhat 0.5 Hz => "chay cuc cham" (phan ve chi 3-5 ms,
+  // SPI 2 ms/lan nen KHONG phai loi ve). Nay nhip thu gian dan 2.5 -> 5 -> 10 -> 20 -> 30 s (toi da 30 s):
+  // the mat han thi chi ton ~2 s moi 30 s (6%) thay vi 80% thoi gian. Bam REFRESH / cam the -> thu NGAY
+  // (cyd_sd_retry() dat `s_sd_retry_req`).
+  // ---------------------------------------------------------------------------
+  if (s_sd_retry_req) { s_sd_retry_req = false; s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS; }
+  else if (now - s_sd_retry_ms < s_sd_retry_gap_ms) return;
   s_sd_retry_ms = now;
-  if (sd_mount(false)) clean_dir("mount lai", false);
+  if (sd_mount(false)) { s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS; clean_dir("mount lai", false); }
+  else if (s_sd_retry_gap_ms < 30000u) {
+    s_sd_retry_gap_ms *= 2u;
+    if (s_sd_retry_gap_ms > 30000u) s_sd_retry_gap_ms = 30000u;
+  }
 #endif
 }
 
+// In + XOA bo dem hieu nang cua chang `cyd_sd_task()` (lenh `UI PERF`).
+// VI SAO CAN: do duoc chang nay an ~2 s MOI vong lap (=> vong lap 0.5 Hz => "man hinh chay cuc cham" du
+// phan ve chi 3-5 ms). Hai nghi pham: `sd_alive()` (= `SD.exists("/")`, cham vao the moi lan) va `clean_dir()`
+// (quet thu muc /cydlcd_tmp). Hai con so duoi day noi ro cai nao.
+void cyd_sd_perf_report(void) {
+  Serial.printf("[PERF] sd_task: sd_alive %lu lan, %lu us tong, tb %lu us, max %lu us | clean_dir %lu us\n",
+                (unsigned long)s_pf_check_n, (unsigned long)s_pf_check_us,
+                (unsigned long)(s_pf_check_n ? s_pf_check_us / s_pf_check_n : 0),
+                (unsigned long)s_pf_check_max_us, (unsigned long)s_pf_clean_us);
+  Serial.printf("[PERF] log 1 Hz: %lu lan, %lu us tong, tb %lu us (SD.totalBytes/usedBytes)\n",
+                (unsigned long)s_pf_log_n, (unsigned long)s_pf_log_us,
+                (unsigned long)(s_pf_log_n ? s_pf_log_us / s_pf_log_n : 0));
+  s_pf_check_n = s_pf_check_us = s_pf_check_max_us = s_pf_clean_us = 0;
+  s_pf_log_n = s_pf_log_us = 0;
+}
+
 void cyd_sd_log(void) {
+  const uint32_t t_log = micros();
   const uint32_t heap = ESP.getFreeHeap();
   if (heap < s_heap_min) s_heap_min = heap;
   // Ten file tam dang co (chi ten, khong ca duong dan - dong log gon)
@@ -1484,8 +1530,19 @@ void cyd_sd_log(void) {
   const uint32_t free_kb = 0;
   const int sd_state = (int)cyd_sd_ready();
 #else
-  const uint32_t free_kb = (SD.totalBytes() > SD.usedBytes())
-                               ? (uint32_t)((SD.totalBytes() - SD.usedBytes()) / 1024ull) : 0u;
+  // Dung luong con trong: `SD.totalBytes()/usedBytes()` = FATFS `f_getfree` (QUET BANG FAT) - do duoc ~20 ms
+  // moi lan tren the 16 GB. Truoc day goi MOI GIAY (4 lan goi trong 1 bieu thuc!) chi de in log -> ton 2% CPU
+  // va lam vong lap bi chan. Nay doc moi CYDLCD_SD_FREE_MS va nho lai gia tri cu.
+  static uint32_t s_free_kb = 0;
+  static uint32_t s_free_ms = 0;
+  const uint32_t nowms = millis();
+  if (s_sd_ready && (!s_free_ms || (uint32_t)(nowms - s_free_ms) >= CYDLCD_SD_FREE_MS)) {
+    s_free_ms = nowms;
+    const uint64_t tot = SD.totalBytes(), use = SD.usedBytes();
+    s_free_kb = (tot > use) ? (uint32_t)((tot - use) / 1024ull) : 0u;
+  }
+  else if (!s_sd_ready) s_free_kb = 0;
+  const uint32_t free_kb = s_free_kb;
   const int sd_state = (int)s_sd_ready;
 #endif
   Serial.printf("[UP] wifi=%u ssid=\"%s\" ip=%s rssi=%d sd=%d busy=%d rx=%lu written=%lu "
@@ -1505,6 +1562,9 @@ void cyd_sd_log(void) {
                 (unsigned long)s_raw_rd, (unsigned long)s_raw_rd_err,
                 (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err,
                 (unsigned long)s_raw_rd_refused, (unsigned long)s_raw_wr_refused);
+  // Do hieu nang (`UI PERF`): dong log 1 Hz nay goi `SD.totalBytes()/usedBytes()` (FATFS `f_getfree` - co the
+  // QUET CA BANG FAT tren the lon) nen phai do: neu no cung ton tram ms thi cung lam man hinh cham.
+  s_pf_log_us += micros() - t_log; s_pf_log_n++;
 }
 
 #else   // ---- CYDLCD_WIFI_UPLOAD = 0: stub rong (moi env van link duoc) ----
@@ -1512,6 +1572,7 @@ void cyd_sd_log(void) {
 void cyd_sd_begin(void) {}
 void cyd_sd_task(void) {}
 void cyd_sd_log(void) {}
+void cyd_sd_perf_report(void) {}
 bool cyd_sd_ready(void) { return false; }
 bool cyd_sd_mount_now(void) { return false; }
 void cyd_sd_retry(void) {}

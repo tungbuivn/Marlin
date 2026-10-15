@@ -220,13 +220,13 @@ void page_status_update(void) {
       snprintf(b, sizeof(b), "%u%%", (unsigned)fp);
       set_text(st_cur[i], b);
       set_text(st_tgt[i], "");
-      lv_img_set_src(st_icon[i], (fp >= 50) ? &ui_icon_fan_fast : (fp ? &ui_icon_fan_slow : &ui_icon_fan));
+      set_img_src(st_icon[i], (fp >= 50) ? &ui_icon_fan_fast : (fp ? &ui_icon_fan_slow : &ui_icon_fan));
     }
     else {                                            // dau in / ban in: so nguyen do C
       temp_lookup(i == 0 ? CYDLCD_TEMP_E0 : CYDLCD_TEMP_BED, &cur, &tgt);
       const bool powered = (tgt > 0);
-      if (i == 0) lv_img_set_src(st_icon[i], powered ? &ui_icon_hotend : &ui_icon_hotend_line);
-      else        lv_img_set_src(st_icon[i], powered ? &ui_icon_bed_heated : &ui_icon_bed);
+      if (i == 0) set_img_src(st_icon[i], powered ? &ui_icon_hotend : &ui_icon_hotend_line);
+      else        set_img_src(st_icon[i], powered ? &ui_icon_bed_heated : &ui_icon_bed);
       //   - mau: dai mau theo NHIET DO TUYET DOI (temp_ramp()), moc dau/cuoi lay tu MR_TEMP_*_MIN/MAX.
       // LUU Y DON VI: `cur` cua temp_lookup() la 1/100 do C (vd 3102 = 31.02 do C - xem `scale /100` o
       // UI TEMPS) con dai mau tinh bang DO C -> PHAI chia truoc, khong thi 3102 > 250 = luon mau NONG
@@ -240,8 +240,8 @@ void page_status_update(void) {
       set_text(st_tgt[i], a2);
     }
     icon_color(st_icon[i], col);
-    lv_obj_set_style_text_color(st_cur[i], col, 0);
-    lv_obj_set_style_text_color(st_tgt[i], col, 0);
+    set_text_color(st_cur[i], col);
+    set_text_color(st_tgt[i], col);
   }
 
   // ---- XYZ: chua home -> "?" (Marlin nhay "?" mau AXIS_NOT_HOMED) ----
@@ -249,15 +249,15 @@ void page_status_update(void) {
   for (uint8_t i = 0; i < 3; i++) {
     if (!homed) {
       set_text(st_axis_val[i], "?");
-      lv_obj_set_style_text_color(st_axis_val[i], MR_NOAXIS, 0);
+      set_text_color(st_axis_val[i], MR_NOAXIS);
     }
     else {
       fmt_scaled(a1, sizeof(a1), posv[i], 1000, 2);
       set_text(st_axis_val[i], a1);
-      lv_obj_set_style_text_color(st_axis_val[i], MR_AXIS, 0);
+      set_text_color(st_axis_val[i], MR_AXIS);
     }
   }
-  lv_obj_set_style_border_color(st_xyz_frame, link_ok() ? MR_AXIS : COL_ERR, 0);
+  set_border_color(st_xyz_frame, link_ok() ? MR_AXIS : COL_ERR);
 
   // ---- FR / FL: xanh la khi 100%, vang khi khac (Marlin) ----
   const uint8_t rate[2] = { (uint8_t)(cydlcd.pos.feed_pct / 100), (uint8_t)(cydlcd.pos.flow_pct / 100) };
@@ -265,7 +265,7 @@ void page_status_update(void) {
     const lv_color_t col = (rate[i] == 100) ? MR_RATE100 : MR_RATEALT;
     snprintf(b, sizeof(b), "%u%%", (unsigned)rate[i]);
     set_text(st_rate_val[i], b);
-    lv_obj_set_style_text_color(st_rate_val[i], col, 0);
+    set_text_color(st_rate_val[i], col);
     icon_color(st_rate_icon[i], col);
   }
 
@@ -285,13 +285,13 @@ void page_status_update(void) {
   // ---- dong trang thai: mat lien ket > "STATE  ten file" ----
   if (!link_ok()) {
     set_text(st_msg, tbt.rx_active ? "LINK ERR (byte khong hop le)" : "NO LINK");
-    lv_obj_set_style_text_color(st_msg, COL_ERR, 0);
+    set_text_color(st_msg, COL_ERR);
   }
   else {
     if (cydlcd.prog.file[0]) snprintf(b, sizeof(b), "%s  %s", state_name(cydlcd.state), cydlcd.prog.file);
     else snprintf(b, sizeof(b), "%s", state_name(cydlcd.state));
     set_text(st_msg, b);
-    lv_obj_set_style_text_color(st_msg, MR_MSG, 0);
+    set_text_color(st_msg, MR_MSG);
   }
 }
 

@@ -434,18 +434,48 @@ uint32_t ui_port_millis(void) { return millis(); }
 // ===========================================================================
 //  Flush callback cua LVGL (CYD: TFT_eSPI)
 // ===========================================================================
+// ---- DO HIEU NANG (xem ui_port_perf_report) ----
+// Dem so lan flush + TONG DIEN TICH da day ra SPI: neu "px" lon (nhieu man hinh/giay) thi LVGL dang ve lai
+// qua nhieu (moi vong lap ve lai ca man), con neu px nho ma van cham thi do SPI hoac do cho khac.
+static uint32_t s_pf_flush_n = 0, s_pf_flush_px = 0, s_pf_flush_us = 0, s_pf_flush_max_us = 0;
+static uint32_t s_pf_read_n = 0, s_pf_read_us = 0, s_pf_read_max_us = 0;
+
 void ui_port_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *px) {
   const int32_t w = area->x2 - area->x1 + 1;
   const int32_t h = area->y2 - area->y1 + 1;
   if (w > 0 && h > 0) {
+    const uint32_t t0 = micros();
     // pushColors(..., swap = true): TFT_eSPI doi 2 byte -> dung endianness cua ST7789
     s_lcd.startWrite();
     s_lcd.setAddrWindow(area->x1, area->y1, w, h);
     s_lcd.pushColors(reinterpret_cast<uint16_t *>(px), (uint32_t)w * (uint32_t)h, true);
     s_lcd.endWrite();
+    const uint32_t dt = micros() - t0;
+    s_pf_flush_n++;
+    s_pf_flush_px += (uint32_t)w * (uint32_t)h;
+    s_pf_flush_us += dt;
+    if (dt > s_pf_flush_max_us) s_pf_flush_max_us = dt;
   }
   lv_disp_flush_ready(disp_drv);
 }
+
+// In + XOA bo dem hieu nang cua phan cung (SPI + cam ung). `UI PERF` goi ham nay 2 lan cach nhau N giay:
+// lan 1 de xoa, lan 2 de doc so cua khoang do.
+void ui_port_perf_report(void) {
+  const uint32_t px = s_pf_flush_px, n = s_pf_flush_n;
+  Serial.printf("[PERF] SPI: %lu lan flush, %lu px (%lu%% cua 1 man) | tb %lu px/lan | %lu us tong, "
+                "%lu us/lan, max %lu us\n",
+                (unsigned long)n, (unsigned long)px, (unsigned long)(px * 100UL / (UI_LCD_HOR_RES * UI_LCD_VER_RES)),
+                (unsigned long)(n ? px / n : 0), (unsigned long)s_pf_flush_us,
+                (unsigned long)(n ? s_pf_flush_us / n : 0), (unsigned long)s_pf_flush_max_us);
+  Serial.printf("[PERF] cam ung: %lu lan doc, %lu us tong, tb %lu us/lan, max %lu us\n",
+                (unsigned long)s_pf_read_n, (unsigned long)s_pf_read_us,
+                (unsigned long)(s_pf_read_n ? s_pf_read_us / s_pf_read_n : 0),
+                (unsigned long)s_pf_read_max_us);
+  s_pf_flush_n = s_pf_flush_px = s_pf_flush_us = s_pf_flush_max_us = 0;
+  s_pf_read_n = s_pf_read_us = s_pf_read_max_us = 0;
+}
+
 // ===========================================================================
 //  Input
 // ===========================================================================
@@ -491,7 +521,13 @@ void ui_port_read_cb(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
   lv_coord_t x = 0, y = 0;
   data->point.x = 0;
   data->point.y = 0;
-  if (cyd_touch_read(&x, &y)) {
+  // Do thoi gian doc cam ung (bit-bang SPI mem): LVGL goi ham nay moi LV_INDEV_DEF_READ_PERIOD (20 ms).
+  const uint32_t t0 = micros();
+  const bool touched = cyd_touch_read(&x, &y);
+  const uint32_t dt = micros() - t0;
+  s_pf_read_n++; s_pf_read_us += dt;
+  if (dt > s_pf_read_max_us) s_pf_read_max_us = dt;
+  if (touched) {
     data->point.x = x;
     data->point.y = y;
     data->state = LV_INDEV_STATE_PRESSED;

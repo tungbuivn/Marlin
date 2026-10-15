@@ -149,11 +149,17 @@
                       (unsigned long)tbt.lines, (unsigned long)tbt.errors,
                       (unsigned long)tbt.raw_bytes,
                       (unsigned long)(cydlcd_millis() - tbt.last_rx_ms));
-        // Thoi gian tung chang cua vong lap TRUOC (ms) - de thay chang nao bat dau cham/chan.
+        // Thoi gian tung chang cua vong lap TRUOC (MICRO giay) - de thay chang nao bat dau cham/chan.
         // Thu tu: 1 = console COM7, 2 = link Marlin, 3 = web server WiFi, 4 = UI LVGL.
-        Serial.printf("[CYD] chang: con=%lu link=%lu http=%lu ui=%lu ms | dang o chang %u\n",
+        // (1 us = 1/1000 ms; vong lap binh thuong: link ~0, http 1-3 ms, ui ~2 ms.)
+        Serial.printf("[CYD] chang: con=%lu link=%lu http=%lu ui=%lu us | dang o chang %u\n",
                       (unsigned long)s_ms[1], (unsigned long)s_ms[2], (unsigned long)s_ms[3],
                       (unsigned long)s_ms[4], (unsigned)s_stage);
+        // Doi chieu voi dong tren: so lan ui_lvgl_task() chay >= 20 ms trong 1 s vua qua + thoi gian lan cuoi
+        // (do NGAY TRONG ham). Xem ui_lvgl.h: ui_lvgl_perf_slow_take().
+        Serial.printf("[CYD] ui cham >=20ms: %lu lan/s | lan cuoi %lu us | tong %lu lan\n",
+                      (unsigned long)ui_lvgl_perf_slow_take(), (unsigned long)ui_lvgl_perf_last_us(),
+                      (unsigned long)ui_lvgl_perf_slow_all());
         // Pool LVGL: `used/total` + do phan manh. Chi so QUAN TRONG: pool day 100% =>
         // `lv_mem_alloc()` tra NULL => LVGL assert (truoc 2026-10-14 handler la `while(1)`
         // nen panel TREO IM LANG - xem ghi chu o lv_conf_cydlcd.h).
@@ -180,15 +186,18 @@
       s_forward_pending[0] = '\0';
     }
     s_stage = 2;
-    uint32_t t_stage = millis();
+    // Do bang MICRO giay (khong phai millis): vong lap binh thuong chi ~2-5 ms nen do phan giai 1 ms cua
+    // millis() cho so VO NGHIA (da gap: dong log bao `ui=67 ms` trong khi do ben trong ui_lvgl_task() chi
+    // 2.1 ms/lan => xem `UI PERF`). In ra us, chia 1000 khi can.
+    uint32_t t_stage = micros();
     cydlcd_link_task();     // nhan frame tu Marlin + giu PING/lien ket
-    s_ms[2] = millis() - t_stage;
-    s_stage = 3; t_stage = millis();
+    s_ms[2] = micros() - t_stage;
+    s_stage = 3; t_stage = micros();
     net_upload_http_task();// web server (nhan file qua WiFi) -> ghi vao the SD cua man hinh
-    s_ms[3] = millis() - t_stage;
-    s_stage = 4; t_stage = millis();
+    s_ms[3] = micros() - t_stage;
+    s_stage = 4; t_stage = micros();
     ui_lvgl_task();        // LVGL: ve man hinh, xu ly encoder/touch
-    s_ms[4] = millis() - t_stage;
+    s_ms[4] = micros() - t_stage;
     s_stage = 1;           // con lai trong vong lap: doc console COM7
 
     // CONSOLE G-CODE QUA CONG USB CUA MAN HINH CYD (tinh nang, 2026-10-13): nhan tung dong G-code/M-code
@@ -328,6 +337,8 @@
             else if (strcasecmp(a3, "HELLO") == 0)   ui_lvgl_test_hello();
             // `UI RX` = in 2 chieu cua UART (frame theo loai + tuoi PONG) - xem ui_lvgl_test_rx().
             else if (strcasecmp(a3, "RX") == 0)      ui_lvgl_test_rx();
+            // `UI PERF` = do hieu nang man hinh (ve/SPI/cam ung) - xem ui_lvgl_test_perf().
+            else if (strcasecmp(a3, "PERF") == 0)    ui_lvgl_test_perf();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
             // `UI EDIT <id>` = mo lop phu SUA cua dong do Y NHU VUA CHAM (kiem tra "Gia tri:"/"Buoc" tu PC).

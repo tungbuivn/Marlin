@@ -394,6 +394,14 @@ const char *state_name(uint8_t st);
 void temp_lookup(const uint8_t id, int16_t *cur, int16_t *tgt);
 /** Set text cho nhan, CHI khi khac noi dung cu (khong nhap nhay, khong ve lai vo ich). */
 void set_text(lv_obj_t *lbl, const char *txt);
+// ---- Cac ham "chi ghi khi DOI" cho MAU/ANH (LVGL khong tu bo qua gia tri trung) --------------
+// VI SAO: `lv_obj_set_style_*` va `lv_img_set_src` deu goi `lv_obj_invalidate()` vo dieu kien (lv_img.c:74)
+// => man cap nhat 150 ms/lan ma goi chung moi lan thi moi 150 ms lai ve lai vung do (do that: 7 khung ~70 ms
+// moi giay, ~3,3 man hinh/giay day ra SPI) du KHONG CO GI DOI. Dung 4 ham nay thay cho loi goi truc tiep.
+void set_text_color(lv_obj_t *o, lv_color_t col);
+void set_border_color(lv_obj_t *o, lv_color_t col);
+void set_bg_color(lv_obj_t *o, lv_color_t col);
+void set_img_src(lv_obj_t *im, const void *src);
 /** Gan font CO DAU tieng Viet cho DUNG 1 nhan (che do 4; che do 0 la no-op). */
 void vn_font(lv_obj_t *label);
 /** Nhu vn_font() nhung cho nhan NAM TRONG 1 nut (mk_btn tao dung 1 label con). */

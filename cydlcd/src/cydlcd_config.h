@@ -383,6 +383,23 @@
   // phien upload). Xem cyd_sd_task()/clean_dir().
   #define CYDLCD_SD_CLEANUP_MS (30u * 60u * 1000u)
 #endif
+#ifndef CYDLCD_WIFI_REFRESH_MS
+  // Nhip doc day du trang thai WiFi (WiFi.status/localIP/RSSI - RSSI phai hoi driver, ~300 us/lan).
+  // VI SAO khong doc moi vong lap: do bang `UI PERF` 2026-10-15 -> `net_wifi_task()` an ~300 us MOI vong
+  // (~40% CPU khi vong lap chay ~300 lan/s) trong khi icon WiFi + chu dBm chi cap nhat 400 ms/lan.
+  #define CYDLCD_WIFI_REFRESH_MS 500u
+#endif
+#ifndef CYDLCD_SD_FREE_MS
+  // Nhip doc DUNG LUONG CON TRONG cua the (`SD.totalBytes()/usedBytes()` = FATFS `f_getfree`, quet bang FAT:
+  // do duoc ~20 ms moi lan tren the 16 GB) - chi de IN RA LOG 1 Hz, nen khong can doc moi giay.
+  #define CYDLCD_SD_FREE_MS 10000u
+#endif
+#ifndef CYDLCD_HTTP_POLL_MS
+  // Nhip goi `server.handleClient()`: ~50 us MOI lan goi (hoi lwIP xem co ket noi moi) nen goi moi vong lap
+  // (5000 lan/s) la 27% CPU vo ich. Trang web chi vai request/giay; phien upload khong bi anh huong vi
+  // WebServer xu ly CA body trong 1 lan goi.
+  #define CYDLCD_HTTP_POLL_MS 10u
+#endif
 // ---------------------------------------------------------------------------
 // BAO MAT TEN FILE (yeu cau nguoi dung 2026-10-15: "ten file tren server can fix bao mat, chi cho phep
 // a-z0-9._"): whitelist ky tu cho ten file gui qua WEB (upload + xoa).

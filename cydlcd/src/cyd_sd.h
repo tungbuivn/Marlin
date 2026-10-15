@@ -30,6 +30,9 @@ extern "C" {
 void cyd_sd_begin(void);        // mount the (leo thang toc do) + don file .tmp mo coi
 void cyd_sd_task(void);         // theo doi the nong (rut ra / cam vao) - khong chan
 void cyd_sd_log(void);          // 1 dong log 1 Hz (the, WiFi, phien upload, heap, bo dem sector)
+// Do hieu nang (`UI PERF`): thoi gian `sd_alive()` (= `SD.exists("/")`, cham vao the) va `clean_dir()` trong
+// `cyd_sd_task()`, roi XOA bo dem. Dung khi man hinh cham ma phan ve (LVGL/SPI) lai nhanh.
+void cyd_sd_perf_report(void);
 
 // The SD
 bool cyd_sd_ready(void);        // cache - khong SPI, khong chan

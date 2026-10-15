@@ -81,15 +81,30 @@ void ui_port_display_init(void) {
 // ===========================================================================
 //  Flush callback cua LVGL (STM32: day thang ra ILI9341 qua SPI)
 // ===========================================================================
+static uint32_t s_pf_flush_n = 0, s_pf_flush_px = 0;
+
 void ui_port_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *px) {
   const int32_t w = area->x2 - area->x1 + 1;
   const int32_t h = area->y2 - area->y1 + 1;
   if (w > 0 && h > 0) {
     lcd_window(area->x1, area->y1, area->x2, area->y2);
     lcd_push_pixels(px, (uint32_t)w * (uint32_t)h);
+    // Do hieu nang (`UI PERF`): dem so lan flush + tong dien tich da day ra SPI.
+    s_pf_flush_n++;
+    s_pf_flush_px += (uint32_t)w * (uint32_t)h;
   }
   lv_disp_flush_ready(disp_drv);
 }
+
+// Do hieu nang (`UI PERF`, xem ui_lvgl_test_perf): board STM32 chua do thoi gian SPI (chi dem dien tich).
+void ui_port_perf_report(void) {
+  Serial.printf("[PERF] SPI: %lu lan flush, %lu px (%lu%% cua 1 man) | tb %lu px/lan\n",
+                (unsigned long)s_pf_flush_n, (unsigned long)s_pf_flush_px,
+                (unsigned long)(s_pf_flush_px * 100UL / (UI_LCD_HOR_RES * UI_LCD_VER_RES)),
+                (unsigned long)(s_pf_flush_n ? s_pf_flush_px / s_pf_flush_n : 0));
+  s_pf_flush_n = s_pf_flush_px = 0;
+}
+
 
 bool ui_port_input_is_encoder(void) { return true; }
 

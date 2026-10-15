@@ -101,10 +101,10 @@ void page_rate_update(void) {
   const int32_t fl = cydlcd_setting(CYDLCD_SET_FLOW_PCT, 10000) / 100;
   snprintf(b, sizeof(b), "%ld%%", (long)fr);
   set_text(rt_fr, b);
-  lv_obj_set_style_text_color(rt_fr, (fr == 100) ? MR_RATE100 : MR_RATEALT, 0);
+  set_text_color(rt_fr, (fr == 100) ? MR_RATE100 : MR_RATEALT);
   snprintf(b, sizeof(b), "%ld%%", (long)fl);
   set_text(rt_fl, b);
-  lv_obj_set_style_text_color(rt_fl, (fl == 100) ? MR_RATE100 : MR_RATEALT, 0);
+  set_text_color(rt_fl, (fl == 100) ? MR_RATE100 : MR_RATEALT);
 }
 
 // Huy man FEED/FLOW (xem quy uoc o ui_lvgl_int.h): chi dat NULL 2 nhan FR/FL. Container trang do

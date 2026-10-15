@@ -2078,6 +2078,54 @@ hình hiện **43%** (đã trả lại `M220 S100`).
 menu file"*) và mục `Settings` không còn ghi `58/33` (tổng 33 là con số cũ; Marlin gửi 58 dòng) mà ghi **`58 muc`**
 — màn hình không biết tổng số thật vì Marlin không gửi frame "hết danh sách" cho SETTING.
 
+## Vì sao màn hình chạy chậm (2026-10-15) — đo bằng `UI PERF`
+
+**Triệu chứng người dùng:** *"LCD chạy cực chậm"*. Cách đo: `UI PERF` (COM8) + dòng log 1 Hz
+`[CYD] chang: con=… link=… http=… ui=… us` (đã đổi sang **µs**) + `[CYD] ui cham >=20ms: N lan/s`.
+
+| Đo được (trước khi sửa) | Nghĩa |
+|---|---|
+| `http=2088 ms` mỗi vòng lặp ⇒ **vòng lặp 0.5 Hz** | giao diện chỉ được cập nhật **2 lần/giây** |
+| `http: sd_the 10 425 880 us` trong ~12 s, `sd_alive 0 lan` | **`cyd_sd_task()`**: thẻ TF **không mount được** nên cứ 2,5 s lại `sd_mount()`; mỗi lần thử **3 mức tốc độ** (20/10/4 MHz) ≈ **2 s** ⇒ gần như cả vòng lặp bị chặn |
+| log đầy `sdcard_mount(): f_mount failed: (3)` | thẻ không phản hồi (rút ra / tiếp xúc kém) |
+| `ui cham >=20ms: 7 lan/s | lan cuoi 68 000 us` | mỗi 150 ms (`UI_REFRESH_MS`) LVGL lại vẽ lại ~nửa màn hình: **~3,3 màn hình/giây đẩy ra SPI** |
+| `handleClient 4,5 s / 9 s` | `WebServer::handleClient()` của core ESP32 gọi **`delay(1)`** mỗi lần khi chưa có client (`WebServer.cpp:275-283`) |
+| `net_wifi_task 4,5 s / 9 s` | `WiFi.RSSI()` hỏi driver **mỗi vòng lặp** (~300 µs) dù chỉ hiển thị 400 ms/lần |
+| `log 1 Hz: 21 ms/lần` | `SD.totalBytes()/usedBytes()` = FATFS `f_getfree` **quét bảng FAT** (4 lần gọi trong 1 biểu thức!) mỗi giây |
+
+**6 chỗ đã sửa:**
+
+1. **Thẻ không mount → thử lại THƯA DẦN** (`cyd_sd.cpp`): 2,5 → 5 → 10 → 20 → **30 s** (trước: mỗi vòng lặp). Thẻ
+   mất hẳn chỉ còn tốn ~2 s mỗi 30 s (≈6 %) thay vì 80 % thời gian. Cắm thẻ / bấm `REFRESH` ⇒ thử ngay.
+2. **Không ghi màu/ảnh khi giá trị KHÔNG ĐỔI** (`ui_widgets.cpp` + các trang): LVGL **không** tự bỏ qua —
+   `lv_obj_set_style_*()` và `lv_img_set_src()` đều gọi `lv_obj_invalidate()` **vô điều kiện** (`lv_img.c:74`).
+   Thêm 4 helper `set_text_color()` / `set_border_color()` / `set_bg_color()` / `set_img_src()` (và `icon_color()`
+   nay tự so màu) — dùng thay cho lời gọi trực tiếp ở các trang cập nhật nhanh (STATUS/MENU/FEED-FLOW/ENDSTOP).
+   ⇒ SPI từ **3 852 %/12 s** xuống **136 %/12 s** (29×), khung vẽ chậm từ **7 lần/s** xuống **0**.
+3. **`server.enableDelay(false)`** (`net_upload_http.cpp`): bỏ `delay(1)` mỗi lần `handleClient()` khi rảnh.
+   Không ảnh hưởng phiên upload (WebServer vẫn xử lý cả body trong 1 lần gọi).
+4. **`net_wifi_task()` đọc trạng thái WiFi mỗi `CYDLCD_WIFI_REFRESH_MS` (500 ms)** (`net_wifi.cpp`): `RSSI()` chỉ
+   để vẽ icon + chữ dBm (400 ms/lần) nên không cần đọc mỗi vòng lặp ⇒ 4,5 s → **0,2 s**.
+5. **Đọc dung lượng thẻ mỗi `CYDLCD_SD_FREE_MS` (10 s)** thay vì mỗi giây (`cyd_sd.cpp`) — chỉ để in log.
+6. **Gọi `server.handleClient()` mỗi `CYDLCD_HTTP_POLL_MS` (10 ms)** (`net_upload_http.cpp`): ~50 µs/lần gọi ×
+   5 000 vòng/s là 27 % CPU vô ích.
+
+**Đo lại sau khi sửa** (thẻ TF vẫn chưa mount được — lỗi phần cứng/thẻ, xem dưới):
+
+```
+[PERF] ui_lvgl_task: 112 998 vong | tb 7 us, max 17 086 us
+[PERF] SPI: 21 lan flush, 65 366 px (85% cua 1 man) | 1 560 us/lan
+[PERF] http: wifi 211 029 us | sd_the 2 303 422 us | handleClient 60 963 us (bo qua 112 272 lan)
+[CYD] chang: con=0 link=0 http=1 ui=5 us      <- truoc: http=2088 ms, ui=68 000 us
+```
+
+⇒ vòng lặp từ **0,5 lần/giây** lên **~11 300 lần/giây** (~0,09 ms/vòng); phần VẼ gần như không còn (LVGL chỉ vẽ khi
+có gì đó **thực sự đổi**). Chi phí còn lại: `sd_mount()` thử lại (theo backoff) và log chẩn đoán 1 Hz trên UART.
+
+> ⚠️ **Thẻ TF của màn hình hiện KHÔNG mount được** (`sd=0`, log `sdcard_mount(): f_mount failed: (3) The physical
+> drive cannot work`) — cắm lại thẻ hoặc thay thẻ khác rồi bấm `REFRESH`/khởi động lại. Trong lúc chưa có thẻ,
+> Marlin cũng không đọc/ghi được thẻ SD (thẻ nằm ở khe màn hình, xem §12) nên `M20`/in từ thẻ sẽ báo lỗi.
+
 ## Dai mau nhiet do cua man STATUS (2026-10-15)
 
 Tra loi cau hoi *"khi nhiệt độ tăng dần thì màu của icon hotend và bed có chuyển dần sang đỏ không?"* — **có**,
@@ -2237,6 +2285,7 @@ vao duoc màn hình CYD **chuyen tiep sang Marlin** bang dung duong ma cac nut t
 | 🆕 `UI BUSY` | in **máy đang làm gì** + **có cho nhận file upload không**: `[UI] MAY: st=<mã> (<tên>) fl=0x.. file="<file đang in>" prog=<%> | IN TU THE SD=0/1 TAM DUNG=0/1` rồi `[UI] upload: cho nhan file \| BI CHAN (...)`. Trả lời *"làm sao biết máy đang in?"* — upload **chỉ** bị chặn khi đang in / tạm dừng bản in **từ thẻ SD** (HOME/PROBE/G35 không tính). Tự in kèm trong `UI BOX` |
 | 🆕 `UI TEMPS` | in **cả 2 nguồn nhiệt độ** mà màn hình đang có để đối chiếu: **PUSH** = frame `CYDLCD_F_TEMPS` (`id=1` đầu in, `id=0` bàn in; `cur/tgt` đơn vị °C×100) và **TRAM** = 4 token nhiệt độ cuối dòng `TBT ...`, kèm dòng "đang HIỂN THỊ" = đúng giá trị `temp_lookup()` dùng để vẽ. Dùng khi *"nhiệt hiển thị không đúng"* (đã dùng để tìm ra lỗi target bàn in luôn 0). Tự in kèm trong `UI BOX` |
 | 🆕 `UI GRAD` | in **bảng màu của dải nhiệt độ** mà màn STATUS dùng cho **cả icon lẫn 2 con số**: dòng đầu in 2 đầu dải (`hotend 25..250`, `bed 25..60`, mốc giữa `MR_WARM`), dòng 2 in **màu ĐANG HIỂN THỊ** thật (kèm °C của cả đầu in và bàn in), rồi 2 dòng quét `25C(0%)=#00E6FF … 250C(100%)=#FF8983` / `30C(14%)=#41DEC5 … 60C(100%)=#FFB64A` (kèm **% vị trí trong dải**). Trả lời *"nhiệt độ tăng dần thì màu có chuyển dần sang đỏ không?"* **mà KHÔNG phải đốt nóng máy**, và bắt được lỗi **sai đơn vị** (°C so với °C×100) — xem mục **"Dai mau nhiet do cua man STATUS"** |
+| 🆕 `UI PERF` | **đo hiệu năng màn hình**, gọi 2 lần cách nhau N giây (lần 1 xoá bộ đếm, lần 2 đọc số của khoảng đó): `ui_lvgl_task` tb/max µs, `lv_timer_handler` tb/max, **SPI** (số lần flush + TỔNG SỐ PIXEL đã đẩy, % của 1 màn = 76 800 px), **cảm ứng** (µs/lần), `http` (wifi / thẻ TF / `handleClient` + số lần bỏ qua), `sd_task` (`sd_alive` / `clean_dir`), log 1 Hz, `lvmem` + heap. Dùng để biết **màn hình chậm là do VẼ, do SPI, do cảm ứng hay do vòng lặp bị chặn ở chỗ khác** — xem mục **"Vì sao màn hình chạy chậm"** |
 | 🆕 `UI RX` | in **2 CHIỀU của UART** để biết bên nào hỏng: `PONG co/CHUA BAO GIO` + **tuổi PONG** (bình thường < 1500 ms) + **số lần mất PONG**, rồi bảng **số frame đã nhận theo LOẠI** (`HELLO/STATUS/TEMPS/POS/MESH/FILES/SETTING/PONG…`), và vị trí + FR/FL + `n_settings`/cỡ lưới. Dùng khi *"bấm nút trên màn hình mà máy không chạy"*: **PONG = 0 / tuổi lớn ⇒ chiều MÀN HÌNH → MARLIN hỏng** (trong khi `STATUS/TEMPS` vẫn tăng = chiều xuống vẫn tốt) — đối chiếu với `PANEL DIAG` in ở COM4. Xem mục **"Chan doan link 2 chieu"** |
 | 🆕 `UI PRE <0\|1\|2>` | **bấm nút preset preheat** PLA/PETG/ABS của màn NHIỆT ĐỘ (đi đúng đường sự kiện thật) — log ra `[PRE] bam <tên>: gui "M104 S<n>" + "M140 S<b>" (hàng đợi TX chờ=…, đã bỏ=…)` để đối chiếu màn hình gửi gì với Marlin nhận gì. Phải mở `UI NHIET DO` trước |
 | 🆕 `UI TAP <0..4>` · `P\|N` · `I` · `D` · `K` · `C` · `L [đường dẫn]` | **ban su kien CHAM that** de kiem tra UI tu PC (màn hình CYD không có framebuffer đọc ngược): `<0..4>` = dòng thứ mấy **của TRANG đang xem** ở màn FILE SD (mở `UI FILE SD` trước), `P`/`N` = **PREV/NEXT**, `I` = **PRINT** (kiểm tra đường in: có gửi `M23`+`M24` không), `D` = **XOA** (hộp xác nhận nếu mở thì tự đóng sau 8 s), `C` = **đếm mục con** của thư mục đang chọn (**không xoá gì**), `K` = **bấm OK** hộp thoại đang mở (**mọi màn**; hộp 2 bước phải `K` **2 lần** mới chạy lệnh thật), `L` = **liệt kê thư mục bằng FATFS của chính màn hình** (tên ĐẦY ĐỦ, không bị SdFat cắt 27 ký tự; `UI TAP L /BTUP` để xem 1 thư mục). Đều đi **đúng đường sự kiện thật** (`lv_event_send` → `cb_files_row`/`cb_files_print`/`cb_prompt_value`/…) nên kiểm được: chạm dòng nào thì **dòng đó** được chọn + tô sáng, `XOA`/`PRINT` đúng dòng, prompt của Marlin được trả lời (`M0` → `K` → `st=1`→`st=0`), xoá file/thư mục rỗng có chạy không. `UI TAP` (không tham số) = in trạng thái danh sách (kèm `PRINT=`/`XOA=` khoá hay mở) |
