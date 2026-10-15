@@ -288,7 +288,7 @@ MENU có 10 mục chính và một dòng hiệu chuẩn cảm ứng:
 1. `Temperature`
 2. `Motion`
 3. `Feed/Flow rate`
-4. `SD card`
+4. `Print from Media`
 5. `Bed mesh`
 6. `Custom/Init SD`
 7. `Configuration`
@@ -299,7 +299,7 @@ MENU có 10 mục chính và một dòng hiệu chuẩn cảm ứng:
 
 Chi tiết hiển thị hiện tại:
 
-- dòng `SD card` **không còn đếm số file**;
+- dòng `Print from Media` (tên cũ `SD card`, đổi 2026-10-15 cho giống Marlin) **không còn đếm số file**;
 - dòng `Bed mesh` cho biết kích thước lưới và `ON/OFF`;
 - dòng `Configuration` mở cây menu con kiểu 12864 (xem 7.10), không còn là bảng phẳng;
 - dòng `Motion` mở menu MOTION kiểu 12864 (Move Axis (JOG), Z Probe Wizard, Tramming, UBL, Level Bed,

@@ -34,7 +34,10 @@ static const menu_item_t MENU_ITEMS[MENU_ROWS] = {
   // Tramming/M48...) - trong do co dong "Move Axis (JOG)" mo lai trang JOG cu.
   { "Motion",          MENU_ACT_PAGE, A_GOTO_MOTION },
   { "Feed/Flow rate",  PG_RATE,   0 },
-  { "SD card",         PG_FILES,  0 },
+  // 2026-10-15 (YEU CAU NGUOI DUNG: "thay text sd card o menu thanh 'Print from media' giong marlin"):
+  // lay DUNG chuoi cua Marlin (`language_en.h`: MSG_MEDIA_MENU = "Print from " MEDIA_TYPE_EN, voi
+  // MEDIA_TYPE_EN = "Media" khi LCD du rong >= 20 ky tu) -> "Print from Media". Trang van la PG_FILES.
+  { "Print from Media",PG_FILES,  0 },
   { "Bed mesh",        PG_MESH,   0 },
   { "Custom/Init SD",  PG_CUSTOM, 0 },
   // 2026-10-15 (yeu cau nguoi dung: "phan configuration toi thay lam giong 12864 tien hon"): dong nay
@@ -175,9 +178,10 @@ void page_menu_update(void) {
            (long)(cydlcd_setting(CYDLCD_SET_FLOW_PCT, 10000) / 100));
   set_text(mn_val[2], b);
 
-  // YEU CAU NGUOI DUNG 2026-10-15: "bo phan dem so luong file o menu file" -> dong "SD card" o trang MENU
-  // KHONG con hien so file (truoc: "12 file"). Cach Marlin cung vay: muc "Card" trong menu khong co gia tri;
-  // the co doc duoc hay khong da co ICON THE o thanh tren, con so luong thi thay ngay khi mo trang.
+  // YEU CAU NGUOI DUNG 2026-10-15: "bo phan dem so luong file o menu file" -> dong "Print from Media"
+  // (truoc ten "SD card") o trang MENU KHONG con hien so file (truoc: "12 file"). Cach Marlin cung vay:
+  // muc "Print from Media" trong menu khong co gia tri; the co doc duoc hay khong da co ICON THE o thanh
+  // tren, con so luong thi thay ngay khi mo trang.
   // (Bam vao dong nay la mo thang trang FILE SD - xem MENU_ITEMS.)
   set_text(mn_val[3], "");
 
