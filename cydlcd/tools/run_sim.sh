@@ -257,10 +257,18 @@ done
 
 if [ "$NOBUILD" = 0 ]; then
   echo "Biên dịch UI (${#SOURCES[@]} file)..."
+  # PHU THUOC HEADER: vong lap duoi chi so mtime cua .cpp voi .o (khong dung -MMD), nen SUA MOT HEADER
+  # se KHONG lam rebuild cac .cpp dung no -> object cu -> loi lien ket kho hieu (da gap that: doi
+  # UI_TEXT_FONT trong cydlcd_config.h thi ui_lvgl.cpp.o van tham chieu font cu).
+  # Cach chua: tao 1 file MOC mang dung mtime cua header MOI NHAT trong src/, roi so .o voi moc do.
+  # Chi 1 lan `find` cho ca build nen khong cham.
+  HDRSTAMP="$BLD/.hdrstamp"
+  _newest=$(find "$SRC" -maxdepth 1 -name '*.h' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+  [ -n "$_newest" ] && touch -r "$_newest" "$HDRSTAMP"
   JOBFILE="$BLD/.jobs"; : > "$JOBFILE"; N=0
   for f in "${SOURCES[@]}"; do
     o="$BLD/$(basename "$f").o"
-    if [ "$REBUILD" = 1 ] || [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then
+    if [ "$REBUILD" = 1 ] || [ ! -f "$o" ] || [ "$f" -nt "$o" ] || [ "$HDRSTAMP" -nt "$o" ]; then
       case "$f" in
         *.c) job_emit c   "$f" "$o";;
         *)   job_emit cxx "$f" "$o";;

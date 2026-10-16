@@ -502,6 +502,32 @@
 #endif
 
 // ---------------------------------------------------------------------------
+//  FONT CHU cua UI  (2026-10-16) -- doi DUY NHAT o day.
+//
+//    UI_TEXT_FONT = 0 : Segoe UI 16     (gfx4_font_text)       bpp4, 16 muc xam, font TI LE
+//    UI_TEXT_FONT = 1 : Roboto Mono 13  (gfx_font_robotomono)  bpp1, khong antialias, font DEU
+//    UI_TEXT_FONT = 2 : Montserrat 14   (font MAC DINH cua LVGL) — KHONG dung font GFX nao
+//
+//  Che do 0 va 1 deu CO DAU tieng Viet (5 dai roi rac U+0020..U+00FF, U+0102..U+01B1,
+//  U+1EA0..U+1EF9). Che do 2 (Montserrat) KHONG co dau tieng Viet -> cac nhan co dau trong lop phu
+//  SUA ("Gia tri" / "Buoc" / "Huy") se ra O VUONG — chi dung de XEM THU bo cuc, khong de phat hanh.
+//
+//  MOI FONT GFX LA MOT BANG BITMAP LON (~110 KB va ~40 KB). Chi font DUOC CHON moi duoc include
+//  (xem gfx4_font_text.c / gfx_font_robotomono.c) -> font khong dung KHONG vao build: build nhanh
+//  hon va khong ton flash. Che do 2 khong include bang nao ca.
+//  Doi font chi can doi so nay, KHONG phai sua cho nao khac: ui_lvgl_int.h tu suy ra
+//  UI_MONO_FONT + UI_MONO_GFX_BPP tu day.
+//  Ep tu ngoai de thu nhanh: them -DUI_TEXT_FONT=N vao build_flags.
+// ---------------------------------------------------------------------------
+#ifndef UI_TEXT_FONT
+  // CHOT 2026-10-16: Segoe UI 16. Da thu ca 3 bang ban gia lap:
+  //   - Segoe UI 16  : dep nhat (nguoi dung chon), CO dau tieng Viet, +19,7 KB flash so voi Montserrat
+  //   - Roboto Mono 13: 1-bit -> chu bi rang (do do: 0 muc xam trung gian, 2 ban kia la 12)
+  //   - Montserrat 14: cung co khua rang cua nhung KHONG co dau tieng Viet ("Tieng Viet" -> o vuong)
+  #define UI_TEXT_FONT 0
+#endif
+
+// ---------------------------------------------------------------------------
 //  Cac macro DUNG CHUNG cho MOI board, KHONG phu thuoc WiFi (sua 2026-10-16)
 //
 //  VI SAO: `cyd_sd.cpp` (dung cho ca board STM32 - nhanh stub) va `ui_boxes.cpp` (moi board) dung

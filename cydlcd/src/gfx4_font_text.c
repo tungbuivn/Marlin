@@ -38,7 +38,14 @@
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 
-#include "gfx4_font_text.h"
+// 2026-10-16: CHI include bang bitmap khi font nay DUOC CHON (UI_TEXT_FONT o cydlcd_config.h).
+// Bang nay ~110 KB va chi MOT trong hai font chu duoc dung -> font khong dung khong vao build
+// (build nhanh hon, khong ton flash).
+#if UI_TEXT_FONT == 0
+  #include "gfx4_font_text.h"
+#else
+  typedef int gfx4_font_text_not_selected;   // UI_TEXT_FONT != 0 -> khong dung font nay
+#endif
 
 #else  /* CYDLCD_USE_LVGL */
 

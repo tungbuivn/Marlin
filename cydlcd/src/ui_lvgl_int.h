@@ -134,18 +134,32 @@ extern uint8_t g_link_icon_ok;
 //       font sinh bang lv_font_conv nen KHONG con font nao co dau -> vn_font()/vn_font_btn() thanh
 //       no-op va 3 nhan co dau trong lop phu SUA ("Gia tri" / "Buoc" / "Huy") se ra O VUONG.
 //       Muon co dau tieng Viet thi PHAI dung che do 4.
-// Cho phep ep tu ngoai (-DUI_MONO_FONT=0) de kiem tra che do 0 ma khong phai sua file.
-#ifndef UI_MONO_FONT
-  #define UI_MONO_FONT 4
+// Cho phep ep tu ngoai (-DUI_TEXT_FONT=N) de thu font khac ma khong phai sua file.
+//
+// 2026-10-16: KHONG dat thang `UI_MONO_FONT` / `UI_MONO_GFX_BPP` nua — CA HAI suy ra tu MOT so
+// `UI_TEXT_FONT` trong cydlcd_config.h. Doi font chi can doi so do, khong phai sua cho nao khac.
+// Giu nguyen 2 ten cu de phan con lai cua file khong phai sua.
+#if UI_TEXT_FONT == 0 || UI_TEXT_FONT == 1
+  #define UI_MONO_FONT 4            // font GFX tu sinh
+#elif UI_TEXT_FONT == 2
+  #define UI_MONO_FONT 0            // font MAC DINH cua LVGL (Montserrat 14)
+#else
+  #error "UI_TEXT_FONT chi nhan 0 (Segoe UI 16) / 1 (Roboto Mono 13) / 2 (Montserrat 14)"
 #endif
 
-// Do phan giai cua font mono che do 4 (xem lv_font_gfxfont.h):
-//   4 = 4 bit/pixel, 16 muc xam -> CO antialias (dang dung; chu dep hon han 1-bit).
-//       Header gfx4_font_robotomono.h KHONG phai Adafruit GFXfont: bitmap da ghi theo dung
-//       chuoi bit lien tuc cua LVGL nen driver tra con tro THANG (khong repack, khong ton RAM).
+// Do phan giai cua font GFX (chi co nghia khi UI_MONO_FONT == 4 — xem lv_font_gfxfont.h):
+//   4 = 4 bit/pixel, 16 muc xam -> CO antialias (chu dep hon han 1-bit).
+//       Header gfx4_font_text.h KHONG phai Adafruit GFXfont: bitmap da ghi theo dung chuoi bit
+//       lien tuc cua LVGL nen driver tra con tro THANG (khong repack, khong ton RAM).
 //   1 = 1 bit/pixel, Adafruit GFXfont (gfx_font_robotomono.h) -> driver phai repack.
-//       Giu lai lam PHUONG AN DU PHONG (da nghiem thu tren may that, chu bi rang nhung chac chan chay).
-#define UI_MONO_GFX_BPP 4
+//       Chu bi rang (khong antialias) nhung nhe flash hon nhieu (39 KB so voi 112 KB).
+#if UI_TEXT_FONT == 0
+  #define UI_MONO_GFX_BPP 4
+#elif UI_TEXT_FONT == 1
+  #define UI_MONO_GFX_BPP 1
+#else
+  #define UI_MONO_GFX_BPP 4         // che do 2 (Montserrat) KHONG dung tri so nay; de 4 cho khoi loi
+#endif
 
 #if UI_MONO_FONT == 4
 // ---------------------------------------------------------------------------

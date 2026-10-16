@@ -24,7 +24,13 @@
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 
-#include "gfx_font_robotomono.h"
+// 2026-10-16: CHI include bang bitmap khi font nay DUOC CHON (UI_TEXT_FONT o cydlcd_config.h).
+// Bang nay ~40 KB va chi MOT trong hai font chu duoc dung -> font khong dung khong vao build.
+#if UI_TEXT_FONT == 1
+  #include "gfx_font_robotomono.h"
+#else
+  typedef int gfx_font_robotomono_not_selected;   // UI_TEXT_FONT != 1 -> khong dung font nay
+#endif
 
 #else  /* CYDLCD_USE_LVGL */
 
