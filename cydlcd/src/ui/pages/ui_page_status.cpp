@@ -323,12 +323,14 @@ void page_status_update(void) {
         lv_obj_add_flag(st_pct,  LV_OBJ_FLAG_HIDDEN);
       }
     }
-    // Dong trang thai: AN khi dang in (nhuong cho 2 nut), hien khi ranh - va doi be rong theo trang thai.
+    // Dong trang thai: LUON HIEN (nguoi dung can doc message ca khi dang in) - chi doi BE RONG:
+    // may ranh = 320 (day chieu ngang), dang in = 232 (nhuong cho 2 nut o goc duoi phai).
+    // YEU CAU NGUOI DUNG 2026-10-16: "khi dang in thi dong trang thai van hien, chi la co lai thoi,
+    // de con xem message".
     // Chi set lai khi be rong THAT SU doi (`lv_obj_set_width` luon invalidate vat).
     const lv_coord_t want_w = printing ? (lv_coord_t)MR_MSG_W_RUN : (lv_coord_t)MR_MSG_W;
     if (lv_obj_get_width(st_msg) != want_w) lv_obj_set_width(st_msg, want_w);
-    if (printing) lv_obj_add_flag(st_msg,   LV_OBJ_FLAG_HIDDEN);
-    else          lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
   }
 
   // ---- 3 o: icon + mau theo nhiet do VA theo trang thai CAP NGUON cua heater ----
