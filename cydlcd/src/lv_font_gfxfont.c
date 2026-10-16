@@ -40,19 +40,34 @@
 /* So dai toi da trong 1 font (font tieng Viet cua ta dung 5: ascii + 4 dai dau). */
 #define LV_FONT_GFXFONT_MAX_RANGES   8U
 
-/* So descriptor font dung dong thoi. UI can 3: font CHU mono (ui_lvgl.cpp) + font ICON ban NHO
- * (icon WiFi o header) + font ICON ban TO (icon WiFi tren man STATUS). Cac descriptor nay chi
- * duoc cap khi co nguoi goi lv_font_gfxfont_get[_ex]() voi tap `ranges` khac nhau; HET SLOT thi
- * driver dung lai slot 0 -> descriptor cu bi ghi de (chu ve bang font khac = hong man hinh), nen
- * so nay PHAI >= so font gfxfont dung dong thoi. Moi slot ton 52 byte DRAM tinh (do bang nm tren
- * lv_font_gfxfont.c.o: s_slots = 104 byte cho 2 slot): 2 -> 3 slot la +52 byte. */
-#define LV_FONT_GFXFONT_MAX_FONTS    3U
+/* So descriptor font dung dong thoi. Cac descriptor nay chi duoc cap khi co nguoi goi
+ * lv_font_gfxfont_get[_ex]() voi tap `ranges` khac nhau; HET SLOT thi driver dung lai slot 0 ->
+ * descriptor cu bi ghi de (chu ve bang font khac = hong man hinh), nen so nay PHAI >= so font
+ * gfxfont dung dong thoi. Moi slot ton 52 byte DRAM tinh (do bang nm tren lv_font_gfxfont.c.o:
+ * s_slots = 104 byte cho 2 slot).
+ *
+ * ⚠️ DANH SACH THAT (kiem 2026-10-16) — 5 font, KHONG phai 3 nhu comment cu:
+ *     1. gfx4_font_text        chu chinh (Segoe UI 16, bpp4)          - moi trang
+ *     2. gfx_font_robotomono   chu mono (Roboto Mono 13, bpp1)       - nhan trong nut
+ *     3. gfx4_font_icons       icon 14 px                            - header
+ *     4. gfx4_font_icons_title icon 20 px (them 2026-10-16)          - header
+ *     5. gfx4_font_icons_big   icon 30 px                            - chi man STATUS
+ *   (lv_font_montserrat_*) la font GOC cua LVGL, KHONG chiem slot.
+ *
+ * LOI DA XAY RA THAT: de 3 slot trong khi UI dung 5 -> font thu 4 tro di GHI DE slot 0 (descriptor
+ * cua font CHU chinh) -> chu tren RAT NHIEU TRANG ve bang font icon/mono (nguoi dung bao "hong het
+ * font chu"). Truoc do chi khi vao man STATUS moi tran (font icon 30 px), con tu 2026-10-16 font
+ * icon 20 px duoc cap ngay luc dung thanh tieu de -> hong ngay tu trang dau.
+ * => Khi THEM font gfxfont moi, PHAI tang so nay. */
+#define LV_FONT_GFXFONT_MAX_FONTS    6U
 
-/* Buffer repack cho font bpp 1 (bitmap Adafruit canh hang). Glyph lon nhat cua font 13px la
- * 9x14 -> 17 byte; 128 byte du cho toi 16x64 pixel. Chi MOT buffer dung chung vi LVGL ve
- * tung glyph mot (lv_draw_sw_letter goi get_glyph_bitmap roi dung ngay). Neu font nao can
- * hon thi driver tu cap phat bang lv_mem_alloc(). Font bpp 4 KHONG dung buffer nay. */
-#define LV_FONT_GFXFONT_SCRATCH      128U
+/* Buffer repack cho font bpp 1 (bitmap Adafruit canh hang). CHI font bpp 1 moi can, va hien tai
+ * KHONG co font bpp 1 nao duoc dang ky (UI_MONO_GFX_BPP = 4 -> gfx4_font_text; gfx_font_robotomono
+ * chi nam trong nhanh BPP=1 khong bat). Glyph lon nhat cua font 13px la 9x14 -> 16 byte.
+ * 2026-10-16: ha 128 -> 32 de lay 96 byte DRAM cho bang slot font (dang thieu cho). Neu sau nay
+ * bat lai font bpp 1 ma glyph to hon 32 byte thi driver TU cap phat tu heap (xem nhanh
+ * `s_scratch_heap` ben duoi) — khong hong gi, chi khong tiet kiem duoc RAM nua. */
+#define LV_FONT_GFXFONT_SCRATCH      32U
 
 /* Cach xep bitmap trong header font:
  *   1 = Adafruit GFXfont: 1 bit/pixel, MOI HANG CANH DAU BYTE  -> driver phai REPACK
