@@ -238,15 +238,11 @@ static uint8_t ov_step_default(const uint8_t i) {
 // Cung quy uoc voi jg_axis[] man JOG: "dang chon" = NEN COL_ACCENT, "focus" = VIEN (focus_mark
 // bo qua doi nen voi vat co LV_OBJ_FLAG_USER_1 -> focus roi di KHONG tra nen nut ve COL_BTN).
 static void ov_marks(void) {
-  for (uint8_t k = 0; k < 4; k++) {
-    if (!ov_step_btn[k]) continue;
-    const lv_color_t want = (k == ov_step_k) ? COL_ACCENT : COL_BTN;
-    // Chi set khi mau THAT SU doi: ham nay duoc goi moi chu ky cap nhat cua man SETTINGS
-    // (400 ms) va lv_obj_set_style_bg_color() luon invalidate vat -> goi vo dieu kien se
-    // lam lop phu nhap nhay va ton bang thong SPI.
-    if (lv_obj_get_style_bg_color(ov_step_btn[k], 0).full != want.full)
-      lv_obj_set_style_bg_color(ov_step_btn[k], want, 0);
-  }
+  for (uint8_t k = 0; k < 4; k++)
+    // mk_btn_set_sel() doi CA NEN va MAU CHU, va CHI set khi mau that su doi: ham nay duoc goi moi
+    // chu ky cap nhat cua man SETTINGS (400 ms) va lv_obj_set_style_* luon invalidate vat -> goi vo
+    // dieu kien se lam lop phu nhap nhay va ton bang thong SPI.
+    mk_btn_set_sel(ov_step_btn[k], k == ov_step_k);
 }
 
 // Tim dong khai bao cua 1 id (de in so dung so le nhu bang dang hien)

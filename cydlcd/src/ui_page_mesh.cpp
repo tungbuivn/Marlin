@@ -67,13 +67,10 @@ static int32_t   me_raw = 0;                // gia tri dang sua (um, cung don vi
 static uint8_t   me_step_k = 1;             // buoc dang chon (mac dinh 0.05 mm)
 
 // To nut buoc dang chon (giong trang THONG SO: nen COL_ACCENT cho muc dang chon).
+// mk_btn_set_sel() doi CA NEN va MAU CHU (nen accent la mau sang -> chu phai toi).
 static void me_step_marks(void) {
-  for (uint8_t k = 0; k < ME_STEP_N; k++) {
-    if (!me_step_btn[k]) continue;
-    const lv_color_t want = (k == me_step_k) ? COL_ACCENT : COL_BTN;
-    if (lv_obj_get_style_bg_color(me_step_btn[k], 0).full != want.full)
-      lv_obj_set_style_bg_color(me_step_btn[k], want, 0);
-  }
+  for (uint8_t k = 0; k < ME_STEP_N; k++)
+    mk_btn_set_sel(me_step_btn[k], k == me_step_k);
 }
 
 // Hien lai gia tri dang sua trong hop.
@@ -124,7 +121,7 @@ static void cb_mesh_cell(lv_event_t *e) {
 // Ap trang thai `me_edit` len giao dien: nut EDIT (fill mau), 4 nut dieu huong (hien/an), cuon cua bang.
 // Tach rieng de CA nut bam tren man hinh LAN lenh chan doan `UI MCELL` deu dung chung 1 duong.
 static void mesh_edit_apply(void) {
-  if (me_edit_btn) lv_obj_set_style_bg_color(me_edit_btn, me_edit ? COL_ACCENT : COL_BTN, 0);
+  if (me_edit_btn) mk_btn_set_sel(me_edit_btn, me_edit);   // doi CA NEN va CHU
   for (uint8_t k = 0; k < 4; k++)
     if (me_nav[k]) {
       if (me_edit) lv_obj_clear_flag(me_nav[k], LV_OBJ_FLAG_HIDDEN);
@@ -299,7 +296,7 @@ void page_mesh_create(lv_obj_t *p) {
 
   me_edit_btn = mk_btn(me_layer, "EDIT", ME_EDIT_W, ME_EDIT_H, cb_mesh_edit_toggle, NULL);
   lv_obj_set_pos(me_edit_btn, MESH_TABLE_W - ME_EDIT_W - 2, 2);
-  lv_obj_set_style_bg_color(me_edit_btn, COL_BTN, 0);    // tat = mau nut thuong (bat -> COL_ACCENT)
+  mk_btn_set_sel(me_edit_btn, false);                    // tat = mau nut thuong (bat -> COL_ACCENT)
 
   // 4 nut dieu huong: dung ICON cua FONT ICON (Material Icons) thay vi chu "< ^ v >" (yeu cau nguoi
   // dung 2026-10-15: icon phai o font rieng, khong dung ky tu chu). U+E009/E00A/E00B/E008 = trai/len/

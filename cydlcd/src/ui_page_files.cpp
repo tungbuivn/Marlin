@@ -275,8 +275,10 @@ static void files_rows_mark(void) {
     files_row_text(idx, b, sizeof(b));
     set_text(l, b);                                // set_text() tu bo qua khi chu khong doi
     const bool on = (idx == s_sel);
+    // Dong dang chon: nen COL_ACCENT (mau SANG) -> chu phai la COL_ON_ACCENT (mau toi), neu dung
+    // COL_TXT thi tuong phan chi 1.19:1. Nay dung token chung thay vi tu viet ma mau.
     lv_obj_set_style_bg_color(r, on ? COL_ACCENT : COL_BTN, 0);
-    lv_obj_set_style_text_color(l, on ? lv_color_hex(0x102030) : COL_TXT, 0);
+    lv_obj_set_style_text_color(l, on ? COL_ON_ACCENT : COL_TXT, 0);
   }
 }
 

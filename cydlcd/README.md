@@ -741,6 +741,39 @@ quả chạy thật: `RED #FF0000 OK · GREEN #00FF00 OK · BLUE #0000FF OK · W
 · CYAN #00E7FF (~#00E5FF) OK · HOTEND #FF8A84 (~#FF8A80) OK` ⇒ **tầng 1+2 đúng**, nên nếu board lệch thì
 chắc chắn ở tầng 3.
 
+### Tương phản chữ trên nền — bẫy "đổi nền mà quên đổi chữ" (2026-10-16)
+
+`COL_ACCENT` (`#00E5FF`) là màu **SÁNG**. Khi dùng nó làm **NỀN** cho vật đang chọn thì chữ phải là màu
+**TỐI**, nếu không chữ gần như vô hình:
+
+| Cặp màu | Tương phản | |
+|---|---|---|
+| `COL_TXT` `#E6E1E5` trên `COL_ACCENT` | **1,19:1** | ❌ còn xa mức 4,5:1 |
+| `COL_ON_ACCENT` `#102030` trên `COL_ACCENT` | **10,66:1** | ✅ |
+
+Đã từng có **4 màn hình** (JOG, BED MESH, NHIỆT ĐỘ, THÔNG SỐ) chỉ đổi **nền** sang accent mà quên đổi
+**chữ** → chữ trên ô đang chọn tan vào nền. Hai chỗ khác (danh sách FILE, roller WIFI) tự đặt màu tối
+`0x102030` nên **đúng** — tức tác giả đã biết cách làm, chỉ là không có gì ép buộc.
+
+Nay gom về **một token + một hàm** để không thể quên nữa:
+
+```c
+#define COL_ON_ACCENT lv_color_hex(0x102030)    // ui_lvgl_int.h
+void mk_btn_set_sel(lv_obj_t *btn, bool sel);   // ui_widgets.cpp: đổi CẢ nền và chữ
+```
+
+**Quy tắc:** mọi chỗ tô nền `COL_ACCENT` cho vật đang chọn thì gọi `mk_btn_set_sel(obj, đang_chọn)`,
+KHÔNG tự gọi `lv_obj_set_style_bg_color()`. Hàm tự bỏ qua khi màu không đổi (tránh nhấp nháy + tốn SPI —
+các màn cập nhật 150–400 ms một lần).
+
+Kiểm chứng trên board thật (đọc pixel từ ảnh `/screen.bmp`): nút X trang JOG `101 px` glyph tối,
+nút bước trang BED MESH `108 px`; tương phản `10,91:1` (trước là `1,19:1`).
+
+**Material 3 — bo góc:** `mk_btn()` đổi **3 → 8 px** (filled button của M3 dùng bo góc lớn/pill).
+**`GAP` CỐ Ý giữ nguyên 2 px**: tăng lên 4 làm trang JOG vượt ngưỡng và **bật thanh trạng thái dưới**
+(`bot_sync()` so `scroll_top + scroll_bottom > PAGE_PAD`), lúc đó vùng nội dung bị co còn 192 px.
+Muốn tăng khoảng cách thì phải đo lại bằng bản giả lập trước.
+
 ---
 
 ## Chụp màn hình từ xa — `GET /screen.bmp` (2026-10-16)

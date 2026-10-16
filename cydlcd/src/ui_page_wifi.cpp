@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ui_page_wifi.cpp -- man WIFI cua UI LVGL (man hinh CYD): xem trang thai, quet mang,
  * nhap mat khau, ket noi/ngat/quen cau hinh (NVS).
  * API WiFi deu `weak`: thieu module -> trang VAN MO DUOC va bao "khong ho tro".
@@ -282,7 +282,7 @@ void page_wifi_create(lv_obj_t *p) {
   lv_obj_set_style_bg_opa(wf_roller, LV_OPA_COVER, 0);
   lv_obj_set_style_text_color(wf_roller, COL_TXT, 0);
   lv_obj_set_style_border_width(wf_roller, 0, 0);
-  lv_obj_set_style_text_color(wf_roller, lv_color_hex(0x102030), LV_PART_SELECTED);
+  lv_obj_set_style_text_color(wf_roller, COL_ON_ACCENT, LV_PART_SELECTED);   // muc dang chon: nen accent -> chu toi
   lv_obj_set_style_bg_color(wf_roller, COL_ACCENT, LV_PART_SELECTED);
   lv_obj_set_style_bg_opa(wf_roller, LV_OPA_COVER, LV_PART_SELECTED);
   lv_obj_add_flag(wf_roller, LV_OBJ_FLAG_CLICK_FOCUSABLE);

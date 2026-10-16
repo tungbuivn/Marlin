@@ -230,7 +230,9 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
   lv_obj_set_style_bg_color(b, COL_BTN, 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(b, 0, 0);
-  lv_obj_set_style_radius(b, 3, 0);
+  // Bo goc 8 px (truoc la 3): Material 3 dung bo goc lon / pill cho filled button. 8 px van vua moi o
+  // (cao nhat 34 px) ma khong an vao vung chu. `mk_hit()` giu 3 vi la vung bam TRONG SUOT (khong thay).
+  lv_obj_set_style_radius(b, 8, 0);
   lv_obj_set_style_pad_all(b, 0, 0);
   lv_obj_set_style_shadow_width(b, 0, 0);
   lv_obj_t *l = lv_label_create(b);
@@ -249,6 +251,20 @@ lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
   lv_obj_t *b = mk_btn(parent, txt, 0, h, cb, ud);
   lv_obj_set_flex_grow(b, 1);
   return b;
+}
+
+// Dat trang thai CHON cho nut: doi CA NEN va MAU CHU cung luc (xem ghi chu o ui_lvgl_int.h).
+void mk_btn_set_sel(lv_obj_t *btn, const bool sel) {
+  if (!btn) return;
+  const lv_color_t bg = sel ? COL_ACCENT    : COL_BTN;
+  const lv_color_t fg = sel ? COL_ON_ACCENT : COL_TXT;
+  // Chi set khi THAT SU doi: lv_obj_set_style_* luon invalidate vat -> goi vo dieu kien moi chu ky
+  // cap nhat se lam man nhap nhay va ton bang thong SPI (xem jog_axis_mark / ov_marks).
+  if (lv_obj_get_style_bg_color(btn, 0).full != bg.full)
+    lv_obj_set_style_bg_color(btn, bg, 0);
+  lv_obj_t *l = lv_obj_get_child(btn, 0);
+  if (l && lv_obj_get_style_text_color(l, 0).full != fg.full)
+    lv_obj_set_style_text_color(l, fg, 0);
 }
 
 // ---------------------------------------------------------------------------

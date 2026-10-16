@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ui_page_jog.cpp -- man JOG cua UI LVGL (man hinh CYD): chon truc + cac buoc nhich + HOME/M84
  * + G28 tung truc + lop phu sua M851 Z.
  *
@@ -38,14 +38,10 @@ static const char *const JOG_STEP[5] = {"0.01", "0.05", "0.1", "1", "10"};   // 
 // Nho tach 2 kenh nay nen focus chuyen sang nut buoc / nut di chuyen KHONG con ghi de nen
 // cua nut truc -> dau "truc dang chon" khong bao gio mat (loi nguoi dung bao truoc day).
 static void jog_axis_mark(void) {
-  for (uint8_t i = 0; i < 3; i++) {
-    if (!jg_axis[i]) continue;
-    const lv_color_t want = (i == s_axis) ? COL_ACCENT : COL_BTN;
-    // Chi set khi mau THAT SU doi: lv_obj_set_style_bg_color() luon invalidate vat, goi vo
-    // dieu kien moi 150 ms se lam man JOG nhap nhay va ton bang thong SPI.
-    if (lv_obj_get_style_bg_color(jg_axis[i], 0).full != want.full)
-      lv_obj_set_style_bg_color(jg_axis[i], want, 0);
-  }
+  // mk_btn_set_sel() doi CA NEN va MAU CHU: nen COL_ACCENT la mau SANG, chu phai toi moi dat tuong
+  // phan (truoc day chi doi nen -> chu tren truc dang chon chi con 1.19:1, gan nhu vo hinh).
+  for (uint8_t i = 0; i < 3; i++)
+    mk_btn_set_sel(jg_axis[i], i == s_axis);
 }
 
 static void cb_jog_axis(lv_event_t *e) {

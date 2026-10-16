@@ -214,6 +214,14 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 #define COL_DIM    lv_color_hex(0xCAC4D0)   // Material 3 dark on-surface-variant: 6.53 -> 8.88:1
 #define COL_BTN    lv_color_hex(0x2A2080)   // nen nut
 #define COL_ACCENT MR_COLD                   // focus / diem nhan
+// CHU DAT TREN NEN `COL_ACCENT` — dung khi to nen vat dang CHON.
+// VI SAO CAN TOKEN RIENG: COL_ACCENT = #00E5FF la mau SANG, nen chu phai TOI moi dat tuong phan:
+//     COL_TXT (#E6E1E5) tren accent = 1.19:1  -> KHONG DAT (WCAG/Material 3 can >= 4.5:1)
+//     COL_ON_ACCENT     tren accent = 10.66:1 -> DAT
+// Truoc day chi 2 cho (danh sach FILE, roller WIFI) tu dat mau toi 0x102030 va lam DUNG; 4 cho khac
+// (JOG / MESH / PREHEAT / SETTINGS) chi doi NEN ma quen doi CHU -> chu tren o dang chon gan nhu vo hinh.
+// Nay gom ve mot token + mot ham `mk_btn_set_sel()` de khong the quen nua.
+#define COL_ON_ACCENT lv_color_hex(0x102030)
 #define COL_WARN   MR_RATEALT
 #define COL_ERR    MR_HOTEND
 #define COL_OK     MR_RATE100
@@ -486,6 +494,18 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
 /** Nut chia deu be rong trong 1 hang flex (khong can biet truoc be rong tung nut). */
 lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
                       lv_event_cb_t cb, void *ud);
+/**
+ * Dat trang thai CHON cho mot nut do `mk_btn()` tao ra: doi CA NEN va MAU CHU cung luc.
+ *
+ * VI SAO CO HAM NAY (thay vi moi noi tu goi lv_obj_set_style_bg_color):
+ * nen `COL_ACCENT` la mau SANG nen chu phai doi sang `COL_ON_ACCENT` (mau toi), neu khong tuong phan
+ * chi con 1.19:1 — chu gan nhu vo hinh. Da tung co 4 man hinh (JOG/MESH/PREHEAT/SETTINGS) chi doi nen
+ * ma quen doi chu. Gom vao mot ham thi khong the quen nua.
+ *
+ * Chi set khi mau THAT SU doi (lv_obj_set_style_* luon invalidate vat -> goi vo dieu kien moi chu ky
+ * se lam man nhap nhay va ton bang thong SPI).
+ */
+void mk_btn_set_sel(lv_obj_t *btn, bool sel);
 /** Vung BAM trong suot co toa do tuyet doi (cb == NULL: khong vao group). */
 lv_obj_t *mk_hit(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
                  lv_event_cb_t cb, void *ud);

@@ -98,19 +98,15 @@ static void po_refresh(void) {
     snprintf(b, sizeof(b), "%s %ld", PO_FNAME[f], (long)v[f]);
     set_text(lv_obj_get_child(s_po_fld[f], 0), b);
     // O dang chon: nen COL_ACCENT (giong nut buoc / nut truc man JOG). Vat TU QUAN LY NEN -> USER_1
-    // de focus_mark() chi ve vien, khong ghi de nen.
-    const lv_color_t want = (f == s_po_field) ? COL_ACCENT : COL_BTN;
-    if (lv_obj_get_style_bg_color(s_po_fld[f], 0).full != want.full)
-      lv_obj_set_style_bg_color(s_po_fld[f], want, 0);
+    // de focus_mark() chi ve vien, khong ghi de nen. mk_btn_set_sel() doi CA NEN va MAU CHU.
+    mk_btn_set_sel(s_po_fld[f], f == s_po_field);
   }
   // 3 nut buoc: chu doi theo o dang chon (1/5/10 hoac 1/5/25) va to nut dang chon.
   const uint8_t kind = (s_po_field == 2) ? 1 : 0;
   for (uint8_t k = 0; k < 3; k++) {
     if (!s_po_stp[k]) continue;
     set_text(lv_obj_get_child(s_po_stp[k], 0), PO_STEP_TXT[kind][k]);
-    const lv_color_t want = (k == s_po_step) ? COL_ACCENT : COL_BTN;
-    if (lv_obj_get_style_bg_color(s_po_stp[k], 0).full != want.full)
-      lv_obj_set_style_bg_color(s_po_stp[k], want, 0);
+    mk_btn_set_sel(s_po_stp[k], k == s_po_step);
   }
 }
 
