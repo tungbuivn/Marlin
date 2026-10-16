@@ -300,6 +300,9 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 // VI SAO KHONG dung MR_HOTEND (#FF8A80): mau do nhat do de lam CHU tren nen toi; to NEN bang no thi
 // icon trang chi dat ~2:1 (khong doc duoc). Tren #C62828 thi icon trang ~7,4:1.
 #define MR_STOPBG  lv_color_hex(0xC62828)
+// Nen MAN HINH LOI NANG (muc FATAL: may da halt, chi tat nguon moi het) - 2026-10-16, yeu cau nguoi
+// dung: "cho CYD chiem toan man hinh nen do, chu trang". Cung sac do voi nut STOP, chu trang dat 5,9:1.
+#define CRIT_BG    lv_color_hex(0xC62828)
 // Nen nut PAUSE (vang) / RESUME (xanh la) - 2026-10-16, yeu cau nguoi dung "nut pause mau vang, va
 // resume mau xanh la". Material yellow 800 / green 800. Mau CHU/ICON do mk_btn_set_bg() tu chon theo
 // do sang nen (mk_color_on): nen vang -> chu TOI, nen xanh -> chu SANG.

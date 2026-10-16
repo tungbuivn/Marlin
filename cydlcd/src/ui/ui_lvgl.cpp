@@ -1555,6 +1555,14 @@ void ui_lvgl_test_preheat(const char *arg) {
 //   UI NOTIFY 5000 Dang in... -> dat thong bao tu an sau 5000 ms
 //   UI NOTIFY 0 giu mai       -> dat thong bao KHONG co thoi gian (giu lai den khi co cai moi)
 // (Khong co tham so dau tien la so -> hieu la ttl 0 + ca chuoi con lai la text, de go nhanh.)
+void ui_lvgl_test_crit(const char *arg) {
+  const char *p = arg ? arg : "";
+  while (*p == ' ') p++;
+  if (strcasecmp(p, "OFF") == 0) { crit_screen_clear(); Serial.println("[UI] da go man hinh loi nang (chi de thu)"); return; }
+  crit_screen_show(*p ? p : "THERMAL RUNAWAY: E1");
+  Serial.printf("[UI] da hien MAN HINH LOI NANG (gia lap HALT): \"%s\"\n", *p ? p : "THERMAL RUNAWAY: E1");
+}
+
 void ui_lvgl_test_notify(const char *arg) {
   const char *p = arg ? arg : "";
   while (*p == ' ') p++;

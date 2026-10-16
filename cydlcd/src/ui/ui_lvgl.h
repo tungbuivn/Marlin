@@ -186,6 +186,12 @@ void ui_lvgl_test_scroll(bool next);
 // day 1 thong bao vao kho cua trang /status (KHONG hien hop tren LCD) de kiem tra tu PC; khong tham so ->
 // in thong bao dang luu + thoi gian con lai; text rong ("UI NOTIFY 0") -> xoa thong bao dang luu.
 void ui_lvgl_test_notify(const char *arg);
+/** Go MAN HINH LOI NANG (nen do) ra - chi dung cho lenh chan doan `UI CRIT OFF`. */
+void crit_screen_clear(void);
+/** Hien MAN HINH LOI NANG (nen do) voi noi dung cho truoc - dung cho lenh chan doan `UI CRIT`. */
+void crit_screen_show(const char *msg);
+/** `UI CRIT <chu>` = gia lap Marlin bao HALT (muc FATAL) de kiem tra man hinh do tu PC. */
+void ui_lvgl_test_crit(const char *arg);
 
 // ---- PRESET PREHEAT: DANH SACH VAT LIEU do NGUOI DUNG tu them/bot (2026-10-15) ---------------
 // Do CHINH MAN HINH CYD luu (NVS namespace "ph2"; ban cu 3 preset o "ph" duoc di tru mot lan) vi ban

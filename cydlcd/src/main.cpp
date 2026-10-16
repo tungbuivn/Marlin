@@ -247,7 +247,13 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
             // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
             // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
-            else if (strcasecmp(a3, "NOTIFY") == 0) ui_lvgl_test_notify(a3 + 6);
+            // (2026-10-16) SUA LOI: truoc day dung `strcasecmp(a3, "NOTIFY")` -> a3 gom CA tham so
+            // ("NOTIFY chu...") nen KHONG BAO GIO khop, tuc `UI NOTIFY <chu>` khong chay duoc; chi
+            // `UI NOTIFY` (khong tham so) moi vao. Phai dung strncasecmp nhu cac lenh khac.
+            else if (strncasecmp(a3, "NOTIFY", 6) == 0) ui_lvgl_test_notify(a3 + 6);
+            // `UI CRIT <chu>` = gia lap Marlin bao HALT (muc FATAL) -> kiem tra MAN HINH LOI NANG (nen do)
+            // tu PC; `UI CRIT OFF` = go man hinh do ra (chi de thu). Xem ui_boxes.cpp: crit_screen_make().
+            else if (strncasecmp(a3, "CRIT", 4) == 0) ui_lvgl_test_crit(a3 + 4);
             // `UI LANG` = in ngon ngu dang dung + danh sach; `UI LANG 0|1` = doi ngon ngu (luu NVS);
             // `UI LANG?` = in cac ID con THIEU ban dich. Xem src/ui_lang.h + ui_lvgl_test_lang().
             else if (strncasecmp(a3, "LANG", 4) == 0) ui_lvgl_test_lang(a3 + 4);

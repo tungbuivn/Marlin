@@ -351,6 +351,8 @@ typedef enum {
 
   UI_T_LANG_VI,                   // "Tiếng Việt"
   UI_T_LANG_EN,                   // "English"
+  // 2026-10-16: dong cuoi cua MAN HINH LOI NANG (chi muc FATAL - xem crit_screen_make() o ui_boxes.cpp).
+  UI_T_CRIT_POWER,                // "TAT NGUON ROI BAT LAI"
   UI_T_COUNT
 } ui_text_t;
 

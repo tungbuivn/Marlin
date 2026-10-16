@@ -159,7 +159,8 @@ const ui_lang_ovr_t UI_OVR_EN[] = {
   // ---- endonym (ten ngon ngu viet bang chinh ngon ngu do - KHONG dich) ----
   // Bang EN co ghi 2 dong nay cho DAY DU, du chuoi y het bang VI (xem `--fallback`).
   { UI_T_LANG_VI,             "Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t" },
-  { UI_T_LANG_EN,             "English" }
+  { UI_T_LANG_EN,             "English" },
+  { UI_T_CRIT_POWER,          "POWER OFF, THEN POWER ON" }
 };
 
 #define UI_OVR_EN_N ((uint16_t)(sizeof(UI_OVR_EN) / sizeof(UI_OVR_EN[0])))

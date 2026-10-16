@@ -22,6 +22,78 @@ static lv_obj_t *s_prompt_box, *s_msg_box;
 static lv_obj_t *s_pid_box;                                  // P5: hop "tune xong"
 static uint32_t  s_msg_shown_ms = 0, s_msg_seen_ms = 0;
 static uint32_t  s_pid_seen = 0;                             // moc pid_done_ms da hien
+static lv_obj_t *s_crit_screen = NULL;                       // != NULL khi dang hien MAN HINH LOI NANG
+
+// ===========================================================================
+//  MÀN HÌNH LỖI NẶNG (mức FATAL) — NỀN ĐỎ, KHÔNG TẮT ĐƯỢC
+//
+//  YEU CAU NGUOI DUNG 2026-10-16: "rieng muc FATAL (may da halt, chi tat nguon moi het) thi cho CYD
+//  chiem toan man hinh nen do, chu trang: tieu de CRITICAL ERROR + noi dung loi + dong TAT NGUON ROI BAT
+//  LAI, khong co nut OK (khong tat duoc - dung nhu 12864). Cac muc INFO/WARN/ERROR van giu nguyen."
+//
+//  BAN CHAT BEN MARLIN: may that (12864) khi halt thi MarlinUI::draw_kill_screen() ve 3 dong chu
+//  "<loi> / HALTED / Please reset" (12864 la man DON SAC nen KHONG the co mau do); cho "do" la
+//  PRINTER_EVENT_LEDS -> leds.set_color(RED) + neo.set_background_color(255,0,0,0) tuc DEN NEN sang do.
+//  Build nay khong bat 12864 lan PRINTER_EVENT_LEDS/NEOPIXEL_LED nen khong co gi; CYD truoc day cung chi
+//  ghi 1 dong o trang /status (CYDLCD_MSG_BOX_ON_LCD = 0). Nay CYD tu lam man hinh do do.
+//
+//  KHONG CO NUT NAO va KHONG tu dong dong: may da halt thi chi con cach TAT NGUON, de nut OK o day la
+//  noi doi voi nguoi dung. Muon het chi co cach tat nguon (hoac reset board CYD).
+// ===========================================================================
+static void crit_screen_make(const char *msg) {
+  if (!s_crit_screen) {
+    lv_obj_t *o = lv_obj_create(lv_layer_top());      // lop tren cung -> de len MOI trang/hop khac
+    lv_obj_set_size(o, UI_LCD_HOR_RES, UI_LCD_VER_RES);
+    lv_obj_set_pos(o, 0, 0);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(o, CRIT_BG, 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(o, 0, 0);
+    lv_obj_set_style_radius(o, 0, 0);
+    lv_obj_set_style_pad_all(o, 8, 0);
+    lv_obj_set_flex_flow(o, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(o, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *l;
+    l = lv_label_create(o);                            // 1) tieu de
+    lv_label_set_text(l, T(UI_T_BOX_SEV_FATAL));
+    lv_obj_set_style_text_color(l, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_pad_bottom(l, 6, 0);
+
+    l = lv_label_create(o);                            // 2) noi dung loi (chuoi Marlin gui sang)
+    // (khong dat ten: LVGL 8 khong co lv_obj_set_name -> dua vao THU TU TAO, con so 1)
+    lv_obj_set_width(l, UI_LCD_HOR_RES - 16);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0xFFFFFF), 0);
+
+    l = lv_label_create(o);                            // 3) dong chi cach duy nhat thoat
+    lv_label_set_text(l, T(UI_T_CRIT_POWER));
+    lv_obj_set_style_text_color(l, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_pad_top(l, 8, 0);
+
+    s_crit_screen = o;
+    Serial.println("[UI] !!! MAN HINH LOI NANG (den do) - may da halt, phai TAT NGUON !!!");
+  }
+  // Cap nhat noi dung loi (Marlin co the bao lai nhieu lan)
+  lv_obj_t *m = lv_obj_get_child(s_crit_screen, 1);
+  if (m && msg && msg[0] && strcmp(lv_label_get_text(m), msg) != 0) lv_label_set_text(m, msg);
+}
+
+// Hien man hinh loi nang (dung cho lenh chan doan `UI CRIT <chu>`).
+// VI SAO PHAI CO HAM RIENG: lenh chan doan khong the chi ghi `cydlcd.message_sev = FATAL` roi mong man
+// hinh hien ra - `cydlcd_link.cpp` dinh ky `memcpy(&cydlcd, &s_src, ...)` nen gia tri do bi ghi de ngay
+// (duong THAT thi khac: Marlin gui khung MESSAGE voi sev=FATAL -> s_src.message_sev = FATAL -> publish
+// -> hook trong boxes_update() thay va goi crit_screen_make()).
+void crit_screen_show(const char *msg) { crit_screen_make(msg); }
+
+// Go man hinh loi nang ra. CHI dung cho lenh chan doan `UI CRIT OFF` - may that bi halt thi KHONG co
+// duong nao go (phai tat nguon), do la chu y cua thiet ke.
+void crit_screen_clear(void) {
+  if (!s_crit_screen) return;
+  lv_obj_del(s_crit_screen);
+  s_crit_screen = NULL;
+}
 
 static void box_close(lv_obj_t **box) {
   if (!*box) return;
@@ -283,6 +355,13 @@ void boxes_update(void) {
   // de lai"). Hop nay dung la loai "co nut OK + tu an sau 6 s" -> nay chi luu vao trang /status
   // (`net_notify_set`, TTL = CYDLCD_MSG_TTL_MS) - man hinh khong bi che nua.
   // Muon quay lai hanh vi cu (hien hop tren LCD): dat CYDLCD_MSG_BOX_ON_LCD = 1 trong cydlcd_config.h.
+  // ---- MAN HINH LOI NANG (FATAL): chiem toan man hinh, KHONG tat duoc (xem crit_screen_make) ----
+  // Bat theo CA `state == KILLED` chu khong chi theo message: Marlin goi onPrinterKilled() ->
+  // push_message(SEV_FATAL) + push_status(), nhung neu message den muon/khong kem thi trang thai KILLED
+  // van phai lam man hinh do hien ra.
+  if (cydlcd.message_sev == CYDLCD_SEV_FATAL || cydlcd.state == CYDLCD_ST_KILLED)
+    crit_screen_make(cydlcd.message);
+
   if (!s_prompt_box && cydlcd.message[0] && cydlcd.message_ms != s_msg_seen_ms) {
     s_msg_seen_ms = cydlcd.message_ms;
     if (CYDLCD_MSG_BOX_ON_LCD) {

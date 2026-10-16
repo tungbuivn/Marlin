@@ -308,5 +308,8 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   // "Tiếng Việt" viet bang MA UTF-8 (\x..) de file nguon giu duoc ASCII thuan - dung quy uoc cua
   // project (xem ghi chu o ui_lvgl.cpp). Font Segoe UI 16 co du dau tieng Viet (dai vn1..vn4).
   [UI_T_LANG_VI]            = "Ti\xE1\xBA\xBFng Vi\xE1\xBB\x87t",
-  [UI_T_LANG_EN]            = "English"
+  [UI_T_LANG_EN]            = "English",
+
+  // ---- man hinh loi nang (FATAL) ----
+  [UI_T_CRIT_POWER]         = "T\xE1\xBA\xAET NGU\xE1\xBB\x92N R\xE1\xBB\x92I B\xE1\xBA\xACT L\xE1\xBA\xA0I"
 };
