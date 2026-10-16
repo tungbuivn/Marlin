@@ -82,7 +82,7 @@
  *       --map 0xE004=0xE623 --map 0xE005=0xF057 --map 0xE006=0xE1C2 --map 0xE007=0xE88A \
  *       -o src/gfx4_font_icons.h
  */
-#include "CYDLCD_config.h"
+#include "cydlcd_config.h"
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 

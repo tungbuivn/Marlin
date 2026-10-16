@@ -65,7 +65,7 @@
  *       --map 0xE000=0xE63E --map 0xE001=0xE648 --map 0xE002=0xEBE1 --map 0xE003=0xEBE4 \
  *       -o src/gfx4_font_icons_big.h
  */
-#include "CYDLCD_config.h"
+#include "cydlcd_config.h"
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 

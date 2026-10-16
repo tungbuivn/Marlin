@@ -36,10 +36,20 @@
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 320
 
-// Neu mau bi dao (xanh <-> do): bo comment dong duoi
-//#define TFT_RGB_ORDER TFT_BGR
-// ST7789 thuong can bat inversion; neu trang <-> den nguoc thi COMMENT dong duoi
-#define TFT_INVERSION_ON
+// THU TU KENH MAU — do tren board that 2026-10-16:
+// KHONG dinh nghia thi TFT_eSPI (TFT_Drivers/ST7789_Defines.h) chi lay BGR khi co
+// CGRAM_OFFSET, ma CGRAM_OFFSET chi duoc dat cho cac co (240,240) (240,135) (280,240)
+// (320,172) (320,170) (300,240)... — KHONG co co 240x320 cua CYD. Nen mac dinh la
+// TFT_MAD_RGB, trong khi panel CYD 2432S028R nay la BGR => PHAI ep TFT_BGR.
+// Trieu chung khi de mac dinh (RGB): nen #1E156E hien ra DO, do hien ra XANH DUONG,
+// xanh la hien ra TIM (khi bat them dao mau thi thanh vang).
+#define TFT_RGB_ORDER TFT_BGR
+
+// CANH BAO: dong duoi VO TAC DUNG voi ST7789. TFT_Drivers/ST7789_Init.h:102 gui
+// `writecommand(ST7789_INVON)` KHONG dieu kien va khong he doc TFT_INVERSION_ON/OFF.
+// Tat dao mau that su = goi `invertDisplay(false)` SAU init, tuc bat co
+// `-DCYDLCD_CYD_INVERT_OFF=1` trong cydlcd/platformio.ini (xem src/ui_port_cyd_st7789.cpp:429).
+//#define TFT_INVERSION_ON
 
 // ---------------------------------------------------------------------------
 // Section 2: chan LCD

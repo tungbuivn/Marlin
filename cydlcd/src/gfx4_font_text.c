@@ -34,7 +34,7 @@
  * LVGL 8.4 doc bitmap bpp4 (chuoi bit LIEN TUC, col chan -> nibble cao, col le -> nibble thap). Vi vay
  * driver tra con tro THANG vao mang bitmap, KHONG phai repack. Xem comment dau header.
  */
-#include "CYDLCD_config.h"
+#include "cydlcd_config.h"
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 

@@ -20,7 +20,7 @@
  *   ascender thuc 14, descender thuc 3, box_h max 14, box_w max 9, |xOffset| max 3,
  *   5 dai / 336 o / 287 glyph co net / 2926 byte bitmap (~5,6 KB ca bang glyph).
  */
-#include "CYDLCD_config.h"
+#include "cydlcd_config.h"
 
 #if defined(CYDLCD_USE_LVGL) && CYDLCD_USE_LVGL
 
