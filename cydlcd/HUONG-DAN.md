@@ -59,8 +59,8 @@ Giám sát treo: mỗi task tăng một bộ đếm heartbeat riêng. Task chẩ
 
 | Kiểu | Env màn hình | Dữ liệu | Dùng khi nào |
 |---|---|---|---|
-| G-code | `cydlcd_f411cc`, `cydlcd_f103c6` | Màn tự hỏi `M105`, `M114`, `M27` | Board STM32 ít RAM, UI đơn giản |
-| PUSH | `cydlcd_f411cc_lvgl`, `cydlcd_f407vgz_lvgl`, `cydlcd_esp32` | Marlin đẩy frame đầy đủ | **Cấu hình đang dùng** |
+| ~~G-code~~ | ~~`cydlcd_f411cc`, `cydlcd_f103c6`~~ (đã xoá 2026-10-16) | Màn tự hỏi `M105`, `M114`, `M27` | Board STM32 ít RAM, UI đơn giản |
+| PUSH | `cydlcd_f407vgz_lvgl`, `cydlcd_esp32` | Marlin đẩy frame đầy đủ | **Cấu hình đang dùng** |
 | TRAM | env LVGL, Marlin bật `CYDLCD_TBT_LINK` | Chỉ trạng thái Tramming Wizard | Muốn giữ màn 12864 và chỉ thêm tramming |
 
 PUSH và TRAM là hai chế độ loại trừ nhau. Tài liệu bên dưới tập trung vào **PUSH**, vì đây là đường duy nhất có đủ FILES, mesh, settings, prompt, WiFi và SD qua UART.
@@ -152,12 +152,12 @@ Marlin và `cydlcd` là **hai project PlatformIO riêng**:
 | Env | Board | UI / link |
 |---|---|---|
 | `cydlcd_esp32` | ESP32-2432S028R CYD | LVGL + PUSH, đang dùng |
-| `cydlcd_f411cc_lvgl` | STM32F411CCU6 | LVGL + PUSH |
+| ~~`cydlcd_f411cc_lvgl`~~ | STM32F411CCU6 | LVGL + PUSH — **đã xoá 2026-10-16** |
 | `cydlcd_f407vgz_lvgl` | STM32F407VGT6 | LVGL + PUSH |
-| `cydlcd_f411cc` | STM32F411CCU6 | UI nhẹ + G-code |
-| `cydlcd_f103c6` | STM32F103C6T6 | UI nhẹ + G-code |
+| ~~`cydlcd_f411cc`~~ | STM32F411CCU6 | UI nhẹ + G-code — **đã xoá 2026-10-16** |
+| ~~`cydlcd_f103c6`~~ | STM32F103C6T6 | UI nhẹ + G-code — **đã xoá 2026-10-16** |
 
-`default_envs` của project màn hình là `cydlcd_f411cc`, không phải CYD. Vì vậy khi build CYD phải luôn ghi rõ `-e cydlcd_esp32`.
+`default_envs` của project màn hình **nay là `cydlcd_esp32`** (đổi 2026-10-16; trước là `cydlcd_f411cc` — env đó đã xoá). Vẫn nên ghi rõ `-e <env>` cho chắc.
 
 ## 4. Build và nạp firmware
 

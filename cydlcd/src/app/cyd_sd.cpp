@@ -1658,5 +1658,9 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
 }
 const char *cyd_sd_last_result(void) { return ""; }
 uint32_t cyd_sd_last_written(void) { return 0; }
+// 2026-10-16: thieu symbol nay lam env STM32F407 LVGL loi LIEN KET (`undefined reference to
+// cyd_sd_last_op`) — ban day du o nhanh tren co no (dong ~1558) nhung nhanh stub thi quen.
+// Tra 0 = "khong ro thao tac cuoi" (man STATUS/chan doan chi doc de hien thi).
+uint8_t cyd_sd_last_op(void) { return 0; }
 
 #endif  // CYDLCD_WIFI_UPLOAD

@@ -5,7 +5,7 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 
 | | **Kiểu G-code** | **Kiểu PUSH** (mới, dùng cho màn LVGL) | **Kiểu TRAM** (mới — **không cần ExtUI**) |
 |---|---|---|---|
-| Env | `cydlcd_f411cc`, `cydlcd_f103c6` | `cydlcd_f407vgz_lvgl`, `cydlcd_f411cc_lvgl`, `cydlcd_esp32` | như kiểu PUSH |
+| Env | ~~`cydlcd_f411cc`, `cydlcd_f103c6`~~ *(đã xoá 2026-10-16 — xem §1.1)* | `cydlcd_f407vgz_lvgl`, `cydlcd_esp32` | như kiểu PUSH |
 | Màn hình CYD lấy dữ liệu | tự hỏi `M105` / `M114` / `M27` (`marlin_link.cpp`) | Marlin **chủ động đẩy frame nhị phân** xuống (`cydlcd_link.cpp`) | dòng ASCII `TRAM …` (`tbt_link.cpp`) — **chỉ** dữ liệu Tramming Wizard |
 | Vẽ bằng | driver ILI9341 tự viết + font 8×8 (`ui.cpp`) | **LVGL 8.3** (`ui_lvgl.cpp`) — **màn NGANG 320×240**, bố cục + **icon lấy từ màn TFT của Marlin** (§5) |
 | Marlin cần | chỉ bật 1 UART trống | bật `CYDLCD_SERIAL_UI` (ExtUI `cydlcd_serial`) + tắt màn 12864 | **chỉ thêm 1 dòng `#define CYDLCD_TBT_LINK`** — **KHÔNG** tắt gì của MarlinUI ⇒ **màn 12864 + menu MarlinUI vẫn nguyên vẹn** |
@@ -37,11 +37,17 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 
 | Env | Board | Màn hình | Giao tiếp |
 |---|---|---|---|
-| `cydlcd_f411cc` | STM32F411CCU6 ("Black Pill") | ILI9341 SPI 240×320 | G-code |
-| `cydlcd_f103c6` | STM32F103C6T6 ("Blue Pill") | ILI9341 SPI 240×320 | G-code |
-| `cydlcd_f411cc_lvgl` | STM32F411CCU6 | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
 | `cydlcd_f407vgz_lvgl` | STM32F407VGT6 (1 MB/128 KB) | ILI9341 SPI 240×320 → **ngang 320×240** (`-DTFT_ROTATION=1`) | PUSH + LVGL |
 | `cydlcd_esp32` | **ESP32-2432S028R "CYD"** 2.8" | **ST7789** 240×320 (bản ILI9341 chỉ khác 1 dòng driver) + XPT2046 (gắn sẵn trên board) → **ngang 320×240** (`setRotation(1)`) | PUSH + LVGL |
+
+> **2026-10-16 — còn ĐÚNG 2 env.** Đã **XOÁ** `cydlcd_f411cc`, `cydlcd_f103c6` (UI G-code tự vẽ, không
+> LVGL) và `cydlcd_f411cc_lvgl` (F411 không đủ chỗ cho LVGL). Lý do: chỉ còn dùng **CYD (ESP32)** và
+> **F407**; giữ thêm env không ai build thì code sẽ mục. Cùng ngày, `cydlcd_f407vgz_lvgl` được **SỬA
+> cho build được trở lại** (trước đó lỗi — xem §1.1).
+> `default_envs = cydlcd_esp32` (trước là `cydlcd_f411cc`, env nay không còn).
+>
+> **Mã nguồn của UI G-code vẫn còn** trong `src/stm32/` (`ui.cpp`, `tft_ili9341.cpp`, `encoder.cpp`)
+> nhưng **không env nào build nữa** → coi như code chết. Muốn dùng lại thì phải thêm lại env.
 
 * Board F407 khác (F407ZGT6 144 chân…): sửa `board =` trong env (`black_f407zg`,
   `vccgnd_f407zg_mini`, `genericSTM32F407IGT6`…) và giữ nguyên phần còn lại.
@@ -56,7 +62,6 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 
 ```powershell
 # từ thư mục gốc repo
-pio run -d cydlcd -e cydlcd_f411cc                     # build (G-code UI)
 pio run -d cydlcd -e cydlcd_f407vgz_lvgl               # build (LVGL + PUSH)
 pio run -d cydlcd -e cydlcd_esp32 -t upload        # nạp qua USB (CYD)
 pio run -d cydlcd -e cydlcd_f407vgz_lvgl -t upload     # nạp qua ST-Link
@@ -71,11 +76,13 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 
 | Env | Flash | RAM |
 |---|---|---|
-| `cydlcd_f411cc` (G-code UI) | 20.688 B / 262.144 (7,9 %) | 1.912 B / 131.072 (1,5 %) |
-| `cydlcd_f103c6` (G-code UI) | 21.096 B / 32.768 (**64,4 %**) | 1.880 B / 10.240 (18,4 %) |
-| `cydlcd_f411cc_lvgl` | 154.544 B / 262.144 (59,0 %) | 52.376 B / 131.072 (40,0 %) |
-| `cydlcd_f407vgz_lvgl` | 156.136 B / 1.048.576 (14,9 %) | 81.096 B / 131.072 (61,9 %) |
-| `cydlcd_esp32` | 460.005 B / 1.310.720 (35,1 %) | 101.812 B / 327.680 (31,1 %) |
+| `cydlcd_f407vgz_lvgl` | **220.696 B / 1.048.576 (21,0 %)** ⟵ đo lại 2026-10-16 | **73.324 B / 131.072 (55,9 %)** |
+| `cydlcd_esp32` | **1.241.325 B / 3.145.728 (39,5 %)** ⟵ đo lại 2026-10-16 | **124.500 B / 327.680 (38,0 %)** |
+| ~~`cydlcd_f411cc`~~ (đã xoá) | 20.688 B / 262.144 (7,9 %) | 1.912 B / 131.072 (1,5 %) |
+| ~~`cydlcd_f103c6`~~ (đã xoá) | 21.096 B / 32.768 (**64,4 %**) | 1.880 B / 10.240 (18,4 %) |
+| ~~`cydlcd_f411cc_lvgl`~~ (đã xoá) | 154.544 B / 262.144 (59,0 %) | 52.376 B / 131.072 (40,0 %) |
+
+> 🆕 **2026-10-16 — CHỈ CÒN 2 ENV, và cả 2 build tốt.** Xem khối ngay dưới bảng.
 
 > **2026-10-13** (commit `1edfd7aa0b` — UI kiểu Marlin + icon thật): số LVGL **đã đo lại** sau khi
 > thêm bộ icon (`ui_lvgl_icons.h`, ~17 KB) và màn MENU/FEED-FLOW. Trước đó: F411 **134.012/46.180**,
@@ -98,6 +105,7 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 > (không còn đệm/Bluedroid). Vẫn bật `-DCYDLCD_CYD_DEBUG=1`. Env STM32 chưa đo lại sau refactor
 > (env `cydlcd_f103c6` build được; 2 env `*_lvgl` cho STM32 **lâu nay chưa từng link được** —
 > lỗi `_fstat`/`_isatty` của newlib, xem cạm bẫy 43 ở `README.md` gốc).
+> ✅ **ĐÃ SỬA 2026-10-16** cho env F407 — xem khối ✅ ở §1.1.
 > Build này **vẫn giữ nguyên** `-DCYDLCD_CYD_DEBUG=1` như trước (không phải số của bản dùng thật).
 
 > Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/gfx/lv_conf.h`
@@ -107,20 +115,48 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 > Bluetooth Classic**. Sau khi xoá hẳn đường Bluetooth (§9.23) thì flash/RAM của env này **nhỏ hơn** (bớt
 > cả stack Bluedroid); số mới **chưa đo lại** trong tài liệu này.
 
-> ⚠️ **2026-10-16 — 2 env `cydlcd_f411cc_lvgl` và `cydlcd_f407vgz_lvgl` ĐANG LỖI BUILD**, và lỗi này
-> **có sẵn từ trước**, không phải do việc chia lại thư mục ở §1.2. `src/main.cpp` dùng API **chỉ có
-> trên ESP32** (`RTC_NOINIT_ATTR`, `vTaskDelay`, `xTaskCreatePinnedToCore`) nhưng lại đặt dưới guard
-> `#if CYDLCD_USE_LVGL` — mà 2 env đó cũng bật cờ này:
+> ✅ **2026-10-16 — `cydlcd_f407vgz_lvgl` ĐÃ BUILD ĐƯỢC TRỞ LẠI** (trước đó lỗi từ lâu, xem lịch sử
+> ngay trên). Việc đã làm, theo yêu cầu *"tách phần ESP32-only của main.cpp, chỉ để lại cydlcd_esp32
+> và F407"*:
+>
+> **1. Tách phần ESP32-only của `src/main.cpp`** — code cũ đặt API **chỉ có trên ESP32** dưới guard
+> `#if CYDLCD_USE_LVGL`, mà board STM32 LVGL cũng bật cờ đó:
 > ```
 > src/main.cpp:41: error: 'RTC_NOINIT_ATTR' does not name a type
 > src/main.cpp:128: error: 'vTaskDelay' was not declared in this scope
 > ```
-> Đã kiểm chứng bằng cách build **cây gốc tại commit `f821960`** (trước khi chia thư mục, dùng
-> `git worktree`): lỗi **y hệt**. Số liệu ở bảng trên là đo ngày 2026-10-13/14, trước khi `main.cpp`
-> có đoạn code ESP32 đó → **bảng đã cũ cho 2 env này**.
-> Ba env còn lại build tốt: `cydlcd_f411cc`, `cydlcd_f103c6`, `cydlcd_esp32`.
-> Muốn 2 env LVGL kia chạy lại thì phải tách phần ESP32-only của `main.cpp` ra sau
-> `#if defined(CYDLCD_BOARD_CYD)` — việc riêng, chưa làm.
+> Nay:
+> | Chỗ sửa | Cách sửa |
+> |---|---|
+> | `RTC_NOINIT_ATTR` (RTC RAM) | `#if !defined(CYDLCD_BOARD_CYD)` → định nghĩa **RỖNG** (biến thường) |
+> | `log_task_fn()` / `net_task_fn()` + `vTaskDelay` | bọc `#if defined(CYDLCD_BOARD_CYD)` |
+> | 2 lời gọi `xTaskCreatePinnedToCore()` trong `setup()` | bọc `#if defined(CYDLCD_BOARD_CYD)` |
+> | Cuối `loop()` | thêm nhánh `#if !defined(CYDLCD_BOARD_CYD)`: tự gọi `cydlcd_link_task()`, `ui_lvgl_task()`, `net_upload_http_task()`, `logq_task(8)` — chính là 4 việc mà CYD chia cho 4 task FreeRTOS |
+> | `ui_task_start()` (`src/ui/ui_lvgl.cpp`) | thêm nhánh `#else` trả `true` (board khác không có task `ui`) |
+> | `cyd_sd_last_op()` (`src/app/cyd_sd.cpp`) | nhánh **stub** còn thiếu hàm này → `undefined reference` |
+> | `_fstat` / `_isatty` | xem mục 2 dưới |
+>
+> Các module `net_wifi.cpp` / `net_upload_http.cpp` / `cyd_sd.cpp` / `logq.cpp` **đã có sẵn nhánh
+> stub cho board STM32** (`CYDLCD_WIFI_UPLOAD = 0`) nên không phải sửa.
+>
+> **2. `_fstat`/`_isatty`** — lỗi liên kết dai dẳng của newlib. Framework ststm32 **có** 2 hàm này
+> (`libraries/SrcWrapper/src/syscalls.c`) nhưng đều là `__attribute__((weak))`, và với `-flto`
+> (trong `cydlcd_common`) linker **quét `libc_nano.a` TRƯỚC khi biên dịch các object LTO** nên báo:
+> ```
+> libc_nano.a(lib_a-fstatr.o): undefined reference to `_fstat'
+> ```
+> Đã: (a) định nghĩa lại **STRONG** ở `src/app/syscalls_stm32.c`, (b) thêm
+> `-Wl,--undefined=_fstat -Wl,--undefined=_isatty` cho env F407. **Phải có CẢ HAI** — chỉ (a) không
+> đủ vì object đã nằm trên dòng link mà vẫn không thắng được thứ tự quét của LTO (đã thử).
+>
+> **3. Xoá 3 env** `cydlcd_f411cc`, `cydlcd_f103c6`, `cydlcd_f411cc_lvgl`; `default_envs` đổi sang
+> `cydlcd_esp32`. Mã UI G-code còn ở `src/stm32/` nhưng **không env nào build** → code chết.
+>
+> **4. Kiểm chứng firmware CYD KHÔNG ĐỔI:** build env `cydlcd_esp32` ở **cây gốc HEAD** (`git
+> worktree`) rồi so từng byte với bản hiện tại — chỉ **64 byte khác**, nằm đúng 2 chỗ 32 byte:
+> mô tả ứng dụng (`0xB0`, chứa `app_elf_sha256`) và 32 byte cuối (SHA256 của ảnh). **Build lại CÙNG
+> thư mục ra byte y hệt** → 64 byte đó là do **đường dẫn build nhúng vào ELF**, không phải code.
+> Toàn bộ sửa đổi đều nằm trong guard non-CYD ✓
 
 ### 1.2 Cấu trúc thư mục nguồn (2026-10-16)
 
@@ -3096,7 +3132,8 @@ cd cydlcd
 pio run -e cydlcd_esp32 -t upload --upload-port COM7
 ```
 
-* **PHAI chi ro `-e cydlcd_esp32`**: `default_envs = cydlcd_f411cc` (`platformio.ini:32`) nen
+* **PHAI chi ro `-e cydlcd_esp32`**: `default_envs` nay DA la `cydlcd_esp32` (doi 2026-10-16;
+truoc la `cydlcd_f411cc`, env nay da xoa) nen
   `pio run -d cydlcd` **khong co `-e`** se build cho **F411 (STM32)**, khong phai CYD.
 * Env CYD **khong khai `upload_port`** (`platformio.ini:123-149`) ⇒ phai truyen **`--upload-port COM7`**
   tren dong lenh; `monitor_speed = 115200` (`platformio.ini:148`).

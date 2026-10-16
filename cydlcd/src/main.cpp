@@ -38,6 +38,13 @@
   //  - Task `cyd_diag_task()` (1 Hz, tren core 0) theo doi `s_loop_n`: vong lap khong chay > 15 s thi
   //    in ro chang dang dung roi TU KHOI DONG LAI -> panel khong bao gio "chet im" mai mai nua.
   //  - `s_ms[..]` do thoi gian tung chang o vong lap truoc, in o dong log 1 Hz (thay chang nao cham).
+  //
+  // 2026-10-16: `RTC_NOINIT_ATTR` la thuoc tinh CHI CO TREN ESP32 (dat bien vao RTC RAM). Board LVGL
+  // khac (STM32F407) khong co RTC RAM -> dinh nghia RONG, bien thanh bien thuong. Mat kha nang "nho
+  // chang treo qua reset", nhung do la tinh nang chan doan cua rieng CYD (xem CYDLCD_CYD_DEBUG).
+  #if !defined(CYDLCD_BOARD_CYD)
+    #define RTC_NOINIT_ATTR
+  #endif
   RTC_NOINIT_ATTR uint32_t s_stage;      // 0 = het vong, 1 = console, 2 = link, 3 = http, 4 = ui
   RTC_NOINIT_ATTR uint32_t s_hung_s;     // so giay vong lap bi dung o lan treo truoc
   static uint32_t s_ms[5];               // thoi gian (ms) tung chang o vong lap truoc
@@ -121,6 +128,10 @@ volatile uint32_t g_hb_link = 0, g_hb_ui = 0, g_hb_net = 0, g_hb_log = 0;
 // Tach ra de phan upload KHONG con lam dung vong lap UI/console nua; va task `link` (core 1) van duoc phuc vu.
 // Task `log` (core 0, uu tien 2): IN cac dong log dang cho trong hang doi (logq). VI SAO tach: UART0
 // (115200) la tai nguyen CHAM (~43 ms cho 500 B) - de rieng mot task thi khong ai phai cho no.
+//
+// 2026-10-16: chi board CYD (ESP32/FreeRTOS) moi co 2 task nay. Board LVGL khac (STM32F407) KHONG co
+// FreeRTOS -> `logq_task()` va `net_upload_http_task()` duoc goi THANG trong `loop()` (xem cuoi loop()).
+#if defined(CYDLCD_BOARD_CYD)
 static void log_task_fn(void *) {
   for (;;) {
     logq_task(8);
@@ -136,6 +147,7 @@ static void net_task_fn(void *) {
     vTaskDelay(1);
   }
 }
+#endif  // CYDLCD_BOARD_CYD
   void setup() {
     #if defined(CYDLCD_CYD_DEBUG)
       Serial.begin(115200);
@@ -175,10 +187,15 @@ static void net_task_fn(void *) {
     // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
     // = WiFi/WebServer/the TF. PHAI tao SAU ui_lvgl_begin() + net_upload_http_begin() (luc do moi thu da san sang).
     if (!ui_task_start())     Serial.println("[CYD] CANH BAO: khong tao duoc task ui");
+#if defined(CYDLCD_BOARD_CYD)
     if (xTaskCreatePinnedToCore(log_task_fn, "log", 3072, nullptr, 2, nullptr, 0) != pdPASS)
                               Serial.println("[CYD] CANH BAO: khong tao duoc task log");
     if (xTaskCreatePinnedToCore(net_task_fn, "net", 6144, nullptr, 4, nullptr, 0) != pdPASS)
                               Serial.println("[CYD] CANH BAO: khong tao duoc task net");
+#else
+    // 2026-10-16: board LVGL khong phai CYD (STM32F407) KHONG co FreeRTOS -> khong tao task `log`/`net`;
+    // 2 viec do duoc goi THANG trong `loop()` (xem cuoi loop()).
+#endif
     DBGLN("cydlcd ready (LVGL, push mode) - da tach task link/ui/net");
   }
 
@@ -487,6 +504,16 @@ while (*a3 == ' ') a3++;
       if (s_fwd_len < sizeof(s_fwd) - 1) s_fwd[s_fwd_len++] = ch;
       else s_fwd_len = 0;
     }
+
+#if !defined(CYDLCD_BOARD_CYD)
+    // 2026-10-16: board LVGL KHONG phai CYD (STM32F407) khong co FreeRTOS -> khong co task nao, nen
+    // vong lap nay phai TU chay ca 4 viec ma CYD chia cho task. Tren CYD 4 dong nay KHONG ton tai
+    // (da co task `link`/`ui`/`net`/`log` rieng) nen PHAI nam trong guard, khong thi chay 2 lan.
+    s_stage = 2;  cydlcd_link_task();        // serial Marlin   (thay task `link` cua CYD)
+    s_stage = 4;  ui_lvgl_task();            // LVGL            (thay task `ui`)
+    s_stage = 3;  net_upload_http_task();    // web server      (thay task `net`; rong khi WiFi tat)
+    logq_task(8);                            // in log          (thay task `log`)
+#endif
   }
 
 #else   // ---------- G-code mode (UI tu ve) ----------

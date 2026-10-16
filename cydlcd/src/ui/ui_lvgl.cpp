@@ -1005,6 +1005,12 @@ bool ui_task_start(void) {
   if (!s_cmd_q) s_cmd_q = xQueueCreate(UI_CMD_Q, UI_CMD_LEN);
   return xTaskCreatePinnedToCore(ui_cmd_task, "ui", 8192, nullptr, 5, &s_ui_task_h, 0) == pdPASS;
 }
+#else   // !CYDLCD_BOARD_CYD
+// 2026-10-16: board LVGL khong phai CYD (STM32F407) KHONG co FreeRTOS -> khong tao task `ui`.
+// Tra ve true (coi nhu "khong co gi de tao") de `setup()` khong in canh bao; `loop()` se tu goi
+// `ui_lvgl_task()` thay cho task (xem cuoi `loop()` trong main.cpp).
+// `ui_post_cmd()` o tren da co nhanh rieng: goi THANG `ui_console_dispatch()`.
+bool ui_task_start(void) { return true; }
 #endif
 
 // ===========================================================================
