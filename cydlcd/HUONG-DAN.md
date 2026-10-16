@@ -1,6 +1,6 @@
 # Hướng dẫn màn hình CYD cho Marlin trên MKS Monster8 V2
 
-Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `e655ee2f`.
+Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `65abb88`.
 
 Tên project màn hình hiện nay là **`cydlcd/`**. Tên cũ `lcd_panel/`, các macro `PANEL_*` và các công cụ `panel_*` đã được đổi sang `cydlcd/`, `CYDLCD_*` và `cydlcd_*`.
 
@@ -59,8 +59,7 @@ Giám sát treo: mỗi task tăng một bộ đếm heartbeat riêng. Task chẩ
 
 | Kiểu | Env màn hình | Dữ liệu | Dùng khi nào |
 |---|---|---|---|
-| ~~G-code~~ | ~~`cydlcd_f411cc`, `cydlcd_f103c6`~~ (đã xoá 2026-10-16) | Màn tự hỏi `M105`, `M114`, `M27` | Board STM32 ít RAM, UI đơn giản |
-| PUSH | `cydlcd_f407vgz_lvgl`, `cydlcd_esp32` | Marlin đẩy frame đầy đủ | **Cấu hình đang dùng** |
+| PUSH | `cydlcd_esp32`, `cydlcd_f407vgz_lvgl` | Marlin đẩy frame đầy đủ | **Cấu hình đang dùng** |
 | TRAM | env LVGL, Marlin bật `CYDLCD_TBT_LINK` | Chỉ trạng thái Tramming Wizard | Muốn giữ màn 12864 và chỉ thêm tramming |
 
 PUSH và TRAM là hai chế độ loại trừ nhau. Tài liệu bên dưới tập trung vào **PUSH**, vì đây là đường duy nhất có đủ FILES, mesh, settings, prompt, WiFi và SD qua UART.
@@ -138,7 +137,7 @@ Kết quả mong đợi của bản tài liệu này:
 
 ```text
 mks-monster8-Voron-2.1.x
-9d6a107282a0127e834a5479a0c23dc08600cfaf
+65abb88
 ```
 
 Marlin và `cydlcd` là **hai project PlatformIO riêng**:
@@ -152,12 +151,11 @@ Marlin và `cydlcd` là **hai project PlatformIO riêng**:
 | Env | Board | UI / link |
 |---|---|---|
 | `cydlcd_esp32` | ESP32-2432S028R CYD | LVGL + PUSH, đang dùng |
-| ~~`cydlcd_f411cc_lvgl`~~ | STM32F411CCU6 | LVGL + PUSH — **đã xoá 2026-10-16** |
 | `cydlcd_f407vgz_lvgl` | STM32F407VGT6 | LVGL + PUSH |
-| ~~`cydlcd_f411cc`~~ | STM32F411CCU6 | UI nhẹ + G-code — **đã xoá 2026-10-16** |
-| ~~`cydlcd_f103c6`~~ | STM32F103C6T6 | UI nhẹ + G-code — **đã xoá 2026-10-16** |
 
-`default_envs` của project màn hình **nay là `cydlcd_esp32`** (đổi 2026-10-16; trước là `cydlcd_f411cc` — env đó đã xoá). Vẫn nên ghi rõ `-e <env>` cho chắc.
+Chỉ còn hai env trên. Các env STM32 nhỏ (F103/F411) và chế độ UI nhẹ hỏi G-code đã bị loại bỏ vì không đủ RAM/ROM cho UI hiện tại.
+
+`default_envs` của project màn hình là `cydlcd_esp32`. Khi build CYD nên ghi rõ `-e cydlcd_esp32` cho chắc.
 
 ## 4. Build và nạp firmware
 
@@ -279,7 +277,7 @@ Chạm vào:
 - icon WiFi → WiFi;
 - SETTINGS → MENU.
 
-Dải màu nhiệt độ dựa trên **nhiệt độ thực**, không dựa trên tỷ lệ so với target: lạnh xanh, ấm vàng, nóng chuyển sang đỏ. Icon heater đổi dạng đặc/viền theo trạng thái cấp nguồn.
+Dải màu nhiệt độ dựa trên **nhiệt độ thực**, không dựa trên tỷ lệ so với target: lạnh xanh, ấm vàng, nóng chuyển sang đỏ. Icon heater đổi dạng đặc/viền theo trạng thái cấp nguồn. **Icon quạt quay thật, tốc độ quay tỷ lệ với % quạt** (quạt tắt thì đứng yên). Khi máy **chưa home**, các số X/Y/Z hiện dấu `?` **nhấp nháy** (~1,7 lần/giây) thay vì hiện `X0 Y0 Z0`.
 
 ### 7.2 MENU
 
@@ -299,16 +297,16 @@ MENU có 10 mục chính và một dòng hiệu chuẩn cảm ứng:
 
 Chi tiết hiển thị hiện tại:
 
-- dòng `Print from Media` (tên cũ `SD card`, đổi 2026-10-15 cho giống Marlin) **không còn đếm số file**;
+- `Motion` mở menu con (Move Axis, Homing đã ẩn, Z-Probe, UBL, Endstops…), không mở thẳng trang JOG như trước;
+- dòng `Print from Media` mở danh sách file trên thẻ (tên giống chuỗi `MSG_MEDIA_MENU` của Marlin), **không còn đếm số file**;
 - dòng `Bed mesh` cho biết kích thước lưới và `ON/OFF`;
 - dòng `Configuration` mở cây menu con kiểu 12864 (xem 7.10), không còn là bảng phẳng;
-- dòng `Motion` mở menu MOTION kiểu 12864 (Move Axis (JOG), Z Probe Wizard, Tramming, UBL, Level Bed,
-  Deploy/Stow Z-Probe, M48, Endstops (M119), Disable Steppers);
+- trang `Tuning (MPC/PID)` đã bị bỏ — tuning giờ nằm trong `Configuration` → `Advanced Settings` → `Temperature`;
+- mục `Endstops (M119)` đã chuyển vào trong menu `Motion`;
 - `Tramming wizard` hiển thị trạng thái phiên;
 - `WiFi` hiển thị tắt, đang nối hoặc đã nối.
 
-> **Mục `Tuning (MPC/PID)` đã bỏ (2026-10-15)**: tuning MPC/PID nay chỉ còn ở
-> **Configuration → Advanced Settings → Temperature** (xem 7.11).
+Giao diện hỗ trợ **hai ngôn ngữ: tiếng Việt và English**. Đổi ở `Configuration` → `Advanced Settings` → `Language` (chọn là lưu ngay vào NVS và vẽ lại màn hình). Mặc định là tiếng Việt; các thuật ngữ kỹ thuật trong menu Configuration giữ nguyên tiếng Anh ở cả hai ngôn ngữ.
 
 ### 7.3 TEMPERATURE
 
@@ -322,7 +320,21 @@ Trang này chỉnh:
 
 Danh sách vật liệu preheat (tối đa 6) do người dùng tự thêm/bớt/đổi tên, mỗi vật liệu gồm tên (tối đa 8 ký tự) + nhiệt nozzle/bed/fan. Sửa trong `Configuration` → `Preheat`: chạm một vật liệu để mở hộp sửa 3-trong-1 (3 ô NOZ/BED/FAN trên cùng một hàng, chạm ô nào thì `-`/`+` chỉnh ô đó), có nút thêm vật liệu mới và xóa (không cho xóa hết). Dòng `Profile` cho biết vật liệu đang dùng. Toàn bộ lưu trong NVS của màn hình, tách khỏi EEPROM của Marlin.
 
-### 7.4 MOTION (JOG)
+### 7.4 MOTION (menu con)
+
+Mục `Motion` trong MENU mở một menu con giống 12864, gồm:
+
+- `Move Axis (JOG)`: trang jog trục X/Y/Z (xem bên dưới);
+- `Z Probe Wizard`: mở hộp sửa probe Z offset (`M851 Z`);
+- `Tramming Wizard`;
+- `Unified Bed Leveling`: bật/tắt UBL, vào trang mesh;
+- `Level Bed (G29)`, `Deploy Z-Probe (M401)`, `Stow Z-Probe (M402)`;
+- `Endstops (M119)`: trang đọc endstop (xem 7.9);
+- `M48 Probe Test`, `Disable Steppers (M84)`.
+
+Menu `Homing` bị ẩn vì các nút home đã có sẵn trong trang JOG. Chức năng `G34` (Auto Z-Align) đã tắt hẳn — máy này trục Z cứng nên G34 không làm gì; phía Marlin cũng đã vô hiệu bằng `CYDLCD_NO_G34`.
+
+#### Trang Move Axis (JOG)
 
 Chọn trục X, Y hoặc Z rồi nhích:
 
@@ -423,101 +435,54 @@ Nếu mở trang mà chưa có lưới, màn hình tự gửi `CYDLCD_REQ_MESH` 
 
 Giá trị bị giới hạn trong khoảng ±2 mm. Sau khi gửi, UI xin lại mesh để hiển thị giá trị thật từ Marlin.
 
-### 7.8 CUSTOM G34/SD
+### 7.8 CUSTOM/INIT SD
 
 Trang CUSTOM gom các chức năng không đủ chỗ ở MENU:
 
-- `G34 Bed` → `G34 Q99`;
 - `Init SD` → `M22` rồi `M21`;
 - `ENDSTOP` → trang M119;
 - `M600 B0` thay filament;
 - `M412: BAT/TAT` bật hoặc tắt filament runout;
 - `REBOOT DFU` → xác nhận hai bước rồi `M997`.
 
+Nút `G34 Bed` đã bị bỏ: trục Z của máy này cứng nên G34 không có tác dụng, phía Marlin cũng đã tắt (`CYDLCD_NO_G34`).
+
 ### 7.9 ENDSTOPS (M119)
 
-Vào: **MENU → `Motion` → `Endstops (M119)`** — nằm **ngay sau `Stow Z-Probe (M402)`** (từ 2026-10-15; trước
-đây là một dòng của MENU chính).
+Trang tự đọc trạng thái endstop **30 lần/giây**, không còn nút REFRESH — cứ mở trang là số liệu tự cập nhật. Rời khỏi trang thì màn hình ngừng xin frame ngay để đỡ tải đường serial.
 
-Trang hiển thị trạng thái các chân endstop/probe. Máy này Marlin chỉ báo **3 chân** —`PROBE`, `X min`, `Y min` —
-nên trang chỉ hiện đúng 3 dòng; dòng nào bản build không có thì **tự ẩn** (trước đây hiện thêm `Z min`, `X max`,
-`Y max` với giá trị `mo (open)` giả tạo).
-
-- `mo (open)` = chưa chạm (chữ xanh); `CHAM (triggered)` = đang chạm (chữ đỏ).
-- Giá trị **tự đọc lại 30 lần/giây**, **không còn nút `REFRESH`**.
-- **Ra khỏi màn là ngừng đọc**: chỉ khi màn ENDSTOP đang mở panel mới xin dữ liệu M119; vào màn khác là dừng
-  hẳn (không tốn đường truyền).
-- Dòng `PROBE`: máy này dùng chung chân Z min cho đầu dò và bật `PROBE_ENABLE_DISABLE`, nên **khi CHƯA deploy
-  đầu dò thì Marlin coi như `open`** (đúng như Marlin bỏ qua chân này trong lúc chưa bật đầu dò). Muốn thấy
-  `CHAM` thì phải deploy đầu dò trước (`Motion → Deploy Z-Probe (M401)`, hoặc khi máy đang home trục Z).
+Chỉ hiện những chân mà bản build Marlin có (máy này báo PROBE, X min, Y min); các chân không có bị ẩn hẳn chứ không hiện "mở" giả. Với cấu hình dùng probe chung chân Z min, `Z min` có thể luôn mở còn `PROBE` mới là trạng thái cần xem.
 
 ### 7.10 CONFIGURATION (cây menu kiểu 12864)
 
-Mục `Configuration` trong MENU mở một cây menu con giống màn 12864, thay cho bảng phẳng trước đây.
+Mục `Configuration` trong MENU mở một cây menu con giống màn 12864. Thứ tự các mục gốc:
 
-Thứ tự ở nhóm gốc `CAU HINH` (2026-10-15):
-
-1. `Advanced Settings` — **dòng đầu tiên**; bên trong có `Max Speed`, `Acceleration`, `Jerk`,
-   `Probe Offsets`, `Steps/mm`, `TMC Drivers`, `Temperature`, `Filament`, `Tune (runtime)`,
-   `Home Offset X/Y`;
-2. `Probe Z Offset` (`M851 Z`, mở hộp sửa);
-3. `Fade Height` (`M420 Z`) — **ngay dưới `Probe Z Offset`**; đây là **chỗ duy nhất** có dòng này
-   (đã bỏ khỏi `Advanced`, `Motion` và `UBL`);
-4. `Controller Fan` (`M710` I/A/S/D);
+1. `Advanced Settings`: cây thông số chi tiết (xem bên dưới);
+2. `Probe Z Offset` (`M851 Z`);
+3. `Fade Height` (`M420 Z`) — gom về đây, ngay dưới Probe Z Offset;
+4. `Controller Fan` (`M710`);
 5. `Preheat`: danh sách vật liệu (xem 7.3);
-6. `Store Settings (M500)` · `Load Settings (M501)` · `Restore Defaults (M502)` (có xác nhận 2 bước);
-7. `All settings (table)`: bảng phẳng cũ (trang THONG SO) với UP/DOWN, SAVE EEPROM, M502.
+6. `Store Settings (M500)`: lưu EEPROM;
+7. `Load Settings (M501)`: đọc lại từ EEPROM;
+8. `Restore Defaults (M502)`: về mặc định (xác nhận 2 bước);
+9. `All settings`: bảng phẳng cũ (trang THONG SO) với UP/DOWN.
 
-Nhóm `Advanced Settings → Temperature` là nơi **duy nhất** để tuning nhiệt: 6 tham số MPC (`M306`),
-`MPC Autotune (M306 T)`, PID bàn (`M304`) + `Bed PID Autotune (M303)`, PID đầu in (`M301`) — xem 7.11.
+Trong `Advanced Settings` có các nhóm: Max Speed, Acceleration, Jerk, Probe Offsets, Temperature (chứa cả MPC autotune `M306 T` và Bed PID autotune `M303` — trang Tuning riêng đã bỏ), Stepper, và cuối cùng là **`Language`** (chọn `Tiếng Việt` / `English`).
 
-Trong bảng `All settings`: hai cột `THONG SO` và `GIA TRI`; chạm một dòng để mở hộp sửa với bước, `-`, `+`, `OK`, `Hủy`. Dòng nào Marlin không gửi giá trị thì tự ẩn. Các thông số mới gồm Min Velocity/Min Travel Speed (`M205`), dòng TMC cho Z2/Z3 (`M906`), StealthChop 6 trục (`M569`), quạt điều khiển (`M710`).
-
-- `SAVE EEPROM` yêu cầu Marlin chạy `M500`;
-- `M502 RESET (ve mac dinh)` có xác nhận, chạy `M502` rồi lưu lại;
-- không còn nút `M501 LOAD` vì nhãn “LOAD” dễ gây hiểu nhầm.
+Trong bảng `All settings`: hai cột `THONG SO` và `GIA TRI`; chạm một dòng để mở hộp sửa với bước, `-`, `+`, `OK`, `Hủy`. Dòng nào Marlin không gửi giá trị thì tự ẩn. Các thông số gồm Min Velocity/Min Travel Speed (`M205`), dòng TMC cho X/Y/Z/Z2/Z3/E (`M906`), StealthChop 6 trục (`M569`), quạt điều khiển (`M710`).
 
 > [!WARNING]
-> Thay đổi một giá trị thường chỉ đổi RAM của Marlin. Muốn giữ qua lần tắt máy, bấm **SAVE EEPROM** sau khi kiểm tra máy chạy đúng.
+> Thay đổi một giá trị thường chỉ đổi RAM của Marlin. Muốn giữ qua lần tắt máy, bấm **Store Settings (M500)** sau khi kiểm tra máy chạy đúng.
 
-### 7.11 TUNING (MPC/PID)
+### 7.11 TUNING (MPC/PID) — đã bỏ trang riêng
 
-⛔ **Trang “TUNING (MPC/PID)” đã bỏ (2026-10-15)** — tuning MPC/PID nay **chỉ còn một chỗ**:
-**Configuration → Advanced Settings → Temperature**.
+Trang Tuning riêng đã bị xóa khỏi MENU. Chức năng autotune giờ nằm trong `Configuration` → `Advanced Settings` → `Temperature`:
 
-Vào: MENU → `Configuration` → dòng đầu `Advanced Settings` → `Temperature`. Trong nhóm đó có sáu giá trị MPC
-thật từ Marlin (sửa được bằng `-` / `+` / `OK`):
+- `M306 T`: autotune MPC đầu in;
+- `M303`: PID autotune bàn nhiệt;
+- sáu giá trị MPC (P/C/R/A/F/H) vẫn xem và sửa được trong bảng `All settings`.
 
-- P: heater power;
-- C: block heat capacity;
-- R: sensor responsiveness;
-- A: ambient transfer với fan 0;
-- F: ambient transfer với fan tối đa;
-- H: hệ số filament.
-
-Các nút:
-
-- `MPC Autotune (M306 T)`: autotune MPC đầu in;
-- `Bed PID Autotune (M303)`: PID autotune bàn nhiệt ở 60 °C;
-- `Bed PID-P/I/D`, `Hotend PID-P/I/D`: sửa tay thông số PID.
-
-Muốn lưu kết quả: quay ra `Configuration` → `Store Settings (M500)`. Làm autotune khi máy an toàn, đầu in nguội
-theo yêu cầu của Marlin và không có bản in đang chạy.
-
-### 7.11b NGÔN NGỮ (đa ngôn ngữ)
-
-Màn hình có **2 ngôn ngữ: Tiếng Việt và English** (mặc định là Tiếng Việt).
-
-Đổi ngôn ngữ: **`Configuration` → `Advanced Settings` → `Language`** → bấm `Tiếng Việt` hoặc `English`.
-Màn hình dựng lại ngay; lựa chọn được **lưu vào bộ nhớ trong** nên lần sau bật máy vẫn giữ nguyên.
-
-- Hai dòng trong menu luôn ghi bằng **chính tên ngôn ngữ đó** (`Tiếng Việt`, `English`) — không dịch — để
-  người đang ở ngôn ngữ nào cũng tìm được đường đổi lại.
-- Đổi ngôn ngữ **không** ảnh hưởng máy in: không gửi lệnh nào sang Marlin, không đổi thông số.
-- Vài chữ **cố ý không dịch** vì là ký hiệu/mã: `II`, `[]`, `ON`/`OFF`, `TBT`/`PUSH`, `NVS`, `MAX`/`MIN`, hay
-  tên lệnh G-code (`M119`, `M500`…).
-- Muốn kiểm tra từ PC: lệnh `UI LANG` (xem đang ở ngôn ngữ nào), `UI LANG 0|1` (đổi), `UI LANG?` (kiểm tra
-  bảng chữ có thiếu dòng dịch nào không).
+Làm autotune khi máy an toàn, đầu in nguội theo yêu cầu của Marlin và không có bản in đang chạy.
 
 ### 7.12 TRAMMING WIZARD
 
@@ -656,6 +621,8 @@ Marlin
 
 Trang web còn có danh sách file/thư mục ở gốc thẻ và nút xóa. Chỉ xóa được thư mục rỗng. Các request `/status` và `/files` chạy nối tiếp để không tạo hai luồng truy cập cùng lúc.
 
+Ngoài ra web server có API **chụp màn hình**: mở `http://<ip-man-hinh>/screen.bmp` để tải ảnh BMP 24-bit của đúng những gì đang hiện trên LCD (màn CYD không có framebuffer đọc từ PC được, API này đọc ngược RAM panel qua lệnh đọc của driver màn hình). Hữu ích khi cần xem màn hình từ xa mà không ngồi trước máy.
+
 > [!WARNING]
 > Token là thông tin xác thực. Không chụp hoặc gửi token cho người khác. Nếu đã lộ, thay `CYDLCD_HTTP_TOKEN`, build và nạp lại firmware màn hình.
 
@@ -746,6 +713,8 @@ Không thử lệnh chuyển động hoặc gia nhiệt nếu chưa đứng cạ
 | `UI CFG [nhom]` | in cây menu Configuration / mở một nhóm và liệt kê các dòng |
 | `UI HIT <k>` | bấm nút thứ k (mô phỏng chạm) — dùng khi hộp sửa đang mở |
 | `UI BACK` | nút BACK (đóng lớp phủ đang mở trước, rồi mới lùi nhóm) |
+| `UI LANG` | xem ngôn ngữ đang dùng; `UI LANG 0` = tiếng Việt, `UI LANG 1` = English |
+| `UI COLORTEST` | tô lần lượt 8 màu toàn màn hình (mỗi màu 0,7 giây) để kiểm tra đường màu |
 | `WIFI?` | trạng thái WiFi, IP, RSSI và heap |
 | `PRE?` | in danh sách vật liệu preheat |
 
@@ -754,22 +723,7 @@ Không thử lệnh chuyển động hoặc gia nhiệt nếu chưa đứng cạ
 - STATUS/TEMPS tăng nhưng PONG không có → chiều Marlin → màn còn tốt, chiều màn → Marlin có vấn đề;
 - không có HELLO → màn không biết khả năng Marlin, mesh/settings có thể trống;
 - `err` tăng → nghi sai baud hoặc nhiễu dây;
-- PONG bình thường dưới khoảng 1,5 giây → đường hai chiều đang khỏe;
-- dòng `TX cho=/bo tong=/BO LENH (G-code)=` cho biết **phía màn hình có gửi được lệnh hay không**:
-  `BO LENH (G-code) = 0` nghĩa là mọi lần bấm nút đều đã đẩy được frame lệnh ra UART (lỗi nằm ở phía sau:
-  dây, RX của Marlin, hoặc hàng đợi lệnh của Marlin). Khác `0` nghĩa là có lần bấm **không gửi được** — xem
-  `TX cho=` (hàng đợi TX đang nghẽn) và log `[UP] CANH BAO: TX kin qua …`.
-
-Khi bấm nút mà máy không chạy, đối chiếu **3 bước** (không đoán):
-
-| Bước | Xem ở đâu | Kết luận |
-|---|---|---|
-| 1 | `UI RX` (COM8) | `BO LENH (G-code)=0` ⇒ màn hình đã gửi lệnh |
-| 2 | `PANEL DIAG` (COM4, 5 giây/lần): `LENH tu man hinh: nhan=` | Tăng khi bấm nút ⇒ Marlin **có** nhận lệnh. Không tăng (dù bước 1 = 0) ⇒ **RX của Marlin kẹt** (chờ watchdog tự khởi tạo lại UART sau 10 giây) |
-| 3 | `PANEL DIAG`: `xep=` / `cho lai=` / `bo=` | `nhan=` tăng mà `xep=` không tăng ⇒ **hàng đợi lệnh của Marlin đầy** (đang in từ thẻ; `BUFSIZE = 4` lệnh). Lệnh được giữ lại và thử lại tới 20 giây; `bo=` tăng nghĩa là hàng đợi bị kẹt thật (ví dụ đang chờ nóng) |
-
-Mỗi lệnh nhận được từ màn hình đều in một dòng `PANEL: lenh [G28]` ra COM4 — đây là **bằng chứng trực tiếp**
-rằng frame đã tới Marlin và đã được giải mã đúng (không còn ký tự điều khiển lạ ở đầu lệnh).
+- PONG bình thường dưới khoảng 1,5 giây → đường hai chiều đang khỏe.
 
 Marlin có watchdog RX: quá 10 giây không nhận frame sẽ khởi tạo lại UART, **tối đa 1 lần mỗi 60 giây** (giới hạn này để tránh khởi tạo lại liên tục ngay sau khi nạp lại firmware màn hình). Màn hình cũng tiếp tục xin HELLO cho đến khi nhận được, thay vì chỉ thử vài lần rồi bỏ.
 
@@ -876,23 +830,27 @@ Code và tài liệu kỹ thuật vẫn giữ phương án 74HC4053 để chia s
 
 ### Phía màn hình
 
-| File/thư mục | Vai trò |
+Thư mục `cydlcd/src/` được chia thành nhóm (từ 2026-10-16):
+
+| Nhóm | Vai trò |
+|---|---|
+| `src/main.cpp` | setup/loop, console, watchdog |
+| `src/app/` | lõi ứng dụng: `cydlcd_link.*` (PUSH RX/TX, PING/PONG, HELLO), `cyd_sd.*` (thẻ ở khe CYD, sector, upload), `cydlcd_config.h` (chân, buffer, WiFi, HTTP, SD), `cydlcd_protocol.h` (frame protocol v4 dùng chung), `logq.*` (hàng đợi log), `tbt_link.*` (link TRAM ASCII) |
+| `src/ui/` | khung UI: `ui_lvgl.*` (điều hướng, action chung), `ui_chrome.*`, `ui_widgets.*`, `ui_overlay.*`, `ui_preheat.*` (danh sách vật liệu trong NVS), `ui_boxes.*`, `ui_colortest.h` |
+| `src/ui/pages/` | từng trang giao diện: `ui_page_menu/status/temp/jog(files…)/mesh/settings/submenu/preheat/tbt/wifi/info/custom/endstop/rate` |
+| `src/ui/lang/` | đa ngôn ngữ: `ui_lang.h` (ID chuỗi + `T()`), `ui_lang_vi.h`, `ui_lang_en.h`, `ui_lang.cpp` |
+| `src/ui/port/` | driver màn hình/cảm ứng theo board: CYD ST7789, STM32 ILI9341 |
+| `src/net/` | `net_wifi.*` (quản lý WiFi và NVS), `net_upload_http.*` (web server, upload, status, files, delete, `/screen.bmp`) |
+| `src/gfx/` | font chữ và icon: font Segoe UI 16 4bpp có dấu tiếng Việt, font icon, `lv_conf*.h` |
+| `src/stm32/` | riêng board STM32: encoder, TFT ILI9341, UI |
+
+| File/thư mục khác | Vai trò |
 |---|---|
 | `cydlcd/platformio.ini` | env, board, thư viện, cờ build |
-| `cydlcd/src/main.cpp` | setup/loop, console, watchdog |
-| `cydlcd/src/app/cydlcd_config.h` | chân, buffer, WiFi, HTTP, SD |
-| `cydlcd/src/app/cydlcd_protocol.h` | frame protocol v4 dùng chung |
-| `cydlcd/src/app/cydlcd_link.cpp` | PUSH RX/TX, PING/PONG, HELLO |
-| `cydlcd/src/app/cyd_sd.cpp` | thẻ ở khe CYD, sector, upload |
-| `cydlcd/src/net/net_wifi.cpp` | quản lý WiFi và NVS |
-| `cydlcd/src/net/net_upload_http.cpp` | web server, upload, status, files, delete |
-| `cydlcd/src/ui/ui_lvgl.cpp` | khung UI, điều hướng, action chung |
-| `cydlcd/src/ui_page_*.cpp` | từng trang giao diện |
-| `cydlcd/src/ui/ui_preheat.cpp` | preset PLA/PETG/ABS trong NVS |
-| `cydlcd/src/ui/port/ui_port_cyd_st7789.cpp` | TFT/touch của CYD |
 | `cydlcd/tools/cydlcd-upload.ps1` | client upload Windows |
+| `cydlcd/tools/run_sim.ps1`, `run_sim.sh` | **giả lập UI trên PC** (không cần board): build đúng code UI của firmware, thay lớp phần cứng bằng stub; chụp ảnh các trang ra `cydlcd/sim/out/` để kiểm tra bố cục/màu/font/menu mà không cần nạp |
 
-UI đã được tách trang; khi sửa một chức năng, mở đúng `ui_page_*.cpp` thay vì tìm mọi thứ trong một file lớn.
+Khi sửa một chức năng, mở đúng file trong nhóm tương ứng thay vì tìm mọi thứ trong một file lớn.
 
 ### Phía Marlin
 
@@ -926,9 +884,9 @@ Không dùng hướng dẫn cũ có `panel_*` để sửa code hiện tại.
 
 ## 15. Font và hiển thị
 
-UI mặc định dùng font mono tự sinh 4 bpp có đủ dấu tiếng Việt, cộng font icon WiFi/SD riêng. Font tiêu đề giữ Montserrat. Công cụ sinh font là `cydlcd/tools/ttf2gfxfont.py`; các font từng sinh bằng `lv_font_conv` đã bị loại bỏ.
+UI dùng **một họ font duy nhất cho chữ**: Segoe UI 16 px, 4 bit/pixel (16 mức xám, có khử răng cưa), đã gồm đầy đủ dấu tiếng Việt — nên hai ngôn ngữ Việt/Anh dùng chung một font, không cần sinh lại khi đổi ngôn ngữ; tên các trang trên thanh tiêu đề cũng dùng chung font này. Hàng số X/Y/Z ở trang STATUS dùng Montserrat 16 cho dễ đọc. Icon (WiFi/SD/quạt…) là font bitmap riêng.
 
-Nếu ép `UI_MONO_FONT=0`, LVGL chỉ dùng Montserrat 14 và một số chữ tiếng Việt có thể hiện ô vuông. Vì vậy bản dùng thực tế nên giữ chế độ font mặc định.
+Công cụ sinh font là `cydlcd/tools/ttf2gfxfont.py`; các font từng sinh bằng `lv_font_conv` đã bị loại bỏ. Font chữ nào không dùng thì không đưa vào build để tiết kiệm flash.
 
 Màn ngang có vùng nội dung 206 px. Các trang dài dùng cuộn hoặc PREV/NEXT; FILES dùng phân trang cố định, không dùng cuộn vòng cho tên file.
 
