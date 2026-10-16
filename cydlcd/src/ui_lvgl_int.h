@@ -70,12 +70,18 @@
   #if __has_include("gfx4_font_icons_big.h")
     #define UI_HAVE_ICON_FONT_BIG 1
   #endif
+  #if __has_include("gfx4_font_icons_title.h")
+    #define UI_HAVE_ICON_FONT_TITLE 1
+  #endif
 #endif
 #if !defined(UI_HAVE_ICON_FONT)
   #define UI_HAVE_ICON_FONT 0
 #endif
 #if !defined(UI_HAVE_ICON_FONT_BIG)
   #define UI_HAVE_ICON_FONT_BIG 0
+#endif
+#if !defined(UI_HAVE_ICON_FONT_TITLE)
+  #define UI_HAVE_ICON_FONT_TITLE 0
 #endif
 
 #if UI_HAVE_ICON_FONT
@@ -87,6 +93,12 @@
 #if UI_HAVE_ICON_FONT_BIG
   // Ban TO cua cung bo glyph (man STATUS: icon WiFi to bang icon FR/FL 32x32).
   extern "C" const lv_font_t *gfx4_font_icons_big_get(void);
+#endif
+#if UI_HAVE_ICON_FONT_TITLE
+  // Ban 20 px RIENG cho THANH TIEU DE (2026-10-16): ban 14 px cho glyph 10..13 px -> nguoi dung
+  // bao "hoi be"; ban 30 px (big) cho 20..23 px -> qua cao so voi thanh 26 px. Xem
+  // gfx4_font_icons_title.c. Chi chua 6 glyph ma thanh tieu de dung (khong phai ca bang 14 px).
+  extern "C" const lv_font_t *gfx4_font_icons_title_get(void);
 #endif
 
 // Chuoi UTF-8 cua cac glyph - GIONG NHAU o ca 2 co font (ban nho va ban to), nen khong phu thuoc

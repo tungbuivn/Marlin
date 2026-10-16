@@ -238,6 +238,7 @@ SOURCES=(
   "$SRC/lv_font_gfxfont.c"
   "$SRC/gfx4_font_icons.c"          # font icon 4bpp (UI_MONO_FONT 4)
   "$SRC/gfx4_font_icons_big.c"
+  "$SRC/gfx4_font_icons_title.c"    # ban 20 px rieng cho thanh tieu de (2026-10-16)
   "$SRC/gfx4_font_text.c"
   "$SRC/gfx_font_robotomono.c"
   "$SIM/sim_port.cpp"

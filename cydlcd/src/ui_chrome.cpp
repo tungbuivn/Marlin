@@ -258,6 +258,18 @@ static const lv_font_t *wifi_icon_font(const bool big) {
 #endif
 }
 
+// Font icon dung cho 1 vat thanh tieu de: ban 20 px RIENG (glyph 14..18 px) — xem
+// gfx4_font_icons_title.c. Ban 14 px qua nho, ban 30 px qua cao so voi thanh 26 px.
+// Chua co ban 20 px -> lui ve ban 14 px (roi ban NULL -> noi goi ve cham tron).
+// PHAI dinh nghia SAU wifi_icon_font() vi ham nay goi no.
+static const lv_font_t *title_icon_font(void) {
+#if UI_HAVE_ICON_FONT_TITLE
+  return gfx4_font_icons_title_get();
+#else
+  return wifi_icon_font(false);
+#endif
+}
+
 // Vat chi bao: KHONG cho bam (khong nhan touch) va KHONG vao group encoder.
 // f != NULL -> label dung font icon f; f == NULL -> cham tron 12x12 (duong lui).
 static lv_obj_t *mk_wifi_icon(lv_obj_t *parent, const lv_font_t *f) {
@@ -425,8 +437,10 @@ void status_sd_icon_mark(void) {
 }
 // ===========================================================================
 //  Dong tieu de cho cac man con:
-//    [HOME] [ten man] ...... [ten may] [wifi] [II] [[]] [BACK]
+//    [HOME] [ten man] ...... [II] [[]] [icon ket noi] [wifi] [BACK]
 //  (STATUS khong dung thanh nay; MENU dung nhung co bo cuc rieng cho phan noi dung)
+//  2026-10-16: II/[] duoc TAO TRUOC icon ket noi -> khi hien (dang in) chung la 2 icon DAU TIEN
+//  cua nhom ben phai; khi AN thi flex bo qua nen nhom bat dau bang icon ket noi nhu cu.
 //
 //  BE RONG CO DINH (pad 4+4, gap 3 moi khe - xem pad_column o duoi):
 //    (a) binh thuong (II/[] AN - flex bo qua vat HIDDEN):  6 vat, 5 khe
@@ -434,6 +448,7 @@ void status_sd_icon_mark(void) {
 //    (b) dang in (II/[] HIEN): 8 vat, 7 khe
 //        8 + 7*3 + (26 + TITLE_W + 64 + 14 + 26 + 26 + 48) = 8 + 21 + 288 = 317 <= 320 -> spacer = 3
 //    => CA 2 truong hop deu <= 320 px: BACK va HOME KHONG BAO GIO bi day ra ngoai.
+//  (Doi THU TU khong doi TONG be rong vi chi la hoan vi.)
 //  TITLE_W va LINK_LBL_W la be rong CO DINH nen tong tren la con so chac chan (khong phu thuoc
 //  do dai ten man / ten may); chu dai hon thi TU CUON trong o cua no.
 // ===========================================================================
@@ -474,7 +489,7 @@ void build_chrome(void) {
     lv_obj_set_style_border_width(home, 0, 0);
     lv_obj_add_flag(home, LV_OBJ_FLAG_USER_3);   // xoa vien "outlined" ma mk_btn() vua ve
     lv_obj_t *hl = lv_obj_get_child(home, 0);
-    const lv_font_t *iconf = wifi_icon_font(false);
+    const lv_font_t *iconf = title_icon_font();   // ban 20 px cua thanh tieu de
     lv_font_glyph_dsc_t gd;
     if (hl && iconf && lv_font_get_glyph_dsc(iconf, &gd, 0xE007U, 0))
       lv_obj_set_style_text_font(hl, iconf, 0);          // co glyph -> nut chi co icon
@@ -500,30 +515,39 @@ void build_chrome(void) {
   lv_obj_add_event_cb(s_title, cb_action, LV_EVENT_CLICKED, (void *)(intptr_t)A_GOTO_STATUS);
   if (s_group) lv_group_add_obj(s_group, s_title);
 
-  mk_spacer(s_bar, 0, 1, 1);                     // an het cho trong -> day 2 vat sau ve phai
+  mk_spacer(s_bar, 0, 1, 1);                     // an het cho trong -> day cac vat sau ve phai
+
+  // P9: 2 nut nho PAUSE / STOP - mac dinh AN, chi hien khi dang in (xem ui_lvgl_task)
+  // "II" / "[]" la KY HIEU (khong phai chu) -> CO TINH khong dich, giu nguyen o MOI ngon ngu.
+  // 2026-10-16 (yeu cau nguoi dung): TAO TRUOC `s_link` de 2 nut nay luon la 2 ICON DAU TIEN cua
+  // nhom ben phai (thu tu flex = thu tu tao), roi moi toi icon ket noi / WiFi / BACK o phia phai
+  // chung. Luc AN thi flex bo qua nen nhom ben phai bat dau bang icon ket noi nhu cu.
+  s_btn_pause = mk_btn(s_bar, "II", 26, 20, cb_action, (void *)(intptr_t)A_PAUSE);
+  s_btn_stop  = mk_btn(s_bar, "[]", 26, 20, cb_action, (void *)(intptr_t)A_STOP);
+  lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
+
   // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de.
-  // 64 px: du cho "LINK ERR" (8 ky tu mono x 8 px = 64) va vua du cho 4 nut + icon wifi + ten man
+  // 64 px: du cho "LINK ERR" (8 ky tu mono x 8 px = 64) va vua du cho cac nut + icon + ten man
   // (xem bang be rong o dau build_chrome).
   s_link  = mk_label_w(s_bar, T(UI_T_LINK_NONE), COL_ERR, LINK_LBL_W);
   // O nay KHONG con hien TEN MAY IN nua ma hien ICON KET NOI (xem LINK_GLYPH_* o ui_lvgl_int.h).
   // Do glyph luc CHAY giong nut HOME: font cu (chua co U+E00C) -> g_link_icon_ok = 0 va ui_lvgl.cpp
   // lui ve hien CHU nhu truoc, khong bao gio hien o vuong.
   {
-    const lv_font_t *iconf = wifi_icon_font(false);
+    const lv_font_t *iconf = title_icon_font();
     lv_font_glyph_dsc_t gd;
     g_link_icon_ok = (iconf && lv_font_get_glyph_dsc(iconf, &gd, 0xE00CU, 0)) ? 1 : 0;
     if (g_link_icon_ok) lv_obj_set_style_text_font(s_link, iconf, 0);
   }
-  // Icon trang thai WiFi: ngay SAU ten may in, TRUOC 2 nut PAUSE/STOP va BACK. La CON CUA s_bar
-  // nen tu an/hien cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
-  // Dung font icon BAN NHO (14 px) - thanh tieu de chi cao 26 px; ban to (30 px) danh cho STATUS.
-  s_wifi = mk_wifi_icon(s_bar, wifi_icon_font(false));
-  // P9: 2 nut nho PAUSE / STOP - mac dinh AN, chi hien khi dang in (xem ui_lvgl_task)
-  // "II" / "[]" la KY HIEU (khong phai chu) -> CO TINH khong dich, giu nguyen o MOI ngon ngu.
-  s_btn_pause = mk_btn(s_bar, "II", 26, 20, cb_action, (void *)(intptr_t)A_PAUSE);
-  s_btn_stop  = mk_btn(s_bar, "[]", 26, 20, cb_action, (void *)(intptr_t)A_STOP);
-  lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
+  // CANH PHAI trong o 64 px (yeu cau nguoi dung 2026-10-16): mk_label_w() dat long mode
+  // SCROLL_CIRCULAR, ma che do do LUON CANH GIUA nen icon 12 px se lo lung giua o. Doi sang CLIP
+  // de text_align co tac dung. Chuoi du phong "LINK ERR" dung 64 px (8 ky tu mono x 8 px) nen van vua.
+  lv_label_set_long_mode(s_link, LV_LABEL_LONG_CLIP);
+  lv_obj_set_style_text_align(s_link, LV_TEXT_ALIGN_RIGHT, 0);
+  // Icon trang thai WiFi: ngay SAU icon ket noi, TRUOC nut BACK. La CON CUA s_bar nen tu an/hien
+  // cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
+  s_wifi = mk_wifi_icon(s_bar, title_icon_font());
   s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 48, 20, cb_action, (void *)(intptr_t)A_BACK);
 
   // --- Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT] ---

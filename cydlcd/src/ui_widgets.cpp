@@ -286,9 +286,10 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
   lv_obj_set_style_bg_color(b, COL_BTN, 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(b, 0, 0);        // outline_apply() dat lai theo mau nen ben duoi
-  // Bo goc 8 px (truoc la 3): Material 3 dung bo goc lon / pill cho filled button. 8 px van vua moi o
-  // (cao nhat 34 px) ma khong an vao vung chu. `mk_hit()` giu 3 vi la vung bam TRONG SUOT (khong thay).
-  lv_obj_set_style_radius(b, 8, 0);
+  // Bo goc 5 px (truoc la 3, roi 8): 8 px bi nguoi dung thay la qua tron (2026-10-16), 3 px thi
+  // qua vuong. 5 px con ro la nut Material 3 ma khong an vao vung chu o cac o thap (20 px).
+  // `mk_hit()` giu 3 vi la vung bam TRONG SUOT (khong thay).
+  lv_obj_set_style_radius(b, 5, 0);
   lv_obj_set_style_pad_all(b, 0, 0);
   lv_obj_set_style_shadow_width(b, 0, 0);
   lv_obj_t *l = lv_label_create(b);
