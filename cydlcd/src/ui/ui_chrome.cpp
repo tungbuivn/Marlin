@@ -588,7 +588,6 @@ void build_chrome(void) {
 //   - o ten may / LINK ERR / NO LINK: luot cap nhat (ui_lvgl_task) tu dat lai;
 //   - nut HOME khi KHONG co font icon (chu "H") va 2 nut "II"/"[]": KY HIEU, khong dich.
 // Khong dung lai chrome tu dau: build_chrome() xoa/tim lai group + bo cuc, de vo hon muc can thiet.
-
 void chrome_lang_retext(void) {
   if (s_btn_back)  set_text(lv_obj_get_child(s_btn_back, 0),  T(UI_T_CHROME_BACK));
   if (s_bot_prev)  set_text(lv_obj_get_child(s_bot_prev, 0),  T(UI_T_CHROME_PREV));
