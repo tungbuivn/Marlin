@@ -828,6 +828,56 @@ hình cũng màu xanh như vậy"*. Đúng — và đây là lỗi **toàn cục
   (`USER_1` = vật tự quản lý **nền**, `USER_2` = nút có **viền**; hai cờ độc lập nhau).
   Vật KHÔNG phải nút vẫn nhận `border_width = 0` như cũ.
 
+### Thanh tiêu đề: nền mới + icon kết nối thay tên máy in (2026-10-16)
+
+**Yêu cầu người dùng:** *"đổi hẳn màu nền của dòng tiêu đề để nhìn rõ nó là header bar; không vẽ border
+hay màu nền cho title và icon của title ở ngoài cùng bên trái; phần tên máy in TBT hiển thị trên title
+thay bằng icon connected/disconnected (ổ cắm cắm vào nhau), mất kết nối vẽ thêm dấu gạch giống icon wifi"*.
+
+**Nền thanh tiêu đề (`COL_TITLEBAR` `#3A2E9E`).** Có **hai điều kiện mâu thuẫn nhau**, y hệt vấn đề của nút:
+
+```
+nền màn hình L = 0,0176 (đã rất tối)
+  để tiêu đề đạt 3:1 với nền      ->  L_tiêu_đề >= 0,1528
+  để chữ COL_TXT trên tiêu đề >= 4,5:1  ->  L_tiêu_đề <= 0,1319
+```
+
+Không màu nào thoả cả hai. Làm tiêu đề **tối hơn** thì tối đa chỉ **1,24:1** (nền đen tuyệt đối cũng vậy).
+Nên đã làm 2 việc: (1) đổi nền sang `#3A2E9E` cho khác biệt rõ (**1,49:1**, mọi chữ trên đó vẫn ≥ 4,5:
+TXT 8,21 · DIM 6,34 · ACCENT 6,89 · xanh 5,20 · đỏ 4,58), và (2) **kẻ 1 px** dưới chân thanh bằng
+`COL_BTN_OUTLINE` → **biên** của thanh đạt **4,45:1** so với nền màn hình.
+
+**Title + icon trái cùng = vật "phẳng" (`LV_OBJ_FLAG_USER_3`).** Không nền, không viền — kể cả khi focus.
+Ba cờ độc lập nhau:
+
+| Cờ | Nghĩa |
+|---|---|
+| `USER_1` | vật tự quản lý **nền** (focus không đổi nền) |
+| `USER_2` | nút có **viền outlined** (focus trả lại viền) |
+| `USER_3` | vật **phẳng** (không bao giờ vẽ viền, không đổi nền) |
+
+Vì bỏ hết viền/nền thì mất dấu focus khi dùng encoder, vật `USER_3` **báo focus bằng MÀU CHỮ** (đổi sang
+`COL_ACCENT`, trả về `COL_TXT` khi mất focus) — không dùng border hay nền nên vẫn đúng yêu cầu.
+
+**Icon kết nối thay tên máy in.** Ô `LINK_LBL_W` không còn hiện tên máy (`cydlcd.name`) mà hiện glyph:
+
+| Trạng thái | Glyph | Gốc Material Icons |
+|---|---|---|
+| Đã kết nối | `LINK_GLYPH_ON` `U+E00C` | `usb` (phích cắm) |
+| Mất kết nối | `LINK_GLYPH_OFF` `U+E00D` | `usb_off` (**phích + gạch chéo**, đúng kiểu `wifi_off`) |
+
+Màu chữ vẫn theo trạng thái như cũ (xanh / accent / đỏ). Font cũ chưa có glyph → `g_link_icon_ok = 0`
+và **lùi về hiện chữ** như trước, không bao giờ hiện ô vuông.
+
+**Font icon phải sinh lại** (12 → 21 glyph). Đã kiểm: **12 glyph cũ giống hệt cả metadata lẫn bitmap**,
+chỉ `yAdvance` 12 → 13 (glyph `usb` cao 13 px). Xem đầu file `src/gfx4_font_icons.c` để có URL font nguồn
++ lệnh sinh đầy đủ. 6 lựa chọn icon khác (`power_input`, `cable`, `outlet`, `power`, `power_off`, `link`,
+`link_off`) đã sinh sẵn trong font — đổi 1 dòng `LINK_GLYPH_*` là xong, **không cần sinh lại font**.
+
+Kiểm chứng: bản giả lập khi ép `link_state_now()` = 0 thì vùng icon đổi từ **9 px rộng / 58 px mực** sang
+**12 px rộng / 70 px mực** (rộng hơn + nhiều mực hơn = có thêm nét gạch). Trên board thật: nền tiêu đề
+6713 px, đường kẻ đủ 320 px, icon trái cùng **0 px nền / 0 px viền**.
+
 ---
 
 ## Chụp màn hình từ xa — `GET /screen.bmp` (2026-10-16)

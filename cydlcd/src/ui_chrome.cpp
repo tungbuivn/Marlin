@@ -234,6 +234,7 @@ void bot_sync(const bool remeasure) {
 // "LINK ERR" chi can 8x8 = 64 px (font mono advance 8) nen 78/80 px van hien du; ten may dai hon
 // thi tu cuon vong nhu truoc (xem mk_label_w).
 static lv_obj_t  *s_wifi;                  // glyph o HEADER (hoac hinh tron khi chua co font icon)
+uint8_t           g_link_icon_ok = 0;      // 1 = o `s_link` dang dung FONT ICON (xem ui_lvgl_int.h)
 static lv_obj_t  *s_st_sd_icon;            // icon THE 64x64 CO SAN cua Marlin (o SD man STATUS)
 static lv_obj_t  *s_st_wifi;               // glyph WiFi tren man STATUS (hang nhiet do - xem ST_WIFI_X)
 static lv_obj_t  *s_st_rssi;               // CHU do manh tin hieu canh icon WiFi do ("-58" / "--")
@@ -446,7 +447,12 @@ void build_chrome(void) {
   s_bar = lv_obj_create(scr);
   lv_obj_set_pos(s_bar, 0, 0);
   lv_obj_set_size(s_bar, UI_LCD_HOR_RES, BAR_H);
-  style_flat(s_bar, COL_BAR);
+  style_flat(s_bar, COL_TITLEBAR);
+  // Duong ke 1 px o day thanh: nen man hinh qua toi nen DOI MAU NEN khong the dat 3:1 voi no
+  // (xem ghi chu COL_TITLEBAR o ui_lvgl_int.h). Duong ke la thu lam BIEN cua thanh dat chuan.
+  lv_obj_set_style_border_side(s_bar, LV_BORDER_SIDE_BOTTOM, 0);
+  lv_obj_set_style_border_color(s_bar, COL_BTN_OUTLINE, 0);
+  lv_obj_set_style_border_width(s_bar, 1, 0);
   lv_obj_set_style_pad_left(s_bar, 4, 0);
   lv_obj_set_style_pad_right(s_bar, 4, 0);
   // Gap 3 (truoc la 4): du 7 khe khi dang in -> tiet kiem 7 px, xem bang be rong o tren.
@@ -462,6 +468,11 @@ void build_chrome(void) {
   {
     lv_obj_t *home = mk_btn(s_bar, HOME_GLYPH, HOME_BTN_W, 20, cb_action,
                             (void *)(intptr_t)A_GOTO_STATUS);
+    // Icon trai cung nam TRUC TIEP tren nen thanh tieu de: KHONG nen, KHONG vien (yeu cau nguoi dung
+    // 2026-10-16). LV_OBJ_FLAG_USER_3 = vat "phang" -> focus_mark() khong bao gio ve vien cho no.
+    lv_obj_set_style_bg_opa(home, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(home, 0, 0);
+    lv_obj_add_flag(home, LV_OBJ_FLAG_USER_3);   // xoa vien "outlined" ma mk_btn() vua ve
     lv_obj_t *hl = lv_obj_get_child(home, 0);
     const lv_font_t *iconf = wifi_icon_font(false);
     lv_font_glyph_dsc_t gd;
@@ -484,6 +495,8 @@ void build_chrome(void) {
   // lv_label.c) nen phai tu bat co; them CLICK_FOCUSABLE + vao group de encoder cung dung duoc.
   lv_obj_add_flag(s_title, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_flag(s_title, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+  // Ten man cung la vat "phang": KHONG nen, KHONG vien (yeu cau nguoi dung 2026-10-16).
+  lv_obj_add_flag(s_title, LV_OBJ_FLAG_USER_3);
   lv_obj_add_event_cb(s_title, cb_action, LV_EVENT_CLICKED, (void *)(intptr_t)A_GOTO_STATUS);
   if (s_group) lv_group_add_obj(s_group, s_title);
 
@@ -492,6 +505,15 @@ void build_chrome(void) {
   // 64 px: du cho "LINK ERR" (8 ky tu mono x 8 px = 64) va vua du cho 4 nut + icon wifi + ten man
   // (xem bang be rong o dau build_chrome).
   s_link  = mk_label_w(s_bar, T(UI_T_LINK_NONE), COL_ERR, LINK_LBL_W);
+  // O nay KHONG con hien TEN MAY IN nua ma hien ICON KET NOI (xem LINK_GLYPH_* o ui_lvgl_int.h).
+  // Do glyph luc CHAY giong nut HOME: font cu (chua co U+E00C) -> g_link_icon_ok = 0 va ui_lvgl.cpp
+  // lui ve hien CHU nhu truoc, khong bao gio hien o vuong.
+  {
+    const lv_font_t *iconf = wifi_icon_font(false);
+    lv_font_glyph_dsc_t gd;
+    g_link_icon_ok = (iconf && lv_font_get_glyph_dsc(iconf, &gd, 0xE00CU, 0)) ? 1 : 0;
+    if (g_link_icon_ok) lv_obj_set_style_text_font(s_link, iconf, 0);
+  }
   // Icon trang thai WiFi: ngay SAU ten may in, TRUOC 2 nut PAUSE/STOP va BACK. La CON CUA s_bar
   // nen tu an/hien cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
   // Dung font icon BAN NHO (14 px) - thanh tieu de chi cao 26 px; ban to (30 px) danh cho STATUS.

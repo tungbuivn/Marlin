@@ -177,3 +177,7 @@ flash-dfu.log
 
 # Scratch files (commit messages, throwaway scripts)
 *.tmp
+
+# Font nguon de sinh lai font icon (349 KB, tai bang curl - xem cydlcd/src/gfx4_font_icons.c).
+# KHONG commit binary: file .c da ghi ro URL + version can dung.
+cydlcd/tools/MaterialIcons-Regular.ttf

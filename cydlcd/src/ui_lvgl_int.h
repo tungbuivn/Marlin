@@ -96,6 +96,19 @@
 #define WIFI_GLYPH_CONN  "\xEE\x80\x82"   // U+E002 3 vach      -> DANG ket noi
 #define WIFI_GLYPH_OFF   "\xEE\x80\x81"   // U+E001 wifi_off    -> WiFi tat / chua cau hinh
 #define HOME_GLYPH       "\xEE\x80\x87"   // U+E007 ngoi nha    -> nut HOME o dau thanh tieu de
+// ICON KET NOI MAY IN — thay cho TEN MAY IN o o `LINK_LBL_W` tren thanh tieu de (2026-10-16).
+// Nguon Material Icons: U+E1E0 `usb` (phich cam) va U+E4FA `usb_off` (phich cam + DAU GACH, dung
+// kieu nhu `wifi_off`). Day la 2 glyph MOI them vao gfx4_font_icons.h (o U+E00C..U+E014).
+// CHI co o FONT NHO: font TO (gfx4_font_icons_big.h) giu dai rieng U+E000..U+E003 cho man STATUS,
+// neu mo rong no se DUNG SO O voi font nho (vd U+E004 = the nho ben nho, = icon khac ben to).
+// Cac lua chon KHAC da sinh san trong font — doi 1 dong la xong, KHONG can sinh lai font:
+//   U+E00E power_input (phich cam vao o cam) · U+E00F cable · U+E010 outlet (o cam tuong)
+//   U+E011 power · U+E012 power_off · U+E013 link · U+E014 link_off
+#define LINK_GLYPH_ON    "\xEE\x80\x8C"   // U+E00C <- usb      -> DA ket noi
+#define LINK_GLYPH_OFF   "\xEE\x80\x8D"   // U+E00D <- usb_off  -> MAT ket noi (co dau gach)
+// 1 = `s_link` dang dung FONT ICON (do luc TAO thanh tieu de, xem ui_chrome.cpp). Font cu chua co
+// glyph -> 0, va ui_lvgl.cpp lui ve hien CHU nhu truoc (khong hien o vuong).
+extern uint8_t g_link_icon_ok;
 // Font co DAU tieng Viet: chi con font MONO GFX TU SINH (che do 4) - xem tools/ttf2gfxfont.py
 // + lv_font_gfxfont.c. KHONG con font nao sinh bang lv_font_conv: ca 3 file font do da XOA khoi
 // repo (che do 1 va 2 da thu tren may that deu MAT CHU; che do 3 chua lam).
@@ -210,6 +223,14 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 // Cac man con dung cung bang mau nay (khong con theme rieng)
 #define COL_BG     MR_BG
 #define COL_BAR    lv_color_hex(0x160C52)   // dong tieu de: dam hon nen
+// NEN THANH TIEU DE — sang hon nen man hinh de nhin ro no la "header bar".
+// VI SAO KHONG THE DAT 3:1 BANG CACH DOI NEN (da tinh, xem README muc "Thanh tieu de"):
+//   nen man hinh MR_BG qua toi (L = 0,0176). Doi tieu de TOI hon -> toi da 1,24:1 (nen den tuyet
+//   doi cung vay). Doi tieu de SANG hon thi chua toi 3:1 thi chu da tut: can L >= 0,1528 de dat
+//   3:1, nhung chu COL_TXT chi con >= 4,5:1 khi L <= 0,1319 -> HAI DIEU KIEN MAU THUAN NHAU.
+// Vi vay: (1) doi nen sang #3A2E9E cho KHAC BIET RO (1,49:1, moi chu tren do van >= 4,5:1), va
+//         (2) ve DUONG KE 1 px duoi chan bang COL_BTN_OUTLINE -> BIEN cua thanh dat 4,45:1 (>= 3:1).
+#define COL_TITLEBAR lv_color_hex(0x3A2E9E)
 #define COL_TXT    MR_MENUVAL
 #define COL_DIM    lv_color_hex(0xCAC4D0)   // Material 3 dark on-surface-variant: 6.53 -> 8.88:1
 #define COL_BTN    lv_color_hex(0x2A2080)   // nen nut

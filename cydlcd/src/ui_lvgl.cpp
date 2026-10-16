@@ -819,9 +819,16 @@ static void ui_lvgl_task_body(void) {
   // (xem link_state_now() - "co byte toi" khac voi "doc duoc dong TRAM").
   // 2026-10-13 (yeu cau): khi link TOT thi hien TEN MAY (tu HELLO cua Marlin, khong co thi
   // CYDLCD_MACHINE_NAME) thay cho chu "LINK OK"; chi khi co loi moi hien LINK ERR / NO LINK.
+  // 2026-10-16 (yeu cau MOI cua nguoi dung): THAY HAN TEN MAY IN bang ICON KET NOI (phich cam):
+  //   ket noi OK  -> LINK_GLYPH_ON  (phich cam)
+  //   mat ket noi -> LINK_GLYPH_OFF (phich cam + DAU GACH, giong wifi_off)
+  // Mau chu van theo trang thai nhu cu (xanh / accent / do) nen nhin mau la biet muc nao.
+  // `g_link_icon_ok` = 0 khi font icon cu chua co glyph -> lui ve hien CHU, khong hien o vuong.
   const uint8_t lst = link_state_now();
   const char *const nm = cydlcd.name[0] ? cydlcd.name : CYDLCD_MACHINE_NAME;
-  set_text(s_link, lst == 1 ? nm : (lst == 2 ? T(UI_T_LINK_ERR) : T(UI_T_LINK_NONE)));
+  set_text(s_link, g_link_icon_ok
+                   ? (lst == 1 ? LINK_GLYPH_ON : LINK_GLYPH_OFF)
+                   : (lst == 1 ? nm : (lst == 2 ? T(UI_T_LINK_ERR) : T(UI_T_LINK_NONE))));
   if (lst != s_link_state) {
     s_link_state = lst;
     lv_obj_set_style_text_color(s_link, lst == 1 ? COL_OK : (lst == 2 ? COL_ACCENT : COL_ERR), 0);

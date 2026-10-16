@@ -212,9 +212,15 @@ static bool bg_is_light(const lv_color_t bg) {
 // Ve/bo vien "outlined" cho NUT (vat co LV_OBJ_FLAG_USER_2) theo mau NEN HIEN TAI cua no.
 //   nen TOI  -> CAN vien: khong thi nut lan vao nen man hinh (xem ghi chu COL_BTN_OUTLINE).
 //   nen SANG -> BO vien: nut da noi san (>= 7:1); vien sang tren nen sang chi lam roi mat.
+//   PHANG (USER_3) hoac nen TRONG SUOT -> BO vien: icon/ten nam truc tiep tren thanh tieu de.
 // PHAI goi lai moi khi NEN doi (mk_btn_set_bg, focus_mark) vi vien phu thuoc mau nen.
 static void outline_apply(lv_obj_t *o) {
   if (!o || !lv_obj_has_flag(o, LV_OBJ_FLAG_USER_2)) return;
+  if (lv_obj_has_flag(o, LV_OBJ_FLAG_USER_3) ||
+      lv_obj_get_style_bg_opa(o, 0) == LV_OPA_TRANSP) {
+    lv_obj_set_style_border_width(o, 0, 0);
+    return;
+  }
   const bool dark = !bg_is_light(lv_obj_get_style_bg_color(o, 0));
   lv_obj_set_style_border_width(o, dark ? 1 : 0, 0);
   if (dark) lv_obj_set_style_border_color(o, COL_BTN_OUTLINE, 0);
@@ -229,11 +235,20 @@ void focus_mark(lv_obj_t *o, const bool on) {
   // truc dang chon (sang nut buoc / nut di chuyen) no tra nen nut truc ve COL_BTN -> mat dau
   // "truc dang chon" du s_axis van dung. Nay: "chon" = NEN, "focus" = VIEN.
   const bool own_bg = lv_obj_has_flag(o, LV_OBJ_FLAG_USER_1);
+  // Vat PHANG (LV_OBJ_FLAG_USER_3: TEN MAN va ICON trai cung cua thanh tieu de): khong bao gio ve
+  // vien, khong doi nen (yeu cau nguoi dung 2026-10-16). Bao focus bang MAU CHU — khong dung border
+  // hay mau nen, nhung van biet dang o dau khi dung encoder.
+  const bool flat = lv_obj_has_flag(o, LV_OBJ_FLAG_USER_3);
   // Vat co nen dac (nut, dong menu, bang) -> doi sang COLOR_SELECTION_BG nhu dong dang chon cua Marlin.
   // PHAI lam TRUOC khi ve vien: vien "outlined" duoi day phu thuoc mau nen (xem outline_apply).
-  if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER && !own_bg)
+  if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER && !own_bg && !flat)
     lv_obj_set_style_bg_color(o, on ? MR_SELBG : COL_BTN, 0);
-  if (on) {
+  if (flat) {
+    lv_obj_set_style_border_width(o, 0, 0);
+    lv_obj_t *l = lv_obj_get_child(o, 0);      // nut -> doi mau CHU CON; nhan -> doi mau chinh no
+    lv_obj_set_style_text_color(l ? l : o, on ? COL_ACCENT : COL_TXT, 0);
+  }
+  else if (on) {
     lv_obj_set_style_border_width(o, 2, 0);
     // Nut truc khi focus co the dang to nen COL_ACCENT -> vien COL_ACCENT se chim vao nen,
     // nen dung mau sang (MR_FRAME) de van nhin thay focus.
