@@ -414,8 +414,9 @@
   #define CYDLCD_WIFI_REFRESH_MS 500u
 #endif
 #ifndef CYDLCD_SD_FREE_MS
-  // Nhip doc DUNG LUONG CON TRONG cua the (`SD.totalBytes()/usedBytes()` = FATFS `f_getfree`, quet bang FAT:
-  // do duoc ~20 ms moi lan tren the 16 GB) - chi de IN RA LOG 1 Hz, nen khong can doc moi giay.
+  // KHONG CON DUNG tu 2026-10-16 (yeu cau nguoi dung: "cho nao lay size file hay size the sd thi bo"):
+  // dong log 1 Hz da BO han `SD.totalBytes()/usedBytes()` (= FATFS `f_getfree`, QUET BANG FAT ~20 ms/lan).
+  // Giu macro lai cho khoi phai sua cho nao khac, nhung khong ai doc nua.
   #define CYDLCD_SD_FREE_MS 10000u
 #endif
 #ifndef CYDLCD_HTTP_POLL_MS

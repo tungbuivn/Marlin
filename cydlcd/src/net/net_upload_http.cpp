@@ -189,7 +189,9 @@ function loadFiles(){
        b.title='Xoa '+(f.d?'thu muc ':'file ')+f.n;
        b.onclick=function(){ delFile(f.n, f.d, row, b); };
        var sp=document.createElement('span');
-       sp.textContent=(f.d?'[TM] ':'')+f.n+(f.d?'':' - '+fmtB(f.s));
+       // KHONG hien size file nua (2026-10-16): trang web chi can TEN, va bo size la de man hinh
+       // dung getNextFileName() = 1 readdir khong mo file/khong stat -> liet ke nhanh hon nhieu.
+       sp.textContent=(f.d?'[TM] ':'')+f.n;
        row.appendChild(b); row.appendChild(sp);      // NUT XOA TRUOC, ten file sau
        box.appendChild(row);
      });
@@ -645,22 +647,27 @@ void handle_files(void) {
   js += ",\"files\":[";
   char nm[64];
   uint8_t n = 0;
-  for (uint8_t i = 0; i < 64; i++) {
-    uint32_t sz = 0;
+  // DUYET MOT LUOT (2026-10-16). Truoc day vong lap goi cyd_sd_root_entry(i, ...) cho tung i, ma ham
+  // do MO LAI thu muc roi dem tu dau toi i -> O(N^2). Do tren board that: 7 file 0,18 s | 22 file
+  // 1,89 s | 27 file 3,11 s. Nay 1 lan duyet -> O(N).
+  // KHONG con truong "s" (size file): trang web khong can, va phia Marlin cung da gui size = 0
+  // (`tx_i32(0); // ExtUI khong cung cap`). Bo size cung la de dung getNextFileName() = 1 readdir,
+  // khong mo file/khong stat tung muc.
+  if (cyd_sd_list_begin()) {
     bool isdir = false;
-    if (!cyd_sd_root_entry(i, nm, sizeof(nm), &sz, &isdir)) break;
-    if (n) js += ',';
-    js += "{\"n\":\"";
-    for (const char *p = nm; *p; p++) {          // escape JSON (" va \)
-      if (*p == '"' || *p == '\\') js += '\\';
-      js += *p;
+    while (n < 64 && cyd_sd_list_next(nm, sizeof(nm), &isdir)) {
+      if (n) js += ',';
+      js += "{\"n\":\"";
+      for (const char *p = nm; *p; p++) {          // escape JSON (" va \)
+        if (*p == '"' || *p == '\\') js += '\\';
+        js += *p;
+      }
+      js += "\",\"d\":";
+      js += (isdir ? '1' : '0');
+      js += '}';
+      n++;
     }
-    js += "\",\"s\":";
-    js += String((unsigned long)sz);
-    js += ",\"d\":";
-    js += (isdir ? '1' : '0');
-    js += '}';
-    n++;
+    cyd_sd_list_end();
   }
   js += "],\"count\":";
   js += String((unsigned)n);

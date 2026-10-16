@@ -106,12 +106,31 @@ const char *cyd_sd_name_check(const char *name);
  */
 void cyd_sd_name_clean(const char *in, char *out, size_t n);
 /**
- * DUYET GOC THE cho TRANG WEB cua man hinh (net_upload_http.cpp): lay muc thu `idx` (0..) o goc the.
- * Ghi ten (KHONG co dau '/') vao `name` (toi da `name_n` byte), kich thuoc vao *size, thu muc vao *isdir.
- * Tra ve false khi het muc / loi / chua co the. CAC MUC HE THONG (CYDLCD_HIDE_DIRS: cydlcd_tmp, BTUP)
- * duoc AN (khong tinh vao idx) - cung quy tac voi man FILES tren LCD.
+ * DUYET GOC THE cho TRANG WEB cua man hinh (net_upload_http.cpp) — BO DUYET MOT LUOT.
+ *
+ * THAY CHO `cyd_sd_root_entry(idx, ...)` (da xoa 2026-10-16). Ham cu nhan `idx` nen MOI muc phai
+ * MO LAI thu muc roi dem tu dau toi `idx` -> lay N muc la N lan quet = **O(N^2)**. Do tren board that
+ * (the co N file nho): 7 file 0,18 s | 12 file 0,51 s | 17 file 1,06 s | 22 file 1,89 s | 27 file 3,11 s
+ * (moi +5 file them ~0,6-0,9 s). Nay duyet MOT lan -> O(N).
+ *
+ * CHI LAY TEN: dung `File::getNextFileName(&isDir)` cua core ESP32 = dung MOT `readdir()`, KHONG mo
+ * file, KHONG stat (khac `openNextFile()`: no tao doi tuong File va stat tung muc). Nho vay khong doc
+ * kich thuoc file nua — trang web khong can (xem net_upload_http.cpp), va phia Marlin cung da gui
+ * size = 0 tu truoc (`tx_i32(0); // ExtUI khong cung cap`).
+ *
+ * Cach dung (PHAI goi `end` du ket thuc som):
+ *     if (cyd_sd_list_begin()) {
+ *       char nm[64]; bool d = false;
+ *       while (cyd_sd_list_next(nm, sizeof(nm), &d)) { ... }
+ *       cyd_sd_list_end();
+ *     }
+ * CAC MUC HE THONG (CYDLCD_HIDE_DIRS: cydlcd_tmp, BTUP) duoc AN - cung quy tac voi man FILES tren LCD.
  */
-bool cyd_sd_root_entry(uint8_t idx, char *name, size_t name_n, uint32_t *size, bool *isdir);
+bool cyd_sd_list_begin(void);
+/** Muc ke tiep: ghi ten (KHONG co dau '/') vao `name`, thu muc vao *isdir. false = het/loi. */
+bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir);
+/** Dong thu muc dang duyet. Goi du da doc het hay dung giua duong. */
+void cyd_sd_list_end(void);
 /**
  * Bao Marlin mount lai the (M22/M21) + xin lai danh sach file. CHAN ~800 ms (nuoi UART + LVGL).
  * Dung SAU khi xoa file qua trang web (giong `files_init_sd()` cua man FILES). Goi tu vong lap chinh

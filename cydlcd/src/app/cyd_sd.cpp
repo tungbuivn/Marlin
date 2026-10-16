@@ -305,9 +305,8 @@ bool sd_mount(const bool verbose) {
     if (verbose) ELOG("[UP] thu mount the TF @ %u Hz ...\n", (unsigned)hz_try[i]);
     if (SD.begin(CYDLCD_SD_CS, SPI, hz_try[i], "/sd", 4)) {
       s_sd_ready = true;
-      ELOG("[UP] %s @ %u Hz: cardType=%d, tong %lu KB, da dung %lu KB\n",
-           s_sd_was ? "da mount LAI the TF" : "the TF OK", (unsigned)hz_try[i], (int)SD.cardType(),
-           (unsigned long)(SD.totalBytes() / 1024ull), (unsigned long)(SD.usedBytes() / 1024ull));
+      ELOG("[UP] %s @ %u Hz: cardType=%d\n",
+           s_sd_was ? "da mount LAI the TF" : "the TF OK", (unsigned)hz_try[i], (int)SD.cardType());
       s_sd_was = true;
       return true;
     }
@@ -695,41 +694,62 @@ uint32_t    cyd_sd_last_written(void) { return s_written; }
 // ===========================================================================
 // DUYET GOC THE + BAO MARLIN MOUNT LAI (cho TRANG WEB cua man hinh)
 // ===========================================================================
-// Lay muc thu `idx` o goc the (an cac muc he thong nhu man FILES tren LCD). Moi lan goi MO LAI thu muc roi
-// dem toi `idx` - chi phi khong dang ke (the co vai chuc muc) va KHONG can giu trang thai giua 2 lan goi
-// (an toan khi vua doc vua co phien upload/xoa).
-bool cyd_sd_root_entry(const uint8_t idx, char *name, const size_t name_n, uint32_t *size, bool *isdir) {
+// BO DUYET MOT LUOT (2026-10-16). Xem ghi chu day du o cyd_sd.h.
+//
+// TRUOC DAY: `cyd_sd_root_entry(idx, ...)` mo lai thu muc roi dem toi `idx` cho TUNG muc -> O(N^2).
+// Do tren board that (the co N file nho):
+//     7 file -> 0,18 s | 12 -> 0,51 s | 17 -> 1,06 s | 22 -> 1,89 s | 27 -> 3,11 s
+// Nay duyet MOT lan -> O(N). Va dung `getNextFileName(&isDir)` (1 readdir, KHONG mo file, KHONG stat)
+// thay cho `openNextFile()` (tao doi tuong File + stat tung muc) -> khong con doc size file nua.
+static File s_list_dir;              // thu muc goc dang duyet (chi 1 phien duyet tai mot thoi diem)
+static bool s_list_open = false;
+
+bool cyd_sd_list_begin(void) {
 #if CYDLCD_SD_UART
-  if (!s_sd_ready || !name || name_n == 0) return false;
-  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> KHONG liet ke (tra false = het danh
-  // sach lan nay). Trang web `/files` se bao "ban, thu lai sau" (xem net_upload_http.cpp).
-  if (cyd_sd_yield_to_marlin()) return false;
-  if (s_fatfs_stale) fatfs_sync();          // chi khi Marlin vua ghi tho (xem cyd_sd_delete())
+  if (s_list_open) cyd_sd_list_end();          // phien duyet truoc bi bo quen -> dong lai
   if (!s_sd_ready) return false;
-  File dir = SD.open("/");
-  if (!dir || !dir.isDirectory()) { if (dir) dir.close(); return false; }
-  bool found = false;
-  uint8_t i = 0;
-  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
-    const bool   d  = f.isDirectory();
-    const String nm = f.name();             // ESP32 core: ten DAY DU, dang "/ten"
-    const uint32_t sz = (uint32_t)f.size();
-    f.close();
+  // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> KHONG liet ke (tra false = het
+  // danh sach lan nay). Trang web `/files` se bao "ban, thu lai sau" (xem net_upload_http.cpp).
+  if (cyd_sd_yield_to_marlin()) return false;
+  if (s_fatfs_stale) fatfs_sync();             // chi khi Marlin vua ghi tho (xem cyd_sd_delete())
+  if (!s_sd_ready) return false;
+  s_list_dir = SD.open("/");
+  if (!s_list_dir || !s_list_dir.isDirectory()) {
+    if (s_list_dir) s_list_dir.close();
+    return false;
+  }
+  s_list_open = true;
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir) {
+#if CYDLCD_SD_UART
+  if (!s_list_open || !name || name_n == 0) return false;
+  for (;;) {
+    bool d = false;
+    // getNextFileName: MOT readdir, khong mo file/khong stat (khac openNextFile). Khong lay duoc size
+    // nhung trang web khong can (xem cyd_sd.h).
+    const String nm = s_list_dir.getNextFileName(&d);
+    if (nm.length() == 0) return false;        // het muc
     const char *p = nm.c_str();
     if (*p == '/') p++;
-    if (cydlcd_hidden_dir(p, d ? 1u : 0u)) continue;   // muc he thong -> an (khong tinh vao idx)
-    if (i++ != idx) continue;
+    if (cydlcd_hidden_dir(p, d ? 1u : 0u)) continue;   // muc he thong -> an
     snprintf(name, name_n, "%s", p);
-    if (size)  *size  = sz;
     if (isdir) *isdir = d;
-    found = true;
-    break;
+    return true;
   }
-  dir.close();
-  return found;
 #else
-  (void)idx; (void)name; (void)name_n; (void)size; (void)isdir;
+  (void)name; (void)name_n; (void)isdir;
   return false;
+#endif
+}
+
+void cyd_sd_list_end(void) {
+#if CYDLCD_SD_UART
+  if (s_list_open) { s_list_dir.close(); s_list_open = false; }
 #endif
 }
 
@@ -1562,7 +1582,7 @@ void cyd_sd_perf_report(void) {
                 (unsigned long)s_pf_check_n, (unsigned long)s_pf_check_us,
                 (unsigned long)(s_pf_check_n ? s_pf_check_us / s_pf_check_n : 0),
                 (unsigned long)s_pf_check_max_us, (unsigned long)s_pf_clean_us);
-  Serial.printf("[PERF] log 1 Hz: %lu lan, %lu us tong, tb %lu us (SD.totalBytes/usedBytes)\n",
+  Serial.printf("[PERF] log 1 Hz: %lu lan, %lu us tong, tb %lu us (log trang thai, KHONG con f_getfree)\n",
                 (unsigned long)s_pf_log_n, (unsigned long)s_pf_log_us,
                 (unsigned long)(s_pf_log_n ? s_pf_log_us / s_pf_log_n : 0));
   // KHOA THE (B2a): cho lau nhat + so lan het tran. YEU CAU: cho cua duong `link` phai << 1000 ms (Marlin).
@@ -1580,31 +1600,21 @@ void cyd_sd_log(void) {
   // Ten file tam dang co (chi ten, khong ca duong dan - dong log gon)
   const char *t = s_tmp[0] ? strrchr(s_tmp, '/') : nullptr;
 #if CYDLCD_SD_SHARED
-  // The dung chung: KHONG goi SD.totalBytes() khi chua mount (vua ton SPI vua vo nghia vi bus
-  // dang thuoc Marlin). Trang thai the that su nam o co CYDLCD_SF_MEDIA cua Marlin.
-  const uint32_t free_kb = 0;
+  // The dung chung: trang thai the that su nam o co CYDLCD_SF_MEDIA cua Marlin.
   const int sd_state = (int)cyd_sd_ready();
 #else
-  // Dung luong con trong: `SD.totalBytes()/usedBytes()` = FATFS `f_getfree` (QUET BANG FAT) - do duoc ~20 ms
-  // moi lan tren the 16 GB. Truoc day goi MOI GIAY (4 lan goi trong 1 bieu thuc!) chi de in log -> ton 2% CPU
-  // va lam vong lap bi chan. Nay doc moi CYDLCD_SD_FREE_MS va nho lai gia tri cu.
-  static uint32_t s_free_kb = 0;
-  static uint32_t s_free_ms = 0;
-  const uint32_t nowms = millis();
-  if (s_sd_ready && (!s_free_ms || (uint32_t)(nowms - s_free_ms) >= CYDLCD_SD_FREE_MS)) {
-    s_free_ms = nowms;
-    const uint64_t tot = SD.totalBytes(), use = SD.usedBytes();
-    s_free_kb = (tot > use) ? (uint32_t)((tot - use) / 1024ull) : 0u;
-  }
-  else if (!s_sd_ready) s_free_kb = 0;
-  const uint32_t free_kb = s_free_kb;
   const int sd_state = (int)s_sd_ready;
 #endif
+  // 2026-10-16 (YEU CAU NGUOI DUNG "cho nao lay size file hay size the sd thi bo"): KHONG con doc
+  // dung luong con trong cua the o day. `SD.totalBytes()/usedBytes()` = FATFS `f_getfree` QUET BANG FAT
+  // (~20 ms/lan tren the 16 GB, co the lau hon nhieu khi the day) ma chi de IN LOG -> vo ich.
+  // Cho DUY NHAT con doc dung luong the la trong duong UPLOAD (cyd_sd_temp_open): o do no la kiem tra
+  // "con du cho khong" TRUOC khi nhan file - dung nhu ngoai le nguoi dung cho phep.
   Serial.printf("[UP] wifi=%u ssid=\"%s\" ip=%s rssi=%d sd=%d busy=%d rx=%lu written=%lu "
-                "heap=%lu heapmin=%lu free=%luKB | file=%s | %s\n",
+                "heap=%lu heapmin=%lu | file=%s | %s\n",
                 (unsigned)net_wifi_state(), net_wifi_ssid(), net_wifi_ip(), (int)net_wifi_rssi(),
                 sd_state, (int)s_busy, (unsigned long)s_got, (unsigned long)s_written,
-                (unsigned long)heap, (unsigned long)s_heap_min, (unsigned long)free_kb,
+                (unsigned long)heap, (unsigned long)s_heap_min,
                 t ? t + 1 : "-", s_result[0] ? s_result : "-");
   // Trang thai MARLIN (tu frame PUSH) + bo dem sector phuc vu Marlin - de chan doan TU XA khi khong
   // nhin duoc man hinh:
@@ -1617,8 +1627,8 @@ void cyd_sd_log(void) {
                 (unsigned long)s_raw_rd, (unsigned long)s_raw_rd_err,
                 (unsigned long)s_raw_wr, (unsigned long)s_raw_wr_err,
                 (unsigned long)s_raw_rd_refused, (unsigned long)s_raw_wr_refused);
-  // Do hieu nang (`UI PERF`): dong log 1 Hz nay goi `SD.totalBytes()/usedBytes()` (FATFS `f_getfree` - co the
-  // QUET CA BANG FAT tren the lon) nen phai do: neu no cung ton tram ms thi cung lam man hinh cham.
+  // Do hieu nang (`UI PERF`) cho ca dong log 1 Hz nay. TRUOC 2026-10-16 trong do co
+  // `SD.totalBytes()/usedBytes()` (FATFS `f_getfree`, QUET BANG FAT) nen phai do; nay da bo phan do.
   s_pf_log_us += micros() - t_log; s_pf_log_n++;
 }
 
@@ -1647,9 +1657,11 @@ bool cyd_sd_raw_write(uint32_t sector, const uint8_t *src) { (void)sector; (void
 bool cyd_sd_delete(const char *name) { (void)name; return false; }
 int  cyd_sd_dir_count(const char *name) { (void)name; return -1; }
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) { (void)name; if (not_empty) *not_empty = false; return false; }
-bool cyd_sd_root_entry(uint8_t idx, char *name, size_t name_n, uint32_t *size, bool *isdir) {
-  (void)idx; (void)name; (void)name_n; (void)size; (void)isdir; return false;
+bool cyd_sd_list_begin(void) { return false; }
+bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir) {
+  (void)name; (void)name_n; (void)isdir; return false;
 }
+void cyd_sd_list_end(void) {}
 void cyd_sd_notify_marlin_remount(void) {}
 void cyd_sd_log_dir(const char *path) { (void)path; ELOG("[UP] goc the: che do the khong phai CYDLCD_SD_UART\n"); }
 bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, char *err, size_t errn) {
