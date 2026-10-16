@@ -61,6 +61,35 @@ static lv_obj_t *st_time, *st_pct, *st_bar, *st_msg;
 static uint32_t  s_xyz_blink_ms = 0;        // moc doi trang thai lan cuoi
 static bool      s_xyz_blink_on = true;     // true = dang HIEN dau "?"
 
+// ---------------------------------------------------------------------------
+//  QUAT QUAY theo toc do (2026-10-16)
+//
+//  YEU CAU NGUOI DUNG: "cho quat QUAY, toc do theo % quat".
+//  TRUOC DAY: chi doi giua 3 ANH TINH (fan / fan_slow / fan_fast) theo nguong 50% -> do bang cach chup
+//  o icon 8 lan lien tiep thi chi ra 1 anh duy nhat => icon DUNG YEN, khong he co animation.
+//
+//  VI SAO PHAI SINH KHUNG XOAY SAN (khong dung lv_img_set_angle()): xem ghi chu o pick_icon() ngay tren —
+//  LVGL 8.4 chi transform duoc TRUE_COLOR* / RGB565A8, con ALPHA_4BIT (dinh dang cua MOI icon o day) roi
+//  vao `default:` cua lv_draw_sw_transform.c => xoay bang LVGL thi icon BIEN MAT, khong phai xoay.
+//  Nen 8 khung duoc SINH SAN bang tools/make_lvgl_icons.py (ham rotate4).
+//
+//  8 khung x 15 do phu 0..105 do. Icon quat ve 3 CANH -> cu xoay 120 do la TRUNG KHIT (do bang tu tuong
+//  quan xoay: sai so nho nhat 0,82/15 o dung 120 do) nen 120 do = 0 do => vong lap LIEN MACH, khong giat.
+//  8 khung x 2048 byte = 16 KB flash.
+// ---------------------------------------------------------------------------
+#define FAN_FRAME_N 8
+static const lv_img_dsc_t *const s_fan_frames[FAN_FRAME_N] = {
+  &ui_icon_fan_r0, &ui_icon_fan_r1, &ui_icon_fan_r2, &ui_icon_fan_r3,
+  &ui_icon_fan_r4, &ui_icon_fan_r5, &ui_icon_fan_r6, &ui_icon_fan_r7
+};
+static uint8_t  s_fan_frame = 0;            // khung dang hien
+static uint32_t s_fan_ms    = 0;            // moc doi khung lan cuoi
+// Thoi gian giu 1 khung theo % quat (100% -> nhanh nhat). GIOI HAN DUOI = UI_REFRESH_MS (150 ms, xem
+// ui_lvgl.cpp): trang chi duoc cap nhat 150 ms/lan nen dat nhanh hon cung khong thay gi.
+//   nhanh nhat = 8 khung x 150 ms = 1,2 s/vong | cham nhat = 8 x 900 ms = 7,2 s/vong
+#define FAN_FRAME_MS_MIN 150
+#define FAN_FRAME_MS_MAX 900
+
 // Thu nho icon bitmap cua Marlin (64x64) xuong sz x sz.
 // KHONG dung lv_img_set_zoom(): LVGL 8.4 chi ho tro transform (zoom/xoay) cho TRUE_COLOR* /
 // RGB565A8 (lv_draw_sw_transform.c, ALPHA_4BIT roi vao `default:` -> khong ve gi) ma icon cua
@@ -227,7 +256,25 @@ void page_status_update(void) {
       snprintf(b, sizeof(b), "%u%%", (unsigned)fp);
       set_text(st_cur[i], b);
       set_text(st_tgt[i], "");
-      set_img_src(st_icon[i], (fp >= 50) ? &ui_icon_fan_fast : (fp ? &ui_icon_fan_slow : &ui_icon_fan));
+      // Quat QUAY that: lat khung theo toc do quat (xem khoi ghi chu s_fan_frames o dau file).
+      if (fp == 0) {
+        s_fan_frame = 0;                       // quat TAT -> anh tinh, khong quay
+        s_fan_ms    = 0;                       // lan sau bat quat thi moc duoc dat lai
+        set_img_src(st_icon[i], &ui_icon_fan);
+      }
+      else {
+        const uint32_t step = FAN_FRAME_MS_MAX
+                            - (uint32_t)((FAN_FRAME_MS_MAX - FAN_FRAME_MS_MIN) * fp / 100);
+        const uint32_t tnow = ui_port_millis();
+        if (!s_fan_ms) s_fan_ms = tnow;
+        const uint32_t el = tnow - s_fan_ms;
+        if (el >= step) {
+          const uint32_t n = el / step;        // UI bi nghen -> nhay NHIEU khung, khong bi quay cham lai
+          s_fan_ms += n * step;
+          s_fan_frame = (uint8_t)((s_fan_frame + n) % FAN_FRAME_N);
+        }
+        set_img_src(st_icon[i], s_fan_frames[s_fan_frame]);
+      }
     }
     else {                                            // dau in / ban in: so nguyen do C
       temp_lookup(i == 0 ? CYDLCD_TEMP_E0 : CYDLCD_TEMP_BED, &cur, &tgt);

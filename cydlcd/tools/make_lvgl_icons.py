@@ -166,6 +166,49 @@ def outline(rows: list[list[int]], w: int, h: int, thick: int = 2) -> list[list[
     return out
 
 
+# ---------------------------------------------------------------------------
+#  KHUNG XOAY cho icon QUAT (2026-10-16)
+#
+#  YEU CAU NGUOI DUNG: "hinh nhu icon quat o trang status khong animate hoac animate qua nhanh"
+#  -> do bang cach chup o icon 8 lan lien tiep: chi ra 1 anh duy nhat => icon DUNG YEN, khong he co
+#     animation. Code cu chi doi giua 3 ANH TINH (fan / fan_slow / fan_fast) theo nguong 50%.
+#
+#  VI SAO 8 KHUNG 15 DO LA DU: do TU TUONG QUAN XOAY cua icon quat (xoay roi so voi chinh no) cho
+#  thay sai so nho nhat o **120 do** (0.82/15) => quat ve 3 CANH, cu xoay 120 do la TRUNG KHIT.
+#  Nen chi can 8 khung 15 do phu 0..105 do; 120 do = 0 do -> vong lap LIEN MACH, khong giat.
+#  8 khung x 2048 byte = 16 KB flash (CYD dung 39% cua 3 MB nen khong dang ke).
+# ---------------------------------------------------------------------------
+FAN_FRAMES = 8              # so khung trong 1 vong 120 do
+FAN_SYMMETRY_DEG = 120.0    # chu ky doi xung do duoc cua icon quat (3 canh)
+
+
+def rotate4(rows: list[list[int]], w: int, h: int, deg: float) -> list[list[int]]:
+    """Xoay luoi muc xam quanh TAM anh, noi suy SONG TUYEN (bilinear).
+
+    Dung noi suy chu khong lam tron: anh goc da co khua rang cua san (muc 0..15), noi suy giu duoc
+    do muot do. Xoay NGUOC (inverse mapping) de khong de lo pixel trang o anh ket qua.
+    """
+    import math
+    rad = math.radians(deg)
+    ca, sa = math.cos(rad), math.sin(rad)
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    out = [[0] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            dx, dy = x - cx, y - cy
+            sx = ca * dx + sa * dy + cx
+            sy = -sa * dx + ca * dy + cy
+            if sx < 0 or sy < 0 or sx > w - 1 or sy > h - 1:
+                continue                     # ngoai anh goc -> trong suot (0)
+            x0, y0 = int(sx), int(sy)
+            x1, y1 = min(x0 + 1, w - 1), min(y0 + 1, h - 1)
+            fx, fy = sx - x0, sy - y0
+            v = (rows[y0][x0] * (1 - fx) * (1 - fy) + rows[y0][x1] * fx * (1 - fy)
+                 + rows[y1][x0] * (1 - fx) * fy + rows[y1][x1] * fx * fy)
+            out[y][x] = max(0, min(15, int(round(v))))
+    return out
+
+
 def main() -> int:
     lines = [
         "/**",
@@ -222,6 +265,14 @@ def main() -> int:
             line = pack4(outline(unpack4(mapped, w, h), w, h), w)
             emit("ui_icon_hotend_line", w, h, line,
                  f"{fname} ({w}x{h}) -> ban VIEN (hotend chua cap nguon)")
+        # KHUNG XOAY cua QUAT (xem khoi ghi chu o rotate4/FAN_FRAMES): trang STATUS lat tung khung
+        # theo toc do quat -> quat QUAY that, nhanh dan theo %.
+        if out_name == "ui_icon_fan_fast":
+            grid = unpack4(mapped, w, h)
+            for k in range(FAN_FRAMES):
+                deg = k * (FAN_SYMMETRY_DEG / FAN_FRAMES)
+                emit(f"ui_icon_fan_r{k}", w, h, pack4(rotate4(grid, w, h, deg), w),
+                     f"{fname} xoay {deg:.0f} do -> khung quay {k + 1}/{FAN_FRAMES}")
 
     for fname, symbol, out_name, w, h, dst_w in SMALL:
         path = IMG_DIR / fname

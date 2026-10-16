@@ -253,6 +253,16 @@ static void run_line(char *line) {
   else if (!strcmp(cmd, "tap"))   { sim_tap(atoi(a1), atoi(a2)); printf("[SIM] tap %d,%d\n", atoi(a1), atoi(a2)); }
   else if (!strcmp(cmd, "settle")){ sim_settle((uint32_t)atoi(a1)); }
   else if (!strcmp(cmd, "shot"))  { do_shot(a1); }
+  // `fan <pct>`: dat % QUAT gia (cydlcd.fans[0].pct = pct * 100). Dung de kiem tra VONG QUAY cua icon
+  // quat o trang STATUS (toc do quay ti le voi %) — xem FAN_FRAME_MS_MIN/MAX o ui_page_status.cpp.
+  // Cach kiem: shot lien tiep moi 150 ms (dung nhip UI_REFRESH_MS), dem so lan ANH DOI -> ra chu ky
+  // doi khung, doi chieu voi cong thuc step = FAN_FRAME_MS_MAX - (MAX-MIN)*pct/100.
+  else if (!strcmp(cmd, "fan")) {
+    cydlcd.n_fans = 1;
+    cydlcd.fans[0].idx = 0;
+    cydlcd.fans[0].pct = (int16_t)(atoi(a1) * 100);
+    printf("[SIM] fan = %s%%\n", a1);
+  }
   else if (!strcmp(cmd, "checkxyz")) { check_xyz(a1); }
   else if (!strcmp(cmd, "colortest")) { ui_port_colortest_raw(); }
   else if (!strcmp(cmd, "checkcolor")) { check_color(); }
