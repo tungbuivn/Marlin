@@ -203,7 +203,8 @@ const char *page_title(uint8_t p) {
 lv_obj_t   *s_page[PG_COUNT];              // container noi dung tung man (NULL = chua tao)
 lv_obj_t   *s_bar;                         // dong tieu de chung: [ten man] ... [LINK][BACK] (an o STATUS)
 lv_obj_t   *s_title, *s_link;
-lv_obj_t   *s_btn_pause, *s_btn_stop;      // P9: 2 nut nho chi hien khi dang in tu the SD
+lv_obj_t   *s_btn_pause, *s_btn_resume, *s_btn_stop;   // P9: hien khi dang in tu the SD
+                                                   // pause/resume CHONG NHAU (xem ui_chrome.cpp)
 lv_group_t *s_group;
 uint8_t     s_page_act = PG_STATUS;
 // Input device (encoder hoac cam ung) - gan trong ui_lvgl_begin(). Man WIFI dung no de KHOA/MO input
@@ -835,15 +836,22 @@ static void ui_lvgl_task_body(void) {
   }
 
   // P9: 2 nut PAUSE/STOP nho o dong tieu de, CHI hien khi dang in tu the SD
-  if (s_btn_pause && s_btn_stop) {
-    const bool printing = ((cydlcd.flags & CYDLCD_SF_SD_PRINTING) != 0);
+  if (s_btn_pause && s_btn_resume && s_btn_stop) {
+    const bool printing = ((cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0);
+    const bool paused   = ((cydlcd.flags & CYDLCD_SF_PAUSED) != 0);
     if (printing) {
-      lv_obj_clear_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_clear_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
+      // pause/resume CHONG NHAU o cung mot khe: dang in -> PAUSE (vang), tam dung -> RESUME (xanh la).
+      // An/hien CA NUT (khong doi nhan) vi doi nhan tren nhan con cua nut khong ve lai duoc.
+      if (paused) { lv_obj_add_flag(s_btn_pause,  LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_clear_flag(s_btn_resume, LV_OBJ_FLAG_HIDDEN); }
+      else        { lv_obj_clear_flag(s_btn_pause,  LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_add_flag(s_btn_resume, LV_OBJ_FLAG_HIDDEN); }
+      lv_obj_clear_flag(s_btn_stop, LV_OBJ_FLAG_HIDDEN);
     }
     else {
-      lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(s_btn_pause,  LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(s_btn_resume, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(s_btn_stop,   LV_OBJ_FLAG_HIDDEN);
     }
   }
 

@@ -513,7 +513,7 @@ extern lv_obj_t *s_title;
 /** Nhan trang thai link tren dong tieu de (TEN MAY / LINK ERR / NO LINK). */
 extern lv_obj_t *s_link;
 /** 2 nut nho PAUSE/STOP tren dong tieu de (chi hien khi dang in tu the SD). */
-extern lv_obj_t *s_btn_pause, *s_btn_stop;
+extern lv_obj_t *s_btn_pause, *s_btn_resume, *s_btn_stop;
 /** Group chung cho encoder/touch: MOI vat bam duoc cua moi man deu nam trong day. */
 extern lv_group_t *s_group;
 /** Man dang mo (chi so PG_*). */

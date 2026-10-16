@@ -516,7 +516,19 @@ void build_chrome(void) {
 
   // ---- Ten man: o be rong CO DINH (TITLE_W) de tong be rong thanh tieu de la con so chac chan
   // (xem bang o tren). Ten dai hon o thi tu cuon trong o, khong day cac nut ra ngoai.
-  s_title = mk_label_w(s_bar, T(UI_T_PT_STATUS), COL_TXT, TITLE_W);
+  // 2026-10-16 (yeu cau nguoi dung: "nut ... tren topbar align ben phai di, nhung truoc icon link-on,
+  // link-off; no dang can vao giua ma MAT DIEN TICH HIEN THI CUA TITLE"):
+  //  O KET NOI ben phai rong 64 px, nhung 64 px chi de CHUA CHU DU PHONG "NO LINK"/"LINK ERR" (8 ky tu
+  //  x 8 px). Khi CO font icon (duong di binh thuong) thi icon chi ~14 px -> thu o do con 30 px va
+  //  NHUONG 34 px cho TEN MAN. Vay ten man duoc 84 + 34 = 118 px thay vi 84.
+  //  (Khong dung flex_grow cho ten man: da thu, no lam nhan tu co ve dung be rong CHU -> 39 px, te hon.)
+  {
+    const lv_font_t *iconf = title_icon_font();
+    lv_font_glyph_dsc_t gd;
+    g_link_icon_ok = (iconf && lv_font_get_glyph_dsc(iconf, &gd, 0xE00CU, 0)) ? 1 : 0;
+  }
+  const lv_coord_t title_w = g_link_icon_ok ? (TITLE_W + 34) : TITLE_W;
+  s_title = mk_label_w(s_bar, T(UI_T_PT_STATUS), COL_TXT, title_w);
   // 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1 loai font hien thi chu"): BO override
   // sang Montserrat 14. `mk_label_w()` da goi mono_obj() -> ten man dung CHUNG font chu cua UI.
   // Truoc day ten man co tinh de Montserrat lam "doi chung" de biet font GFX co ve duoc khong;
@@ -535,40 +547,69 @@ void build_chrome(void) {
 
   mk_spacer(s_bar, 0, 1, 1);                     // an het cho trong -> day cac vat sau ve phai
 
-  // P9: 2 nut nho PAUSE / STOP - mac dinh AN, chi hien khi dang in (xem ui_lvgl_task)
-  // "II" / "[]" la KY HIEU (khong phai chu) -> CO TINH khong dich, giu nguyen o MOI ngon ngu.
-  // 2026-10-16 (yeu cau nguoi dung): TAO TRUOC `s_link` de 2 nut nay luon la 2 ICON DAU TIEN cua
-  // nhom ben phai (thu tu flex = thu tu tao), roi moi toi icon ket noi / WiFi / BACK o phia phai
-  // chung. Luc AN thi flex bo qua nen nhom ben phai bat dau bang icon ket noi nhu cu.
-  // 2026-10-16 (yeu cau nguoi dung: "cac nut nay dung icon material play, pause, stop, thay ca icon
-  // tren topbar"): 2 nut nay dung ICON Material thay cho ky hieu chu "II"/"[]".
-  // Van giu du phong chu neu font icon cua ban build nay khong co 3 glyph do (xem ctrl_icon_ok()).
-  s_btn_pause = mk_btn(s_bar, ctrl_icon_ok() ? CTRL_GLYPH_PAUSE : "II", 26, 20,
-                       cb_action, (void *)(intptr_t)A_PAUSE);
-  s_btn_stop  = mk_btn(s_bar, ctrl_icon_ok() ? CTRL_GLYPH_STOP : "[]", 26, 20,
-                       cb_action, (void *)(intptr_t)A_STOP);
-  if (ctrl_icon_ok()) {                 // nhan icon -> phai dat FONT ICON cho nhan con cua nut
-    lv_obj_t *lp = lv_obj_get_child(s_btn_pause, 0);
-    lv_obj_t *ls = lv_obj_get_child(s_btn_stop, 0);
-    if (lp) lv_obj_set_style_text_font(lp, title_icon_font(), 0);
-    if (ls) lv_obj_set_style_text_font(ls, title_icon_font(), 0);
-  }
-  lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
-
   // Gioi han be rong de ten may dai khong day cac nut P9 ra ngoai thanh tieu de.
   // 64 px: du cho "LINK ERR" (8 ky tu mono x 8 px = 64) va vua du cho cac nut + icon + ten man
   // (xem bang be rong o dau build_chrome).
-  s_link  = mk_label_w(s_bar, T(UI_T_LINK_NONE), COL_ERR, LINK_LBL_W);
-  // O nay KHONG con hien TEN MAY IN nua ma hien ICON KET NOI (xem LINK_GLYPH_* o ui_lvgl_int.h).
-  // Do glyph luc CHAY giong nut HOME: font cu (chua co U+E00C) -> g_link_icon_ok = 0 va ui_lvgl.cpp
-  // lui ve hien CHU nhu truoc, khong bao gio hien o vuong.
+  // ---------------------------------------------------------------------------
+  //  NUT DIEU KHIEN IN: PAUSE / RESUME / STOP  (2026-10-16)
+  //  YEU CAU NGUOI DUNG: "nut play, resume, stop tren topbar aligh ben phai di, nhung truoc icon link-on
+  //  link-off; no dang can vao giua ma mat dien tich hien thi cua title; cung to 3 mau xanh vang do cho
+  //  tung nut".
+  //  -> Thu tu flex (thu tu TAO) la: home, ten man, spacer, PAUSE/RESUME, STOP, icon ket noi, WiFi, BACK.
+  //     Vay 2 khe nut nam SAT PHAI va NGAY TRUOC icon ket noi (link-on/link-off) dung y nguoi dung;
+  //     phan "bi can vao giua" la do `spacer` om cho trong -> da xu ly bang flex_grow cho ten man.
+  //
+  //  KHE 1 = PAUSE va RESUME CHONG NHAU trong mot khay 26x20 (trong khay KHONG dung flex -> dat toa do
+  //  tuy y). VI SAO PHAI CHONG: doi nhan bang lv_label_set_text() tren nhan con CUA NUT khong ve lai
+  //  duoc (do tren board that truoc do: "II" = 102 px muc, doi sang "|>"/">>" deu 0 px). An/hien CA NUT
+  //  thi chac chan co ve lai.
+  //  KHE 2 = STOP.
+  //
+  //  MAU: pause = VANG, resume = XANH LA, stop = DO. Mau CHU/ICON do mk_btn_set_bg() tu chon theo do sang
+  //  nen (nen vang -> chu toi, nen xanh/do -> chu sang). Ca 3 deu la LV_OBJ_FLAG_USER_1 ("tu quan ly nen")
+  //  -> focus_mark() khong ghi de mau nen khi bam.
   {
-    const lv_font_t *iconf = title_icon_font();
-    lv_font_glyph_dsc_t gd;
-    g_link_icon_ok = (iconf && lv_font_get_glyph_dsc(iconf, &gd, 0xE00CU, 0)) ? 1 : 0;
-    if (g_link_icon_ok) lv_obj_set_style_text_font(s_link, iconf, 0);
+    const bool ic = (ctrl_icon_ok() != 0);
+    const lv_coord_t BW = 26, BH = 20;
+    lv_obj_t *kheap = lv_obj_create(s_bar);            // khay trong suot chua pause+resume chong nhau
+    lv_obj_set_size(kheap, BW, BH);
+    lv_obj_clear_flag(kheap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(kheap, LV_OBJ_FLAG_CLICKABLE);   // khay khong duoc an cu cham
+    lv_obj_set_style_bg_opa(kheap, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(kheap, 0, 0);
+    lv_obj_set_style_pad_all(kheap, 0, 0);
+
+    s_btn_pause  = mk_btn(kheap, ic ? CTRL_GLYPH_PAUSE : "II", BW, BH,
+                          cb_action, (void *)(intptr_t)A_PAUSE);
+    s_btn_resume = mk_btn(kheap, ic ? CTRL_GLYPH_PLAY  : ">",  BW, BH,
+                          cb_action, (void *)(intptr_t)A_RESUME);
+    lv_obj_set_pos(s_btn_pause,  0, 0);
+    lv_obj_set_pos(s_btn_resume, 0, 0);                // CUNG toa do -> chong nhau
+    s_btn_stop   = mk_btn(s_bar, ic ? CTRL_GLYPH_STOP : "[]", BW, BH,
+                          cb_action, (void *)(intptr_t)A_STOP);
+
+    if (ic) {                 // nhan icon -> phai dat FONT ICON cho nhan con cua tung nut
+      lv_obj_t *l;
+      if ((l = lv_obj_get_child(s_btn_pause,  0))) lv_obj_set_style_text_font(l, title_icon_font(), 0);
+      if ((l = lv_obj_get_child(s_btn_resume, 0))) lv_obj_set_style_text_font(l, title_icon_font(), 0);
+      if ((l = lv_obj_get_child(s_btn_stop,   0))) lv_obj_set_style_text_font(l, title_icon_font(), 0);
+    }
+    mk_btn_set_bg(s_btn_pause,  MR_PAUSEBG);
+    lv_obj_add_flag(s_btn_pause,  LV_OBJ_FLAG_USER_1);
+    mk_btn_set_bg(s_btn_resume, MR_RESUMEBG);
+    lv_obj_add_flag(s_btn_resume, LV_OBJ_FLAG_USER_1);
+    mk_btn_set_bg(s_btn_stop,   MR_STOPBG);
+    lv_obj_add_flag(s_btn_stop,   LV_OBJ_FLAG_USER_1);
+
+    lv_obj_add_flag(s_btn_pause,  LV_OBJ_FLAG_HIDDEN);   // mac dinh AN (chi hien khi dang in)
+    lv_obj_add_flag(s_btn_resume, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_btn_stop,   LV_OBJ_FLAG_HIDDEN);
   }
+
+  // O nay KHONG con hien TEN MAY IN nua ma hien ICON KET NOI (xem LINK_GLYPH_* o ui_lvgl_int.h).
+  // Be rong: 30 px khi co icon, 64 px khi phai dung CHU du phong (g_link_icon_ok da tinh o tren).
+  s_link  = mk_label_w(s_bar, T(UI_T_LINK_NONE), COL_ERR, g_link_icon_ok ? 30 : LINK_LBL_W);
+  if (g_link_icon_ok) lv_obj_set_style_text_font(s_link, title_icon_font(), 0);
   // CANH PHAI trong o 64 px (yeu cau nguoi dung 2026-10-16): mk_label_w() dat long mode
   // SCROLL_CIRCULAR, ma che do do LUON CANH GIUA nen icon 12 px se lo lung giua o. Doi sang CLIP
   // de text_align co tac dung. Chuoi du phong "LINK ERR" dung 64 px (8 ky tu mono x 8 px) nen van vua.
