@@ -324,9 +324,20 @@ enum {
 //  con nhieu cho): X: 24..90 (66 px) | Y: 141..207 (66 px) | Z: 233..301 (68 px).
 //  => ca "-285.98" (58,6 px) cung vua, va khong cham nhan ke tiep (Y o 127, Z o 219).
 // ---------------------------------------------------------------------------
-#define MR_XYZ_VX(i) ((lv_coord_t)(MR_XYZ_LX(i) + 14))                        // 24 / 141 / 233
-#define MR_XYZ_VR(i) ((lv_coord_t)((i) == 0 ? 90 : ((i) == 1 ? 207 : 301)))   // can phai moi o
-#define MR_XYZ_VW(i) ((lv_coord_t)(MR_XYZ_VR(i) - MR_XYZ_VX(i)))              // 66 / 66 / 68
+// ---------------------------------------------------------------------------
+//  Cho phep GHI DE tu ngoai (2026-10-16) de A/B kiem tra bo cuc MA KHONG can sua file: ban gia lap
+//  `cydlcd/sim` build lai voi bo cuc CU roi do khoang trong nhan<->so (xem tools/run_sim.ps1 -OldXyz).
+//  Do la bang chung "bay kiem thu nay THAT SU bat duoc loi so de len nhan".
+// ---------------------------------------------------------------------------
+#ifndef MR_XYZ_VX
+  #define MR_XYZ_VX(i) ((lv_coord_t)(MR_XYZ_LX(i) + 14))                        // 24 / 141 / 233
+#endif
+#ifndef MR_XYZ_VR
+  #define MR_XYZ_VR(i) ((lv_coord_t)((i) == 0 ? 90 : ((i) == 1 ? 207 : 301)))   // can phai moi o
+#endif
+#ifndef MR_XYZ_VW
+  #define MR_XYZ_VW(i) ((lv_coord_t)(MR_XYZ_VR(i) - MR_XYZ_VX(i)))              // 66 / 66 / 68
+#endif
 #define MR_RATE_Y    136                                  // canvas(70/170, 136, 80, 32)
 #define MR_RATE_H    32
 #define MR_SD_X      0                                    // the SD: Marlin (0,130,64,64)

@@ -1440,9 +1440,18 @@ void ui_lvgl_test_perf(void) {
   }
   lv_mem_monitor_t lm;
   lv_mem_monitor(&lm);
-  Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap %u B\n",
-                (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
-                (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size, (unsigned)ESP.getFreeHeap());
+  // `ESP.getFreeHeap()` chi co tren ESP32 (CYD). Board STM32 LVGL (F411/F407) va ban gia lap tren PC
+  // khong co `ESP` => TRUOC DAY dong nay lam 2 env STM32 BAO LOI BUILD
+  // ("'ESP' was not declared in this scope", ui_lvgl.cpp). Nay tach theo board (sua 2026-10-16).
+  #if defined(CYDLCD_BOARD_CYD)
+    Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap %u B\n",
+                  (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
+                  (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size, (unsigned)ESP.getFreeHeap());
+  #else
+    Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap: khong co ESP\n",
+                  (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
+                  (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size);
+  #endif
   s_pf_loop_n = s_pf_hdl_us = s_pf_hdl_max_us = 0;
   s_pf_task_n = s_pf_task_us = s_pf_task_max_us = 0;
 }

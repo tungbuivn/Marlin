@@ -439,21 +439,12 @@
   #define CYDLCD_NAME_ALLOW_EXTRA "-"
 #endif
 // ---------------------------------------------------------------------------
-// THONG BAO tren TRANG /status (yeu cau nguoi dung 2026-10-15): hop thoai "thong bao" cua Marlin (co nut OK
-// + tu dong an tren LCD) KHONG hien tren man hinh nua, chi hien o trang /status va luu lai message LAN CUOI;
-// qua `CYDLCD_MSG_TTL_MS` thi tu bien mat (dat 0 = giu mai).
-//   CYDLCD_MSG_BOX_ON_LCD 0 = khong hien hop thong bao tren LCD (mac dinh, theo yeu cau);
-//                         1 = quay lai hanh vi cu (hien hop OK + tu an sau CYDLCD_MSG_TTL_MS tren LCD).
+// !!! BA MACRO THONG BAO DA CHUYEN RA CUOI FILE (2026-10-16) !!!
+// `CYDLCD_MSG_BOX_ON_LCD` / `CYDLCD_MSG_TTL_MS` / `CYDLCD_NOTIFY_LEN` truoc day nam O DAY (trong khoi
+// `#if CYDLCD_WIFI_UPLOAD`) nhung `ui_boxes.cpp:288,296` dung chung VO DIEU KIEN => board STM32 LVGL
+// (cydlcd_f411cc_lvgl / cydlcd_f407vgz_lvgl, WiFi = 0) KHONG BUILD DUOC. Nay chung nam ngoai khoi WiFi
+// (xem cuoi file) - KHONG dinh nghia lai o day.
 // ---------------------------------------------------------------------------
-#ifndef CYDLCD_MSG_BOX_ON_LCD
-  #define CYDLCD_MSG_BOX_ON_LCD 0
-#endif
-#ifndef CYDLCD_MSG_TTL_MS
-  #define CYDLCD_MSG_TTL_MS 6000u        // thoi gian tu an cua thong bao o trang /status (0 = giu mai)
-#endif
-#ifndef CYDLCD_NOTIFY_LEN
-  #define CYDLCD_NOTIFY_LEN 96           // do dai toi da cua 1 thong bao (byte)
-#endif
 // Cho phep nhan file khi Marlin dang in? 0 = tu choi (an toan: 2 nguoi ghi 1 FAT).
 #ifndef CYDLCD_HTTP_ALLOW_WHILE_PRINTING
   #define CYDLCD_HTTP_ALLOW_WHILE_PRINTING 0
@@ -508,4 +499,34 @@
 // ---------------------------------------------------------------------------
 #ifndef CYDLCD_HIDE_DIRS
   #define CYDLCD_HIDE_DIRS "cydlcd_tmp,BTUP"
+#endif
+
+// ---------------------------------------------------------------------------
+//  Cac macro DUNG CHUNG cho MOI board, KHONG phu thuoc WiFi (sua 2026-10-16)
+//
+//  VI SAO: `cyd_sd.cpp` (dung cho ca board STM32 - nhanh stub) va `ui_boxes.cpp` (moi board) dung
+//  nhung macro nay, nhung truoc day chung nam TRONG `#if CYDLCD_WIFI_UPLOAD` (chi board CYD co WiFi)
+//  => 2 env STM32 LVGL (`cydlcd_f411cc_lvgl`, `cydlcd_f407vgz_lvgl`) BAO LOI BUILD:
+//      cyd_sd.cpp:32:  error: 'CYDLCD_NAME_ALLOW_EXTRA' was not declared in this scope
+//      ui_boxes.cpp:288: error: 'CYDLCD_MSG_BOX_ON_LCD' was not declared in this scope
+//  Nay chung nam o day (ngoai khoi WiFi) va deu co `#ifndef` nen board CYD van dung gia tri cu.
+// ---------------------------------------------------------------------------
+// Ky tu CHO PHEM THEM trong ten file (ngoai [A-Za-z0-9._-]) khi lam sach ten khach gui len (cyd_sd.cpp:
+// name_char_ok) - lop chan o BIEN GIOI WEB. Duong xoa file tu man FILES tren LCD khong bi gioi han nay.
+#ifndef CYDLCD_NAME_ALLOW_EXTRA
+  #define CYDLCD_NAME_ALLOW_EXTRA "-"
+#endif
+// Cho Marlin xu ly M22/M21 truoc khi xin lai danh sach file (cyd_sd.cpp dung).
+#ifndef CYDLCD_HTTP_SDWAIT_MS
+  #define CYDLCD_HTTP_SDWAIT_MS     800u
+#endif
+// Thong bao tren trang /status: hop thoai cua Marlin KHONG hien tren LCD (chi luu o /status).
+#ifndef CYDLCD_MSG_BOX_ON_LCD
+  #define CYDLCD_MSG_BOX_ON_LCD 0
+#endif
+#ifndef CYDLCD_MSG_TTL_MS
+  #define CYDLCD_MSG_TTL_MS 6000u        // thoi gian tu an cua thong bao o trang /status (0 = giu mai)
+#endif
+#ifndef CYDLCD_NOTIFY_LEN
+  #define CYDLCD_NOTIFY_LEN 96           // do dai toi da cua 1 thong bao (byte)
 #endif

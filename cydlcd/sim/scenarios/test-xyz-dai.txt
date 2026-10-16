@@ -1,0 +1,35 @@
+# ===========================================================================
+#  cydlcd/sim/scenarios/test-xyz-dai.txt
+#
+#  Kiem tra TU DONG (khong can board) rang hang X/Y/Z KHONG bi so DE len nhan:
+#  dat toa do DAI (`-1234.56`) - truong hop xau nhat - roi do khoang trong giua nhan truc va so
+#  bang cach doc pixel cua anh vua ve (`checkxyz`).
+#
+#  Chay:  pwsh cydlcd/tools/run_sim.ps1 -Script cydlcd/sim/scenarios/test-xyz-dai.txt
+#  Ket qua: exit code = so kiem tra that bai (0 = dat). Xem cuoi file co dong
+#      [SIM] xong. Kiem tra tu dong that bai: 0
+#
+#  VI SAO CO FILE NAY: day chinh la loi nguoi dung bao 2026-10-16 ("tai truc X 285.98 thi so 2 de vao
+#  nhan X"). Ban gia lap ve UI THAT ra anh, roi tu doc anh de ket luan - khong phai ngoi nhin.
+# ===========================================================================
+state basic
+page STATUS
+settle 300
+
+echo --- toa do dai nhat (-1234.56 / -1234.56 / -1234.56) ---
+pos -1234.56 -1234.56 -1234.56
+settle 300
+shot 95-xyz-dai.bmp
+checkxyz
+
+echo --- toa do binh thuong (285.98 / 123.4 / 56.0) ---
+pos 285.98 123.4 56.0
+settle 300
+shot 96-xyz-thuong.bmp
+checkxyz
+
+echo --- so duong rat dai (1000.00 - gioi han thuc te cua may) ---
+pos 1000.00 1000.00 300.00
+settle 300
+shot 97-xyz-1000.bmp
+checkxyz

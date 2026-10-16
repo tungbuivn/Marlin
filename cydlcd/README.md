@@ -299,10 +299,52 @@ pwsh cydlcd/tools/run_host_test.ps1
 
 Chương trình `tools/test_cydlcd_link.cpp` dùng **đúng** bộ tạo/giải frame trong
 `src/cydlcd_protocol.h` và nạp trực tiếp `src/cydlcd_link.cpp` với một UART giả → kiểm luôn
-đường nhận + phân tích frame. Hiện có **40 kiểm tra**: HELLO/STATUS/TEMPS/POSITION/PROGRESS/
-FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, và nhóm chịu lỗi (rác trước
-frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi). Lần chạy đầu đã bắt được **2 lỗi thật**
-(lệch offset 2 byte của `feed/flow %`, và điều kiện gửi PING sai) — nay **40/40 pass**.
+đường nhận + phân tích frame. Hiện có **81 kiểm tra**: HELLO/STATUS/TEMPS/POSITION/PROGRESS/
+FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, nhóm chịu lỗi (rác trước
+frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi), TRAM, **8b** (hồi quy byte `len` cho
+`G28`/`G28 X/Y/Z`) và **8c** (UART kín → frame lệnh bị bỏ **nhưng có đếm**, không im lặng).
+Lần chạy đầu đã bắt được **2 lỗi thật** (lệch offset 2 byte của `feed/flow %`, và điều kiện gửi PING sai).
+
+> ⚠️ **2026-10-16 — bộ test này đã CHẾT ÂM suốt từ 2026-10-15** (không build được: `ui_lvgl.h` kéo
+> `cydlcd_config.h` vào bản host ⇒ `'Serial' was not declared`; `CYDLCD_HIDE_DIRS` nằm trong khối WiFi;
+> và `run_host_test.ps1` để `$ErrorActionPreference='Stop'` quanh `g++` nên **mọi WARNING thành lỗi kết
+> thúc**). Hậu quả: lỗi **vòng lặp vô tận** trong `send_frame_wait()` (xem cám bẫy 45 ở README gốc) lọt
+> lưới. Nay đã sửa cả 3 chỗ và test chạy lại **81/81**. **Bài học: bộ test không chạy được = không có test.**
+
+### 4.2 Giả lập **UI** trên PC (`cydlcd/sim`) — xem ảnh màn hình mà không cần board
+
+```powershell
+pwsh cydlcd/tools/run_sim.ps1                  # mở MỌI trang, chụp ảnh + tự kiểm tra hàng X/Y/Z
+pwsh cydlcd/tools/run_sim.ps1 -Script cydlcd/sim/scenarios/test-xyz-dai.txt
+pwsh cydlcd/tools/run_sim.ps1 -OldXyz -Script cydlcd/sim/scenarios/test-xyz-dai.txt   # PHẢI báo lỗi (xem dưới)
+```
+
+Ảnh `.bmp` ở `cydlcd/sim/out/`. Cách làm: build **đúng** các file `src/ui_*.cpp` của firmware (không vẽ
+lại UI) rồi thay lớp phần cứng bằng stub — màn hình = framebuffer 320×240 trong RAM, cảm ứng = hàng đợi
+"chạm" do kịch bản bơm vào, thẻ SD/WiFi/NVS = giả, đồng hồ = giả (chạy nhanh hơn thực tế). Chi tiết +
+bảng "thật/giả" + ngôn ngữ kịch bản: **`cydlcd/sim/README.md`**.
+
+**Kiểm tra tự động hàng X/Y/Z** (`checkxyz`): đọc chính framebuffer, tách nhóm cột "có mực" trong dải y của
+hàng XYZ rồi đo khoảng trống giữa **nhãn trục** và **số** (phải ≥ 3 px). Đã chứng minh bẫy này **thật sự bắt
+được lỗi** người dùng báo *"tại trục X = 285.98 thì số `2` đè vào nhãn `X`"*:
+
+| Bố cục | `checkxyz` với `pos -1234.56 …` |
+|---|---|
+| **Cũ** (giá trị căn phải trong hộp bắt đầu NGAY tại nhãn — `MR_XYZ_VX = MR_XYZ_LX`) | `X: 1 nhóm [14..72] <-- nhan va so DINH LIEN (loi!)`, `Y: … loi!` ⇒ **4 lỗi**, exit code 4 |
+| **Mới** (`MR_XYZ_VX` = nhãn + 14; hộp 66/66/68 px — xem §5.1) | `X: [14..24] [30..94] khe = 5 px OK` ⇒ **0 lỗi** |
+
+> 📌 **Phát hiện kèm khi làm giả lập (2026-10-16): 2 env STM32 LVGL `cydlcd_f411cc_lvgl` /
+> `cydlcd_f407vgz_lvgl` ĐANG KHÔNG BUILD ĐƯỢC** — và không liên quan gì tới giả lập:
+> `cyd_sd.cpp:32` thiếu `CYDLCD_NAME_ALLOW_EXTRA`, `cyd_sd.cpp:1651` thiếu `ELOG`,
+> `ui_boxes.cpp:288,296` thiếu `CYDLCD_MSG_BOX_ON_LCD`/`CYDLCD_MSG_TTL_MS`, `ui_lvgl.cpp:1445` dùng
+> `ESP.getFreeHeap()`, `ui_overlay.cpp:166` dùng `lv_font_montserrat_20` (font này chỉ được bật trong
+> `lv_conf_cydlcd.h` của board CYD), `ui_lang.cpp:29,33` thiếu `NULL`.
+> **Đã sửa hết các lỗi thuộc file dùng chung** (macro chuyển ra ngoài khối WiFi, `ELOG` lên trước nhánh
+> stub, `ESP.getFreeHeap()` có `#if`, font 20 có fallback 16 cho STM32, thêm `<stddef.h>`) — board CYD
+> vẫn build **SUCCESS**. **Còn lại**: `src/main.cpp` của 2 env đó dùng thẳng API ESP32/FreeRTOS
+> (`RTC_NOINIT_ATTR`, `vTaskDelay`, `xTaskCreatePinnedToCore`, `pdPASS`…) nên vẫn chưa build được —
+> cần một `main.cpp` riêng cho STM32 LVGL (chưa làm; đây là việc riêng, không thuộc phần giả lập).
+
 
 > **2026-10-13 — thêm nhóm test cho TRAM** (`src/tbt_link.cpp` + `src/tbt_protocol.h`): **+35 kiểm
 > tra** (tổng **~75**): định dạng số `tbt_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse

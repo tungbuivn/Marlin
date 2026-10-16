@@ -1,0 +1,4 @@
+# `.build*/` (object + lib cua ban gia lap) va `out/` (anh chup man hinh) khong dua vao git.
+.build/
+.build-oldxyz/
+out/

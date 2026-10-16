@@ -9,6 +9,10 @@
 #include "cydlcd_config.h"
 #include "ui_lang.h"
 
+// `stddef.h` cho NULL: file nay khong include Arduino.h nen board STM32 LVGL (lv_conf.h chung) bao loi
+// "'NULL' was not declared in this scope" (sua 2026-10-16). Tren board CYD thi Arduino.h da keo san.
+#include <stddef.h>
+
 #if defined(CYDLCD_BOARD_CYD)
   #include <Preferences.h>
   #define LANG_NVS_NS  "ui"        // namespace NVS cua man hinh (chung voi cac tuy chon UI khac)

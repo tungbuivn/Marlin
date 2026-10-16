@@ -64,6 +64,15 @@ void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
   }
 }
 
+// Log chan doan cua phan the SD. PHAI dinh nghia TRUOC `#if CYDLCD_WIFI_UPLOAD` (sua 2026-10-16):
+// nhanh STUB khi CYDLCD_WIFI_UPLOAD = 0 (board STM32) cung goi ELOG (vd cyd_sd_log_dir o cuoi file)
+// => de trong nhanh WiFi thi board STM32 LVGL BAO LOI BUILD: "'ELOG' was not declared in this scope".
+#if defined(CYDLCD_CYD_DEBUG)
+  #define ELOG(...)   do { logq_post(__VA_ARGS__); } while (0)
+#else
+  #define ELOG(...)   do { } while (0)
+#endif
+
 #if CYDLCD_WIFI_UPLOAD
 
 #include <Arduino.h>
@@ -84,12 +93,6 @@ void cyd_sd_name_clean(const char *in, char *out, const size_t cap) {
 #include "logq.h"             // log KHONG CHAN (xem logq.h): ELOG co the chay trong task `link`
                               // (doc/ghi sector tho cho Marlin) nen KHONG duoc in truc tiep ra UART0
 #include "ui_overlay.h"       // lop phu tien do upload (chi ghi trang thai; task `ui` ve)
-
-#if defined(CYDLCD_CYD_DEBUG)
-  #define ELOG(...)   do { logq_post(__VA_ARGS__); } while (0)
-#else
-  #define ELOG(...)   do { } while (0)
-#endif
 
 namespace {
 
