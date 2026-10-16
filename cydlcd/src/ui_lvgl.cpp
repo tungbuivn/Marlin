@@ -1384,6 +1384,12 @@ void ui_lvgl_test_rx(void) {
                 (int)net_wifi_rssi());
   if (age != 0xFFFFFFFFu) Serial.printf("[UI] RX: PONG cuoi %lu ms truoc (binh thuong < 1500 ms)\n",
                                         (unsigned long)age);
+  // CHIEU MAN HINH -> MARLIN: hang doi TX cua man hinh. `BO LENH` PHAI = 0 - khac 0 nghia la bam nut
+  // ma KHONG gui duoc lenh (truoc day viec nay im lang hoan toan: xem send_frame_user o cydlcd_link.cpp).
+  Serial.printf("[UI] RX: TX cho=%u | bo tong=%lu | BO LENH (G-code)=%lu %s\n",
+                (unsigned)cydlcd_link_tx_pending(), (unsigned long)cydlcd_link_tx_dropped(),
+                (unsigned long)cydlcd_link_tx_dropped_user(),
+                cydlcd_link_tx_dropped_user() ? "-> NUT BAM KHONG GUI DUOC LENH!" : "(tot)");
   Serial.printf("[UI] RX: HELLO=%u STATUS=%u TEMPS=%u POS=%u PROGRESS=%u FANS=%u MESH=%u FILES=%u "
                 "SETTING=%u EVENT=%u PROMPT=%u PONG_F=%u TBT=%u ENDSTOP=%u\n",
                 (unsigned)cydlcd_link_rx_count(CYDLCD_F_HELLO),

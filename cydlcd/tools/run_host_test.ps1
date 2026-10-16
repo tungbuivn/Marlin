@@ -18,12 +18,22 @@ if (-not $gxx) { throw "Khong tim thay g++. Cai MinGW (winget install BrechtSand
 New-Item -ItemType Directory -Force -Path $outd | Out-Null
 
 Write-Host "Bien dich: $src" -ForegroundColor Cyan
+# !! KHONG de $ErrorActionPreference = 'Stop' trong luc goi trinh bien dich !!
+# Tren Windows PowerShell 5.1, MOI dong ma g++ ghi ra stderr (ke ca WARNING) bi doi thanh
+# NativeCommandError = loi KET THUC -> script bao "loi" va KHONG chay test, du binary da build xong.
+# (Loi that 2026-10-15: nguoi dung chay script thay 'Bien dich ... [exit code: 1]' roi thoi.)
+$old = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & $gxx.Source -std=gnu++17 -O1 -Wall -Wextra -Wno-unused-parameter -Wno-dangling-pointer -DCYDLCD_HOST_TEST `
     "-I$(Join-Path $root 'cydlcd\src')" $src -o $exe
-if ($LASTEXITCODE -ne 0) { throw "Bien dich loi (exit $LASTEXITCODE)" }
+$cc = $LASTEXITCODE
+$ErrorActionPreference = $old
+if ($cc -ne 0) { throw "Bien dich loi (exit $cc)" }
 
 Write-Host "Chay test..." -ForegroundColor Cyan
+$ErrorActionPreference = 'Continue'
 & $exe
 $rc = $LASTEXITCODE
+$ErrorActionPreference = $old
 if ($rc -eq 0) { Write-Host "TAT CA PASS" -ForegroundColor Green } else { Write-Host "CO TEST FAIL ($rc)" -ForegroundColor Red }
 exit $rc

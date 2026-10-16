@@ -44,7 +44,11 @@ static cydlcd_data_t s_src;            // ban GOC, chi task `link` ghi
 // Publish `s_src` -> `cydlcd` (KHONG BAO GIO cho khoa). Goi o cuoi moi vong `cydlcd_link_task()`.
 static void state_publish(void) {
 #if defined(CYDLCD_BOARD_CYD)
-  if (!s_state_mtx) { memcpy(&cydlcd, &s_src, sizeof(cydlcd)); return; }   // chua tao khoa (luc setup)
+  if (!s_state_mtx) {                     // chua tao khoa (luc setup)
+    memcpy(&cydlcd, &s_src, sizeof(cydlcd));
+    tbt_publish_locked();
+    return;
+  }
   if (xSemaphoreTake(s_state_mtx, 0) == pdTRUE) {
     memcpy(&cydlcd, &s_src, sizeof(cydlcd));
     tbt_publish_locked();               // trang thai TRAMMING (`tbt`) cung duoc publish trong CUNG khoa nay
@@ -53,7 +57,12 @@ static void state_publish(void) {
   }
   else s_pub_pending = true;          // nguoi doc dang doc -> lan sau publish (khong mat du lieu)
 #else
+  // Ban 1 luong (STM32 F411/F407 LVGL) va BAN TEST TREN MAY TINH: khong co 2 core nen khong can khoa.
+  // !!! PHAI publish CA `tbt` o day nua (sua 2026-10-16): truoc day nhanh nay CHI copy `cydlcd`, khong
+  // goi tbt_publish_locked() => tren board khong phai CYD, trang TRAMMING doc `tbt` MAI MAI la du lieu
+  // cu (0) du link van chay. Bay test host phat hien (test 12: `tbt.lines` khong bao gio tang).
   memcpy(&cydlcd, &s_src, sizeof(cydlcd));
+  tbt_publish_locked();
 #endif
 }
 
@@ -113,7 +122,35 @@ static uint8_t  s_txq[CYDLCD_TXQ_FRAMES][CYDLCD_MAX_FRAME];
 static uint8_t  s_txq_len[CYDLCD_TXQ_FRAMES];
 static uint8_t  s_txq_head = 0, s_txq_n = 0;
 static uint32_t s_tx_drop = 0;                  // so frame bi bo khi hang doi day (chan doan)
+static uint32_t s_tx_drop_user = 0;             // trong do: frame LENH (G-code) bi bo - xem send_frame_user()
 
+// ---------------------------------------------------------------------------
+//  KHOA TX (2026-10-16): `s_tx` + `s_txq` + UART la TAI NGUYEN DUNG CHUNG giua 2 CORE.
+//
+//  VI SAO CAN: tu ban da luong (cydlcd/docs/ke-hoach-da-luong.md), task `link` (core 1, uu tien 20)
+//  va task `ui` (core 0, uu tien 5) CUNG goi cac ham gui frame:
+//    - task `ui`: bam nut -> cydlcd_link_send_gcode() (va trang ENDSTOP xin frame 30 lan/giay);
+//    - task `link`: PING 1 s/lan + PONG/ACK tra loi + trai hang doi TX.
+//  `send_frame()`/`cydlcd_tx_begin()` deu dung CHUNG bien `s_tx` (bo tao frame). Khong khoa thi:
+//  core 0 dang dung frame "G28" trong `s_tx` thi core 1 (uu tien CAO HON) goi cydlcd_link_ping()
+//  -> ghi de `s_tx.buf` -> frame gui di la HON HOP -> Marlin kiem CRC sai -> BO IM LANG lenh.
+//  Trieu chung dung bang "bam nut tren man hinh ma may khong chay" nhung KHONG on dinh (phu thuoc
+//  thoi diem bam so voi nhip PING) => rat de ket luan sai la "man hinh khong gui lenh".
+//
+//  CACH LAM: moi lan tao+gui 1 frame deu di qua 1 vung khoa ngan (vai chuc us). Mutex cua FreeRTOS
+//  co PRIORITY INHERITANCE nen task `link` (uu tien 20) phai cho task `ui` (5) khong gay dao nguoc
+//  uu tien. Board 1 luong (STM32 F411/F407) va ban test tren may tinh: khoa RONG.
+// ---------------------------------------------------------------------------
+#if defined(CYDLCD_BOARD_CYD)
+  static SemaphoreHandle_t s_tx_mtx = nullptr;
+  static void tx_lock(void)   { if (s_tx_mtx) xSemaphoreTake(s_tx_mtx, portMAX_DELAY); }
+  static void tx_unlock(void) { if (s_tx_mtx) xSemaphoreGive(s_tx_mtx); }
+#else
+  static void tx_lock(void)   {}
+  static void tx_unlock(void) {}
+#endif
+
+// PHAI goi TRONG vung khoa TX (xem tx_lock).
 static void send_frame(const uint8_t total) {
   if (!total) return;
   if (!s_txq_n && (int)CYDLCD_MARLIN_SERIAL.availableForWrite() >= (int)total) {
@@ -127,8 +164,9 @@ static void send_frame(const uint8_t total) {
   s_txq_n++;
 }
 
-// Trai hang doi TX. Goi moi vong lap (cydlcd_link_task) - khi Marlin doc lai thi hang doi tat ngay.
-void cydlcd_link_tx_task(void) {
+// Trai hang doi TX (PHAI goi TRONG vung khoa TX - xem tx_lock). Goi moi vong lap (cydlcd_link_task)
+// va tu send_frame_wait(): khi Marlin doc lai thi hang doi tat ngay.
+static void tx_drain_locked(void) {
   while (s_txq_n) {
     const uint8_t l = s_txq_len[s_txq_head];
     if ((int)CYDLCD_MARLIN_SERIAL.availableForWrite() < (int)l) break;
@@ -138,8 +176,18 @@ void cydlcd_link_tx_task(void) {
   }
 }
 
+// Ban CONG KHAI: tu lay khoa TX (dung cho moi noi ngoai file nay, vd vong lap task `link`).
+void cydlcd_link_tx_task(void) {
+  tx_lock();
+  tx_drain_locked();
+  tx_unlock();
+}
+
 // So frame da bi bo vi hang doi TX day (chan doan: `TXQ?` o main.cpp).
 uint32_t cydlcd_link_tx_dropped(void) { return s_tx_drop; }
+// Trong do: bao nhieu frame la LENH NGUOI DUNG (G-code) - khac 0 nghia la "bam nut ma khong gui duoc".
+// In ra bang lenh `UI RX` (COM8) de biet NGAY ben man hinh co gui duoc lenh hay khong.
+uint32_t cydlcd_link_tx_dropped_user(void) { return s_tx_drop_user; }
 // So frame dang cho trong hang doi TX (0 = da gui het).
 uint8_t cydlcd_link_tx_pending(void) { return s_txq_n; }
 
@@ -155,27 +203,61 @@ uint16_t cydlcd_link_pong_lost(void) { return s_pong_lost; }
 // hong ca sector (Marlin bao "SD read error" va dung ban in). Nguoc lai, frame trang thai/PING thi
 // BO DUOC (nhip sau gui lai) nen di qua hang doi khong-chan o tren.
 // PHAI day HET hang doi truoc khi ghi truc tiep de khong dao THU TU frame.
+// PHAI goi TRONG vung khoa TX (xem tx_lock) - nen dung tx_drain_locked(), KHONG dung ban cong khai.
 static bool send_frame_wait(const uint8_t total, const uint32_t timeout_ms) {
   if (!total) return true;
   const uint32_t t0 = cydlcd_millis();
   while (s_txq_n) {
-    cydlcd_link_tx_task();
+    tx_drain_locked();
     if (s_txq_n && (cydlcd_millis() - t0) > timeout_ms) return false;
   }
   uint8_t sent = 0;
   while (sent < total) {
     const int room = CYDLCD_MARLIN_SERIAL.availableForWrite();
     if (room > 0) {
-      uint8_t k = (uint8_t)(total - sent);
-      if (k > (uint8_t)room) k = (uint8_t)room;
+      // !!! PHAI CAT BANG uint16_t, KHONG duoc cat bang uint8_t !!!
+      // `availableForWrite()` tren ESP32 tra ve SO BYTE CON TRONG cua TX ring = TOI DA 256
+      // (build flag -DSERIAL_TX_BUFFER_SIZE=256 trong cydlcd/platformio.ini). Khi ring RONG HOAN TOAN
+      // (truong hop BINH THUONG ngay truoc khi gui) no tra ve 256 -> (uint8_t)256 == 0 -> k = 0 ->
+      // ghi 0 byte -> `sent` KHONG TANG -> VONG LAP VO TAN ngay trong task `link`/`ui`:
+      //   - task `link` treo -> watchdog `cyd_diag_task` (5 s) TU KHOI DONG LAI man hinh,
+      //   - MAN HINH KHONG BAO GIO gui duoc frame do -> Marlin bao loi doc/ghi the SD
+      //     ("PANEL SD: doc sector ... THAT BAI"), bam nut khong chay.
+      // Day chinh la loi that 2026-10-16 va la ly do phai co BAY TEST HOST cho duong nay
+      // (cydlcd/tools/test_cydlcd_link.cpp da tim ra: test 8 treo ngay o lan gui dau tien).
+      uint16_t k = (uint16_t)(total - sent);
+      if (k > (uint16_t)room) k = (uint16_t)room;
       CYDLCD_MARLIN_SERIAL.write(s_tx.buf + sent, k);
-      sent = (uint8_t)(sent + k);
+      sent = (uint8_t)(sent + k);          // total <= CYDLCD_MAX_FRAME (199) -> khong tran uint8_t
     }
     else if ((cydlcd_millis() - t0) > timeout_ms) return false;   // tran: coi nhu mat frame
   }
   return true;
 }
 #define CYDLCD_SD_TX_WAIT_MS 250u       // 1 frame ~136 B @250000 baud mat ~5 ms -> 250 ms la rong rai
+
+// ---------------------------------------------------------------------------
+//  FRAME LENH CUA NGUOI DUNG (G-code tu nut bam) - KHONG BAO GIO BO IM LANG.
+//
+//  VI SAO: frame trang thai (STATUS/TEMPS/POSITION) bo duoc vi nhip sau gui lai; con 1 LENH nguoi dung
+//  bi bo = "bam nut ma may khong chay" VA KHONG CO DAU VET NAO (ca man hinh lan Marlin deu im).
+//  Truoc day moi frame deu di qua send_frame(): TX ring kin + hang doi TX (4 slot) day -> `s_tx_drop++`
+//  roi thoi. Nay frame G-code cho trong toi da CYDLCD_USER_TX_WAIT_MS (trai hang doi ra UART), het
+//  tran moi bo + DEM RIENG (`s_tx_drop_user`, xem lenh `UI RX`) + ghi log de con doi chieu duoc.
+//
+//  Vi sao 120 ms: 1 frame G-code ~12-20 byte @250000 baud chi mat < 1 ms; 120 ms la con so rong rai
+//  cho tinh huong Marlin dang ban doc sector the SD (moi sector = 564 B = ~23 ms). Task `ui` bi giu
+//  toi da 120 ms trong tinh huong XAU NHAT (khong phai binh thuong) - doi lai la khong mat lenh.
+// ---------------------------------------------------------------------------
+#define CYDLCD_USER_TX_WAIT_MS 120u
+static void send_frame_user(const uint8_t total) {
+  if (!total) return;
+  if (send_frame_wait(total, CYDLCD_USER_TX_WAIT_MS)) return;
+  s_tx_drop++;
+  s_tx_drop_user++;
+  SDLOG("[UP] CANH BAO: TX kin qua %u ms -> BO 1 frame LENH (%u byte) [tong bi bo: %lu]\n",
+        (unsigned)CYDLCD_USER_TX_WAIT_MS, (unsigned)total, (unsigned long)s_tx_drop_user);
+}
 
 #if CYDLCD_SD_UART
 // ---------------------------------------------------------------------------
@@ -202,6 +284,7 @@ static bool     s_wr_active = false;
 #endif
 
 void cydlcd_link_send_sd_data(const uint8_t status, const uint32_t sector, const uint8_t *data) {
+  tx_lock();                                   // 4 frame cua 1 sector phai di LIEN NHAU, khong xen frame khac
   for (uint8_t idx = 0; idx < CYDLCD_SD_CHUNKS; idx++) {
     cydlcd_tx_begin(&s_tx, CYDLCD_F_SDDATA);
     cydlcd_tx_u8(&s_tx, status);
@@ -214,18 +297,22 @@ void cydlcd_link_send_sd_data(const uint8_t status, const uint32_t sector, const
     else {
       cydlcd_tx_u8(&s_tx, 0);
       send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
+      tx_unlock();
       return;                                  // loi -> chi 1 frame
     }
     send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
   }
+  tx_unlock();
 }
 
 void cydlcd_link_send_sd_ack(const uint8_t status, const uint32_t sector) {
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_SDACK);
   cydlcd_tx_u8(&s_tx, status);
   cydlcd_tx_u32(&s_tx, sector);
   // SDACK cung la frame BAT BUOC: Marlin cho ack nay moi coi lenh GHI xong -> khong duoc bo.
   send_frame_wait(cydlcd_tx_finish(&s_tx), CYDLCD_SD_TX_WAIT_MS);
+  tx_unlock();
 }
 
 // Nhan 1 manh du lieu cua lenh GHI. Du 4 manh -> ghi xuong the + tra SDACK.
@@ -256,52 +343,78 @@ void cydlcd_link_sd_write_begin(const uint32_t sector) {
 }
 #endif  // CYDLCD_SD_UART
 
+// ---------------------------------------------------------------------------
+// Cac ham gui frame CONG KHAI: MOI ham tu lay khoa TX (tx_lock) vi duoc goi tu CA 2 core
+// (task `ui` core 0 va task `link` core 1) - xem ghi chu o tx_lock. Ham *_locked la ruot ben trong,
+// CHI duoc goi khi da giu khoa (de 1 thao tac 2 frame nhu G91+G1+G90 khong bi xen frame khac vao giua).
+// ---------------------------------------------------------------------------
 void cydlcd_link_ping() {
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_PING);
   cydlcd_tx_u8(&s_tx, ++s_tx.seq);
   send_frame(cydlcd_tx_finish(&s_tx));
+  tx_unlock();
+}
 
+static void send_gcode_locked(const char *line) {
+  if (!line || !*line) return;
+  cydlcd_tx_begin(&s_tx, CYDLCD_F_GCODE);
+  cydlcd_tx_str(&s_tx, line, CYDLCD_MAX_PAYLOAD - 1);
+  // Frame LENH nguoi dung: di duong KHONG-BO-IM-LANG (xem send_frame_user).
+  send_frame_user(cydlcd_tx_finish(&s_tx));
 }
 
 void cydlcd_link_send_gcode(const char *line) {
   if (!line || !*line) return;
-  cydlcd_tx_begin(&s_tx, CYDLCD_F_GCODE);
-  cydlcd_tx_str(&s_tx, line, CYDLCD_MAX_PAYLOAD - 1);
-  send_frame(cydlcd_tx_finish(&s_tx));
+  tx_lock();
+  send_gcode_locked(line);
+  tx_unlock();
 }
 
 void cydlcd_link_send_gcode2(const char *a, const char *b) {
-  cydlcd_link_send_gcode(a);
-  if (b && *b) cydlcd_link_send_gcode(b);
+  if (!a || !*a) return;
+  // 2 frame trong CUNG 1 vung khoa: Marlin phai nhan du va DUNG THU TU (vd "G91" roi "G1 ...").
+  tx_lock();
+  send_gcode_locked(a);
+  if (b && *b) send_gcode_locked(b);
+  tx_unlock();
 }
 
 void cydlcd_link_request(const uint8_t what) {
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_REQUEST);
   cydlcd_tx_u8(&s_tx, what);
   send_frame(cydlcd_tx_finish(&s_tx));
+  tx_unlock();
 }
 
 void cydlcd_link_request_dir(const char *dirname) {
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_REQUEST);
   cydlcd_tx_u8(&s_tx, (uint8_t)CYDLCD_REQ_FILES_DIR);
   cydlcd_tx_str(&s_tx, dirname, CYDLCD_FILE_NAME_LEN);
   send_frame(cydlcd_tx_finish(&s_tx));
+  tx_unlock();
 }
 
 void cydlcd_link_answer(const uint8_t answer) {
   if (!s_src.prompt_active) return;
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_ANSWER);
   cydlcd_tx_u8(&s_tx, s_src.prompt_id);
   cydlcd_tx_u8(&s_tx, answer);
   send_frame(cydlcd_tx_finish(&s_tx));
+  tx_unlock();
   s_src.prompt_active = false;
 }
 
 void cydlcd_link_send_tbt_cmd(char cmd) {
   if (!cmd) return;
+  tx_lock();
   cydlcd_tx_begin(&s_tx, CYDLCD_F_TBT_CMD);
   cydlcd_tx_u8(&s_tx, (uint8_t)cmd);
   send_frame(cydlcd_tx_finish(&s_tx));
+  tx_unlock();
 }
 
 int32_t cydlcd_setting(const uint16_t id, const int32_t def) {
@@ -635,6 +748,8 @@ void cydlcd_link_begin(const uint32_t baud) {
 #if defined(CYDLCD_BOARD_CYD)
   // Tao KHOA trang thai TRUOC khi bat UART/task (task `link` publish ngay o vong dau).
   if (!s_state_mtx) s_state_mtx = xSemaphoreCreateMutex();
+  // Khoa TX: `s_tx`/hang doi TX dung chung giua task `ui` (core 0) va task `link` (core 1) - xem tx_lock.
+  if (!s_tx_mtx)    s_tx_mtx    = xSemaphoreCreateMutex();
 #endif
   CYDLCD_LINK_BEGIN(baud);
   cydlcd_rx_init(&s_rx);

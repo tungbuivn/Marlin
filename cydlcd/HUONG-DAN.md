@@ -754,7 +754,22 @@ Không thử lệnh chuyển động hoặc gia nhiệt nếu chưa đứng cạ
 - STATUS/TEMPS tăng nhưng PONG không có → chiều Marlin → màn còn tốt, chiều màn → Marlin có vấn đề;
 - không có HELLO → màn không biết khả năng Marlin, mesh/settings có thể trống;
 - `err` tăng → nghi sai baud hoặc nhiễu dây;
-- PONG bình thường dưới khoảng 1,5 giây → đường hai chiều đang khỏe.
+- PONG bình thường dưới khoảng 1,5 giây → đường hai chiều đang khỏe;
+- dòng `TX cho=/bo tong=/BO LENH (G-code)=` cho biết **phía màn hình có gửi được lệnh hay không**:
+  `BO LENH (G-code) = 0` nghĩa là mọi lần bấm nút đều đã đẩy được frame lệnh ra UART (lỗi nằm ở phía sau:
+  dây, RX của Marlin, hoặc hàng đợi lệnh của Marlin). Khác `0` nghĩa là có lần bấm **không gửi được** — xem
+  `TX cho=` (hàng đợi TX đang nghẽn) và log `[UP] CANH BAO: TX kin qua …`.
+
+Khi bấm nút mà máy không chạy, đối chiếu **3 bước** (không đoán):
+
+| Bước | Xem ở đâu | Kết luận |
+|---|---|---|
+| 1 | `UI RX` (COM8) | `BO LENH (G-code)=0` ⇒ màn hình đã gửi lệnh |
+| 2 | `PANEL DIAG` (COM4, 5 giây/lần): `LENH tu man hinh: nhan=` | Tăng khi bấm nút ⇒ Marlin **có** nhận lệnh. Không tăng (dù bước 1 = 0) ⇒ **RX của Marlin kẹt** (chờ watchdog tự khởi tạo lại UART sau 10 giây) |
+| 3 | `PANEL DIAG`: `xep=` / `cho lai=` / `bo=` | `nhan=` tăng mà `xep=` không tăng ⇒ **hàng đợi lệnh của Marlin đầy** (đang in từ thẻ; `BUFSIZE = 4` lệnh). Lệnh được giữ lại và thử lại tới 20 giây; `bo=` tăng nghĩa là hàng đợi bị kẹt thật (ví dụ đang chờ nóng) |
+
+Mỗi lệnh nhận được từ màn hình đều in một dòng `PANEL: lenh [G28]` ra COM4 — đây là **bằng chứng trực tiếp**
+rằng frame đã tới Marlin và đã được giải mã đúng (không còn ký tự điều khiển lạ ở đầu lệnh).
 
 Marlin có watchdog RX: quá 10 giây không nhận frame sẽ khởi tạo lại UART, **tối đa 1 lần mỗi 60 giây** (giới hạn này để tránh khởi tạo lại liên tục ngay sau khi nạp lại firmware màn hình). Màn hình cũng tiếp tục xin HELLO cho đến khi nhận được, thay vì chỉ thử vài lần rồi bỏ.
 

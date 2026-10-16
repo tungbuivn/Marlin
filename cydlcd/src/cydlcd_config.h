@@ -55,7 +55,17 @@
 // ---------------------------------------------------------------------------
 #define CYDLCD_MARLIN_BAUD     250000
 
-#if defined(CYDLCD_BOARD_CYD)
+#if defined(CYDLCD_HOST_TEST)
+  // BAN TEST TREN MAY TINH (cydlcd/tools/test_cydlcd_link.cpp): KHONG co Arduino nen KHONG duoc dinh
+  // nghia CYDLCD_MARLIN_SERIAL / CYDLCD_LINK_BEGIN o day - `cydlcd_port.h` cung cap CydlcdSerialStub
+  // (UART gia) va macro CYDLCD_LINK_BEGIN rieng.
+  //
+  // VI SAO CAN NHANH NAY (loi that 2026-10-16): cydlcd_link.cpp bat dau `#include "ui_lvgl.h"` (de lay
+  // ui_lvgl_perf_link_call) -> ui_lvgl.h include cydlcd_config.h -> roi vao nhanh `#else` ben duoi ->
+  // `#define CYDLCD_MARLIN_SERIAL Serial` -> ban test tren may tinh KHONG BUILD DUOC nua
+  // ("'Serial' was not declared in this scope"). Hau qua: BAY KIEM THU GIAO THUC CHET AM, dung luc no
+  // can nhat (moi loi "bam nut ma may khong chay" deu phai doi chieu voi no). Xem README muc "test host".
+#elif defined(CYDLCD_BOARD_CYD)
   #define CYDLCD_MARLIN_SERIAL Serial2
   #ifndef CYDLCD_UART_TX
     #define CYDLCD_UART_TX 22
@@ -480,14 +490,22 @@
                                       // Muon thu lai toc do cao: doi so nay roi chay lai upload file lon.
 #define CYDLCD_UPLOAD_TMP_DIR "/cydlcd_tmp"       // thu muc file tam (Marlin chi liet ke goc the -> khong thay)
 
+#endif  // CYDLCD_WIFI_UPLOAD
+#endif  // CYDLCD_WIFI_MGMT
+
+// ---------------------------------------------------------------------------
 // Cac THU MUC HE THONG khong hien tren man FILE SD (danh sach TEN, ngan cach bang dau phay; so sanh
-// khong phan biet hoa/thuong). Loc NGAY O PHIA MAN HINH (cydlcd_link.cpp: is_hidden_dir) nen khong
+// khong phan biet hoa/thuong). Loc NGAY O PHIA MAN HINH (cydlcd_link.cpp: cydlcd_hidden_dir) nen khong
 // phai nap lai Marlin:
 //   cydlcd_tmp = thu muc file tam cua CHINH MAN HINH (cyd_sd.cpp tu tao khi nhan file qua WiFi);
 //   BTUP       = thu muc cu cua duong upload qua BLUETOOTH (da xoa khoi firmware 2026-10-14).
 // Trong 2 thu muc nay khong co gi de in/xoa -> an di cho danh sach gon.
+//
+// VI SAO NAM NGOAI KHOI WiFi (sua 2026-10-16): truoc day dong nay nam TRONG `#if CYDLCD_WIFI_UPLOAD`
+// (chi board CYD) nen ban TEST TREN MAY TINH (CYDLCD_HOST_TEST, khong bat WiFi) khong co macro nay ->
+// `cydlcd_link.cpp: cydlcd_hidden_dir()` khong build duoc => ca bay kiem thu giao thuc CHET AM.
+// Bo loc nay dung chung cho moi board, khong lien quan WiFi.
+// ---------------------------------------------------------------------------
 #ifndef CYDLCD_HIDE_DIRS
   #define CYDLCD_HIDE_DIRS "cydlcd_tmp,BTUP"
 #endif
-#endif  // CYDLCD_WIFI_UPLOAD
-#endif  // CYDLCD_WIFI_MGMT

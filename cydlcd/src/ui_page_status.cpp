@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ui_page_status.cpp -- man STATUS cua UI LVGL (man hinh CYD): bo cuc lay Y NGUYEN toa do tu
  * UI TFT ILI9341 cua Marlin (Marlin/src/lcd/tft/ui_320x240.cpp).
  *
@@ -104,7 +104,9 @@ void page_status_create(lv_obj_t *p) {
   for (uint8_t i = 0; i < 3; i++) {
     lv_obj_t *n = mk_label(xyz_hit, AX_L[i], MR_AXIS);
     lv_obj_set_pos(n, MR_XYZ_LX(i), MR_XYZ_TY);
-    st_axis_val[i] = mk_label_right(xyz_hit, MR_XYZ_LX(i), MR_XYZ_TY, MR_XYZ_VW(i),
+    // Gia tri can phai trong vung RIENG, bat dau SAU nhan truc (MR_XYZ_VX) - khong dung chung x voi
+    // nhan nua, neu khong so se de len nhan (xem ghi chu o MR_XYZ_VX trong ui_lvgl_int.h).
+    st_axis_val[i] = mk_label_right(xyz_hit, MR_XYZ_VX(i), MR_XYZ_TY, MR_XYZ_VW(i),
                                     "-", MR_AXIS);
     // FONT TO HON cho hang X/Y/Z (yeu cau nguoi dung 2026-10-15: "font X,Y,Z o trang status to hon 1 chut").
     // Dung Montserrat 16 (lv_conf.h: LV_FONT_MONTSERRAT_16): line_height 19 px + le tren MR_XYZ_TY=3 = 22

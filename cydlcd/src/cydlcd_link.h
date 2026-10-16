@@ -155,6 +155,8 @@ bool cydlcd_link_connected();
 // va trai dan o day. Nho vay KHONG BAO GIO chan vong lap du Marlin tam thoi khong doc UART.
 void     cydlcd_link_tx_task();                           // trai hang doi (goi trong cydlcd_link_task)
 uint32_t cydlcd_link_tx_dropped();                        // so frame bi bo (hang doi day) - chan doan
+uint32_t cydlcd_link_tx_dropped_user();                   // trong do: frame LENH nguoi dung (G-code) bi bo
+                                                          // -> PHAI = 0; khac 0 = "bam nut ma khong gui duoc"
 uint8_t  cydlcd_link_tx_pending();                        // so frame dang cho trong hang doi
 
 // Chan doan chieu MARLIN -> MAN HINH (lenh `UI RX` tren COM8): so frame da nhan theo LOAI + tuoi PONG.

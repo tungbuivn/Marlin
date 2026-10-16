@@ -307,7 +307,26 @@ enum {
 #define MR_XYZ_H     24
 #define MR_XYZ_TY    3
 #define MR_XYZ_LX(i) ((lv_coord_t)((i) == 0 ? 10 : ((i) == 1 ? 127 : 219)))
-#define MR_XYZ_VW(i) ((lv_coord_t)((i) == 0 ? 58 : ((i) == 1 ? 58 : 82)))   // can phai -> 68 / 185 / 301
+// ---------------------------------------------------------------------------
+//  VUNG GIA TRI cua hang X/Y/Z -- KHONG duoc dung chung x voi nhan truc (sua 2026-10-16).
+//
+//  LOI NGUOI DUNG BAO: "tai truc X 285.98 thi so 2 de vao nhan X".
+//  NGUYEN NHAN: nhan dat tai x = LX, gia tri can phai trong hop [LX .. LX+VW] = [10 .. 68] => hop chi
+//  58 px ma BAT DAU NGAY tai nhan. Font Montserrat 16 (yeu cau 2026-10-15: "font X/Y/Z to hon 1 chut")
+//  rong HON font 8x12 cua man 12864 - do THAT tu lv_font_montserrat_16.c (adv_w/16):
+//      '2' = 9,19 px   '8' = 10,31   '.' = 3,62   '-' = 6,12   'X' = 10,75 px
+//  => "285.98" = 52,5 px (dai nhat "-285.98" = 58,6 px) => gia tri bat dau o 68 - 52,5 = 15,5
+//     -> DE len nhan 'X' (10 .. 20,75). Marlin goc (ui_320x240.cpp) cung can phai ve 68 nhung font
+//     cua no hep (~6 px/ky tu) nen 6 ky tu chi ~36 px, khong bao gio cham nhan.
+//
+//  CACH SUA: nhan GIU NGUYEN (10 / 127 / 219 - dung bo cuc Marlin), con vung gia tri bat dau SAU nhan
+//  (LX + 14 = be rong 'X' 10,75 + 3 px khe) va NO RONG sang phai (khung XYZ rong 312 px, giua cac o
+//  con nhieu cho): X: 24..90 (66 px) | Y: 141..207 (66 px) | Z: 233..301 (68 px).
+//  => ca "-285.98" (58,6 px) cung vua, va khong cham nhan ke tiep (Y o 127, Z o 219).
+// ---------------------------------------------------------------------------
+#define MR_XYZ_VX(i) ((lv_coord_t)(MR_XYZ_LX(i) + 14))                        // 24 / 141 / 233
+#define MR_XYZ_VR(i) ((lv_coord_t)((i) == 0 ? 90 : ((i) == 1 ? 207 : 301)))   // can phai moi o
+#define MR_XYZ_VW(i) ((lv_coord_t)(MR_XYZ_VR(i) - MR_XYZ_VX(i)))              // 66 / 66 / 68
 #define MR_RATE_Y    136                                  // canvas(70/170, 136, 80, 32)
 #define MR_RATE_H    32
 #define MR_SD_X      0                                    // the SD: Marlin (0,130,64,64)

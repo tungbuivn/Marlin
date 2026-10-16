@@ -23,13 +23,18 @@
 static uint8_t  rxq[1024]; static int rx_head = 0, rx_tail = 0;
 static uint8_t  txlog[4096]; static int tx_len = 0;
 static uint32_t g_ms = 0;
+// Gia lap TX ring KIN hoan toan (0 = khong con cho) de kiem "frame LENH bi bo nhung CO DEM".
+// Khi kin thi moi lan hoi `availableForWrite()` cho dong ho troi 25 ms (tren board that la millis()
+// tu chay) - neu khong, vong cho co tran cua send_frame_wait() se khong bao gio het.
+static int      stub_room = 1024;
+#define STUB_ROOM_FULL 1024
 
 CydlcdSerialStub CYDLCD_MARLIN_SERIAL;
 int    CydlcdSerialStub::available() { return rx_head - rx_tail; }
 int    CydlcdSerialStub::read() { return rx_head > rx_tail ? rxq[rx_tail++] : -1; }
 size_t CydlcdSerialStub::write(const uint8_t *b, size_t l) { memcpy(txlog + tx_len, b, l); tx_len += (int)l; return l; }
 size_t CydlcdSerialStub::write(uint8_t c) { txlog[tx_len++] = c; return 1; }
-int    CydlcdSerialStub::availableForWrite() { return 1024; }
+int    CydlcdSerialStub::availableForWrite() { if (!stub_room) g_ms += 25; return stub_room; }
 uint32_t cydlcd_millis() { return g_ms; }
 
 // Nap truc tiep code cua man hinh CYD de test (sau khi da co stub)
@@ -75,6 +80,8 @@ static void clear_tx() { tx_len = 0; }
 
 // ---------------------------------------------------------------------------
 int main() {
+  // KHONG dem output: neu 1 test bi TREO, ta van thay no dung o cho nao (stdout ra pipe bi dem theo khoi).
+  setvbuf(stdout, nullptr, _IONBF, 0);
   printf("== Test giao thuc cydlcd_serial (host) ==\n");
   cydlcd_link_begin(250000);
   clear_tx();
@@ -152,6 +159,10 @@ int main() {
   cydlcd_link_answer(1);
   uint8_t abuf[8]; uint8_t alen = 0;
   CHECK(tx_find_frame(CYDLCD_F_ANSWER, abuf, &alen, sizeof(abuf)) && alen == 2 && abuf[1] == 1, "ANSWER: gui len Marlin (answer=1)");
+  // `cydlcd` la BAN CONG KHAI: task `link` publish `s_src` -> `cydlcd` moi vong (state_publish).
+  // cydlcd_link_answer() tat prompt o `s_src` ngay, nhung phai qua 1 vong task moi thay o ban cong khai
+  // (dung nhu tren board: UI doc ban cong khai, tre toi da ~1 ms - xem ke-hoach-da-luong.md).
+  cydlcd_link_task();
   CHECK(!cydlcd.prompt_active, "ANSWER: da tat prompt");
 
   // ---------------- 5. MESH ----------------
@@ -224,6 +235,52 @@ int main() {
       }
     CHECK(found_gcode == 2, "GUI: 2 lenh G-code gui dung");
     CHECK(found_dir == 1, "GUI: REQUEST FILES_DIR + ten thu muc");
+  }
+
+  // ---------------- 8b. LENH HOME (G28 / G28 X / G28 Y / G28 Z) ----------------
+  // HOI QUY cho loi 2026-10-13 (byte do dai o dau payload): test khang dinh payload cua frame GCODE la
+  //   payload[0] = SO KY TU, payload[1..] = chuoi lenh  => ben Marlin PHAI bo payload[0] (i = 1).
+  // Ai doi cydlcd_tx_str() ma quen ben Marlin -> test nay FAIL ngay (truoc day loi nay lam MOI lenh tu
+  // man hinh bi Marlin bo im lang: "bam G28 tren man hinh khong chay").
+  {
+    static const char *const HOME[4] = { "G28", "G28 X", "G28 Y", "G28 Z" };
+    clear_tx();
+    for (uint8_t i = 0; i < 4; i++) cydlcd_link_send_gcode(HOME[i]);
+
+    cydlcd_rx_t rx; memset(&rx, 0, sizeof(rx)); cydlcd_rx_init(&rx);
+    char    got[4][24]; uint8_t nfound = 0, len_ok = 0;
+    for (int i = 0; i < tx_len; i++)
+      if (cydlcd_rx_byte(&rx, txlog[i]) && rx.type == CYDLCD_F_GCODE) {
+        // DUNG LUAT CUA MARLIN (cydlcd_serial.cpp: `for (i = 1; i < rx.len; ...)` = BO byte len dau tien)
+        char txt[24]; uint8_t n = 0;
+        for (uint8_t k = 1; k < rx.len && n < 23; k++) {
+          const char c = (char)rx.payload[k];
+          txt[n++] = (c == '\r' || c == '\n') ? ' ' : c;
+        }
+        txt[n] = '\0';
+        if (nfound < 4) { memcpy(got[nfound], txt, (size_t)n + 1); nfound++; }
+        if (rx.payload[0] == (uint8_t)strlen(txt)) len_ok++;   // byte len PHAI = so ky tu
+      }
+    CHECK(nfound == 4, "G28: gui du 4 lenh HOME (G28 / G28 X / G28 Y / G28 Z)");
+    CHECK(len_ok == 4, "G28: payload[0] = do dai chuoi (Marlin bo byte dau la ra lenh dung)");
+    bool same = (nfound == 4);
+    for (uint8_t i = 0; same && i < 4; i++) same = (strcmp(got[i], HOME[i]) == 0);
+    CHECK(same, "G28: Marlin doc ra dung 'G28' / 'G28 X' / 'G28 Y' / 'G28 Z'");
+  }
+
+  // ---------------- 8c. TX kin: frame LENH khong bi bo IM LANG (phai DEM duoc) ----------------
+  // Truoc day moi frame deu di qua send_frame(): hang doi TX day -> `s_tx_drop++` roi thoi, KHONG co dau
+  // vet nao => "bam nut ma may khong chay" khong the chan doan. Nay frame G-code cho toi da 120 ms roi
+  // moi bo VA dem rieng (`cydlcd_link_tx_dropped_user`, in ra bang `UI RX`).
+  {
+    const uint32_t before = cydlcd_link_tx_dropped_user();
+    const int      keep   = tx_len;
+    stub_room = 0;                          // gia lap UART TX ring kin hoan toan
+    cydlcd_link_send_gcode("G28");          // phai THOAT (khong treo) + DEM, khong im lang
+    stub_room = STUB_ROOM_FULL;
+    CHECK(cydlcd_link_tx_dropped_user() == before + 1,
+          "TX kin: frame LENH bi bo nhung CO DEM (khong im lang)");
+    CHECK(tx_len == keep, "TX kin: khong ghi duoc byte nao ra UART (dung nhu mong doi)");
   }
 
   // ---------------- 9. PING/PONG + mat lien ket ----------------
@@ -321,13 +378,20 @@ int main() {
           "TBT feed: lech -> tra lai day du 'TBX' (khong mat byte)");
 
     // (b) 1 dong TBT ca dong phai bi tieu thu, trang thai phai cap nhat
+    // LUU Y: sniffer chi nhan "TBT" khi byte TRUOC DO la '\n' (dau dong) - sau (a) byte cuoi la 'X'
+    // nen phai `tbt_link_begin()` de ve trang thai dau dong (dung nhu sau khi reset/thay link).
+    tbt_link_begin();
     const char *l = "TBT 2 1 3 10.000 0.100 -0.200 0.000 0.000 0 0 0 0 1 0 CCW:0.100\n";
     uint8_t leaked = 0;
     for (const char *q = l; *q; q++) leaked = (uint8_t)(leaked + tbt_link_feed((uint8_t)*q, f));
     CHECK(leaked == 0, "TBT feed: ca dong TBT bi tieu thu (0 byte lot ra)");
+    // `tbt` la BAN CONG KHAI (task `link` publish s_tbt -> tbt) -> phai qua 1 vong task moi doc duoc.
+    cydlcd_link_task();
     CHECK(tbt.lines == 1 && tbt.ever && tbt.linked, "TBT feed: nhan duoc 1 dong -> linked");
     CHECK(tbt.st.phase == TBT_PH_PROBING && tbt.st.idx == 3, "TBT feed: phase/idx");
-    CHECK(tbt.st.ok[0] && !tbt.st.ok[2], "TBT feed: ok[] tung goc");
+    // 4 goc trong dong nay deu la SO THAT ("0.100", "-0.200", "0.000", "0.000") nen ok[] phai = 1 het.
+    // (Goc CHUA probe = "---.---" -> ok[] = 0 da duoc kiem o muc 11 voi dong do tbt_status_format tao ra.)
+    CHECK(tbt.st.ok[0] && tbt.st.ok[2], "TBT feed: ok[] tung goc (4 goc deu co so)");
 
     // (c) Frame PUSH co payload chua 'T' VA chuoi "TBT" VAN phai nguyen ven
     //     (chuoi nam giua payload, khong o dau dong -> khong bi bo sniff an)
@@ -342,13 +406,18 @@ int main() {
     CHECK(cydlcd.n_files == 1 && !strcmp(cydlcd.files[0].name, "TBT PROJECTS"),
           "TBT feed: frame PUSH van nguyen ven ('T'/'TBT' trong payload khong bi an");
 
-    // (d) O che do TBT thi KHONG gui PING nua (tranh byte nhi phan lot vao parser ASCII cua Marlin)
+    // (d) O che do PUSH (da nhan frame PUSH hop le) thi PING VAN PHAI duoc gui - HOI QUY cho loi that
+    // 2026-10-15: dieu kien cu `if (!tbt_link_active())` lam PING bi TAT VINH VIEN ngay tu frame dau
+    // (o che do PUSH, dong TBT di trong frame CYDLCD_F_TBT -> tbt.ever = true) => Marlin khong bao gio
+    // biet man hinh con song, va man hinh khong co cach nao biet lenh minh gui co toi Marlin khong.
+    // Chi o che do TRAM ASCII THO (tbt.ever && CHUA tung nhan frame PUSH nao) moi bo PING.
     clear_tx();
     g_ms += 2000;
     cydlcd_link_task();
     {
       uint8_t pbuf[8]; uint8_t plen = 0;
-      CHECK(!tx_find_frame(CYDLCD_F_PING, pbuf, &plen, sizeof(pbuf)), "TBT feed: da o che do TBT -> khong PING");
+      CHECK(tx_find_frame(CYDLCD_F_PING, pbuf, &plen, sizeof(pbuf)),
+            "PUSH: da nhan frame -> VAN gui PING 1 s/lan (hoi quy loi 2026-10-15)");
     }
   }
 

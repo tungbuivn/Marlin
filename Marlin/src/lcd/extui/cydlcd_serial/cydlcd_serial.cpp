@@ -127,6 +127,21 @@ namespace {
   uint16_t s_rx_type[0x50];              // dem theo type (0x40..0x46 = man hinh -> Marlin)
   uint32_t s_rx_defer = 0, s_rx_defer_drop = 0;
 
+  // ---- LENH G-CODE TU MAN HINH: DAU VET + CHO LAI KHI HANG DOI DAY ----
+  // VI SAO CAN (trieu chung nguoi dung bao: "bam G28 / G28 X / Y / Z tren man hinh ma may khong chay",
+  // trong khi Marlin van day STATUS xuong deu): TRUOC DAY khong co MOT DONG LOG nao cho biet lenh da toi
+  // Marlin hay chua, va lenh khong xep duoc vao hang doi thi bi BO sau 2 s cung im lang. Khong the phan biet:
+  //   (a) man hinh KHONG gui duoc lenh (day TX long / RX cua Marlin ket), hay
+  //   (b) Marlin NHAN duoc nhung khong xep kip vao hang doi (BUFSIZE = 4 lenh) roi bi bo.
+  // Nay: MOI lenh nhan duoc in 1 dong `PANEL: lenh [...]` (bang chung o COM4), va lenh khong xep duoc
+  // trong 2 s thi duoc GIU LAI, thu lai moi vong onIdle toi da CYDLCD_CMD_PENDING_MS truoc khi bo.
+  #ifndef CYDLCD_CMD_PENDING_MS
+    #define CYDLCD_CMD_PENDING_MS 20000UL   // 20 s: du de vuot qua mot vong cho nong / khoi phuc hang doi
+  #endif
+  char     s_pending_cmd[MAX_CMD_SIZE] = { 0 };   // lenh dang cho cho trong hang doi (rong = khong co)
+  millis_t s_pending_ms = 0;                      // moc nhan lenh do (de tinh tran cho lai)
+  uint16_t s_cmd_rx = 0, s_cmd_ok = 0, s_cmd_retry = 0, s_cmd_drop = 0;
+
   // ------------------------------------------------- SD qua UART (proto 3) ----
   // Marlin KHONG tu doc the SPI nua (the nam o khe man hinh): moi sector 512 B duoc hoi man hinh CYD qua
   // chinh UART nay. Xem cydlcd_serial.h + cydlcd/README.md muc 12.
@@ -139,7 +154,6 @@ namespace {
     bool     s_sd_busy = false;        // dang cho sector -> hoan cac frame mang LENH lai
     bool     s_sd_present = false;     // cydlcd bao co the (tu lan cydlcd_serial_sd_init)
     volatile uint8_t s_wr_status = 0xFF;   // ket qua lenh GHI (CYDLCD_F_SDACK): 0xFF = chua co
-    uint16_t s_cmd_drop = 0;               // so lenh thuong bi BO vi hang doi day qua 2 s (chan doan)
     volatile uint32_t s_wr_sector = 0;
 
     // Ghi THANG ra UART, khong qua hang doi TX: chi dung cho yeu cau SD (5 byte). Co tran thoi gian
@@ -867,6 +881,7 @@ namespace {
   //   SDDATA/SDACK       = tra loi sector the SD,
   //   sd_busy            = dang cho sector (moi frame LENH toi luc nay bi HOAN lai),
   //   hoan/bo            = so frame bi hoan / bi BO vi hang hoan day,
+  //   LENH tu man hinh   = nhan (da toi Marlin) / xep (da vao hang doi) / cho lai / bo (PHAI = 0),
   //   alive              = co frame nao toi trong CYDLCD_TIMEOUT_MS khong (0 = MAN HINH IM LANG).
   // ---------------------------------------------------------------------------
   #if ENABLED(CYDLCD_SERIAL_UI)
@@ -881,6 +896,12 @@ namespace {
       SERIAL_ECHOLNPGM("PANEL DIAG: TBT=", s_rx_type[CYDLCD_F_TBT_CMD],
                        " SDDATA=", s_rx_type[CYDLCD_F_SDDATA], " SDACK=", s_rx_type[CYDLCD_F_SDACK],
                        " | alive=", (int)cydlcd_alive);
+      // LENH G-CODE tu man hinh: nhan = so lenh da toi Marlin, xep = da vao hang doi, cho lai = so lan
+      // phai giu lai vi hang doi day, bo = so lenh bi bo han (PHAI = 0). Day la bang chung tra loi
+      // "bam nut ma may khong chay" la do (a) khong toi, hay (b) toi ma khong xep duoc vao hang doi.
+      SERIAL_ECHOLNPGM("PANEL DIAG: LENH tu man hinh: nhan=", s_cmd_rx, " xep=", s_cmd_ok,
+                       " cho lai=", s_cmd_retry, " bo=", s_cmd_drop,
+                       " | dang cho doi=[", s_pending_cmd[0] ? s_pending_cmd : "", "]");
       #if ENABLED(CYDLCD_SD_OVER_UART)
         SERIAL_ECHOLNPGM("PANEL DIAG: sd_busy=", (int)s_sd_busy, " defer=", s_defer_n,
                          " hoan=", s_rx_defer, " bo=", s_rx_defer_drop);
@@ -937,10 +958,23 @@ namespace {
         //
         // CACH XU LY (theo yeu cau: "lenh critical thi chay luon"):
         //   - CRITICAL (M108 thoat vong cho nong, M524 huy ban in) -> chay NGAY, khong qua hang doi;
-        //   - lenh thuong -> doi cho hang doi nhung CO TRAN (2 s), het tran thi BO + dem lai
-        //     (s_cmd_drop) + bao ra COM4, KHONG BAO GIO block vo han.
+        //   - lenh thuong -> doi cho hang doi nhung CO TRAN (2 s); het tran thi GIU LAI 1 lenh va thu lai
+        //     moi vong onIdle toi da CYDLCD_CMD_PENDING_MS (20 s) roi moi BO (`s_cmd_drop`), bao ra COM4.
+        //     (Ban cu BO NGAY sau 2 s => bam nut luc hang doi day = lenh mat khong dau vet.)
         // ---------------------------------------------------------------------------
         if (n) {
+          // DAU VET BAT BUOC: 1 dong ra COM4 cho MOI lenh tu man hinh. Doi chieu voi `UI RX` ben man hinh:
+          //   - khong thay dong nay ma `UI RX` van bao PONG deu  -> lenh KHONG toi (day TX / RX cua Marlin);
+          //   - thay dong nay ma may khong chay -> lenh toi Marlin nhung bi ket o hang doi (xem `cho lai`/`bo`).
+          SERIAL_ECHOLNPGM("PANEL: lenh [", cmd, "]");
+          s_cmd_rx++;
+          // TRAN DO DAI: hang doi cua Marlin chi co MAX_CMD_SIZE byte/lenh va copy bang strcpy()
+          // (queue.cpp: RingBuffer::enqueue) => lenh DAI HON se GHI TRAN BO NHO. Cat bot va bao ro.
+          if (n > (MAX_CMD_SIZE - 1)) {
+            cmd[MAX_CMD_SIZE - 1] = '\0';
+            SERIAL_ECHOLNPGM("PANEL: CANH BAO lenh qua dai (", n, " > ", MAX_CMD_SIZE - 1,
+                             " byte) -> da CAT BOT thanh [", cmd, "]");
+          }
           // M108: thoat vong cho nong (M109/M190/M303) - giong GcodeSuite::M108()/e_parser.h:215.
           if (strcasecmp(cmd, "M108") == 0) {
             wait_for_heatup = false;
@@ -982,13 +1016,26 @@ namespace {
           }
           else {
             const millis_t t0 = millis();
-            while (!queue.enqueue_one(cmd)) {
-              if (ELAPSED(millis(), t0 + 2000)) {     // TRAN 2 s: khong bao gio block vo han
-                s_cmd_drop++;
-                SERIAL_ECHOLNPGM("PANEL: hang doi day qua 2s -> BO lenh [", cmd, "]");
-                break;
-              }
+            bool queued = false;
+            while (true) {
+              if (queue.enqueue_one(cmd)) { queued = true; break; }
+              if (ELAPSED(millis(), t0 + 2000)) break;   // TRAN 2 s: khong bao gio block vo han
               idle();
+            }
+            if (queued) s_cmd_ok++;
+            else {
+              // Hang doi day qua 2 s (vd dang in tu the: BUFSIZE = 4 lenh luon kin, hoac dang trong mot
+              // vong cho nong dai). KHONG BO lenh nua: giu lai 1 lenh va thu lai moi vong onIdle - xem
+              // khoi `s_pending_cmd` o dau file + onIdle(). Lenh MOI den se day lenh cho doi cu ra.
+              if (s_pending_cmd[0]) {
+                s_cmd_drop++;
+                SERIAL_ECHOLNPGM("PANEL: BO lenh cho doi cu [", s_pending_cmd, "] (co lenh moi)");
+              }
+              strcpy(s_pending_cmd, cmd);          // da bi cat <= MAX_CMD_SIZE - 1 byte o tren
+              s_pending_ms = millis();
+              s_cmd_retry++;
+              SERIAL_ECHOLNPGM("PANEL: hang doi day qua 2 s -> GIU LAI lenh [", cmd,
+                               "] va thu lai moi vong (toi da ", CYDLCD_CMD_PENDING_MS / 1000, " s)");
             }
           }
         }
@@ -1035,6 +1082,23 @@ namespace ExtUI {
     // Day hang doi TX ra UART TRUOC TIEN (khong cho doi - xem tx_drain): vua giai phong cho
     // trong hang doi, vua tra cac frame dang ton dong ra duong truyen.
     tx_drain();
+
+    // LENH TU MAN HINH chua xep duoc vao hang doi (hang doi day luc bam): thu lai o day. KHONG dung
+    // `idle()`/vong cho nhu duong nhan frame - onIdle() chay trong vong lap chinh nen chi thu MOT lan
+    // moi vong, khong bao gio chan. Xem khoi `s_pending_cmd` o dau file.
+    if (s_pending_cmd[0]) {
+      if (queue.enqueue_one(s_pending_cmd)) {
+        SERIAL_ECHOLNPGM("PANEL: da xep duoc lenh cho doi [", s_pending_cmd, "]");
+        s_cmd_ok++;
+        s_pending_cmd[0] = '\0';
+      }
+      else if (ELAPSED(millis(), s_pending_ms + CYDLCD_CMD_PENDING_MS)) {
+        s_cmd_drop++;
+        SERIAL_ECHOLNPGM("PANEL: BO lenh cho doi qua ", CYDLCD_CMD_PENDING_MS / 1000,
+                         " s [", s_pending_cmd, "] (hang doi khong bao gio trong)");
+        s_pending_cmd[0] = '\0';
+      }
+    }
 
     while (CYDLCD_SERIAL.available())
       if (cydlcd_rx_byte(&rx, (uint8_t)CYDLCD_SERIAL.read())) handle_frame();

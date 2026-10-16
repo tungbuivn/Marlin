@@ -363,13 +363,23 @@ AXIS_NOT_HOMED vàng, RATE_100 xanh lá, RATE_ALTERED vàng, PRINT_TIME aqua, PR
 | Khối | Vị trí / nội dung |
 |---|---|
 | 3 ô nhiệt + quạt (64×100) | x = **21 / 127 / 234**: **đầu in (E0)** · **bàn in (BED)** · **quạt (FAN)** — target ở y=8, **icon 64×64** ở y=18 (quạt y=10), nhiệt độ hiện tại ở y=72; đổi màu + đổi icon theo nhiệt độ/tốc độ |
-| Hàng **XYZ** | khung (4, 103, 312, 24); chưa home → hiện `?` màu vàng (`AXIS_NOT_HOMED`), khung đổi màu theo liên kết |
+| Hàng **XYZ** | khung (4, 103, 312, 24); chưa home → hiện `?` màu vàng (`AXIS_NOT_HOMED`), khung đổi màu theo liên kết. **Nhãn trục** ở x = 10 / 127 / 219 (đúng Marlin), **vùng giá trị** ở 24..90 / 141..207 / 233..301 (rộng 66/66/68 px) — xem ghi chú bên dưới |
 | **FR / FL** + **icon WiFi** | hàng giữa, **y 136..167**. `FR` (54, 136, 68×32) · **icon WiFi 30×30** (128, 139) + **số dBm `-43`** (161, 143) · `FL` (192, 136, 68×32) — icon 32×32 + `%` ở x=32. **Icon WiFi to ĐÚNG BẰNG icon FR/FL** (font icon bản to 30 px) và nằm **giữa 2 ô tốc độ in/flow**; bấm icon → mở trang WIFI. Màu theo trạng thái: **xanh** = đã kết nối, **đỏ** = đang kết nối (`--`), **xám** = WiFi tắt (chu rỗng) |
 | **SD / SETTINGS** | 2 nút **icon 48×48** ở (0, 138) và (272, 138) — **đã thu nhỏ từ 64×64** của Marlin để nhường chỗ cho icon WiFi ở giữa (bitmap 48×48 **sinh sẵn** bằng `tools/make_lvgl_icons.py`, KHÔNG zoom lúc chạy — xem ghi chú bên dưới) |
 | Thời gian in | (96, 176, 128, 20) — `đã in / còn lại` |
 | Thanh tiến độ | (4, 198, 312, 9) + `%` ở (226, 176) |
 | Dòng trạng thái | (0, 216, 320, 20) — `STATE  tên file` hoặc `NO LINK` |
 
+> ⚠️ **Nhãn trục và số toạ độ KHÔNG được dùng chung một hộp (sửa 2026-10-16).** Người dùng báo:
+> *"tại trục X = 285.98 thì số `2` đè vào nhãn `X`"*. Bố cục Marlin gốc (`ui_320x240.cpp:271-279`) vẽ nhãn
+> ở x = 10/127/219 rồi **căn phải số vào mốc 68/185/301** — nhưng Marlin dùng font TFT 8×12 **hẹp**
+> (~6 px/ký tự) nên 6 ký tự chỉ ~36 px. Panel dùng **Montserrat 16** (theo yêu cầu *"font X/Y/Z to hơn"*
+> 2026-10-15) với bề rộng thật (đo từ `lv_font_montserrat_16.c`, `adv_w`/16): `'2'`=9,19 · `'8'`=10,31 ·
+> `'.'`=3,62 · `'-'`=6,12 · `'X'`=10,75 px ⇒ `285.98` = **52,5 px** (dài nhất `-285.98` = 58,6 px) mà hộp
+> chỉ 58 px **lại bắt đầu ngay tại nhãn** ⇒ số bắt đầu ở x = 68 − 52,5 = 15,5 ⇒ **đè lên `X`** (10..20,75).
+> Cách sửa: giữ nguyên nhãn, **tách vùng giá trị ra sau nhãn** (`MR_XYZ_VX` = nhãn + 14) và nới rộng sang
+> phải: **X 24..90 · Y 141..207 · Z 233..301** (66/66/68 px) — đủ cho cả `-285.98` và không chạm nhãn kế tiếp.
+>
 > ⚠️ **Vì sao 2 ô thẻ/SETTINGS phải thu nhỏ, và vì sao KHÔNG dùng `lv_img_set_zoom()`:** hàng giữa của
 > Marlin là `[SD 64] [FR 80] [FL 80] [SET 64]` = **320 px kín**, khe giữa FR và FL chỉ **20 px** — không
 > đủ cho icon 30 px + số dBm. Phải nhường: 2 ô thẻ 64→**48** và 2 khối FR/FL 80→**68** (giá trị `100%`
@@ -2141,6 +2151,58 @@ hình hiện **43%** (đã trả lại `M220 S100`).
 (yêu cầu người dùng: *"bỏ phần đếm số lượng file ở
 menu file"*) và mục `Settings` không còn ghi `58/33` (tổng 33 là con số cũ; Marlin gửi 58 dòng) mà ghi **`58 muc`**
 — màn hình không biết tổng số thật vì Marlin không gửi frame "hết danh sách" cho SETTING.
+
+## "Bấm nút trên màn hình mà máy không chạy" — kiểm tra lại toàn bộ đường LỆNH (2026-10-16)
+
+**Câu hỏi:** *"khi bấm vào menu của cydlcd thì có gửi lệnh đến Marlin không? các lệnh `G28`, `G28 X/Y/Z` đều
+không chạy"*. Trả lời **có** — code màn hình gửi đúng; nhưng đường đi có **3 chỗ có thể bỏ lệnh trong im lặng**,
+nay đã bịt và **có bằng chứng ở cả 2 đầu dây**. Đường đi đầy đủ (kiểm bằng đọc code + bộ test host):
+
+| Bước | Nơi | Kiểm chứng |
+|---|---|---|
+| 1. Bấm nút `HOME ALL (G28)` / `G28 X` / `G28 Y` / `G28 Z` ở trang JOG | `ui_page_jog.cpp:107,112-114` → `cb_action` → `do_action(A_HOME/A_HOME_X/Y/Z)` | `ui_lvgl.cpp:326-329` gọi `cydlcd_link_send_gcode("G28" / "G28 X" / …)` |
+| 2. Đóng gói frame `CYDLCD_F_GCODE` payload = `u8 len` + chuỗi | `cydlcd_link.cpp: send_gcode_locked()` → `cydlcd_tx_str()` (giao thức dùng chung 2 phía) | Test host `test_cydlcd_link.cpp` mục **8** + **8b**: payload `[4]G28` … đọc lại ra đúng `G28`/`G28 X`/`G28 Y`/`G28 Z` |
+| 3. Ra UART (USART3 PD8/PD9 ↔ GPIO22/GPIO35) | `send_frame_user()` → `send_frame_wait()` | Mục **8c**: UART kín ⇒ frame bị bỏ **nhưng CÓ ĐẾM** (`cydlcd_link_tx_dropped_user`) |
+| 4. Marlin nhận frame (CRC8) → bỏ byte `len` → `queue.enqueue_one()` | `Marlin/src/lcd/extui/cydlcd_serial/cydlcd_serial.cpp` (`case CYDLCD_F_GCODE`) | In `PANEL: lenh [G28]` ra COM4 cho **mọi** lệnh nhận được |
+| 5. Hàng đợi → `parser.parse()` → `G28()` chạy | `Marlin/src/gcode/queue.cpp` (`BUFSIZE = 4` lệnh!) | `PANEL DIAG: LENH tu man hinh: nhan=/xep=/cho lai=/bo=` (1 dòng/5 s) |
+
+**3 chỗ từng bỏ lệnh trong im lặng (đã sửa):**
+
+1. **Panel — hàng đợi TX đầy:** `send_frame()` (frame trạng thái) bỏ frame và chỉ tăng `s_tx_drop`. Lệnh người
+   dùng nay đi đường riêng `send_frame_user()`: **chờ tối đa 120 ms** cho TX rồi mới bỏ, có **đếm riêng**
+   (`UI RX: … BO LENH (G-code)=n`) + log. `n > 0` ⇒ lỗi ở phía màn hình/hàng đợi, không phải ở Marlin.
+2. **Marlin — hàng đợi lệnh đầy:** `BUFSIZE = 4` nên khi đang in từ thẻ (hoặc đang trong một vòng chờ nóng
+   dài) hàng đợi gần như luôn kín. Bản cũ **bỏ lệnh sau 2 s**; nay **giữ lại 1 lệnh và thử lại mỗi vòng
+   `onIdle()` tới 20 s** (`CYDLCD_CMD_PENDING_MS`) rồi mới bỏ — vẫn **không bao giờ block** vòng lặp chính.
+3. **Tranh chấp 2 core trên bộ tạo frame:** task `ui` (core 0 — bấm nút) và task `link` (core 1 — PING/trả lời)
+   cùng dùng biến `s_tx` + hàng đợi TX. Không khoá thì core 1 có thể **ghi đè frame `G28` đang dựng dở** ⇒ frame
+   gửi đi hỏng CRC ⇒ Marlin bỏ **im lặng**. Nay mọi đường gửi đi qua `tx_lock()` (mutex FreeRTOS, có priority
+   inheritance nên không đảo ngược ưu tiên; board 1 luồng = khoá rỗng).
+
+**Cách chẩn đoán 3 bước (không cần đoán) khi tái phát:**
+
+| Bước | Lệnh | Kết luận |
+|---|---|---|
+| 1 | `UI RX` (COM8) | Xem **`BO LENH (G-code)`**: `= 0` ⇒ màn hình ĐÃ gửi (lỗi ở phía sau). `> 0` ⇒ màn hình không gửi được ⇒ xem `TX cho=` (hàng đợi nghẽn) / dây TX |
+| 2 | `PANEL DIAG` (COM4, 5 s/lần) | Xem **`LENH tu man hinh: nhan=`**: tăng khi bấm nút = Marlin **có** nhận. `nhan=` không tăng dù `UI RX` báo PONG đều ⇒ **RX của Marlin kẹt** (đã có watchdog tự `begin()` lại sau 10 s) |
+| 3 | `nhan=` tăng mà `xep=` không tăng / `cho lai=` tăng | Lệnh tới Marlin nhưng **hàng đợi đầy** (đang in từ thẻ, `BUFSIZE=4`). Nay lệnh được giữ 20 s; nếu vẫn `bo=` tăng thì hàng đợi bị kẹt thật (vd đang chờ nóng mà PSU tắt) |
+
+**Đo được sau khi sửa:** bộ test host **81 kiểm tra / 0 lỗi** (`pwsh cydlcd/tools/run_host_test.ps1`) — trong đó
+mục 8b là hồi quy cho cám bẫy #39 (byte `len` ở đầu payload) và mục 8c là hồi quy cho việc bỏ lệnh im lặng.
+⚠️ **Bộ test này đã KHÔNG BUILD ĐƯỢC từ 2026-10-15** (xem cám bẫy 46 ở README gốc) — nó chỉ được sửa trong
+cùng đợt này, nên trước đó mọi lỗi dưới đây đều **không có lưới an toàn**:
+
+* **`send_frame_wait()` vòng lặp vô tận** khi TX ring rỗng (ESP32 trả `availableForWrite() = 256`, bị cắt bằng
+  `(uint8_t)` thành **0**) ⇒ task `link`/`ui` treo ⇒ watchdog **tự restart màn hình**, Marlin báo
+  `PANEL SD: doc sector ... THAT BAI`. Đây là lỗi nặng nhất tìm được trong đợt này (cám bẫy 45 ở README gốc).
+* **`tbt` không được publish** ở nhánh không-CYD (`state_publish()` chỉ copy `cydlcd`) ⇒ board F411/F407 LVGL:
+  trang **TRAMMING đứng dữ liệu cũ (0)** dù link vẫn chạy.
+* `run_host_test.ps1` để `$ErrorActionPreference='Stop'` quanh lệnh `g++` ⇒ **mọi WARNING của g++ bị PowerShell
+  5.1 biến thành lỗi kết thúc** ⇒ script báo lỗi và **không chạy test** dù biên dịch xong.
+
+**Chưa kiểm được (không có board trong tay):** hành vi trên dây thật. Mọi kết luận ở trên là từ **đọc code +
+test host**; khi có board, chạy đúng 3 bước ở bảng chẩn đoán trên để xác nhận `nhan=` tăng khi bấm `G28`.
+
 
 ## Menu MOTION kiểu 12864 (2026-10-15) — nhóm `SMG_MOTION` trong `src/ui_page_submenu.cpp`
 
