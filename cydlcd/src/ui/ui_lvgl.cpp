@@ -580,6 +580,8 @@ void show_page(uint8_t p) {
   // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
   // con cua trang) va KHONG dung toi WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
   if (p != PG_WIFI) wifi_page_leave();
+  // Roi trang TRAM -> ket thuc Tramming Wizard (thay nut BACK da bo o hang 4 nut) - xem tbt_page_leave().
+  if (p != PG_TBT) tbt_page_leave();
   else if (prev != PG_WIFI) WIFILOG("[WIFI] vao trang WIFI (chi doc trang thai, khong quet)\n");
 
   // ---- 2) THU HOI TRANG CU (page recycling - xem page_release) ----
@@ -1105,6 +1107,20 @@ void ui_lvgl_show_page_name(const char *name) {
       else                              Serial.printf(" %u=%s(%s)", (unsigned)i, PG_KEY[i], disp);
     }
     Serial.println();
+    return;
+  }
+  // 2026-10-17: nhan CA CHI SO (vd `UI 9` tren board / `page 9` trong script gia lap). VI SAO CAN:
+  // vai ten trang co DAU CACH ("NHIET DO", "FILE SD", "BED MESH", "THONG SO", "CAU HINH") hoac dau "/"
+  // ("FEED/FLOW") nen khong the go theo ten duoc (console tach tham so theo dau cach). Chi so lay tu
+  // PG_KEY[] o dau file nay.
+  if (name[0] >= '0' && name[0] <= '9') {
+    const int n = atoi(name);
+    if (n >= 0 && n < (int)PG_COUNT) {
+      Serial.printf("[UI] mo trang %d: %s\n", n, PG_KEY[n]);
+      show_page((uint8_t)n);
+      return;
+    }
+    Serial.printf("[UI] chi so trang %d ngoai dai 0..%u\n", n, (unsigned)(PG_COUNT - 1));
     return;
   }
   for (uint8_t i = 0; i < PG_COUNT; i++) {

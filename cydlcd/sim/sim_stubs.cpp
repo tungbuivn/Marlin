@@ -110,5 +110,16 @@ void ui_console_dispatch(const char *a3) {
   else if (!strncasecmp(a3, "TAP", 3))   ui_lvgl_test_tap(a3 + 3);
   else if (!strncasecmp(a3, "EDIT", 4))  settings_test_edit(a3 + 4);
   else if (!strncasecmp(a3, "MCELL", 5)) mesh_test_cell(a3 + 5);
+  // 2026-10-17: BO SUNG cac lenh TRUOC DAY BI THIEU -> chung roi vao nhanh cuoi ("ten trang") nen
+  // KHONG LAM GI, khien thua vien anh (tools/make_gallery.py) co 3 canh bi TRUNG: menu-tree/confirm
+  // va fatal-red deu la anh cua trang dang mo. Thieu: TESTBOX, CRIT, CFG, NOTIFY, SET, BACK/NEXT/PREV.
+  else if (!strcasecmp(a3, "TESTBOX"))     ui_lvgl_test_dialog();
+  else if (!strncasecmp(a3, "CRIT", 4))    ui_lvgl_test_crit(a3 + 4);
+  else if (!strncasecmp(a3, "CFG", 3))     submenu_dump(a3 + 3);
+  else if (!strncasecmp(a3, "NOTIFY", 6))  ui_lvgl_test_notify(a3 + 6);
+  else if (!strcasecmp(a3, "SET"))         page_settings_dump();
+  else if (!strcasecmp(a3, "BACK"))        ui_lvgl_test_back();
+  else if (!strcasecmp(a3, "NEXT"))        ui_lvgl_test_scroll(true);
+  else if (!strcasecmp(a3, "PREV"))        ui_lvgl_test_scroll(false);
   else                                   ui_lvgl_show_page_name(a3);   // ten trang (STATUS/MENU/...)
 }

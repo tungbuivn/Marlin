@@ -1,50 +1,52 @@
-# THU VIEN ANH: TOAN BO MAN HINH + DIALOG (sinh tu dong)
+# THU VIEN ANH: TOAN BO MAN HINH + DIALOG (sinh tu dong boi tools/make_gallery.py)
+# DUNG CHI SO trang: vai ten trang co dau cach ("NHIET DO") hoac dau "/" ("FEED/FLOW") nen
+# lenh `page <ten>` khong dung duoc. Chi so lay tu PG_KEY[] trong ui_lvgl.cpp.
 state basic
 settle 600
-page STATUS
+page 0
 settle 600
 shot page-00-STATUS
-page MENU
+page 1
 settle 600
 shot page-01-MENU
-page RATE
+page 2
 settle 600
-shot page-02-RATE
-page TEMP
+shot page-02-FEED-FLOW
+page 3
 settle 600
-shot page-03-TEMP
-page JOG
+shot page-03-NHIET-DO
+page 4
 settle 600
 shot page-04-JOG
-page FILES
+page 5
 settle 600
-shot page-05-FILES
-page SETTINGS
+shot page-05-FILE-SD
+page 6
 settle 600
-shot page-06-SETTINGS
-page MESH
+shot page-06-THONG-SO
+page 7
 settle 600
-shot page-07-MESH
-page CUSTOM
+shot page-07-BED-MESH
+page 8
 settle 600
 shot page-08-CUSTOM
-page TBT
+page 9
 settle 600
-shot page-09-TBT
-page INFO
+shot page-09-TRAMMING
+page 10
 settle 600
 shot page-10-INFO
-page ENDSTOP
+page 11
 settle 600
 shot page-11-ENDSTOP
-page WIFI
+page 12
 settle 600
 shot page-12-WIFI
-page SUBMENU
+page 13
 settle 600
-shot page-13-SUBMENU
+shot page-13-CAU-HINH
 # --- dialog ---
-page STATUS
+page 0
 settle 400
 ui CFG
 settle 600
@@ -54,24 +56,26 @@ settle 600
 shot dlg-02-confirm
 ui TAP K
 settle 500
-page SETTINGS
+page 6
 settle 500
 ui EDIT 3
 settle 600
 shot dlg-03-edit-overlay
-page MESH
+page 7
 settle 500
 ui MCELL 0 0
 settle 600
 shot dlg-04-mesh-cell
-page TEMP
+page 3
 settle 500
 ui PRE DEL 2
 ui PRE KB
 settle 700
 shot dlg-05-keyboard
+page 0
+settle 500
 ui CRIT
-settle 600
+settle 700
 shot dlg-06-fatal-red
 ui CRIT OFF
 settle 400

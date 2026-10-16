@@ -990,6 +990,9 @@ void page_wifi_update(void);
  * Goi tu show_page() moi khi doi man, va tu page_wifi_destroy() (idempotent).
  */
 void wifi_page_leave(void);
+/** Roi trang TRAM -> bao Marlin thoat Tramming Wizard (thu probe + danh dau Z chua home).
+ *  Goi tu show_page() khi doi trang; thay cho nut "BACK" da bo o hang 4 nut. */
+void tbt_page_leave(void);
 /** Man TRAMMING: dieu khien Bed Tramming Wizard qua link ASCII (4 so 4 goc + 4 nut lenh). */
 void page_tbt_create(lv_obj_t *p);
 /** Cap nhat man TRAMMING tu dong 'TBT ...' cua Marlin (4 goc, huong dan van, mode). */

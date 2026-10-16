@@ -38,9 +38,21 @@ static const char *const TBT_NAME[TBT_PROTO_POINTS] = { "BR", "BL", "FL", "FR" }
 static void cb_tbt_cmd(lv_event_t *e) {
   const char c = (char)(intptr_t)lv_event_get_user_data(e);
   tbt_link_send(c);
-  // BACK = thoat man nay (giong nut BACK cua wizard tren man 12864): bao Marlin thoat wizard
-  // (stow probe + danh dau Z chua home) roi quay ve MENU.
-  if (c == TBT_CMD_BACK) show_page(PG_MENU);
+  // (2026-10-17) Truoc day con nhanh `if (c == TBT_CMD_BACK) show_page(PG_MENU);` cho nut BACK o hang
+  // 4 nut. Nut do da bo; viec thoat wizard + roi trang nay do tbt_page_leave() lo.
+}
+
+// Roi trang TRAM -> bao Marlin THOAT WIZARD neu dang chay (thu probe ve + danh dau Z chua home).
+//
+//  YEU CAU NGUOI DUNG 2026-10-17: "bo nut back o hang co 4 nut, tren header da co roi".
+//  Nhung nut BACK do KHONG phai chi de dieu huong: no con gui lenh 'B' xuong Marlin de ket thuc
+//  Tramming Wizard. Nut BACK tren HEADER (do_action A_BACK) CHI dieu huong, KHONG gui 'B'.
+//  => Neu bo thang nut do thi nguoi dung roi trang binh thuong nhung WIZARD VAN CHAY NGAN voi probe
+//     con ha xuong -> nguy hiem. Vi vay chuyen chuc nang do sang hook "roi trang" (giong
+//     wifi_page_leave): MOI duong roi trang (BACK header, PREV/NEXT, cham tab khac) deu ket thuc wizard.
+//     Lam xong thi nut BACK o hang 4 nut moi THUC SU thua va da bo.
+void tbt_page_leave(void) {
+  if (tbt.st.active) tbt_link_send(TBT_CMD_BACK);
 }
 
 // " BR  -0.012" / "*FL    ---" : 1 goc, mm so voi moc (Marlin gui san gia tri da tinh)
@@ -79,7 +91,8 @@ void page_tbt_create(lv_obj_t *p) {
   lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
   mk_btn_grow(rb, "PROBE",   38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_PROBE);
   mk_btn_grow(rb, "MAX/MIN", 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_MINMAX);
-  mk_btn_grow(rb, "BACK",    38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_BACK);
+  // 2026-10-17: BO nut "BACK" o day (yeu cau nguoi dung - tren header da co nut BACK).
+  // Viec thoat wizard da chuyen sang tbt_page_leave() -> moi duong roi trang deu ket thuc wizard.
   mk_btn_grow(rb, "DONE",    38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_DONE);
 
   mk_label_w(p, T(UI_T_TBT_HINT), COL_DIM, PAGE_INN_W);
