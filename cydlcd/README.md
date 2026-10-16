@@ -743,6 +743,101 @@ chắc chắn ở tầng 3.
 
 ---
 
+## Chụp màn hình từ xa — `GET /screen.bmp` (2026-10-16)
+
+**Vì sao cần:** màn hình CYD **không có framebuffer** (driver vẽ thẳng ra SPI) và 320×240×2 = 150 KB thì
+không đủ RAM, nên trước đây **không có cách nào xem màn hình từ xa** — mỗi lần kiểm tra màu hay bố cục đều
+phải nhờ người ngồi trước máy. Vụ lệch màu panel (mục *Kiểm tra đường màu* ngay trên) phải đối chiếu đi
+đối chiếu lại nhiều lần chính vì lý do đó.
+
+```bash
+curl -o shot.bmp http://<ip-man-hinh>/screen.bmp      # BMP 24-bit 320×240, 230.454 byte, ~3 giây
+```
+
+**Cách làm:** ST7789 có lệnh đọc RAM (`RAMRD`, `0x2E`). Firmware đọc **từng dải 8 dòng** bằng
+`readRectRGB()` rồi trả về BMP. Vì mọi truy cập TFT_eSPI phải nằm trong **một** task, task `net` không tự
+đọc panel mà gọi `ui_shot_band()`: đặt yêu cầu + **đợi semaphore**, task `ui` thấy cờ thì chụp rồi trả
+semaphore ⇒ task `ui` **vẫn chạy bình thường** trong lúc chờ, không bị chặn.
+
+### 5 cái bẫy của đường đọc ngược (đã gặp thật — ghi lại để khỏi mất thời gian lần sau)
+
+| # | Bẫy | Xử lý |
+|---|---|---|
+| 1 | `readRect()` đọc **3 byte/pixel** (18-bit) nhưng init đặt `COLMOD = 0x55` (16-bit) ⇒ lệch hoàn toàn (ghi `0xF800` đọc ra `0xE007`) | Tạm đổi COLMOD sang `0x66` trong lúc đọc rồi trả về `0x55`. RAM panel vốn 18-bit/pixel nên **ảnh đang hiện không đổi** |
+| 2 | `readRect()` còn **ghép kênh sai** cho ST7789 | Dùng `readRectRGB()` lấy **byte thô** rồi tự giải mã |
+| 3 | Byte thô: `raw[0]` là **1 byte thừa**, rồi mỗi pixel 3 byte R6,G6,B6 (giá trị 6-bit nằm ở 6 bit cao) | Bỏ byte đầu, mask `>> 2` |
+| 4 | Dữ liệu đọc về **bị dịch phải 1 bit** | Bù `<< 1`. Chứng minh: `00011000 00010100 01101000` đọc thành `00001100 00001010 00110100`. Vì giá trị 6-bit nằm ở 6 bit cao (2 bit thấp luôn 0) nên dịch phải **không mất dữ liệu** |
+| 5 | Hệ toạ độ là **landscape 320×240** (`setRotation(1)`), không phải 240×320 | Đọc đúng 320 cột. Đọc nhầm 240×320 sẽ chỉ lấy 240 cột đầu và tràn chiều cao |
+
+⚠️ Bẫy #4 là cái khó nhất: `UI READTEST` với **màu thuần** (0 và max) **luôn đạt dù công thức sai** — phải
+đo thêm **tổng trung gian** (`BG 0x18AD`) mới lộ ra.
+
+### Kiểm chứng
+
+`UI READTEST` (console COM7) tô 5 màu đã biết, chụp lại rồi so với giá trị panel **thực sự hiển thị**:
+
+```
+BLACK 0x0000 -> chup RGB(  0,  0,  0), panel hien thi (  0,  0,  0) | lech 0,0,0 -> OK
+BG    0x18AD -> chup RGB( 24, 20,105), panel hien thi ( 24, 20,105) | lech 0,0,0 -> OK
+WHITE 0xFFFF -> chup RGB(255,255,255), panel hien thi (255,255,255) | lech 0,0,0 -> OK
+RED   0xF800 -> chup RGB(255,  0,  0), panel hien thi (255,  0,  0) | lech 0,0,0 -> OK
+GREEN 0x07E0 -> chup RGB(  0,255,  0), panel hien thi (  0,255,  0) | lech 0,0,0 -> OK
+KET LUAN: 5/5 -> CHUP MAN HINH DUNG MAU
+```
+
+Đối chiếu với bản giả lập trên PC (`cydlcd/sim`, cùng trang STATUS): **87,7 % pixel khớp**, lệch trung bình
+35/765. Phần lệch còn lại là do **trạng thái màn hình khác nhau** (nhiệt độ, toạ độ, giờ) — không phải sai màu.
+
+### Mang sang máy khác build — `tools/patch_tft_espi.py` (2026-10-16)
+
+Phần giải mã ở trên **phụ thuộc vào hành vi cụ thể của TFT_eSPI 2.5.43** (số byte/pixel, thứ tự byte, byte
+dummy). Trước đây `lib_deps` ghi `^2.5.43` — **dấu `^` cho phép lên 2.5.44, 2.6.x…**, nên máy khác build sẽ
+kéo bản khác và **ảnh chụp sai màu âm thầm** (không compiler nào báo lỗi; chỉ nhìn ảnh mới biết).
+
+Đã xử lý bằng **2 việc**:
+
+**1. Ghim đúng phiên bản** trong `cydlcd/platformio.ini` (bỏ `^`):
+```ini
+lib_deps = lvgl/lvgl@8.4.0
+           bodmer/TFT_eSPI@2.5.43
+```
+*(trước đây ghi `^8.3.11` nhưng thực tế đã kéo lên **LVGL 8.4.0** — nay ghi đúng số đang chạy)*
+
+**Bản giả lập trên PC cũng phải cùng bản LVGL:** `tools/run_sim.sh` nay ghim `LVGL_VER=8.4.0` (trước đây
+8.3.11). Hai bên khác bản thì ảnh giả lập có thể lệch bố cục/màu so với board mà rất khó lần ra — và đó
+chính là loại lỗi mà công cụ giả lập sinh ra để phát hiện. Đã build lại và kiểm chứng với LVGL 8.4.0: mọi
+kiểm tra tự động đạt (exit 0).
+
+**2. `tools/patch_tft_espi.py`** chạy tự động trước mỗi lần build CYD:
+```ini
+extra_scripts = pre:tools/patch_tft_espi.py
+```
+Nó kiểm tra **đúng version** và **mã nguồn thư viện còn khớp giả định của phần giải mã** chưa (COLMOD
+16-bit trong init; `readRectRGB` đọc 3 byte/pixel, đúng 1 byte dummy, R–G–B liền nhau). Lệch ⇒ **build dừng
+ngay** kèm hướng dẫn cụ thể, không để lọt tới lúc nhìn ảnh mới phát hiện.
+
+Dòng log khi đạt:
+```
+[patch_tft_espi] TFT_eSPI 2.5.43: da ghim version + kiem tra ma nguon khop gia dinh (duong doc nguoc panel cho /screen.bmp)
+```
+
+> **Vì sao KHÔNG sửa tay file trong `libdeps/`:** PlatformIO quản lý thư viện theo version + checksum
+> (`integrity.dat`); sửa tay sẽ bị **ghi đè** ở lần `pio pkg install` / `pio run -t clean` sau, và máy khác
+> thì không có bản sửa đó ⇒ dựng lại đúng lỗi cũ. "Patch" bền vững ở đây là **ghim version + cổng kiểm tra**,
+> không phải chép đè mã nguồn thư viện.
+
+**Khi buộc phải nâng TFT_eSPI:** sửa `platformio.ini` → build → nạp → chạy `UI READTEST` trên board.
+**5/5 đạt** thì phần giải mã còn đúng; lệch thì phải chỉnh `ui_port_capture_band()` rồi đo lại.
+
+### Hạn chế đã biết
+
+- Chụp mất **~3 giây**, trong lúc đó web server **không phục vụ request khác** (task `net` bận stream).
+  Dùng để kiểm tra thì tốt, **không dùng để quay video**.
+- **Có thể rách ảnh nhẹ nếu màn hình đang động**: task `ui` vẫn vẽ giữa các dải, nên một progress bar đang
+  chạy có thể lệch giữa dải trên và dải dưới. Màn hình tĩnh thì không sao.
+
+---
+
 ## 7. Về font chữ (chỉ dùng cho kiểu G-code)
 
 `src/font8x8.h` là **file sinh tự động** (Lucida Console 11px → ô 8×8) bằng

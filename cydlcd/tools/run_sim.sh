@@ -37,7 +37,9 @@ NOBUILD=0
 OLDXYZ=0
 FETCH_LVGL=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
-LVGL_VER="${LVGL_VER:-8.3.11}"
+# GHIM DUNG phien ban LVGL ma board dang chay (platformio.ini: lvgl/lvgl@8.4.0). Truoc day ghi
+# 8.3.11 -> ban gia lap va board dung HAI ban LVGL khac nhau, co the lech bo cuc/mau ma kho lan ra.
+LVGL_VER="${LVGL_VER:-8.4.0}"
 
 usage() {
   cat <<'EOF'
