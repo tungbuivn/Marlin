@@ -63,6 +63,18 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  pre{white-space:pre-wrap;font-size:12px;color:#9aa;margin:8px 0 0}
  .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex:0 0 auto}
  button.mini{width:auto;padding:6px 10px;font-size:13px}
+ /* Hang tieu de: <h1> ben trai, nut "Chup man hinh" ben phai */
+ .hdhdr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+ /* Lop phu XEM ANH CHUP: phu kin man hinh, anh vua khung, duoi la 2 nut Luu / Dong */
+ #snapov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9;
+   flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px}
+ #snapov img{width:100%;max-width:640px;background:#000;border:1px solid #2a2080;border-radius:6px;
+   image-rendering:pixelated}       /* pixelated: anh 320x240 phong to nhin ro tung diem, khong bi nhoe */
+ .snaprow{display:flex;gap:10px;width:100%;max-width:640px}
+ .snaprow>*{flex:1 1 0}
+ a.dl{display:block;text-align:center;text-decoration:none;padding:10px;border-radius:6px;
+   background:#00e5ff;color:#12102a;font-weight:700;font-size:13px;box-sizing:border-box}
+ #snapinfo{font-size:12px;color:#9aa;text-align:center}
  /* Danh sach file: full size - chiem het chieu cao con lai cua the, chi cuon khi danh sach dai hon */
  .list{font-size:13px;flex:1 1 auto;min-height:0;overflow:auto}
  /* NUT XOA DAT TRUOC TEN FILE (yeu cau 2026-10-15: "nut xoa de truoc ten file cho khoi nham"): nut nam
@@ -76,7 +88,12 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
  .ntf.warn{border-left-color:#ffb300}
  .ntf.err{border-left-color:#ff5252}
 </style></head><body>
-<h1>TBT-CYDLCD</h1>
+<div class="hdhdr">
+  <h1>TBT-CYDLCD</h1>
+  <!-- NUT CHUP MAN HINH (yeu cau nguoi dung 2026-10-16). Goi GET /screen.bmp roi hien anh o lop phu
+       ngay trong trang (khong mo tab moi) + cho LUU ve may voi ten co NGAY GIO. -->
+  <button id="snapb" class="mini" onclick="snap()">Chup man hinh</button>
+</div>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
 <div class="card up">
   <input type="text" id="tok" placeholder="token (vd TBT-3D-up)" value="%%TOKEN%%">
@@ -91,6 +108,16 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 <div class="card fl">
   <div class="hd"><b>File tren the SD</b><button id="rf" class="mini" onclick="loadFiles()">Lam moi</button></div>
   <div id="flist" class="list">dang doc...</div>
+</div>
+<!-- LOP PHU XEM ANH CHUP (an mac dinh). Nut "Chup man hinh" o tieu de bat no len; Esc hoac "Dong" de tat.
+     PHAI nam NGOAI khoi lenh JavaScript ben duoi - de lot vao trong do la trang web vo. -->
+<div id="snapov">
+  <img id="snapimg" alt="anh chup man hinh cydlcd">
+  <div class="snaprow">
+    <a id="snapdl" class="dl" download>Luu .bmp</a>
+    <button class="mini" onclick="snapClose()">Dong</button>
+  </div>
+  <div id="snapinfo"></div>
 </div>
 <script>
 var q=new URLSearchParams(location.search); if(q.get('token')) document.getElementById('tok').value=q.get('token');
@@ -203,6 +230,44 @@ function send(){
   x.send(fd); log('dang gui '+f.name+' ('+f.size+' B)...');
   upBusy=true; updGo();                // KHOA nut ngay khi bat dau gui (tranh bam 2 lan)
 }
+
+// ---- CHUP MAN HINH: nut "Chup man hinh" o tieu de goi ham nay ----
+// Lay GET /screen.bmp (man hinh doc nguoc panel) -> hien trong lop phu #snapov + cho LUU ve may.
+// PHAI them ?t=<ms>: khong co thi trinh duyet dung lai anh CU trong cache, bam lan sau van ra anh cu.
+var snapUrl=null;
+function snapName(){
+  var d=new Date(), p=function(n){return String(n).padStart(2,'0');};
+  return 'cyd-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+
+         p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+'.bmp';
+}
+function snapClose(){document.getElementById('snapov').style.display='none';}
+function snap(){
+  var b=document.getElementById('snapb');
+  if(b.disabled) return;                       // dang chup -> bo qua (tranh bam 2 lan)
+  b.disabled=true; b.textContent='Dang chup...';
+  var t0=Date.now();
+  fetch('/screen.bmp?t='+t0,{cache:'no-store'})
+   .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.blob(); })
+   .then(function(bl){
+     if(snapUrl) URL.revokeObjectURL(snapUrl);  // giai phong anh cu (bam nhieu lan se ro ri bo nho)
+     snapUrl=URL.createObjectURL(bl);
+     var name=snapName();
+     document.getElementById('snapimg').src=snapUrl;
+     var a=document.getElementById('snapdl'); a.href=snapUrl; a.download=name;
+     document.getElementById('snapinfo').textContent=name+'  |  '+fmtB(bl.size)+'  |  '+(Date.now()-t0)+' ms';
+     document.getElementById('snapov').style.display='flex';
+     log('da chup man hinh: '+name+' ('+fmtB(bl.size)+')');
+   })
+   .catch(function(e){ log('chup man hinh LOI: '+e.message); })
+   .finally(function(){ b.disabled=false; b.textContent='Chup man hinh'; });
+}
+// Esc de dong lop phu (tien khi xem tren may tinh)
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') snapClose(); });
+
+// `?snap=1` -> TU CHUP ngay khi mo trang. Tien cho nguoi dung (luu 1 link, bam la co anh ngay) va
+// cung la cach kiem tra tu dong bang trinh duyet headless.
+if(q.get('snap')) snap();
+
 updGo();
 poll(true);                            // doc trang thai truoc, xong moi nap danh sach file
 </script></body></html>)HTML";
