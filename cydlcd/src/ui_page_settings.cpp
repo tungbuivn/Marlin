@@ -632,6 +632,7 @@ void page_settings_create(lv_obj_t *p) {
   se_info = mk_label_w(p, T(UI_T_SET_INFO_NONE), COL_DIM, PAGE_INN_W);
 
   se_table = lv_table_create(p);
+  mono_obj(se_table);                        // font CHUNG cua UI (yeu cau thong nhat 1 ho font)
   lv_obj_set_size(se_table, PAGE_INN_W, SET_TABLE_H);
   lv_table_set_col_cnt(se_table, 2);
   lv_table_set_col_width(se_table, 0, SET_COL0_W);

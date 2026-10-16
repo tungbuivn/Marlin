@@ -241,6 +241,7 @@ void page_mesh_create(lv_obj_t *p) {
 
   // Luoi la CON TRUC TIEP cua trang (da bo cot nut ben phai) -> rong het 312 px.
   me_table = lv_table_create(p);
+  mono_obj(me_table);                        // font CHUNG cua UI (yeu cau thong nhat 1 ho font)
   lv_obj_set_size(me_table, MESH_TABLE_W, MESH_TABLE_H);
   lv_table_set_col_cnt(me_table, 1);
   lv_table_set_row_cnt(me_table, 1);

@@ -375,6 +375,11 @@ lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
 // trang; phim dang bam (PRESSED) doi sang COL_ACCENT. O nhap (ta) cung dat nen toi + chu trang.
 void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
   if (kb) {
+    // 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1 loai font hien thi chu"): ban phim va o
+    // nhap la widget LVGL tao truc tiep (khong qua mk_label/mk_btn) nen truoc day dung font MAC DINH
+    // cua LVGL (Montserrat 14) -> man WIFI / NHIET DO bi lech ho font. Gan font chung o day.
+    // Ban phim TU chia hang theo chieu cao vat (KB_H) nen doi font khong lam tran.
+    mono_obj(kb);
     lv_obj_set_style_bg_color(kb, COL_BAR, 0);
     lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(kb, COL_ACCENT, 0);
@@ -397,6 +402,7 @@ void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
     lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
   }
   if (ta) {
+    mono_obj(ta);                                               // font chung (xem ghi chu o tren)
     lv_obj_set_style_bg_color(ta, lv_color_hex(0x0B0B2B), 0);   // toi hon nen trang: chu trang noi ro
     lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(ta, COL_ACCENT, 0);

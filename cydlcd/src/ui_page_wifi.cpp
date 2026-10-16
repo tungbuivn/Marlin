@@ -34,7 +34,9 @@
 //  Nut QUET goi net_wifi_scan() BLOCKING ~2-4 s -> hien lop phu T(UI_T_WIFI_SCANNING) + KHOA input
 //  (lv_indev_enable) trong luc quet (giong cach nhanh firmware lam o pha init), xong moi mo lai.
 // ===========================================================================
-#define WIFI_ROLLER_H  (4 * 17)        // 68 = 4 dong x line_height 17 (mono mode 4)
+// 2026-10-16: line_height doi theo FONT CHUNG cua UI (20 px, khong con 17 cua font mono cu) nen
+// 4 dong can 4*20 = 80. Roller KHONG tu co gian theo so dong hien thi (da ep height ben duoi).
+#define WIFI_ROLLER_H  (4 * 20)        // 80 = 4 dong x line_height 20 (font chung Segoe UI 16)
 #define WIFI_SCAN_SHOW 8               // toi da 8 mang vao roller (o 68 px van cuon duoc)
 #define WIFI_PASS_MAX  64
 
@@ -274,6 +276,7 @@ void page_wifi_create(lv_obj_t *p) {
   wf_pass = mk_btn(p, T(UI_T_WIFI_PASS_DOTS), PAGE_INN_W, 26, cb_wifi_pass, NULL);
 
   wf_roller = lv_roller_create(p);
+  mono_obj(wf_roller);                       // font CHUNG cua UI (yeu cau thong nhat 1 ho font)
   lv_obj_set_width(wf_roller, PAGE_INN_W);
   lv_roller_set_visible_row_count(wf_roller, 4);
   lv_obj_set_height(wf_roller, WIFI_ROLLER_H);

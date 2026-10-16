@@ -163,15 +163,10 @@ static bool ov_build(void) {
     lv_obj_set_width(title, (lv_coord_t)(UI_LCD_HOR_RES - 16));
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
   }
-  // Font cho DONG TRANG THAI cua lop phu: 20 px (bat rieng trong lv_conf_cydlcd.h cho board CYD).
-  // Board STM32 LVGL (F411/F407) dung lv_conf.h chung - o do CHI bat montserrat 14/16 (de tiet kiem
-  // flash) => TRUOC DAY 2 env STM32 BAO LOI BUILD ("'lv_font_montserrat_20' was not declared").
-  // Lop phu nay chi hien khi nhan file qua WiFi (board CYD), nen board STM32 dung 16 px la du.
-  #if defined(CYDLCD_BOARD_CYD)
-    #define OV_FONT_BIG &lv_font_montserrat_20
-  #else
-    #define OV_FONT_BIG &lv_font_montserrat_16
-  #endif
+  // Font cho DONG TRANG THAI cua lop phu: 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1
+  // loai font hien thi chu") dung CHUNG font chu cua UI thay vi Montserrat 20/16 rieng.
+  // UI_MONO_FACE tu lui ve Montserrat 14 khi khong co font GFX (cac board STM32) nen van an toan.
+  #define OV_FONT_BIG UI_MONO_FACE
   ov_state = ov_label(ov, "...", OV_TXT, OV_FONT_BIG);
   ov_info  = ov_label(ov, "", OV_TXT, nullptr);
   ov_bar = lv_bar_create(ov);

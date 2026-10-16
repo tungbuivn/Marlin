@@ -500,12 +500,13 @@ void build_chrome(void) {
   // ---- Ten man: o be rong CO DINH (TITLE_W) de tong be rong thanh tieu de la con so chac chan
   // (xem bang o tren). Ten dai hon o thi tu cuon trong o, khong day cac nut ra ngoai.
   s_title = mk_label_w(s_bar, T(UI_T_PT_STATUS), COL_TXT, TITLE_W);
-#if UI_MONO_FONT == 4
-  // DOI CHUNG cho phep thu mono: giu TEN MAN o font Montserrat. Neu man hinh chi con doc duoc ten
-  // man ma moi chu khac mat => font mono khong ve duoc. Neu chu khac hien binh thuong => font tot.
-  // (Uu tien nhat: neu CA ten man lan chu khac deu mat thi loi nam o cho khac, khong phai font.)
-  lv_obj_set_style_text_font(s_title, &lv_font_montserrat_14, 0);
-#endif
+  // 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1 loai font hien thi chu"): BO override
+  // sang Montserrat 14. `mk_label_w()` da goi mono_obj() -> ten man dung CHUNG font chu cua UI.
+  // Truoc day ten man co tinh de Montserrat lam "doi chung" de biet font GFX co ve duoc khong;
+  // nay viec do da co dong bao trong man INFO (s_gfx_mono ? "OK" : "FAIL") lo.
+  // ⚠️ Font chung la 16 px (Montserrat 14 la 14 px) nen ten man dai hon truoc -> vai ten se TU CUON
+  // trong o TITLE_W (dung co che san co: mk_label_w dat LV_LABEL_LONG_SCROLL_CIRCULAR).
+  // KHONG the nong TITLE_W: truong hop dang in, spacer chi con 3 px (xem bang be rong o tren).
   // Ten man CUNG bam duoc -> ve STATUS (giong nut HOME). lv_label mac dinh KHONG clickable (xem
   // lv_label.c) nen phai tu bat co; them CLICK_FOCUSABLE + vao group de encoder cung dung duoc.
   lv_obj_add_flag(s_title, LV_OBJ_FLAG_CLICKABLE);
