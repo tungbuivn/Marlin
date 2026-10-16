@@ -847,6 +847,7 @@ static void ui_lvgl_task_body(void) {
     }
   }
 
+
   switch (s_page_act) {
     case PG_STATUS: page_status_update(); break;
     case PG_MENU:   page_menu_update();   break;

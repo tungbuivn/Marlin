@@ -57,6 +57,8 @@ static lv_obj_t *st_tgt[ST_CELLS], *st_cur[ST_CELLS];
 static lv_obj_t *st_axis_val[3], *st_xyz_frame;
 static lv_obj_t *st_rate_val[2], *st_rate_icon[2];
 static lv_obj_t *st_time, *st_pct, *st_bar, *st_msg;
+// 3 nut PAUSE / RESUME / STOP (2026-10-16). Chi hien khi dang IN / TAM DUNG, xem page_status_update().
+static lv_obj_t *st_pb[3];
 // Nhap nhay dau "?" cua hang XYZ khi CHUA HOME (2026-10-16). Xem page_status_update().
 static uint32_t  s_xyz_blink_ms = 0;        // moc doi trang thai lan cuoi
 static bool      s_xyz_blink_on = true;     // true = dang HIEN dau "?"
@@ -104,6 +106,19 @@ static const lv_img_dsc_t *pick_icon(const lv_img_dsc_t *full, const lv_img_dsc_
 static void status_cell(lv_obj_t *p, const uint8_t i, const lv_img_dsc_t *icon, const uint8_t act) {
   lv_obj_t *c = mk_hit(p, MR_CELL_X(i), 0, MR_CELL_W, MR_CELL_H,
                        cb_action, (void *)(intptr_t)act);
+  // ---------------------------------------------------------------------------
+  // 2026-10-16 (YEU CAU NGUOI DUNG): "bo duong vien cua 3 nut bam hotend, bed va fan khi click o trang
+  // status. Bo sung khi cham vao nut thi thay doi mau nen cua nut, khi nhac tay thi phuc hoi mau nen."
+  //
+  //  * LV_OBJ_FLAG_USER_4 = KHONG ve vien focus (xem focus_mark() o ui_widgets.cpp). KHONG dung USER_3
+  //    vi USER_3 con doi mau CHU, ma icon o day la glyph font -> doi mau chu se doi luon mau NHIET DO.
+  //  * Doi nen khi NHAN: dat style cho LV_STATE_PRESSED. LVGL TU bat trang thai nay luc cham xuong va
+  //    TU tat khi nhac tay -> khong phai tu quan ly trang thai, va khong the "ket" mau nen.
+  //    Mau chon MR_SELBG (#4F378B): nen trang la #1E156E nen phai sang hon ro ret moi thay tren LCD.
+  // ---------------------------------------------------------------------------
+  lv_obj_add_flag(c, LV_OBJ_FLAG_USER_4);
+  lv_obj_set_style_bg_opa(c, LV_OPA_COVER, LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(c, MR_SELBG, LV_STATE_PRESSED);
   st_cell[i] = c;
   st_icon[i] = mk_icon(c, 0, MR_ICON_Y, icon, MR_COLD);
   st_tgt[i]  = mk_label_mid(c, 0, MR_TGT_Y, MR_CELL_W, "-", MR_COLD);
@@ -203,6 +218,23 @@ void page_status_create(lv_obj_t *p) {
   lv_obj_set_pos(st_msg, MR_MSG_X, MR_MSG_Y);
   lv_obj_set_style_text_align(st_msg, LV_TEXT_ALIGN_CENTER, 0);
 
+  // ---- 3 nut PAUSE / RESUME / STOP (MR_PB_Y, an khi may ranh) ----
+  // YEU CAU NGUOI DUNG 2026-10-16: "toi muon hien thi 3 nut pause, resume, stop o man hinh status".
+  // Dat o HANG CUOI (xem giai thich o MR_PB_Y trong ui_lvgl_int.h): day la cho trong duy nhat con du
+  // cho 3 nut bam duoc, doi lai phai an DONG NHAN TRANG THAI khi 3 nut hien (page_status_update lo viec do).
+  // Chu giong trang FILE (thang tieng Anh, nhu "PAUSE" / "RESUME" / "STOP (M524)") cho nhat quan.
+  // Hien ca 3 (khong an bot theo trang thai): bam nham nut vo nghia thi Marlin bo qua (M24 khi dang in
+  // / M25 khi dang tam dung deu vo hai), doi lai nguoi dung luon thay du lua chon.
+  {
+    static const char *const PB_TXT[3] = { "PAUSE", "RESUME", "STOP" };
+    static const uint8_t     PB_ACT[3] = { A_PAUSE, A_RESUME, A_STOP };
+    for (uint8_t i = 0; i < 3; i++) {
+      st_pb[i] = mk_btn(p, PB_TXT[i], MR_PB_W, MR_PB_H, cb_action, (void *)(intptr_t)PB_ACT[i]);
+      lv_obj_set_pos(st_pb[i], MR_PB_X(i), MR_PB_Y);
+      lv_obj_add_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);   // mac dinh AN (may thuong dang ranh)
+    }
+  }
+
   // ---- 2 icon trang thai: WiFi + chu dBm (nam trong KHE PHAI cua hang nhiet do, xem
   // ui_chrome.cpp: status_icons_create()) + luu lai icon THE co san cua Marlin de to mau theo
   // trang thai the TF cua MAN HINH CYD (xem khoi "Icon trang thai WiFi" o cuoi file).
@@ -235,6 +267,21 @@ void page_status_update(void) {
   char b[48], a1[12], a2[12], t1[10], t2[10];
   int16_t cur = 0, tgt = 0;
   const bool homed = (cydlcd.flags & CYDLCD_SF_HOMED) != 0;
+
+  // ---- 3 nut PAUSE/RESUME/STOP doi cho voi DONG NHAN TRANG THAI o hang cuoi (xem MR_PB_Y) ----
+  // Dang IN hoac TAM DUNG -> hien 3 nut, an dong trang thai. May ranh -> nguoc lai.
+  // `lv_obj_add_flag`/`clear_flag` cua LVGL TU BO QUA khi co da dung trang thai -> goi moi vong (150 ms)
+  // khong ton gi va khong gay ve lai.
+  {
+    const bool ctl = ((cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0);
+    for (uint8_t i = 0; i < 3; i++) {
+      if (!st_pb[i]) continue;
+      if (ctl) lv_obj_clear_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);
+      else     lv_obj_add_flag(st_pb[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (ctl) lv_obj_add_flag(st_msg,   LV_OBJ_FLAG_HIDDEN);
+    else     lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
+  }
 
   // ---- 3 o: icon + mau theo nhiet do VA theo trang thai CAP NGUON cua heater ----
   // YEU CAU NGUOI DUNG 2026-10-15: "neu marlin cap nguon cho hot end thi co bieu fill dac icon, mau cung
@@ -383,6 +430,7 @@ void page_status_destroy(void) {
   st_xyz_frame = NULL;
   for (uint8_t i = 0; i < 2; i++) { st_rate_val[i] = NULL; st_rate_icon[i] = NULL; }
   st_time = NULL; st_pct = NULL; st_bar = NULL; st_msg = NULL;
+  for (uint8_t i = 0; i < 3; i++) st_pb[i] = NULL;      // 3 nut PAUSE/RESUME/STOP
   // 2 icon trang thai nam trong kho cua ui_chrome.cpp (cap nhat dinh ky o MOI trang) -> phai quen.
   status_icons_forget();
 }

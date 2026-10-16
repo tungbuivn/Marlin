@@ -420,6 +420,25 @@ enum {
 #define MR_MSG_X     0                                    // canvas(0, 216, 320, 20)
 #define MR_MSG_Y     216
 #define MR_MSG_W     320
+// ---------------------------------------------------------------------------
+//  3 nut PAUSE / RESUME / STOP o CUOI trang STATUS (2026-10-16, yeu cau nguoi dung: "toi muon la o
+//  man hinh status ay").
+//
+//  VI SAO DAT O DAY: trang STATUS khong con cho trong nao khac - 3 o nhiet do chiem y=0..100, hang XYZ
+//  y=103..127, FR/FL + 2 nut the SD o y=136..186, dong thoi gian y=176..196, thanh tien do y=198..207.
+//  Khoang trong duy nhat du cho 3 nut bam duoc la HANG CUOI (y=210..232, rong 320).
+//
+//  DANH DOI: hang cuoi dang la DONG NHAN TRANG THAI (ten file / "IDLE" / "PAUSED"...). Nen:
+//    - dang IN (hoac TAM DUNG) -> hien 3 NUT, an dong trang thai (luc nay 3 nut noi ro trang thai hon);
+//    - may RANH               -> an 3 nut, hien dong trang thai nhu cu.
+//  An khi ranh vi pause/resume/stop khong co y nghia khi khong in, con dong trang thai thi can.
+//
+//  Chieu cao 22 px: bang co nut "II"/"[]" o thanh tieu de (20) va nut PREV/NEXT o thanh day (18) -
+//  vua ngon tay ma khong chiem them cho.
+#define MR_PB_Y      210
+#define MR_PB_H      22
+#define MR_PB_W      102
+#define MR_PB_X(i)   (4 + (i) * (MR_PB_W + 3))            // 3 nut: 4 / 109 / 214, ket thuc 316
 
 // --- B) cac man con ---
 #define BAR_H      26                                  // dong tieu de: [ten man] ... [LINK][BACK]

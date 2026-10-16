@@ -243,6 +243,16 @@ void focus_mark(lv_obj_t *o, const bool on) {
   // PHAI lam TRUOC khi ve vien: vien "outlined" duoi day phu thuoc mau nen (xem outline_apply).
   if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER && !own_bg && !flat)
     lv_obj_set_style_bg_color(o, on ? MR_SELBG : COL_BTN, 0);
+  // Vat co LV_OBJ_FLAG_USER_4: KHONG BAO GIO ve vien focus va KHONG doi mau chu.
+  // YEU CAU NGUOI DUNG 2026-10-16: "bo duong vien cua 3 nut hotend, bed va fan khi click o trang STATUS".
+  // VI SAO KHONG DUNG USER_3 (vat phang): USER_3 con doi MAU CHU de bao focus, ma icon cua 3 o nay la
+  // GLYPH FONT (khong phai anh) nen doi mau chu = doi mau icon -> se de mat mau NHIET DO (mau icon o day
+  // do temp_ramp() quyet dinh). Nen phai co mot co RIENG: chi bo vien, khong dung gi khac.
+  // (Nen khi NHAN khong lam o day: do la style cho LV_STATE_PRESSED dat ngay tai status_cell().)
+  if (lv_obj_has_flag(o, LV_OBJ_FLAG_USER_4)) {
+    lv_obj_set_style_border_width(o, 0, 0);
+    return;
+  }
   if (flat) {
     lv_obj_set_style_border_width(o, 0, 0);
     lv_obj_t *l = lv_obj_get_child(o, 0);      // nut -> doi mau CHU CON; nhan -> doi mau chinh no
