@@ -57,6 +57,9 @@ static lv_obj_t *st_tgt[ST_CELLS], *st_cur[ST_CELLS];
 static lv_obj_t *st_axis_val[3], *st_xyz_frame;
 static lv_obj_t *st_rate_val[2], *st_rate_icon[2];
 static lv_obj_t *st_time, *st_pct, *st_bar, *st_msg;
+// Nhap nhay dau "?" cua hang XYZ khi CHUA HOME (2026-10-16). Xem page_status_update().
+static uint32_t  s_xyz_blink_ms = 0;        // moc doi trang thai lan cuoi
+static bool      s_xyz_blink_on = true;     // true = dang HIEN dau "?"
 
 // Thu nho icon bitmap cua Marlin (64x64) xuong sz x sz.
 // KHONG dung lv_img_set_zoom(): LVGL 8.4 chi ho tro transform (zoom/xoay) cho TRUE_COLOR* /
@@ -248,11 +251,27 @@ void page_status_update(void) {
     set_text_color(st_tgt[i], col);
   }
 
-  // ---- XYZ: chua home -> "?" (Marlin nhay "?" mau AXIS_NOT_HOMED) ----
+  // ---- XYZ: chua home -> "?" NHAP NHAY (Marlin nhay "?" mau AXIS_NOT_HOMED) ----
+  // 2026-10-16 (yeu cau nguoi dung): them phan NHAP NHAY cho dau "?".
+  // Nhip cap nhat trang la UI_REFRESH_MS = 150 ms, nen chon chu ky 300 ms (doi trang thai moi 2
+  // nhip) -> nhap nhay ~1,7 Hz: nhanh vua du de thay, khong bi giat vi lech nhip.
   const int32_t posv[3] = { cydlcd.pos.x, cydlcd.pos.y, cydlcd.pos.z };
+  if (!homed) {
+    const uint32_t tnow = ui_port_millis();
+    if (tnow - s_xyz_blink_ms >= 300U) {
+      s_xyz_blink_ms = tnow;
+      s_xyz_blink_on = !s_xyz_blink_on;
+    }
+  }
+  else {
+    s_xyz_blink_ms = ui_port_millis();      // ve home -> lan sau bat dau tu trang thai HIEN
+    s_xyz_blink_on = true;
+  }
   for (uint8_t i = 0; i < 3; i++) {
     if (!homed) {
-      set_text(st_axis_val[i], "?");
+      // Pha TAT dung " " (1 khoang trang) chu khong phai chuoi rong: giu nguyen be rong o nen
+      // khong lam so nhay qua lai.
+      set_text(st_axis_val[i], s_xyz_blink_on ? "?" : " ");
       set_text_color(st_axis_val[i], MR_NOAXIS);
     }
     else {

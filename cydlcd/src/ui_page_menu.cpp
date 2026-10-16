@@ -171,11 +171,11 @@ void page_menu_update(void) {
   snprintf(b, sizeof(b), "%s C", a1);
   set_text(mn_val[0], b);
 
-  snprintf(b, sizeof(b), "X%u Y%u Z%u",
-           (unsigned)((cydlcd.flags & CYDLCD_SF_HOMED) ? 1 : 0),
-           (unsigned)((cydlcd.flags & CYDLCD_SF_HOMED) ? 1 : 0),
-           (unsigned)((cydlcd.flags & CYDLCD_SF_HOMED) ? 1 : 0));
-  set_text(mn_val[1], b);
+  // 2026-10-16 (yeu cau nguoi dung): dong "Motion" truoc day hien trang thai HOME cua 3 truc duoi
+  // dang "X0 Y0 Z0" / "X1 Y1 Z1" (0/1 = chua/da home, lap lai cung mot co 3 lan). Nguoi dung thay
+  // roi va doi BO di, chi can "XYZ". Trang thai home nay chi con hien o man STATUS (dau "?" nhap
+  // nhay khi chua home — xem page_status_update()).
+  set_text(mn_val[1], "XYZ");
 
   snprintf(b, sizeof(b), "%ld/%ld%%",
            (long)(cydlcd_setting(CYDLCD_SET_FEEDRATE_PCT, 10000) / 100),
