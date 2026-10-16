@@ -425,6 +425,15 @@
   // WebServer xu ly CA body trong 1 lan goi.
   #define CYDLCD_HTTP_POLL_MS 10u
 #endif
+#ifndef CYDLCD_UPLOAD_SESS_TIMEOUT_MS
+  // 2026-10-16 -- Qua bao lau KHONG GHI them thi coi phien upload cu la "bi bo quen" va lan mo file
+  // tam ke tiep la PHIEN MOI (truncate). VI SAO CAN: upload bi ngat giua duong (client dong tab / WiFi
+  // rot) ma khong duoc don sach thi file tam con nam tren the; neu lan sau nguoi dung gui lai DUNG TEN
+  // do ma bi hieu nham la "part 2" thi se GHI TIEP vao file cu -> HONG FILE (co the dem di in).
+  // Nghi ngo -> luon chon truncate: mat phan da nhan cua phien bo dang (gui lai la xong), khong bao
+  // gio de mot file .gcode hong lot vao goc the.
+  #define CYDLCD_UPLOAD_SESS_TIMEOUT_MS 60000u
+#endif
 // ---------------------------------------------------------------------------
 // BAO MAT TEN FILE (yeu cau nguoi dung 2026-10-15: "ten file tren server can fix bao mat, chi cho phep
 // a-z0-9._"): whitelist ky tu cho ten file gui qua WEB (upload + xoa).

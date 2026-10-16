@@ -420,6 +420,10 @@ void handle_upload_stream(void) {
     case UPLOAD_FILE_START: {
       s_client[0] = '\0';
       snprintf(s_client, sizeof(s_client), "%s", server.client().remoteIP().toString().c_str());
+      // `new_sess` = PHAN DAU cua mot REQUEST MOI. LAY NGAY O DAY, TRUOC khi dat `s_sess_busy = true`
+      // (dat roi thi khong con phan biet duoc nua). Day la tin hieu GOC de cyd_sd_temp_open() biet
+      // phai MO DANG GHI (truncate) hay GHI TIEP (append) - xem ghi chu o cyd_sd_temp_open().
+      const bool new_sess = !s_sess_busy;
       // Ranh gioi request: phan file DAU TIEN cua 1 request = phien moi (dem lai parts/chunks/tong).
       if (!s_sess_busy) {
         s_sess_busy = true;
@@ -469,15 +473,19 @@ void handle_upload_stream(void) {
       snprintf(s_file, sizeof(s_file), "%s", nm_ok);
       HLOG("[HTTP] PHAN FILE #%u: \"%s\" tu %s (khach khai bao: %lu B)\n",
            (unsigned)s_parts, s_file, s_client, (unsigned long)s_declared);
-      if (s_parts > 1) {
-        // Nhieu phan trong CUNG 1 request: moi phan ghi vao 1 FILE PART rieng roi DONG NGAY; het request
-        // man hinh GHEP lai (xem cyd_sd_finish_upload/merge_parts). Khong bao gio mo lai/xoa part da xong.
-        HLOG("[HTTP] request nay co nhieu PHAN FILE - moi phan 1 file rieng, het request se GHEP lai\n");
+      if (s_parts == 1) {
+        HLOG("[HTTP] PHAN FILE DAU TIEN cua request nay = PHIEN MOI (mo file tam dang GHI, khong append)\n");
+      } else {
+        HLOG("[HTTP] PHAN FILE #%u cua CUNG request -> ghi TIEP vao chinh file tam do (FILE_APPEND)\n",
+             (unsigned)s_parts);
       }
       s_http_state = HS_RECV;
       s_last_activity_ms = millis();
       snprintf(s_msg, sizeof(s_msg), "dang nhan file");
-      if (!cyd_sd_temp_open(nm_ok, s_parts == 1 ? s_declared : 0, s_parts)) {
+      // `new_sess`: day co phai PHAN DAU cua mot REQUEST MOI khong. Truyen THANG xuong cyd_sd_temp_open()
+      // thay vi de no tu doan theo `part` (xem ghi chu o cyd_sd_temp_open - append nham lam HONG file
+      // trung ten).
+      if (!cyd_sd_temp_open(nm_ok, new_sess ? s_declared : 0, s_parts, new_sess)) {
         s_http_state = HS_ERR;
         snprintf(s_msg, sizeof(s_msg), "khong mo duoc file tam (the TF?)");
         HLOG("[HTTP] LOI: %s\n", s_msg);
@@ -520,10 +528,14 @@ void handle_upload_stream(void) {
       }
       break;
     }
-    default:                                       // UPLOAD_FILE_ABORT
+    default:                                       // UPLOAD_FILE_ABORTED (core: Parsing.cpp:549) + khac
+      // 2026-10-16: nhanh nay DA co tu truoc va no chinh la thu don sach khi client ngat giua duong
+      // (dong tab / WiFi rot). Thieu no thi `s_sess_busy` ket o true -> request sau bi coi la "part 2,3"
+      // -> cyd_sd_temp_open() se GHI TIEP vao file tam cu => file trung ten bi append, HONG FILE.
       cyd_sd_temp_abort();
       s_http_state = HS_ERR;
       s_sess_busy = false;
+      s_parts = 0;                                 // don luon bo dem part (phong khi request sau khong reset)
       snprintf(s_msg, sizeof(s_msg), "client ngat giua luc gui");
       HLOG("[HTTP] %s (phan #%u, %u chunk, da nhan %lu B)\n",
            s_msg, (unsigned)s_parts, (unsigned)s_chunks, (unsigned long)s_rx);

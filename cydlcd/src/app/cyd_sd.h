@@ -57,12 +57,18 @@ void cyd_sd_retry(void);        // xin mount lai o vong lap ke tiep (khong chan)
 
 // ---- Ghi file tam theo KIEN TRUC PART (net_upload_http.cpp goi khi nhan duoc file) ----
 // `name` = ten file DICH (nhu Marlin se nhin thay tren the). Dong thoi gian: khong chan (chi FATFS).
-// `part` = so thu tu PHAN FILE (1..255): MOI part duoc ghi vao MOT FILE RIENG `/cydlcd_tmp/<ten>_NNN.tmp`
-//   va duoc DONG NGAY khi het part (`cyd_sd_temp_close`) -> du lieu da xong nam chac tren the, part sau
-//   loi/ngat khong lam mat part truoc. part = 1 = PHIEN MOI (don part/.tmp cu cua cung ten truoc).
+// `part` = so thu tu PHAN FILE (1..255). Cac part cua CUNG mot phien deu ghi vao MOT file tam
+//   `/cydlcd_tmp/<ten>.tmp`, mo o che do FILE_APPEND (2026-10-16, bo buoc GHEP part), va DONG NGAY khi
+//   het part (`cyd_sd_temp_close`) -> du lieu da xong nam chac tren the, part sau loi/ngat khong lam mat
+//   part truoc; giua 2 part khong giu file handle mo nen nha the cho Marlin.
 // `size_hint` = tong so byte khach KHAI BAO (neu biet) -> kiem tra cho trong truoc khi nhan.
-// Xong het request: `cyd_sd_finish_upload()` se doi ten thang (1 part) hoac GHEP cac part (>=2 part).
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part = 1);
+// `new_session` = day LA part dau tien cua mot REQUEST MOI (net_upload_http biet qua `s_sess_busy`).
+//   ⚠️ QUAN TRONG: append chi duoc phep khi chac chan CON dang cung mot phien. Neu `new_session` sai
+//   (vd request truoc bi ngat ma khong duoc don) thi file trung ten se bi GHI TIEP -> HONG FILE. Vi vay
+//   trong cyd_sd_temp_open() con kiem tra them: phien co dang mo khong, co qua lau khong ghi khong,
+//   ten dich co doi khong - NGHI NGO thi coi la PHIEN MOI (truncate). Mac dinh = true (huong an toan).
+// Xong het request: `cyd_sd_finish_upload()` kiem tra size roi doi ten thang vao goc the (khong copy).
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part = 1, bool new_session = true);
 size_t cyd_sd_temp_write(const uint8_t *d, size_t n);
 uint32_t cyd_sd_temp_close(void);       // DONG PART dang mo, tra ve TONG byte da ghi ca phien
 void cyd_sd_temp_abort(void);           // dong + xoa MOI file part/.tmp cua phien (khi loi / bi ngat)

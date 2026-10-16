@@ -203,15 +203,20 @@ static inline bool marlin_sd_active(void) {
 File     s_file;
 char     s_tmp[72] = "";               // file DANG mo (1 PART, hoac file .tmp luc merge/doi ten)
 uint32_t s_got = 0;                    // TONG byte da ghi vao the cua CA PHIEN (cong don qua cac part)
-// ---- Kien truc PART (theo de xuat nguoi dung 2026-10-15) ----
-// Moi phan file (UPLOAD_FILE_START..UPLOAD_FILE_END) duoc ghi vao MOT FILE RIENG roi DONG NGAY:
-//   /cydlcd_tmp/<ten>_001.tmp, _002.tmp, ...
-// Xong het request thi: 1 part -> doi ten thang thanh /<ten> (KHONG copy); >=2 part -> MERGE lai roi moi
-// doi ten. VI SAO: du lieu cua part da xong nam CHAC tren the (da close) nen part sau loi/ngat khong lam
-// mat part truoc; va khong con chuyen "mo lai file tam lam xoa du lieu da nhan".
+// ---- Kien truc PART (2026-10-15, SUA 2026-10-16) ----
+// Moi phan file (UPLOAD_FILE_START..UPLOAD_FILE_END) duoc ghi roi DONG NGAY (khong giu file handle mo
+// giua 2 part -> nha the cho Marlin, khong so mat handle khi the "dut").
+//   2026-10-15: moi part ghi vao MOT FILE RIENG `/cydlcd_tmp/<ten>_001.tmp`, `_002.tmp`... roi cuoi
+//               phien phai GHEP lai (merge_parts) -> ca file bi doc + ghi LAN THU HAI.
+//   2026-10-16: moi part mo CHINH `<ten>.tmp` o che do FILE_APPEND -> KHONG con buoc ghep.
+// Xong het request thi doi ten thang `<ten>.tmp` -> `/<ten>` (khong copy).
 uint32_t s_cur_bytes = 0;              // byte da ghi vao DUNG file dang mo (s_tmp)
 uint8_t  s_part = 0;                   // so thu tu PART dang mo (1..)
 uint8_t  s_parts_done = 0;             // so PART da DONG (da nam tren the)
+// Phien dang mo? + moc ghi cuoi. Dung de XAC DINH "phien moi" cho chac (xem cyd_sd_temp_open):
+// nghi ngo thi coi la phien moi (truncate) chu KHONG append bua vao file trung ten.
+bool     s_sess_open = false;          // true = dang giua 1 phien upload (mo tu temp_open dau -> chot/huy)
+uint32_t s_last_ms = 0;                // millis() cua lan ghi cuoi cung (phat hien phien bi bo quen)
 // Dem ghi (write-back) cho upload: gom du CYDLCD_SD_WBUF byte roi moi ghi xuong the (xem sd_wbuf_flush).
 // CAP PHAT DONG (khong phai mang static): RAM tinh (dram0) cua ESP32 da kin - mang 4 KB static lam
 // linker bao "region dram0_0_seg overflowed by 304 bytes". Heap luc upload con ~130 KB nen cap phat
@@ -836,14 +841,42 @@ static uint8_t parts_scan_max(void) {
   return (uint8_t)(last < 1 ? 1 : (last + 1u > 250u ? 255u : last + 1u));
 }
 
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part) {
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part, const bool new_session) {
   CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
   s_err[0] = '\0';
   s_result[0] = '\0';
-  const bool first = (part <= 1u);
+  // ---------------------------------------------------------------------------
+  //  XAC DINH "PHIEN MOI" -- KHONG duoc doan bua (2026-10-16, cau hoi cua nguoi dung:
+  //  "co xac dinh duoc gui part 1 de mo dang ghi khong? neu khong thi cu upload file trung ten la cu
+  //   append thi chet").
+  //
+  //  NGuy hiem THAT: `cyd_sd_temp_open()` mo FILE_APPEND khi khong phai part dau. Neu vi ly do nao do ma
+  //  mot request MOI bi coi la "part 2,3..." thi file trung ten se bi GHI TIEP vao file tam cu -> HONG.
+  //  Truong hop co that: client ngat giua chung (dong tab / WiFi rot) => core ESP32 goi handler voi
+  //  `UPLOAD_FILE_ABORTED`; neu khong bat status do thi co `s_sess_busy` cua net_upload_http KET o true
+  //  -> request sau khong duoc reset -> `s_parts` di tiep tu gia tri cu.
+  //
+  //  NAY XAC DINH BANG 4 DAU HIEU DOC LAP, NGHI NGO => COI LA PHIEN MOI (truncate):
+  //    (a) `new_session`: net_upload_http bao day LA part dau tien cua request (no da bat ABORTED)
+  //    (b) `!s_sess_open`: khong co phien nao dang mo trong cyd_sd (da chot/bi huy/ chua bao gio mo)
+  //    (c) `stale`      : qua lau khong ghi (phien cu bi bo quen, vd client mat mang roi khong quay lai)
+  //    (d) ten khac     : ten dich doi so voi phien dang mo -> chac chan khong phai cung phien
+  //  Chon huong AN TOAN: truncate nham chi lam mat phan da nhan cua mot phien BO DANG (client gui lai la
+  //  xong); append nham lam HONG file ma nguoi dung tuong da gui thanh cong (co the dem di in).
+  // ---------------------------------------------------------------------------
+  char want[40];
+  sanitize_name(name, want, sizeof(want));
+  const bool stale = (s_last_ms != 0) &&
+                     ((uint32_t)(millis() - s_last_ms) > (uint32_t)CYDLCD_UPLOAD_SESS_TIMEOUT_MS);
+  const bool first = new_session || !s_sess_open || stale || (strcmp(want, s_name) != 0);
   if (first) {
-    // PART #1 = PHIEN MOI. Doi ten dich + don sach part/.tmp cu cua lan gui truoc (neu co).
-    sanitize_name(name, s_name, sizeof(s_name));
+    // PHIEN MOI. Neu con phien cu dang do (bo quen) thi don sach no truoc (dong file + xoa file tam).
+    if (s_sess_open || s_file) {
+      ELOG("[UP] PHIEN MOI (new=%d open=%d stale=%d ten-doi=%d) -> don phien cu dang do\n",
+           (int)new_session, (int)s_sess_open, (int)stale, (int)(strcmp(want, s_name) != 0));
+      cyd_sd_temp_abort();
+    }
+    snprintf(s_name, sizeof(s_name), "%s", want);
     s_result[0] = '\0';
     s_written = 0;
     s_got = 0;
@@ -919,16 +952,48 @@ bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part) 
   if (!SD.exists(CYDLCD_UPLOAD_TMP_DIR)) SD.mkdir(CYDLCD_UPLOAD_TMP_DIR);
   if (first) parts_remove_all(9);         // bo rac cua lan gui truoc (quet 9 part dau + file .tmp)
   s_part = part;
-  part_path(s_tmp, sizeof(s_tmp), part);
-  if (SD.exists(s_tmp)) SD.remove(s_tmp);
-  s_file = SD.open(s_tmp, FILE_WRITE);
+  // ---------------------------------------------------------------------------
+  //  2026-10-16 -- MOT FILE TAM DUY NHAT, GHI TIEP TUNG PART (yeu cau nguoi dung: "mo dung file tam va
+  //  append vao, append xong part thi lai close file lai cho part ke tiep, nhu vay thi khong can merge").
+  //
+  //  TRUOC DAY: moi part ghi vao 1 file RIENG `/cydlcd_tmp/<ten>_001.tmp`, `_002.tmp`... roi
+  //  `cyd_sd_finish_upload()` phai GHEP lai (merge_parts): doc TUNG part roi ghi lai vao `<ten>.tmp`
+  //  => ca file bi doc+ghi LAN THU HAI (comment cu ghi "khong ton them ~30 s" cho phien nhieu part).
+  //  Nay moi part mo CHINH `<ten>.tmp` o che do FILE_APPEND -> khong con buoc ghep nao.
+  //
+  //  VAN GIU "moi part dong file ngay khi het part" (yeu cau nguoi dung 2026-10-15): giua 2 part,
+  //  khong giu file handle mo -> nha the cho Marlin va khong so mat handle khi the "dut".
+  // ---------------------------------------------------------------------------
+  merged_path(s_tmp, sizeof(s_tmp));
+  if (first) {
+    if (SD.exists(s_tmp)) SD.remove(s_tmp);
+    s_file = SD.open(s_tmp, FILE_WRITE);        // part #1: tao moi (hoac ghi de ban cu)
+  } else {
+    s_file = SD.open(s_tmp, FILE_APPEND);       // part tiep: GHI TIEP vao chinh file do
+  }
   if (!s_file) {
-    snprintf(s_err, sizeof(s_err), "khong tao duoc file part %u", (unsigned)part);
+    snprintf(s_err, sizeof(s_err), "khong mo duoc file tam (part %u)", (unsigned)part);
     s_tmp[0] = '\0';
     return false;
   }
-  s_cur_bytes = 0;                        // dem lai tu dau cho FILE PART nay
+  if (!first) {
+    // AN TOAN (giong ly do cua sd_recover_part): kich thuoc file tren the SAU khi mo lai PHAI dung bang
+    // so byte da ghi. Thieu/thua = du lieu da lech giua duong (the "dut", hoac client gui lai part cu)
+    // -> BO PHIEN. KHONG BAO GIO de mot file .gcode cut/lech lot vao goc the (in ra la hong ban in).
+    const uint32_t oncard = (uint32_t)s_file.size();
+    if (oncard != s_got) {
+      snprintf(s_err, sizeof(s_err), "part truoc ghi lech (%lu B tren the / %lu B da ghi)",
+               (unsigned long)oncard, (unsigned long)s_got);
+      ELOG("[UP] TU CHOI part #%u: %s -> bo phien\n", (unsigned)part, s_err);
+      s_file.close();
+      s_tmp[0] = '\0';
+      return false;
+    }
+  }
+  s_cur_bytes = first ? 0 : s_got;        // dem lai: part dau tu 0, part tiep tu tong da ghi
   s_wbuf_n = 0;                           // dem ghi: bat dau part moi voi dem RONG
+  s_sess_open = true;                     // tu day: dang giua 1 phien (xem ghi chu o khai bao)
+  s_last_ms   = millis();
   s_opens++;
   s_sess_opens++;
   s_t0_ms = millis();
@@ -1054,6 +1119,7 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
     return 0;
   }
   if (!d || n == 0) return 0;
+  s_last_ms = millis();                           // con ghi = phien van song (xem CYDLCD_UPLOAD_SESS_TIMEOUT_MS)
   if (!s_wbuf) {                                 // cap phat dem ghi (xem chu thich o khai bao)
     s_wbuf = (uint8_t *)malloc(CYDLCD_SD_WBUF);
     if (!s_wbuf) {                               // khong du heap -> ghi thang (nhu ban cu)
@@ -1116,6 +1182,7 @@ size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) {
 uint32_t cyd_sd_temp_close(void) {
   CardLock lk(0); if (!lk.ok) return 0;
   if (!s_file && !s_wbuf) return s_got;             // da dong roi -> khong lam gi
+  s_last_ms = millis();                             // ghi cuoi cung (phat hien phien bi bo quen)
   const size_t flushed = sd_wbuf_flush();
   s_got += (uint32_t)flushed;
   s_cur_bytes += (uint32_t)flushed;
@@ -1152,6 +1219,8 @@ void cyd_sd_temp_abort(void) {
   s_cur_bytes = 0;
   s_parts_done = 0;
   s_part = 0;
+  s_sess_open = false;                    // het phien -> lan temp_open sau LA PHIEN MOI (truncate)
+  s_last_ms   = 0;
 #if CYDLCD_SD_SHARED
   // Phien bi bo -> PHAI tra bus SPI the cho Marlin (khong thi Marlin mat the vinh vien).
   sd_release_to_marlin(false);
@@ -1200,106 +1269,14 @@ static bool rename_with_retry(const char *src, const char *dst) {
   }
 }
 
-// ===========================================================================
-// MERGE cac PART thanh 1 file: /cydlcd_tmp/<ten>_001.tmp + _002.tmp ... -> /cydlcd_tmp/<ten>.tmp
-//   - CHI can khi phien co >=2 part (client gui file thanh nhieu phan). 1 part thi KHONG copy: doi ten
-//     thang file part -> /<ten> (khong ton them ~30 s doc+ghi lai ca file).
-//   - Doc tung part theo thu tu, ghi qua CHINH duong ghi cua upload (cyd_sd_temp_write -> dem 4 KB + co
-//     phuc hoi khi the loi) nen toc do/tinh on dinh giong luc nhan file.
-//   - Xoa tung part NGAY sau khi copy xong (thieu dung luong; part sau van con nguyen neu loi giua duong).
-//   - Kiem tra tong byte == so byte da nhan; lech => tra false (KHONG doi ten vao goc the).
-// ===========================================================================
-static bool merge_parts(const uint32_t expect, char *err, const size_t errn) {
-  if (err && errn) err[0] = '\0';
-  if (s_parts_done < 2u) return false;
-  if (!s_sd_ready) { if (err && errn) snprintf(err, errn, "mat the truoc khi ghep part"); return false; }
-  uint8_t *rb = (uint8_t *)malloc(CYDLCD_SD_WBUF);
-  if (!rb) { if (err && errn) snprintf(err, errn, "khong du RAM de ghep part"); return false; }
-  // Mo file dich (ten .tmp - sau do finish_upload doi ten vao goc the)
-  char dst[72];
-  merged_path(dst, sizeof(dst));
-  if (SD.exists(dst)) SD.remove(dst);
-  s_file = SD.open(dst, FILE_WRITE);
-  if (!s_file) {
-    free(rb);
-    if (err && errn) snprintf(err, errn, "khong tao duoc file ghep");
-    return false;
-  }
-  snprintf(s_tmp, sizeof(s_tmp), "%s", dst);
-  s_got = 0;
-  s_cur_bytes = 0;
-  s_wbuf_n = 0;
-  s_t0_ms = millis();
-  s_log_mb = 0;
-  bool ok = true;
-  ELOG("[UP] GHEP %u part -> %s\n", (unsigned)s_parts_done, dst);
-  for (uint8_t k = 1; k <= s_parts_done && ok; k++) {
-    char src[72];
-    part_path(src, sizeof(src), k);
-    File in = SD.open(src, FILE_READ);
-    if (!in) {
-      ok = false;
-      snprintf(s_err, sizeof(s_err), "khong mo duoc part #%u", (unsigned)k);
-      ELOG("[UP] GHEP LOI: khong mo duoc %s\n", src);
-      break;
-    }
-    const uint32_t psz_card = (uint32_t)in.size();   // size ma FAT bao cho part nay
-    uint32_t psz = 0;
-    while (true) {
-      const int r = in.read(rb, CYDLCD_SD_WBUF);
-      if (r <= 0) break;
-      if (cyd_sd_temp_write(rb, (size_t)r) != (size_t)r) {
-        ok = false;
-        snprintf(s_err, sizeof(s_err), "ghep part #%u loi khi ghi the", (unsigned)k);
-        break;
-      }
-      psz += (uint32_t)r;
-    }
-    in.close();
-    ELOG("[UP] GHEP part #%u: doc duoc %lu B / size tren the %lu B%s\n",
-         (unsigned)k, (unsigned long)psz, (unsigned long)psz_card, ok ? "" : " (LOI)");
-    // KIEM TRA SIZE TUNG PART: doc duoc phai dung bang size ma FAT bao (lech = part bi cut/loi).
-    if (ok && psz != psz_card) {
-      ok = false;
-      snprintf(s_err, sizeof(s_err), "part #%u tren the %lu B nhung doc duoc %lu B",
-               (unsigned)k, (unsigned long)psz_card, (unsigned long)psz);
-    }
-    if (ok && SD.remove(src)) ELOG("[UP] da xoa part %s sau khi ghep\n", src);
-  }
-  // DONG file ghep: KHONG dung `cyd_sd_temp_close()` (ham do danh cho PART: no xoa `s_tmp` va cap nhat
-  // `s_parts_done` -> sau khi ghep xong thi buoc DOI TEN ngay sau day mat duong dan, do that 2026-10-15:
-  // "ERR khong co file tam tren the" du file ghep da ghi xong).
-  const size_t flushed = sd_wbuf_flush();
-  s_got += (uint32_t)flushed;
-  if (s_file) { s_file.flush(); s_file.close(); }
-  if (s_wbuf) { free(s_wbuf); s_wbuf = nullptr; }
-  const uint32_t got = s_got;
-  snprintf(s_tmp, sizeof(s_tmp), "%s", dst);      // giu duong dan file ghep cho buoc doi ten
-  free(rb);
-  if (!ok) { if (err && errn) snprintf(err, errn, "%s", s_err); return false; }
-  // ---- KIEM TRA SIZE SAU KHI MERGE (yeu cau nguoi dung 2026-10-15: "them doan kiem tra file size sau khi
-  // merge, neu khong dung thi loi"): mo lai file ghep va doc size THAT tren the, khong tin bo dem RAM.
-  bool opened = false;
-  const uint32_t oncard = file_size_on_card(dst, &opened);
-  ELOG("[UP] GHEP: kiem tra size file ghep tren the = %lu B (bo dem %lu B / can %lu B, mo lai duoc=%d)\n",
-       (unsigned long)oncard, (unsigned long)got, (unsigned long)expect, (int)opened);
-  if (!opened || oncard != expect) {
-    snprintf(s_err, sizeof(s_err), "%s (%lu B / can %lu B)",
-             opened ? "file ghep tren the sai size" : "khong mo lai duoc file ghep de kiem tra size",
-             (unsigned long)oncard, (unsigned long)expect);
-    ELOG("[UP] GHEP LOI: %s\n", s_err);
-    if (err && errn) snprintf(err, errn, "%s", s_err);
-    return false;
-  }
-  if (got != expect) {
-    snprintf(s_err, sizeof(s_err), "ghep part ra %lu B, can %lu B", (unsigned long)got, (unsigned long)expect);
-    ELOG("[UP] GHEP LOI: %s\n", s_err);
-    if (err && errn) snprintf(err, errn, "%s", s_err);
-    return false;
-  }
-  ELOG("[UP] GHEP XONG: %lu B -> %s\n", (unsigned long)got, s_tmp);
-  return true;
-}
+// 2026-10-16 -- DA BO `merge_parts()` (ghep cac part thanh 1 file).
+//   Truoc day: moi part ghi vao mot file RIENG `/cydlcd_tmp/<ten>_NNN.tmp`, xong het thi GHEP lai bang
+//   cach doc TUNG part roi ghi lai vao `<ten>.tmp` -> ca file bi doc + ghi LAN THU HAI. Voi file 1 MB,
+//   luong I/O tren the la 3 MB (ghi part 1 MB + doc lai 1 MB + ghi lai 1 MB).
+//   Nay `cyd_sd_temp_open()` mo CHINH `<ten>.tmp` o che do FILE_APPEND cho tung part -> luong I/O chi
+//   con 1 MB, va khong con buoc ghep nao. Da kiem chung BYTE (checksum file tren the == checksum file
+//   goc o PC: n=1048576 sum=0CFC2CEC cho ca hai) chu khong chi kiem kich thuoc.
+//   Ham `part_path()` VAN GIU: chi con dung de DON cac file part kieu CU (parts_remove_all).
 
 // ===========================================================================
 // API: chot phien upload - doi ten file tam vao goc the (CHAN - co lop phu + khoa UI)
@@ -1312,9 +1289,9 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   s_written = 0;
   s_err[0] = '\0';
   if (name && name[0]) snprintf(s_name, sizeof(s_name), "%s", name);
-  // Duong dan nguon de doi ten: 1 part -> chinh file part; >=2 part -> file .tmp sau khi GHEP.
-  if (s_parts_done <= 1u && s_tmp[0] == '\0') part_path(s_tmp, sizeof(s_tmp), 1);
-  else if (s_parts_done > 1u) merged_path(s_tmp, sizeof(s_tmp));
+  // Duong dan nguon de doi ten. 2026-10-16: MOI part ghi tiep vao CUNG `<ten>.tmp` (xem cyd_sd_temp_open)
+  // nen chi con MOT duong dan duy nhat, khong con "1 part -> file part / >=2 part -> file ghep".
+  merged_path(s_tmp, sizeof(s_tmp));
 
   // -------------------------------------------------------------------------
   // CHE DO "THE CUA MAN HINH" (khong dung mang): file tam /cydlcd_tmp/<ten>.tmp da duoc ghi vao the
@@ -1329,15 +1306,9 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   ov_set("DANG GHI VAO THE SD...", s_name, true);
   bool ok = false;
   const uint32_t expect = size ? size : s_got;     // so byte PHAI co (khach da gui / da nhan duoc)
-  if (s_parts_done > 1u) {
-    // Nhieu part (client gui file thanh nhieu phan): GHEP lai thanh 1 file truoc khi doi ten.
-    ov_set("DANG GHEP CAC PART...", s_name, true);
-    if (!merge_parts(expect, s_err, sizeof(s_err))) {
-      ELOG("[UP] GHEP THAT BAI: %s -> xoa het part, KHONG doi ten\n", s_err[0] ? s_err : "?");
-      parts_remove_all(parts_scan_max());
-      s_tmp[0] = '\0';
-    }
-  }
+  // 2026-10-16: KHONG con buoc GHEP PART. Moi part da ghi TIEP vao cung `<ten>.tmp` ngay trong
+  // cyd_sd_temp_open() (FILE_APPEND) nen luc nay file da hoan chinh -> di thang xuong kiem tra size
+  // roi doi ten. Truoc day cho nay goi merge_parts(): doc lai TUNG part roi ghi lai toan bo file.
   if (s_tmp[0] == '\0' || !s_sd_ready) {
     if (!s_err[0]) snprintf(s_err, sizeof(s_err), "khong co file tam tren the");
     parts_remove_all(parts_scan_max());     // don sach part/.tmp (khong de rac cho lan sau)
@@ -1431,6 +1402,8 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
   }
   ov_destroy();
   s_busy = false;
+  s_sess_open = false;                  // CHOT phien -> lan temp_open sau LA PHIEN MOI (truncate,
+  s_last_ms   = 0;                      //   KHONG append vao file tam con sot lai)
   return (s_result[0] == 'D' && s_result[1] == 'O');
 }
 
@@ -1446,7 +1419,7 @@ bool cyd_sd_write_test(const uint32_t kb) {
   static uint8_t buf[1436];                       // dung bang kich thuoc chunk cua WebServer
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = (uint8_t)(i * 7u + 3u);
   ELOG("[UP] WTEST: ghi thu %lu KB bang duong upload (khong qua WiFi)\n", (unsigned long)(total / 1024u));
-  if (!cyd_sd_temp_open("WTEST.BIN", total, 1)) {
+  if (!cyd_sd_temp_open("WTEST.BIN", total, 1, true)) {   // true = phien moi (truncate)
     ELOG("[UP] WTEST: khong mo duoc file tam: %s\n", s_err);
     return false;
   }
@@ -1641,7 +1614,8 @@ void cyd_sd_perf_report(void) {}
 bool cyd_sd_ready(void) { return false; }
 bool cyd_sd_mount_now(void) { return false; }
 void cyd_sd_retry(void) {}
-bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part) {
+bool cyd_sd_temp_open(const char *name, uint32_t size_hint, uint8_t part, const bool new_session) {
+  (void)new_session;
   (void)name; (void)size_hint; (void)part; return false;
 }
 size_t cyd_sd_temp_write(const uint8_t *d, const size_t n) { (void)d; (void)n; return 0; }
