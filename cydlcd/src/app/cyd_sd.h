@@ -21,6 +21,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+// 2026-10-16: them <stddef.h> cho `size_t`. Truoc day file nam o src/ cung cho voi cac header khac
+// nen `size_t` lot vao qua include CHUYEN TIEP; chia thu muc (src/app/) doi thu tu bien dich ->
+// loi "'size_t' does not name a type". Header PHAI tu du, khong dua vao thu tu include.
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

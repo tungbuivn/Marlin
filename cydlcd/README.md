@@ -48,7 +48,7 @@ Có **3 kiểu giao tiếp**, chọn bằng env trong `cydlcd/platformio.ini` (k
 * Env LVGL kéo thư viện từ mạng lần đầu: `lvgl@^8.3.11` (+ `TFT_eSPI` cho CYD).
 * **`TFT_ROTATION` (2026-10-13)**: `cydlcd_config.h` chỉ còn là **mặc định** (`TFT_ROTATION 0`, portrait
   cho UI G-code `ui.cpp`); 2 env LVGL truyền `-DTFT_ROTATION=1` để UI LVGL chạy **ngang 320×240**.
-  Đổi chỗ này thì phải xem lại `UI_LCD_HOR_RES/VER_RES` trong `src/ui_lvgl.h`.
+  Đổi chỗ này thì phải xem lại `UI_LCD_HOR_RES/VER_RES` trong `src/ui/ui_lvgl.h`.
 * **Env CYD — 2 cờ BẮT BUỘC** (đã có sẵn trong `platformio.ini`):
   `-DUSER_SETUP_LOADED=1 -include tools/tft_setup_cyd/User_Setup.h`. Thiếu 2 cờ này TFT_eSPI dùng
   `User_Setup.h` mặc định trong thư viện (ILI9341, **không có `TFT_BL`**) → màn trắng/không đèn nền.
@@ -100,12 +100,61 @@ ngược lại. Mỗi env chỉ lấy đúng file nó cần (`build_src_filter`:
 > lỗi `_fstat`/`_isatty` của newlib, xem cạm bẫy 43 ở `README.md` gốc).
 > Build này **vẫn giữ nguyên** `-DCYDLCD_CYD_DEBUG=1` như trước (không phải số của bản dùng thật).
 
-> Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/lv_conf.h`
+> Nếu F411 thấy lỗi cấp phát LVGL (`lv_mem` hết) thì tăng `LV_MEM_SIZE` trong `src/gfx/lv_conf.h`
 > từ 20 KB lên 28–32 KB (F411 còn 128 KB RAM; **buffer vẽ giờ là 320×40×2 = 25,6 KB** vì màn ngang).
 
 > ⚠️ **Mọi số của env `cydlcd_esp32` ở trên đo TRƯỚC 2026-10-14** — tức là lúc firmware còn **cả WiFi lẫn
 > Bluetooth Classic**. Sau khi xoá hẳn đường Bluetooth (§9.23) thì flash/RAM của env này **nhỏ hơn** (bớt
 > cả stack Bluedroid); số mới **chưa đo lại** trong tài liệu này.
+
+> ⚠️ **2026-10-16 — 2 env `cydlcd_f411cc_lvgl` và `cydlcd_f407vgz_lvgl` ĐANG LỖI BUILD**, và lỗi này
+> **có sẵn từ trước**, không phải do việc chia lại thư mục ở §1.2. `src/main.cpp` dùng API **chỉ có
+> trên ESP32** (`RTC_NOINIT_ATTR`, `vTaskDelay`, `xTaskCreatePinnedToCore`) nhưng lại đặt dưới guard
+> `#if CYDLCD_USE_LVGL` — mà 2 env đó cũng bật cờ này:
+> ```
+> src/main.cpp:41: error: 'RTC_NOINIT_ATTR' does not name a type
+> src/main.cpp:128: error: 'vTaskDelay' was not declared in this scope
+> ```
+> Đã kiểm chứng bằng cách build **cây gốc tại commit `f821960`** (trước khi chia thư mục, dùng
+> `git worktree`): lỗi **y hệt**. Số liệu ở bảng trên là đo ngày 2026-10-13/14, trước khi `main.cpp`
+> có đoạn code ESP32 đó → **bảng đã cũ cho 2 env này**.
+> Ba env còn lại build tốt: `cydlcd_f411cc`, `cydlcd_f103c6`, `cydlcd_esp32`.
+> Muốn 2 env LVGL kia chạy lại thì phải tách phần ESP32-only của `main.cpp` ra sau
+> `#if defined(CYDLCD_BOARD_CYD)` — việc riêng, chưa làm.
+
+### 1.2 Cấu trúc thư mục nguồn (2026-10-16)
+
+`cydlcd/src/` trước đây để **75 file phẳng**; nay chia theo nhóm:
+
+```
+cydlcd/
+├── platformio.ini        [cydlcd_paths] giữ danh sách -I DÙNG CHUNG cho mọi env
+├── README.md
+├── docs/                 tài liệu dài (kế hoạch, sơ đồ menu...)
+├── sim/                  bản giả lập chạy trên PC (xem sim/README.md)
+├── tools/                script sinh font, kiểm tra, nạp, patch thư viện
+└── src/
+    ├── main.cpp          điểm vào
+    ├── app/              lõi: cấu hình, giao thức, link Marlin/TBT, log, thẻ SD   (16 file)
+    ├── ui/               UI LVGL: khung màn hình, widget, lớp phủ               (11 file)
+    │   ├── pages/        từng MÀN (ui_page_*.cpp)                              (15 file)
+    │   ├── port/         driver màn hình theo board (ST7789 / ILI9341)           (2 file)
+    │   └── lang/         bảng chuỗi đa ngôn ngữ                                  (4 file)
+    ├── gfx/              driver font + dữ liệu font + lv_conf                   (15 file)
+    ├── net/              WiFi + upload HTTP                                      (5 file)
+    └── stm32/            UI TỰ VẼ (không LVGL) cho F411/F103                     (6 file)
+```
+
+**⚠️ Thêm thư mục mới thì phải sửa CẢ HAI chỗ:**
+1. `platformio.ini` → mục `[cydlcd_paths] include_flags` (thêm 1 dòng `-Isrc/<thư mục>`)
+2. `tools/run_sim.sh` → biến `INCS` (thêm `-I$SRC/<thư mục>`) và danh sách `SOURCES`/`find`
+
+Lý do phải liệt kê từng thư mục: trình biên dịch tự tìm header theo **thư mục của file đang include**,
+nên khi mọi file nằm chung một chỗ thì không cần `-I` nào; chia thư mục rồi thì include **chéo thư mục**
+sẽ không tìm thấy nếu thiếu `-I`.
+
+`build_src_filter` trong `platformio.ini` cũng dùng đường dẫn mới
+(vd `-<app/marlin_link.cpp>`, `-<ui/port/ui_port_cyd_st7789.cpp>`).
 
 ---
 
@@ -157,7 +206,7 @@ kiểu giao tiếp** — hai kiểu dùng **hai UART khác nhau**:
   đang bật trong `Configuration.h`) ⇒ phải tắt cả `MKS_MINI_12864_V3` **và** `NEOPIXEL_LED`
   (xem §4).
 * **Màn hình CYD (ESP32)**: UART đến Marlin = `Serial2`, mặc định **GPIO22 = TX**, **GPIO35 = RX**
-  (chân khai trong `src/cydlcd_config.h`: `CYDLCD_UART_TX` / `CYDLCD_UART_RX`). Nối **chéo** với
+  (chân khai trong `src/app/cydlcd_config.h`: `CYDLCD_UART_TX` / `CYDLCD_UART_RX`). Nối **chéo** với
   USART3 (PD9/PD8) ở kiểu PUSH, hoặc với **USART1 (PA10/PA9)** ở kiểu TRAM — xem bảng đầu §2.1.
   ESP32 là 3V3 nên **không** nối 5V từ EXP1 vào chân 3V3 của CYD; cấp nguồn cho CYD bằng USB hoặc
   5V riêng. `GPIO35` chỉ **đọc** được nên đúng cho chiều RX.
@@ -276,7 +325,7 @@ Số liệu build thật của **kiểu PUSH** (`pio run -e mks_monster8`):
 
 ## 4. Giao thức PUSH (frame nhị phân)
 
-Định nghĩa duy nhất ở **`src/cydlcd_protocol.h`** — file này **dùng chung y nguyên** với
+Định nghĩa duy nhất ở **`src/app/cydlcd_protocol.h`** — file này **dùng chung y nguyên** với
 `Marlin/src/lcd/extui/cydlcd_serial/cydlcd_protocol.h` (sửa một bên thì copy sang bên kia).
 
 ```
@@ -298,7 +347,7 @@ pwsh cydlcd/tools/run_host_test.ps1
 ```
 
 Chương trình `tools/test_cydlcd_link.cpp` dùng **đúng** bộ tạo/giải frame trong
-`src/cydlcd_protocol.h` và nạp trực tiếp `src/cydlcd_link.cpp` với một UART giả → kiểm luôn
+`src/app/cydlcd_protocol.h` và nạp trực tiếp `src/app/cydlcd_link.cpp` với một UART giả → kiểm luôn
 đường nhận + phân tích frame. Hiện có **81 kiểm tra**: HELLO/STATUS/TEMPS/POSITION/PROGRESS/
 FANS/SETTING/MESH/FILES/EVENT/PROMPT/ANSWER, PING + mất liên kết, nhóm chịu lỗi (rác trước
 frame, CRC sai, `len` quá lớn, tự đồng bộ lại sau lỗi), TRAM, **8b** (hồi quy byte `len` cho
@@ -346,7 +395,7 @@ hàng XYZ rồi đo khoảng trống giữa **nhãn trục** và **số** (phả
 > cần một `main.cpp` riêng cho STM32 LVGL (chưa làm; đây là việc riêng, không thuộc phần giả lập).
 
 
-> **2026-10-13 — thêm nhóm test cho TRAM** (`src/tbt_link.cpp` + `src/tbt_protocol.h`): **+35 kiểm
+> **2026-10-13 — thêm nhóm test cho TRAM** (`src/app/tbt_link.cpp` + `src/app/tbt_protocol.h`): **+35 kiểm
 > tra** (tổng **~75**): định dạng số `tbt_fmt_mm` (0 · 0,15 · số âm · làm tròn), **format → parse
 > round-trip** đầy đủ trường, đọc được **dòng tối thiểu** (thiếu 3 trường mở rộng) và **từ chối
 > dòng sai**, `tbt_cmd_parse_exact` (không nhận lệnh rác), bộ "sniff" dòng TRAM trên **cùng UART
@@ -430,9 +479,9 @@ AXIS_NOT_HOMED vàng, RATE_100 xanh lá, RATE_ALTERED vàng, PRINT_TIME aqua, PR
 > `default:` ⇒ **không vẽ gì**) — nên nếu zoom thì 2 icon đó **biến mất**; cách đúng là **sinh sẵn bitmap
 > 48×48** (`tools/make_lvgl_icons.py`, mục `SMALL`, lọc trung bình theo diện tích).
 
-### 5.2 Icon thật của Marlin (`src/ui_lvgl_icons.h`)
+### 5.2 Icon thật của Marlin (`src/ui/ui_lvgl_icons.h`)
 
-Icon **không còn** là hình vẽ lại bằng LVGL: `cydlcd/src/ui_lvgl_icons.h` chứa **12 icon
+Icon **không còn** là hình vẽ lại bằng LVGL: `cydlcd/src/ui/ui_lvgl_icons.h` chứa **12 icon
 64×64 / 48×48 / 32×32 chuyển nguyên từ bitmap GREYSCALE4 của Marlin** (`Marlin/src/lcd/tft/images/*.cpp`)
 sang `LV_IMG_CF_ALPHA_4BIT`, rồi **đổi màu lúc chạy** bằng `lv_obj_set_style_img_recolor()` +
 `recolor_opa = LV_OPA_COVER`.
@@ -467,7 +516,7 @@ python cydlcd/tools/make_lvgl_icons.py
 * Bảng đổi mức xám: `level ≤ 8` (nền + lớp bóng của Marlin) → **trong suốt**; `9…15` → alpha
   `(level−8)×15/7`, nên icon hiện **giống hệt bản Marlin** khi `recolor` = màu chính và nền =
   `COLOR_BACKGROUND`.
-* Cần **`#define LV_USE_IMG 1`** trong `src/lv_conf.h` (đã bật ở commit này; trước đây là `0`).
+* Cần **`#define LV_USE_IMG 1`** trong `src/gfx/lv_conf.h` (đã bật ở commit này; trước đây là `0`).
 
 ### 5.3 Các màn
 
@@ -513,7 +562,7 @@ python cydlcd/tools/make_lvgl_icons.py
 * Chữ trên màn hình là **ASCII** (font `montserrat_14` không có dấu tiếng Việt) — đó là lý do
   nhãn màn hình viết không dấu (`NHIET DO`, `THONG SO`…).
 
-### 5.4 Encoder đọc bằng ngắt (`src/encoder.cpp`)
+### 5.4 Encoder đọc bằng ngắt (`src/stm32/encoder.cpp`)
 
 Màn hình CYD **không polling** encoder: hai chân A/B ngắt đổi trạng thái, ISR chỉ đẩy mẫu 2 bit vào một
 **ring cố định 32 phần tử** (không heap, không STL), rồi luồng chính giải mã bằng bảng chuyển tiếp:
@@ -528,7 +577,7 @@ trong khoảng đó polling **không đọc được chân** nên chắc chắn 
 
 Cảm ứng XPT2046 trên CYD do màn hình CYD **tự bit-bang SPI mềm** (TFT_eSPI chỉ đọc được XPT2046 khi nó
 chung bus SPI với LCD, mà CYD đi dây riêng), nên hiệu chuẩn nằm **trong firmware màn hình CYD**
-(`ui_port_touch_calibrate()` — `src/ui_port_cyd_st7789.cpp`).
+(`ui_port_touch_calibrate()` — `src/ui/port/ui_port_cyd_st7789.cpp`).
 
 **Cách vào** (2 đường, không cần build lại):
 
@@ -560,7 +609,7 @@ chung bus SPI với LCD, mà CYD đi dây riêng), nên hiệu chuẩn nằm **t
 **Lưu ở đâu**: **NVS (flash) của ESP32** qua `Preferences`, namespace **`cydtouch`**, khoá
 `xmin/xmax/ymin/ymax/swap/invx/invy` (`touch_cal_save()`); lúc khởi động `touch_cal_load()` nạp lại
 và in `[TOUCHCAL] nap tu NVS: …`. ⇒ **Reset/mất điện không mất hiệu chuẩn, không phải build lại**
-(`erase_flash` mới xoá). Khi chưa có NVS thì dùng **giá trị mặc định trong `src/cydlcd_config.h`**:
+(`erase_flash` mới xoá). Khi chưa có NVS thì dùng **giá trị mặc định trong `src/app/cydlcd_config.h`**:
 `CYDLCD_CYD_TOUCH_SWAP_XY 0`, `INVERT_X/Y 0`, `X 184..3866`, `Y 185..3910` — đây là **kết quả
 hiệu chuẩn thật** đã chạy tốt trên board (dòng MENU hiện `NVS`/`mac dinh` để biết đang dùng bộ nào).
 
@@ -621,7 +670,7 @@ TRAMMING trên màn hình CYD **dùng được độc lập**, không cần mở
 > Vì `temp_lookup()` (ui_widgets.cpp) **ưu tiên nguồn TRAM khi `tbt.ever`**, màn hình hiện
 > `BED <nhiệt> / 0 C` dù Marlin **đã** đặt target 60 (frame PUSH báo `tgt=6000`).
 > **Sửa 2 chỗ** (đo trên máy thật bằng `UI TEMPS`): (1) `tbt_next_tok()` thêm `'\n'` vào bộ dấu phân
-> cách — **ở CẢ HAI bản** `cydlcd/src/tbt_protocol.h` + `Marlin/src/feature/tbt_protocol.h`;
+> cách — **ở CẢ HAI bản** `cydlcd/src/app/tbt_protocol.h` + `Marlin/src/feature/tbt_protocol.h`;
 > (2) `temp_lookup()` **ưu tiên frame PUSH** (`cydlcd.temps[]`) và chỉ lùi về dòng TBT khi không có
 > (chế độ TRAM) ⇒ nguồn hiển thị luôn là nguồn đầy đủ/cập nhật nhất. Thêm test hồi quy
 > (`cydlcd/tools/test_cydlcd_link.cpp`: `p.t_e0/t_bed/t_e0_tgt/t_bed_tgt` phải bằng đúng giá trị đã
@@ -641,7 +690,7 @@ TRAMMING trên màn hình CYD **dùng được độc lập**, không cần mở
 
 Mọi chỗ hiển thị link đều đi qua **một hàm duy nhất** `link_ok()` trong `ui_lvgl.cpp` — sửa logic link chỉ cần sửa hàm này.
 
-**Tên máy in:** ở chế độ PUSH tên lấy từ gói `HELLO` của Marlin; ở chế độ **TRAM không có HELLO** nên màn INFO hiện `FW: <CYDLCD_MACHINE_NAME> (TRAM link)` — đổi tên bằng `CYDLCD_MACHINE_NAME` trong `src/cydlcd_config.h` hoặc `-DCYDLCD_MACHINE_NAME=\"...\"` trong `platformio.ini`.
+**Tên máy in:** ở chế độ PUSH tên lấy từ gói `HELLO` của Marlin; ở chế độ **TRAM không có HELLO** nên màn INFO hiện `FW: <CYDLCD_MACHINE_NAME> (TRAM link)` — đổi tên bằng `CYDLCD_MACHINE_NAME` trong `src/app/cydlcd_config.h` hoặc `-DCYDLCD_MACHINE_NAME=\"...\"` trong `platformio.ini`.
 
 **Chẩn đoán không cần thiết bị gì thêm:** log USB của CYD (115200) in **mỗi giây** một dòng:
 
@@ -668,7 +717,7 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 * **`hint` do Marlin tính sẵn** (dùng đúng `tramming_turn_cw` + `TRAM_DONE_MM` như màn 12864) nên
   màn hình CYD **không** tự suy lại chiều vặn vít ⇒ số và chiều ở 2 màn luôn giống nhau.
 * Định nghĩa **dùng chung y nguyên** ở 2 nơi: `Marlin/src/feature/tbt_protocol.h` và
-  `cydlcd/src/tbt_protocol.h` (sửa một bên thì **copy sang bên kia**).
+  `cydlcd/src/app/tbt_protocol.h` (sửa một bên thì **copy sang bên kia**).
 * Màn hình CYD đọc dòng `TRAM …` **ngay trong vòng đọc UART của `cydlcd_link.cpp`**; byte không thuộc dòng
   TRAM được trả lại **nguyên vẹn** cho bộ giải frame PUSH (không mất byte nào), và khi đã vào chế độ
   TRAM thì màn hình CYD **ngừng gửi PING** (tránh byte nhị phân lọt vào bộ giải lệnh ASCII của Marlin).
@@ -691,9 +740,9 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 | **`NO LINK` hiện đúng lúc máy đang probe / di chuyển giữa các góc** | **Đã sửa 2026-10-13** (link KHÔNG hề mất — bấm `PROBE` vẫn chạy): Marlin có những đoạn **block vài giây** mà **không gọi `idle()`** (probe/dò, `home Z`) nên các dòng `TBT` bị ngưng; màn hình CYD hết timeout 2 s là báo sai. Nay: (1) khi trạng thái cuối cho thấy wizard **đang bận** (`active` + `phase != IDLE`) thì dùng timeout dài **`TBT_LINK_BUSY_TIMEOUT_MS` 20 s**; (2) màn hình CYD **chủ động hỏi lại bằng `Q`** mỗi `TBT_LINK_QUERY_MS` (1 s) khi im lặng — Marlin đáp ngay ở tick kế tiếp (`TBT_CMD_QUERY` → `s_force`), nên trạng thái luôn tươi trong lúc máy làm việc |
 | Màn **TRAMMING** hiện `PROBE`/`ERR` mãi | góc đó chưa probe được (đầu dò lỗi/ngoài tầm) → bấm `PROBE` lại; `ERR` = lần probe vừa rồi trả `NAN` |
 | Màn hình CYD không nhận nhiệt độ/vị trí | Marlin phải build ở **chế độ màn hình CYD** (`set_cydlcd_mode.ps1 -Mode status` để xem) — nếu còn `MKS_MINI_12864_V3` thì Marlin sẽ báo lỗi SanityCheck |
-| Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/cydlcd_config.h` |
+| Encoder quay ngược | `ENC_REVERSE 0/1` trong `src/app/cydlcd_config.h` |
 | Nhiệt độ nhảy loạn | đường serial nhiễu: giảm baud 2 bên (`CYDLCD_MARLIN_BAUD` + `BAUDRATE_2`) hoặc dùng cáp ngắn/xoắn |
-| ESP32 build lỗi `lv_conf.h` | phải có `src/lv_conf.h` và cờ `-DLV_CONF_INCLUDE_SIMPLE -Isrc` (đã có trong env). Nếu LVGL báo `Possible failure to include lv_conf.h` thì include path sai (đừng dùng `${PROJECT_DIR}` — nó bị expand sai trong project này) |
+| ESP32 build lỗi `lv_conf.h` | phải có `src/gfx/lv_conf.h` và cờ `-DLV_CONF_INCLUDE_SIMPLE -Isrc` (đã có trong env). Nếu LVGL báo `Possible failure to include lv_conf.h` thì include path sai (đừng dùng `${PROJECT_DIR}` — nó bị expand sai trong project này) |
 | CYD: chạm không ăn / lệch | TFT_eSPI giả định XPT2046 **chung bus SPI với LCD** (chỉ khác CS) nên `tft.getTouch()` **không** đọc được XPT2046 trên CYD; `ui_port_cyd_st7789.cpp` đã bit-bang SPI mềm cho touch (T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36). **Đừng sửa macro bằng tay nữa — chạy hiệu chuẩn 4 góc** (menu `Calibrate touch`, hoặc giữ tay lúc cấp điện) rồi xem **§5.5**; kết quả lưu vào NVS nên không cần build lại. Muốn thử lại đường TFT_eSPI thì `#define CYDLCD_CYD_TOUCH_USE_TFTESPI` (khi đó **không** hiệu chuẩn được) |
 | CYD: màu không giống bản giả lập / sai màu | **Chạy `UI COLORTEST`** (mục “Kiểm tra đường màu” ngay dưới) rồi đối chiếu: đỏ↔xanh dương ⇒ **sai thứ tự kênh** (`TFT_RGB_ORDER`); trắng↔đen ngược ⇒ **panel bị đảo màu** (inversion). ⚠️ `TFT_INVERSION_ON` trong `User_Setup.h` **không có tác dụng** với driver ST7789 của TFT_eSPI 2.5.43 (xem mục dưới) |
 | CYD: không đèn nền / màn tối | `TFT_BL` mặc định **GPIO21**; nhiều bản ST7789 dùng **GPIO27** — bật `-DCYDLCD_CYD_DEBUG=1` + thử lần lượt, và thử `fillScreen(TFT_RED)` để tách lỗi đèn nền khỏi lỗi driver/SPI |
@@ -711,7 +760,7 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 
 | Tầng | Kiểm chứng |
 |---|---|
-| **1. Màu gốc** (`src/ui_colortest.h`, `ui_lvgl_int.h`) | Dùng `#RRGGBB` chuẩn, khớp `tft_color.h` của Marlin (vd `MR_BG = lv_color_hex(0x1E156E)` ⇔ Marlin `COLOR_BACKGROUND 0x20AC // #1E156E`) |
+| **1. Màu gốc** (`src/ui/ui_colortest.h`, `ui_lvgl_int.h`) | Dùng `#RRGGBB` chuẩn, khớp `tft_color.h` của Marlin (vd `MR_BG = lv_color_hex(0x1E156E)` ⇔ Marlin `COLOR_BACKGROUND 0x20AC // #1E156E`) |
 | **2. Đường flush** (`ui_port_cyd_st7789.cpp`) | `pushColors(px, n, swap=true)` — tham số `true` **chỉ đổi 2 byte** (endianness ST7789), **không đổi kênh màu**. `lv_conf.h`: `LV_COLOR_DEPTH 16` + `LV_COLOR_16_SWAP 0` ⇒ nhất quán (bật SWAP=1 mới sai hết). `TFT_RED 0xF800` / `TFT_BLUE 0x001F` của TFT_eSPI **cùng quy ước** RGB565 với LVGL ⇒ hai thư viện không lệch nhau |
 | **3. Panel** (`tools/tft_setup_cyd/User_Setup.h`) | Thứ tự kênh do **`TFT_RGB_ORDER`** quyết định. Dòng đó **đang comment** ⇒ TFT_eSPI 2.5.43 lấy mặc định **`TFT_MAD_RGB`** (`TFT_Drivers/ST7789_Defines.h`). Nếu panel thật là **BGR** ⇒ **đỏ ↔ xanh dương đổi nhau** |
 
@@ -735,7 +784,7 @@ nó **không đọc** `TFT_INVERSION_ON`/`TFT_INVERSION_OFF` (đã grep cả fil
      giống hệt              -> đường màu OK, khác biệt nằm ở độ sáng/tương phản/đèn nền
 ```
 
-Bản giả lập dùng **chính bảng màu đó** (`src/ui_colortest.h`) và có kiểm tra tự động `checkcolor`: nó **đọc
+Bản giả lập dùng **chính bảng màu đó** (`src/ui/ui_colortest.h`) và có kiểm tra tự động `checkcolor`: nó **đọc
 lại file .bmp** rồi đo màu giữa màn hình, so với `#RRGGBB` (sai số 8/kênh vì RGB565 chỉ 5-6 bit/kênh). Kết
 quả chạy thật: `RED #FF0000 OK · GREEN #00FF00 OK · BLUE #0000FF OK · WHITE/ BLACK OK · BG #18146B (~#1E156E) OK
 · CYAN #00E7FF (~#00E5FF) OK · HOTEND #FF8A84 (~#FF8A80) OK` ⇒ **tầng 1+2 đúng**, nên nếu board lệch thì
@@ -870,7 +919,7 @@ Màu chữ vẫn theo trạng thái như cũ (xanh / accent / đỏ). Font cũ c
 và **lùi về hiện chữ** như trước, không bao giờ hiện ô vuông.
 
 **Font icon phải sinh lại** (12 → 21 glyph). Đã kiểm: **12 glyph cũ giống hệt cả metadata lẫn bitmap**,
-chỉ `yAdvance` 12 → 13 (glyph `usb` cao 13 px). Xem đầu file `src/gfx4_font_icons.c` để có URL font nguồn
+chỉ `yAdvance` 12 → 13 (glyph `usb` cao 13 px). Xem đầu file `src/gfx/gfx4_font_icons.c` để có URL font nguồn
 + lệnh sinh đầy đủ. 6 lựa chọn icon khác (`power_input`, `cable`, `outlet`, `power`, `power_off`, `link`,
 `link_off`) đã sinh sẵn trong font — đổi 1 dòng `LINK_GLYPH_*` là xong, **không cần sinh lại font**.
 
@@ -977,7 +1026,7 @@ Dòng log khi đạt:
 
 ## 7. Về font chữ (chỉ dùng cho kiểu G-code)
 
-`src/font8x8.h` là **file sinh tự động** (Lucida Console 11px → ô 8×8) bằng
+`src/gfx/font8x8.h` là **file sinh tự động** (Lucida Console 11px → ô 8×8) bằng
 `tools/make_font.py` (cần Pillow). Muốn đổi font/cỡ:
 
 ```powershell
@@ -985,7 +1034,7 @@ python cydlcd/tools/make_font.py     # in ra bản ASCII-art để kiểm nét
 ```
 
 Muốn chữ to hơn thì không cần sinh lại: driver đã hỗ trợ `print(..., size)` với `size = 2`.
-Kiểu LVGL dùng font có sẵn của LVGL (`LV_FONT_MONTSERRAT_14`, bật trong `src/lv_conf.h`).
+Kiểu LVGL dùng font có sẵn của LVGL (`LV_FONT_MONTSERRAT_14`, bật trong `src/gfx/lv_conf.h`).
 Còn **icon** của kiểu LVGL là file sinh tự động khác — xem **§5.2**.
 
 ---
@@ -1135,7 +1184,7 @@ Người dùng chốt: **chỉ khoá UI khi thật cần**, và **không hiện 
 
 * Chỉ lúc **ghi vào thẻ** mới `ov_create_full()` + `ui_lock(true)` (trong `cyd_sd_finish_upload()`): để
   người dùng không bấm IN / mở trang FILES trong lúc màn hình đang ghi thẻ ⇒ **đó mới là lúc cần khoá UI**.
-* **Hợp đồng API cho nhánh UI** — `src/net_upload_http.h`:
+* **Hợp đồng API cho nhánh UI** — `src/net/net_upload_http.h`:
 
 ```c
 // true = ĐANG có phiên nhận/ghi file (từ lúc bắt đầu nhận tới lúc ghi xong vào thẻ).
@@ -1150,7 +1199,7 @@ bool net_upload_active(void);
 * Khi tắt web server (`CYDLCD_WIFI_UPLOAD 0`) hoặc board khác: **stub trong `net_upload_http.cpp`** luôn
   trả `false`; `ui_lvgl.cpp` khai báo `weak`/`extern "C"` nên mọi env vẫn build + link được.
 * Lớp phủ lúc ghi thẻ dùng thêm font **`lv_font_montserrat_20`** cho dòng trạng thái (chữ to) — font được
-  bật trong `src/lv_conf_cydlcd.h` (chỉ env CYD): tốn **flash** (~22 KB), **không tốn DRAM** vì font là `const`.
+  bật trong `src/gfx/lv_conf_cydlcd.h` (chỉ env CYD): tốn **flash** (~22 KB), **không tốn DRAM** vì font là `const`.
 * Vòng đời lớp phủ: tạo ở `cyd_sd_finish_upload()`, gỡ ở cuối hàm; lúc **nhận file** không tạo object LVGL
   nào (không tốn LVGL heap).
 
@@ -1881,9 +1930,9 @@ Chạy thật: `cydlcd-upload.ps1 -File <file>` (hoặc `in3d <file>`) → in ra
 `[cydlcd] thay <IP> (nguon: cache|mdns|gateway|quet|danh sach)` rồi tiến độ `receiving → writing → done`
 và `=> File DA DUOC GUI THANH CONG.`
 
-### 10.8 Đối chiếu với firmware màn hình CYD **đã có** trong repo (`src/net_upload_http.cpp`)
+### 10.8 Đối chiếu với firmware màn hình CYD **đã có** trong repo (`src/net/net_upload_http.cpp`)
 
-Đã đọc `src/net_upload_http.cpp` + `cydlcd_config.h` và **khớp hợp đồng §10.2** (xem thêm §9.21):
+Đã đọc `src/net/net_upload_http.cpp` + `cydlcd_config.h` và **khớp hợp đồng §10.2** (xem thêm §9.21):
 
 | Mục | Firmware | Client |
 |---|---|---|
@@ -2208,9 +2257,9 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
 | `Marlin/src/inc/Conditionals_post.h` | `NEED_SD2CARD_CYDLCD_UART` (thay cho `NEED_SD2CARD_SPI`) |
 | `Marlin/src/sd/cardreader.h`, `SdVolume.h` | chọn `DiskIODriver_CydlcdUART` |
 | `Marlin/ini/features.ini` | env `CYDLCD_SD_OVER_UART` (thêm file driver) + `SERIAL_RX_BUFFER_SIZE=1024` (frame 141 B) |
-| `cydlcd/src/cydlcd_config.h` | `CYDLCD_SD_UART 1` (CYD) — tự tắt `CYDLCD_SD_SHARED` |
-| `cydlcd/src/cydlcd_link.cpp` | trả lời `CYDLCD_F_SDREQ` → `cyd_sd_raw_read()` → 4 frame `CYDLCD_F_SDDATA` |
-| `cydlcd/src/cyd_sd.cpp` | `cyd_sd_raw_read/raw_write/delete`; mount thẻ lúc boot và **giữ luôn** |
+| `cydlcd/src/app/cydlcd_config.h` | `CYDLCD_SD_UART 1` (CYD) — tự tắt `CYDLCD_SD_SHARED` |
+| `cydlcd/src/app/cydlcd_link.cpp` | trả lời `CYDLCD_F_SDREQ` → `cyd_sd_raw_read()` → 4 frame `CYDLCD_F_SDDATA` |
+| `cydlcd/src/app/cyd_sd.cpp` | `cyd_sd_raw_read/raw_write/delete`; mount thẻ lúc boot và **giữ luôn** |
 
 ### 12.4 Giao thức (proto **4** — PHẢI nạp cả 2 board)
 
@@ -2518,7 +2567,7 @@ cùng đợt này, nên trước đó mọi lỗi dưới đây đều **không 
 test host**; khi có board, chạy đúng 3 bước ở bảng chẩn đoán trên để xác nhận `nhan=` tăng khi bấm `G28`.
 
 
-## Menu MOTION kiểu 12864 (2026-10-15) — nhóm `SMG_MOTION` trong `src/ui_page_submenu.cpp`
+## Menu MOTION kiểu 12864 (2026-10-15) — nhóm `SMG_MOTION` trong `src/ui/pages/ui_page_submenu.cpp`
 
 **Yêu cầu người dùng:** *"sửa nốt menu 'motion' giống sơ đồ menu của 12864"*. Trước đây dòng `Motion (JOG)`
 trong MENU mở **thẳng trang JOG**; nay nó mở **menu MOTION** đúng thứ tự của menu `Motion` trong 12864
@@ -2591,7 +2640,7 @@ Marlin. Đã nạp `mks_monster8.bin` qua `M997` + `dfu-util` (bản sao ở `D:
 | `UI HELLO` (hàng đợi TX của màn hình) | `tx cho=0 bo=0` ⇒ 30 frame/s **không** làm rớt frame nào |
 | `PANEL DIAG` phía Marlin | `err=0`, `hoan=18 bo=2` (tích luỹ từ lúc boot), `sd_busy=0 defer=0` |
 
-## Đa ngôn ngữ (i18n) kiểu Marlin (2026-10-15) — `src/ui_lang.h`, `src/ui_lang.cpp`
+## Đa ngôn ngữ (i18n) kiểu Marlin (2026-10-15) — `src/ui/lang/ui_lang.h`, `src/ui/lang/ui_lang.cpp`
 
 **Yêu cầu người dùng:** *"các text trong project chưa sử dụng kiểu language cho multiple language giống
 marlin, cách làm như thế nào thì ổn nhất?"* → đã chọn **B1 + B2 + B3, Việt + English**.
@@ -2780,7 +2829,7 @@ config nên **không mất gì**.
   → đã hạ `CYDLCD_SETTINGS_MAX` 80 → **72** (menu PREHEAT không còn bơm 9 giá trị vào bảng thông số nên
   chỉ dùng 63/72) ⇒ tiết kiệm 128 B (2 bản `s_src` + `cydlcd`), build sạch (RAM 38.0%).
 
-## Menu CONFIGURATION kiểu 12864 (2026-10-15) — `src/ui_page_submenu.cpp`
+## Menu CONFIGURATION kiểu 12864 (2026-10-15) — `src/ui/pages/ui_page_submenu.cpp`
 
 **Yêu cầu người dùng:** *"phần configuration tôi thấy làm giống 12864 tiện hơn"*. Trước đây dòng `Settings`
 trong MENU mở **một bảng phẳng 76 dòng** phải cuộn; nay nó mở **cây menu nhiều cấp** giống menu
@@ -2948,7 +2997,7 @@ và từ bản này màu bám **NHIỆT ĐỘ THỰC** chứ không còn chia th
 * **Trước đây** (`temp_grad()`): màu = `cur / tgt`. Hệ quả: **cùng 50 °C** mà target 250 thì **XANH**, target 60
   thì **ĐỎ** ⇒ màu nói *"đã đạt bao nhiêu % của target"*, không nói *"đang nóng bao nhiêu"*; và target nhỏ
   (bàn in 60) thì đỏ ngay ở 60 °C.
-* **Bây giờ** (`temp_ramp()`, `src/ui_page_status.cpp`): 3 mốc **XANH (`MR_COLD`) → VÀNG (`MR_WARM`) → màu NÓNG**,
+* **Bây giờ** (`temp_ramp()`, `src/ui/pages/ui_page_status.cpp`): 3 mốc **XANH (`MR_COLD`) → VÀNG (`MR_WARM`) → màu NÓNG**,
   chạy theo **nhiệt độ đo được**. Trộn thẳng xanh→đỏ sẽ đi qua màu **xám hồng** (trông như bị *nhạt màu* chứ không
   như *nóng lên*) nên chèn mốc vàng ở giữa cho ra cảm giác nóng dần rõ ràng.
 * **Hai đầu dải** (ý người dùng: *"min max hot-end là 10-250; bed 0-60"*): **mốc TRÊN lấy đúng ý** (250 °C đầu in,
@@ -2967,7 +3016,7 @@ và từ bản này màu bám **NHIỆT ĐỘ THỰC** chứ không còn chia th
   console). Bảng in ra dùng **đúng hàm và hằng số** của màn STATUS nên luôn khớp với cái đang vẽ.
 
 ## Font chu (cap nhat: chi con font TU SINH)
-UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co the ep tu ngoai:
+UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui/ui_lvgl.cpp` (co the ep tu ngoai:
 `-DUI_MONO_FONT=0` de thu che do 0 ma khong phai sua file):
 - **`UI_MONO_FONT 4` (MAC DINH)**: font **CHU TU SINH** `gfx4_font_text` (4 bpp) qua driver
   `lv_font_gfxfont`; gan TUNG nhan/nut (`mono_obj`), ten man (`s_title`) giu Montserrat.
@@ -2977,7 +3026,7 @@ UI co **2 che do** font, chon bang `UI_MONO_FONT` trong `src/ui_lvgl.cpp` (co th
     → *"chữ hơi to quá, chỉnh cùng cỡ với Roboto Mono 15 được không?"*; lần 3 (ĐANG DÙNG):
     **Segoe UI Regular size 16** (`C:/Windows/Fonts/segoeui.ttf`), font **TỈ LỆ**, **yAdvance 20**,
     base_line 4, ascender 16, box_h max 18, 301 glyph có nét, 14 746 byte bitmap
-    (file `src/gfx4_font_text.h` + `.c`; tên cũ `gfx4_font_robotomono` — Roboto Mono 15 mono — **đã xoá**).
+    (file `src/gfx/gfx4_font_text.h` + `.c`; tên cũ `gfx4_font_robotomono` — Roboto Mono 15 mono — **đã xoá**).
     **Nét chữ cao đúng 11 px = BẰNG Roboto Mono 15 bản đã chốt trước đó** (`'A' 10x11`, `'X' 9x11`,
     `'0' 8x11`) và **dòng 20 px** — nên bố cục quay về đúng các con số cũ (xem mục chiều cao bên dưới).
     Vì sao đổi được sang font tỉ lệ: driver đặt `dsc->adv_w = g->xAdvance` cho **từng glyph**, nên chỉ cần
@@ -3052,7 +3101,7 @@ pio run -e cydlcd_esp32 -t upload --upload-port COM7
 * Env CYD **khong khai `upload_port`** (`platformio.ini:123-149`) ⇒ phai truyen **`--upload-port COM7`**
   tren dong lenh; `monitor_speed = 115200` (`platformio.ini:148`).
 * Env CYD **can mang lan dau** (keo `espressif32`, `lvgl`, `TFT_eSPI` — `platformio.ini:121, 144-145`).
-* `CYDLCD_PROTO_VERSION` hien la **2** (`src/cydlcd_protocol.h:42`). Doi version thi **phai nap CA HAI
+* `CYDLCD_PROTO_VERSION` hien la **2** (`src/app/cydlcd_protocol.h:42`). Doi version thi **phai nap CA HAI
   board** (Marlin + màn hình CYD), khong thi màn hình CYD bao `LINK ERR` du byte van chay (cam bay 41 o README goc).
 
 ### Khi `-t upload` khong vao duoc bootloader → nap bang esptool truc tiep
@@ -3106,7 +3155,7 @@ pio device monitor -p COM7 -b 115200
 
 > ⚠️ O **che do TRAM** thi `rx`/`err` (dem frame PUSH) **co the dung o 0** vi Marlin chi gui dong
 > ASCII `TBT ...` chu khong gui frame PUSH. Luc do xem `link TBT=1` va doc **man INFO** tren màn hình CYD:
-> `LINK: OK (TRAM) ...` + `RX: <n> frame / <n> loi` (`src/ui_lvgl.cpp:2013-2018`).
+> `LINK: OK (TRAM) ...` + `RX: <n> frame / <n> loi` (`src/ui/ui_lvgl.cpp:2013-2018`).
 
 ### Console gui lenh qua COM7 (giong het bam nut tren màn hình CYD)
 
@@ -3150,7 +3199,7 @@ Marlin; cac lenh màn hình CYD o bang tren deu duoc so **truoc** nhanh chuyen t
 ### Hieu chinh cam ung (chi board co touch — CYD)
 
 * **Vao:** STATUS → **SETTINGS** → **MENU** → dong **`Calibrate touch (giu 1.5s)`** — **PHAI GIU
-  TAY 1,5 giay roi NHAC** (`CAL_TOUCH_HOLD_MS 1500`, `src/ui_lvgl.cpp:2176`; trong luc giu cot phai
+  TAY 1,5 giay roi NHAC** (`CAL_TOUCH_HOLD_MS 1500`, `src/ui/ui_lvgl.cpp:2176`; trong luc giu cot phai
   doi `dang giu` → `NHAC TAY` — `:2288-2289`).
 * **Duong thoat hiem:** **giu tay tren man hinh luc cap dien** — màn hình CYD thay `T_IRQ` muc thap trong
   `ui_port_input_init()` va vao thang che do hieu chuan (dung khi gia tri cu qua te, khong cham trung
@@ -3256,7 +3305,7 @@ Baud **250000 8N1 = 25 000 B/s, 40 us/byte**. Frame PUSH toi da 198 B (`CYDLCD_M
   (core chua `HardwareSerial.h:43-48`, tran an toan 256). Nay da ep len **256/256** bang build flag
   trong `ini/features.ini` (key `CYDLCD_SERIAL_UI`). 64 B chi du 2,56 ms dem -> khong du cho burst.
 - **Màn hình CYD ESP32**: core mac dinh RX 256 B (du ~10 ms). Nay dat **1024 B** bang `setRxBufferSize()`
-  TRUOC `begin()` (`src/cydlcd_config.h`, `CYDLCD_RX_BUFFER`) -> du ~41 ms, an toan khi LVGL giu vong lap
+  TRUOC `begin()` (`src/app/cydlcd_config.h`, `CYDLCD_RX_BUFFER`) -> du ~41 ms, an toan khi LVGL giu vong lap
   vai chuc ms de ve man.
 - **Burst thuc te** (mot lan goi, khong nhip): `REQ_SETTINGS` = 33 frame x 12 B = 396 B;
   `REQ_FULL` ~ 491 B; danh sach file 30 file ~ 1,9 kB; `REQ_MESH` 7 x 23 = 161 B.
@@ -3274,10 +3323,10 @@ Vi sao: font sinh bang `lv_font_conv` (Consolas/Roboto Mono) **lam mat het chu**
 (xem cam bay 45 o README goc: dinh dang bitmap + don vi `adv_w`). Nay dung font 1-bit tu sinh:
 - `tools/ttf2gfxfont.py` - TTF -> header C dung dinh dang Adafruit GFXfont, nhieu dai lien tuc
   (`--font --size --extra-ranges --name -o`, co `--yadvance`/`--threshold`/`--dump`).
-- `src/gfx_font_robotomono.h/.c` - Roboto Mono **size 13 px**: `xAdvance 8`, `yAdvance 17`, `base_line 3`,
+- `src/gfx/gfx_font_robotomono.h/.c` - Roboto Mono **size 13 px**: `xAdvance 8`, `yAdvance 17`, `base_line 3`,
   5 dai (0x20-0xFF, 0x0102-0x0103, 0x0110-0x0111, 0x01A0-0x01B1, 0x1EA0-0x1EF9), 287 glyph co net,
   **2926 byte bitmap**, tong 5714 byte flash (nam o DROM). Du 100% dau tieng Viet.
-- `src/lv_font_gfxfont.c/.h` - driver `lv_font_t` doc GFXfont (repack sang dang lien tuc cua LVGL) +
+- `src/gfx/lv_font_gfxfont.c/.h` - driver `lv_font_t` doc GFXfont (repack sang dang lien tuc cua LVGL) +
   `lv_font_gfxfont_selftest()` in ra COM7: box/adv/ofs/checksum cua 'A' '0' 'a' U+1EC7 U+0110.
 - Cong tac `UI_MONO_FONT` trong `ui_lvgl.cpp`: **0 = chi Montserrat (khong dau tieng Viet, du phong)**,
   **4 = mono GFX gan tung nhan (MAC DINH, dang dung, co du dau)**. Che do 1/2/3 (font sinh bang

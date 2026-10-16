@@ -19,6 +19,19 @@ import re
 import sys
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src')
+# 2026-10-16: `src/` da chia theo NHOM -> bang ngon ngu nam o src/ui/lang/ (khong con o src/).
+LANG = os.path.join(SRC, 'ui', 'lang')
+
+
+def src_files(exts=('.cpp', '.h', '.c')):
+    """Mọi file nguồn trong cây src/ (ĐỆ QUY). Trước đây chỉ liệt kê 1 cấp `src/`; chia thư mục
+    rồi thì phải đi đệ quy, và so khớp theo TÊN FILE (basename) chứ không theo đường dẫn."""
+    out = []
+    for root, _dirs, files in os.walk(SRC):
+        for f in files:
+            if f.endswith(exts):
+                out.append(os.path.join(root, f))
+    return sorted(out)
 
 RE_ENUM_ID = re.compile(r'^\s*(UI_T_[A-Z0-9_]+)\s*(?:=\s*\d+)?\s*,', re.M)
 RE_TABLE = re.compile(r'^\s*\[(UI_T_[A-Z0-9_]+)\]\s*=\s*("(?:[^"\\]|\\.)*")\s*,?', re.M)
@@ -96,10 +109,11 @@ LIT_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
 def audit_display():
     """Tra ve danh sach (file, dong, chuoi) = chuoi TIENG VIET con hard-code trong duong HIEN THI."""
     bad = []
-    files = sorted(f for f in os.listdir(SRC)
-                   if f.endswith('.cpp') and (f.startswith('ui_') or f in UI_FILES))
-    for f in files:
-        raw = read(os.path.join(SRC, f))
+    files = [p for p in src_files(('.cpp',))
+             if (os.path.basename(p).startswith('ui_') or os.path.basename(p) in UI_FILES)]
+    for path in files:
+        f = os.path.basename(path)
+        raw = read(path)
         nocomment = re.sub(r'/\*.*?\*/', lambda m: '\n' * m.group(0).count('\n'), raw, flags=re.S)
         nocomment = '\n'.join(l.split('//')[0] for l in nocomment.split('\n'))
         # tach cau lenh: giu nguyen so dong de bao dung vi tri
@@ -152,17 +166,18 @@ def scan_hardcoded():
               chuoi trong ngoac vuong/khoa NVS, va cac chuoi KY HIEU ngan ("II","[]","ON","OFF"...).
     Day chi la SO DO TIEN DO - khong phai loi.
     """
-    files = sorted(f for f in os.listdir(SRC)
-                   if (f.startswith('ui_page_') or f in ('ui_chrome.cpp', 'ui_widgets.cpp',
-                                                         'ui_boxes.cpp', 'ui_overlay.cpp',
-                                                         'ui_lvgl.cpp'))
-                   and f.endswith(('.cpp', '.h')))
+    files = [p for p in src_files(('.cpp', '.h'))
+             if (os.path.basename(p).startswith('ui_page_') or
+                 os.path.basename(p) in ('ui_chrome.cpp', 'ui_widgets.cpp',
+                                         'ui_boxes.cpp', 'ui_overlay.cpp',
+                                         'ui_lvgl.cpp'))]
     lit_re = re.compile(r'"((?:[^"\\]|\\.)*)"')
     total = 0
     per = []
-    for f in files:
+    for path in files:
+        f = os.path.basename(path)
         n = 0
-        for m in lit_re.finditer(read(os.path.join(SRC, f))):
+        for m in lit_re.finditer(read(path)):
             s = m.group(1)
             if len(s) < 4 or not re.search(r'[A-Za-z]', s):
                 continue
@@ -192,9 +207,9 @@ def main():
                     help='AUDIT: con chuoi HIEN THI nao bang tieng Viet chua boc T() khong (bang chung B2)')
     args = ap.parse_args()
 
-    ids = parse_enum(os.path.join(SRC, 'ui_lang.h'))
-    vi, vi_dup, vi_order = parse_table(os.path.join(SRC, 'ui_lang_vi.h'))
-    en, en_dup, en_order = parse_ovr(os.path.join(SRC, 'ui_lang_en.h'))
+    ids = parse_enum(os.path.join(LANG, 'ui_lang.h'))
+    vi, vi_dup, vi_order = parse_table(os.path.join(LANG, 'ui_lang_vi.h'))
+    en, en_dup, en_order = parse_ovr(os.path.join(LANG, 'ui_lang_en.h'))
     id_set = set(ids)
     idx = {k: i for i, k in enumerate(ids)}
 

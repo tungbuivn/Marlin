@@ -880,16 +880,16 @@ Code và tài liệu kỹ thuật vẫn giữ phương án 74HC4053 để chia s
 |---|---|
 | `cydlcd/platformio.ini` | env, board, thư viện, cờ build |
 | `cydlcd/src/main.cpp` | setup/loop, console, watchdog |
-| `cydlcd/src/cydlcd_config.h` | chân, buffer, WiFi, HTTP, SD |
-| `cydlcd/src/cydlcd_protocol.h` | frame protocol v4 dùng chung |
-| `cydlcd/src/cydlcd_link.cpp` | PUSH RX/TX, PING/PONG, HELLO |
-| `cydlcd/src/cyd_sd.cpp` | thẻ ở khe CYD, sector, upload |
-| `cydlcd/src/net_wifi.cpp` | quản lý WiFi và NVS |
-| `cydlcd/src/net_upload_http.cpp` | web server, upload, status, files, delete |
-| `cydlcd/src/ui_lvgl.cpp` | khung UI, điều hướng, action chung |
+| `cydlcd/src/app/cydlcd_config.h` | chân, buffer, WiFi, HTTP, SD |
+| `cydlcd/src/app/cydlcd_protocol.h` | frame protocol v4 dùng chung |
+| `cydlcd/src/app/cydlcd_link.cpp` | PUSH RX/TX, PING/PONG, HELLO |
+| `cydlcd/src/app/cyd_sd.cpp` | thẻ ở khe CYD, sector, upload |
+| `cydlcd/src/net/net_wifi.cpp` | quản lý WiFi và NVS |
+| `cydlcd/src/net/net_upload_http.cpp` | web server, upload, status, files, delete |
+| `cydlcd/src/ui/ui_lvgl.cpp` | khung UI, điều hướng, action chung |
 | `cydlcd/src/ui_page_*.cpp` | từng trang giao diện |
-| `cydlcd/src/ui_preheat.cpp` | preset PLA/PETG/ABS trong NVS |
-| `cydlcd/src/ui_port_cyd_st7789.cpp` | TFT/touch của CYD |
+| `cydlcd/src/ui/ui_preheat.cpp` | preset PLA/PETG/ABS trong NVS |
+| `cydlcd/src/ui/port/ui_port_cyd_st7789.cpp` | TFT/touch của CYD |
 | `cydlcd/tools/cydlcd-upload.ps1` | client upload Windows |
 
 UI đã được tách trang; khi sửa một chức năng, mở đúng `ui_page_*.cpp` thay vì tìm mọi thứ trong một file lớn.

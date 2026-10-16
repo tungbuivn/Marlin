@@ -169,7 +169,10 @@ if [ "$OLDXYZ" = 1 ]; then
   DEFS+=('-DMR_XYZ_VR(i)=(MR_XYZ_LX(i)+((i)==0?58:((i)==1?58:82)))')
   DEFS+=('-DMR_XYZ_VW(i)=(MR_XYZ_VR(i)-MR_XYZ_VX(i))')
 fi
-INCS=("-I$SIM/shim" "-I$COMPAT" "-I$SIM" "-I$SRC" "-I$LVGL")  # shim/ + compat/ phải TRƯỚC
+INCS=("-I$SIM/shim" "-I$COMPAT" "-I$SIM" "-I$SRC" \
+      "-I$SRC/app" "-I$SRC/ui" "-I$SRC/ui/pages" "-I$SRC/ui/port" "-I$SRC/ui/lang" \
+      "-I$SRC/gfx" "-I$SRC/net" "-I$SRC/stm32" \
+      "-I$LVGL")  # shim/ + compat/ phải TRƯỚC
 CFLAGS=(-O1 -w -std=gnu11 "${DEFS[@]}" "${INCS[@]}")
 CXXFLAGS=(-O1 -w -std=gnu++17 -fno-exceptions -fno-rtti "${DEFS[@]}" "${INCS[@]}")
 
@@ -232,24 +235,26 @@ if [ "$NOBUILD" = 0 ] && [ "$NEED_LVGL" = 1 ]; then
 fi
 
 # --- 2) Code THẬT của firmware (UI + link + tramming) + file của bản giả lập
+# 2026-10-16: `src/` da chia theo nhom (app/ui/ui-pages/ui-port/ui-lang/gfx/net/stm32) nen duong
+# dan o day PHAI khop cay moi — doi thu muc thi sua ca day lan phan INCS o tren.
 SOURCES=(
-  "$SRC/cydlcd_link.cpp"
-  "$SRC/tbt_link.cpp"
-  "$SRC/lv_font_gfxfont.c"
-  "$SRC/gfx4_font_icons.c"          # font icon 4bpp (UI_MONO_FONT 4)
-  "$SRC/gfx4_font_icons_big.c"
-  "$SRC/gfx4_font_icons_title.c"    # ban 20 px rieng cho thanh tieu de (2026-10-16)
-  "$SRC/gfx4_font_text.c"
-  "$SRC/gfx_font_robotomono.c"
+  "$SRC/app/cydlcd_link.cpp"
+  "$SRC/app/tbt_link.cpp"
+  "$SRC/gfx/lv_font_gfxfont.c"
+  "$SRC/gfx/gfx4_font_icons.c"          # font icon 4bpp (UI_MONO_FONT 4)
+  "$SRC/gfx/gfx4_font_icons_big.c"
+  "$SRC/gfx/gfx4_font_icons_title.c"    # ban 20 px rieng cho thanh tieu de (2026-10-16)
+  "$SRC/gfx/gfx4_font_text.c"
+  "$SRC/gfx/gfx_font_robotomono.c"
   "$SIM/sim_port.cpp"
   "$SIM/sim_stubs.cpp"
   "$SIM/sim_net_stubs.cpp"
   "$SIM/sim_main.cpp"
 )
-# mọi ui_*.cpp của firmware, TRỪ ui_port_* (2 file đó dùng TFT_eSPI thật)
+# mọi ui_*.cpp của firmware, TRỪ ui_port_* (2 file đó dùng TFT_eSPI thật) — quét CA 3 thu muc UI
 while IFS= read -r f; do
   [ -n "$f" ] && SOURCES+=("$f")
-done < <(find "$SRC" -maxdepth 1 -name 'ui_*.cpp' ! -name 'ui_port_*' | sort)
+done < <(find "$SRC/ui" "$SRC/ui/pages" "$SRC/ui/lang" -maxdepth 1 -name 'ui_*.cpp' ! -name 'ui_port_*' | sort)
 
 for f in "${SOURCES[@]}"; do
   [ -f "$f" ] || die "Thiếu file nguồn: $f"

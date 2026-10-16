@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]          # ...\<repo>
 IMG_DIR = ROOT / "Marlin" / "src" / "lcd" / "tft" / "images"
-OUT = Path(__file__).resolve().parents[1] / "src" / "ui_lvgl_icons.h"
+OUT = Path(__file__).resolve().parents[1] / "src" / "ui" / "ui_lvgl_icons.h"   # 2026-10-16: src/ chia theo nhom
 
 # (ten file .cpp cua Marlin, ten bien trong file, ten symbol xuat ra, rong, cao)
 # Luu y: mot vai file chua 2 mang (vd heated_bed_64x64x4.cpp co ca bed_64x64x4).

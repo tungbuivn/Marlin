@@ -30,7 +30,7 @@ pwsh cydlcd/tools/run_sim.ps1 -OldXyz -Script cydlcd/sim/scenarios/test-xyz-dai.
 |---|---|
 | Toàn bộ UI: `src/ui_*.cpp` + `ui_lvgl_icons.h` + 3 font GFX (`gfx4_font_*`, `lv_font_gfxfont`) | **THẬT** — build đúng file của firmware, không vẽ lại |
 | Chuỗi đa ngôn ngữ (`ui_lang_vi.h` / `ui_lang_en.h`), menu Configuration, trang BED MESH/JOG/… | **THẬT** |
-| Logic link (`src/cydlcd_link.cpp`) + TRAMMING (`src/tbt_link.cpp`), giao thức PUSH | **THẬT** (UART giả) |
+| Logic link (`src/app/cydlcd_link.cpp`) + TRAMMING (`src/app/tbt_link.cpp`), giao thức PUSH | **THẬT** (UART giả) |
 | Màn hình | giả: 1 mảng framebuffer 320×240 RGB565 trong RAM → ghi ra `.bmp` (`sim_port.cpp`) |
 | Cảm ứng | giả: hàng đợi "chạm" do kịch bản bơm vào (`tap x y`, hoặc `hit k` = bấm nút thứ k đúng đường sự kiện) |
 | Thẻ SD, WiFi, upload HTTP, NVS | giả (`sim_stubs.cpp`, `sim_net_stubs.cpp`): báo "chưa có thẻ"/"WiFi tắt" |
@@ -66,7 +66,7 @@ Bằng chứng bẫy này có thật sự bắt được lỗi (đã chạy, 202
 | **Mới** (`MR_XYZ_VX` = nhãn + 14; hộp 66/66/68 px) | `X: [14..24] [30..94] khe = 5 px OK` · `Y: … 5 px OK` ⇒ **0 lỗi** |
 
 Chạy lại bố cục cũ bất cứ lúc nào: `pwsh cydlcd/tools/run_sim.ps1 -OldXyz -Script cydlcd/sim/scenarios/test-xyz-dai.txt`
-(macro `MR_XYZ_*` trong `src/ui_lvgl_int.h` được bọc `#ifndef` để ghi đè từ ngoài — đó là mục đích của việc bọc).
+(macro `MR_XYZ_*` trong `src/ui/ui_lvgl_int.h` được bọc `#ifndef` để ghi đè từ ngoài — đó là mục đích của việc bọc).
 
 ## Kiểm tra đường MÀU (`colortest` + `checkcolor`)
 

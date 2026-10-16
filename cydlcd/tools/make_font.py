@@ -29,7 +29,7 @@ FONT_SIZE = 11
 X_OFFSET = 0         # wide glyphs (M, W, %) use 7 of the 8 columns -> 1 px gap
 Y_OFFSET = -2        # caps/digits fill rows 0..6; descenders clip at row 7
 THRESHOLD = 96
-OUT = Path(__file__).resolve().parent.parent / "src" / "font8x8.h"
+OUT = Path(__file__).resolve().parent.parent / "src" / "gfx" / "font8x8.h"   # 2026-10-16: src/ chia theo nhom
 
 
 def render(ch: str, font) -> list[list[int]]:
