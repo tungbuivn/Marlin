@@ -218,21 +218,44 @@ void page_status_create(lv_obj_t *p) {
   lv_obj_set_pos(st_msg, MR_MSG_X, MR_MSG_Y);
   lv_obj_set_style_text_align(st_msg, LV_TEXT_ALIGN_CENTER, 0);
 
-  // ---- 3 nut PAUSE / RESUME / STOP (MR_PB_Y, an khi may ranh) ----
-  // YEU CAU NGUOI DUNG 2026-10-16: "toi muon hien thi 3 nut pause, resume, stop o man hinh status".
-  // Dat o HANG CUOI (xem giai thich o MR_PB_Y trong ui_lvgl_int.h): day la cho trong duy nhat con du
-  // cho 3 nut bam duoc, doi lai phai an DONG NHAN TRANG THAI khi 3 nut hien (page_status_update lo viec do).
-  // Chu giong trang FILE (thang tieng Anh, nhu "PAUSE" / "RESUME" / "STOP (M524)") cho nhat quan.
-  // Hien ca 3 (khong an bot theo trang thai): bam nham nut vo nghia thi Marlin bo qua (M24 khi dang in
-  // / M25 khi dang tam dung deu vo hai), doi lai nguoi dung luon thay du lua chon.
+  // ---- 2 NUT DIEU KHIEN o GOC DUOI PHAI (MR_PB_Y / MR_PB_SZ, an khi may ranh) ----
+  // YEU CAU NGUOI DUNG 2026-10-16: "cho xuong goc duoi phai du hien thi 2 nut to mot chut, dich progress
+  // bar sang trai 1 chut, luc dau thi co pause va stop, bam pause thi no chuyen thanh nut resume. cac nut
+  // nay dung icon material play, pause, stop".
+  //   st_pb[0] = PAUSE  \  CHONG NHAU o CUNG toa do (MR_PB_X(0)): dang in hien PAUSE, tam dung hien RESUME
+  //   st_pb[1] = RESUME /  -> nhin ra dung 1 nut TU DOI. Xem ly do khong doi nhan o MR_PB_Y.
+  //   st_pb[2] = STOP   -> o MR_PB_X(1)
+  // Icon Material lay tu font icon cua thanh tieu de; ban build nao thieu glyph thi lui ve chu ASCII.
   {
-    static const char *const PB_TXT[3] = { "PAUSE", "RESUME", "STOP" };
-    static const uint8_t     PB_ACT[3] = { A_PAUSE, A_RESUME, A_STOP };
+    const bool ic = (ctrl_icon_ok() != 0);
+    const char *const TXT[3] = { ic ? CTRL_GLYPH_PAUSE : "II",
+                                 ic ? CTRL_GLYPH_PLAY  : ">",
+                                 ic ? CTRL_GLYPH_STOP  : "[]" };
+    const uint8_t ACT[3] = { A_PAUSE, A_RESUME, A_STOP };
+    const uint8_t POS[3] = { 0, 0, 1 };                 // PAUSE va RESUME cung vi tri
     for (uint8_t i = 0; i < 3; i++) {
-      st_pb[i] = mk_btn(p, PB_TXT[i], MR_PB_W, MR_PB_H, cb_action, (void *)(intptr_t)PB_ACT[i]);
-      lv_obj_set_pos(st_pb[i], MR_PB_X(i), MR_PB_Y);
-      lv_obj_add_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);   // mac dinh AN (may thuong dang ranh)
+      st_pb[i] = mk_btn(p, TXT[i], MR_PB_SZ, MR_PB_SZ, cb_action, (void *)(intptr_t)ACT[i]);
+      lv_obj_set_pos(st_pb[i], MR_PB_X(POS[i]), MR_PB_Y);
+      if (ic) {
+        lv_obj_t *l = lv_obj_get_child(st_pb[i], 0);
+        if (l) lv_obj_set_style_text_font(l, title_icon_font_get(), 0);
+      }
+      lv_obj_add_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);    // mac dinh AN (may thuong dang ranh)
     }
+    // ---- NUT STOP: TO NEN DO (yeu cau nguoi dung 2026-10-16: "nut stop fill mau do") ----
+    //  * Dung `mk_btn_set_bg()`: no tu chon mau chu/icon tuong phan theo nen (mk_color_on) VA ve lai
+    //    vien "outlined" theo mau nen moi. Tu set bg_color thi vien se sai mau.
+    //  * LV_OBJ_FLAG_USER_1 = vat TU QUAN LY NEN: focus_mark() se KHONG doi mau nen cua no nua (chi ve
+    //    vien khi focus) -> nen do khong bi ghi de thanh MR_SELBG luc bam. Xem focus_mark().
+    mk_btn_set_bg(st_pb[2], MR_STOPBG);
+    lv_obj_add_flag(st_pb[2], LV_OBJ_FLAG_USER_1);
+    // PAUSE = VANG, RESUME = XANH LA (2026-10-16, yeu cau nguoi dung). Hai nut nay CHONG NHAU (cung
+    // toa do) nen mau cung la mot cach bao trang thai: vang = dang in (bam de tam dung), xanh = dang
+    // tam dung (bam de chay tiep). Deu la "vat tu quan ly nen" (USER_1) nen focus khong ghi de mau.
+    mk_btn_set_bg(st_pb[0], MR_PAUSEBG);
+    lv_obj_add_flag(st_pb[0], LV_OBJ_FLAG_USER_1);
+    mk_btn_set_bg(st_pb[1], MR_RESUMEBG);
+    lv_obj_add_flag(st_pb[1], LV_OBJ_FLAG_USER_1);
   }
 
   // ---- 2 icon trang thai: WiFi + chu dBm (nam trong KHE PHAI cua hang nhiet do, xem
@@ -268,19 +291,23 @@ void page_status_update(void) {
   int16_t cur = 0, tgt = 0;
   const bool homed = (cydlcd.flags & CYDLCD_SF_HOMED) != 0;
 
-  // ---- 3 nut PAUSE/RESUME/STOP doi cho voi DONG NHAN TRANG THAI o hang cuoi (xem MR_PB_Y) ----
-  // Dang IN hoac TAM DUNG -> hien 3 nut, an dong trang thai. May ranh -> nguoc lai.
-  // `lv_obj_add_flag`/`clear_flag` cua LVGL TU BO QUA khi co da dung trang thai -> goi moi vong (150 ms)
-  // khong ton gi va khong gay ve lai.
+  // ---- 2 nut dieu khien doi cho voi DONG NHAN TRANG THAI o goc duoi phai (xem MR_PB_Y) ----
+  // Dang IN hoac TAM DUNG -> hien 2 nut (PAUSE hoac RESUME + STOP), an dong trang thai.
+  // May ranh -> nguoc lai. `lv_obj_add_flag`/`clear_flag` cua LVGL TU BO QUA khi co da dung trang thai
+  // -> goi moi vong (150 ms) khong ton gi va khong gay ve lai.
+  // O vi tri 0 co HAI nut chong nhau: dang in hien PAUSE, dang tam dung hien RESUME.
   {
-    const bool ctl = ((cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0);
+    const bool printing = ((cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0);
+    const bool paused   = ((cydlcd.flags & CYDLCD_SF_PAUSED) != 0);
+    const uint8_t show0 = paused ? 1u : 0u;            // 0 = PAUSE, 1 = RESUME
     for (uint8_t i = 0; i < 3; i++) {
       if (!st_pb[i]) continue;
-      if (ctl) lv_obj_clear_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);
-      else     lv_obj_add_flag(st_pb[i],   LV_OBJ_FLAG_HIDDEN);
+      const bool show = printing && (i == 2u || i == show0);
+      if (show) lv_obj_clear_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);
+      else      lv_obj_add_flag(st_pb[i],   LV_OBJ_FLAG_HIDDEN);
     }
-    if (ctl) lv_obj_add_flag(st_msg,   LV_OBJ_FLAG_HIDDEN);
-    else     lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
+    if (printing) lv_obj_add_flag(st_msg,   LV_OBJ_FLAG_HIDDEN);
+    else          lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
   }
 
   // ---- 3 o: icon + mau theo nhiet do VA theo trang thai CAP NGUON cua heater ----

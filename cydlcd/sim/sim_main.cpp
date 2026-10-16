@@ -245,6 +245,9 @@ static void run_line(char *line) {
   if (!strcmp(cmd, "state")) {
     if (!strcmp(a1, "offline"))      state_offline();
     else if (!strcmp(a1, "home"))    state_home();
+    // `state paused`: dang in tu the SD NHUNG da TAM DUNG -> de kiem tra nut PAUSE doi thanh RESUME o
+    // man STATUS (xem page_status_update()). `state`/`basic` = dang in binh thuong.
+    else if (!strcmp(a1, "paused")) { state_basic(); cydlcd.flags |= CYDLCD_SF_PAUSED; }
     else                             state_basic();
     printf("[SIM] state = %s\n", a1[0] ? a1 : "basic");
   }

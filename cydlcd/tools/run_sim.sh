@@ -268,7 +268,11 @@ if [ "$NOBUILD" = 0 ]; then
   # Cach chua: tao 1 file MOC mang dung mtime cua header MOI NHAT trong src/, roi so .o voi moc do.
   # Chi 1 lan `find` cho ca build nen khong cham.
   HDRSTAMP="$BLD/.hdrstamp"
-  _newest=$(find "$SRC" -maxdepth 1 -name '*.h' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+  # ⚠️ KHONG dung -maxdepth 1: tu 2026-10-16 `src/` chia theo NHOM (app/ ui/ gfx/ ...) nen header nam
+  # trong thu muc CON. Ban dau toi de -maxdepth 1 -> sua gfx4_font_icons_title.h (o src/gfx/) KHONG lam
+  # rebuild -> ban gia lap chay bang FONT CU va nut dieu khien lui ve chu "II"/"[]" thay vi icon
+  # Material. Phai quet DE QUY.
+  _newest=$(find "$SRC" -name '*.h' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
   [ -n "$_newest" ] && touch -r "$_newest" "$HDRSTAMP"
   JOBFILE="$BLD/.jobs"; : > "$JOBFILE"; N=0
   for f in "${SOURCES[@]}"; do

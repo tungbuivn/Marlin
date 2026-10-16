@@ -118,6 +118,24 @@
 //   U+E011 power · U+E012 power_off · U+E013 link · U+E014 link_off
 #define LINK_GLYPH_ON    "\xEE\x80\x8C"   // U+E00C <- usb      -> DA ket noi
 #define LINK_GLYPH_OFF   "\xEE\x80\x8D"   // U+E00D <- usb_off  -> MAT ket noi (co dau gach)
+// ---------------------------------------------------------------------------
+//  ICON DIEU KHIEN IN (2026-10-16, yeu cau nguoi dung: "cac nut nay dung icon material play, pause,
+//  stop, thay ca icon tren topbar"). Lay tu CUNG font MaterialIcons-Regular.ttf nhu cac icon khac -
+//  xem lenh sinh o dau gfx4_font_icons_title.c. Ma Material goc:
+//      pause      = U+E034  -> o day U+E00E
+//      play_arrow = U+E037  -> o day U+E00F
+//      stop       = U+E047  -> o day U+E010
+//  (Ma goc kiem tra bang bang ligature cua font: 'pause'/'playunderscorearrow'/'stop'.)
+//  Ky tu ngoai 5 dai cua font CHU (Latin + tieng Viet) nen PHAI dung font ICON, khong dung font chu.
+// ---------------------------------------------------------------------------
+#define CTRL_GLYPH_PAUSE "\xEE\x80\x8E"   // U+E00E <- Material pause
+#define CTRL_GLYPH_PLAY  "\xEE\x80\x8F"   // U+E00F <- Material play_arrow (chay tiep)
+#define CTRL_GLYPH_STOP  "\xEE\x80\x90"   // U+E010 <- Material stop
+/** Font ICON cua thanh tieu de (20 px). Co san de man khac dung CUNG bo icon (nut PAUSE/RESUME/STOP
+ *  o man STATUS). LUON khac NULL (lui ve font icon 14 px neu ban build nay khong co font title). */
+const lv_font_t *title_icon_font_get(void);
+/** 1 = font icon hien tai CO du 3 glyph pause/play/stop; 0 = ban build cu -> phai dung chu ASCII. */
+uint8_t ctrl_icon_ok(void);
 // 1 = `s_link` dang dung FONT ICON (do luc TAO thanh tieu de, xem ui_chrome.cpp). Font cu chua co
 // glyph -> 0, va ui_lvgl.cpp lui ve hien CHU nhu truoc (khong hien o vuong).
 extern uint8_t g_link_icon_ok;
@@ -278,6 +296,15 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 // Nay gom ve mot token + mot ham `mk_btn_set_sel()` de khong the quen nua.
 #define COL_ON_ACCENT lv_color_hex(0x102030)
 #define COL_WARN   MR_RATEALT
+// Nen nut STOP (2026-10-16, yeu cau nguoi dung: "nut stop fill mau do"). Material red 800.
+// VI SAO KHONG dung MR_HOTEND (#FF8A80): mau do nhat do de lam CHU tren nen toi; to NEN bang no thi
+// icon trang chi dat ~2:1 (khong doc duoc). Tren #C62828 thi icon trang ~7,4:1.
+#define MR_STOPBG  lv_color_hex(0xC62828)
+// Nen nut PAUSE (vang) / RESUME (xanh la) - 2026-10-16, yeu cau nguoi dung "nut pause mau vang, va
+// resume mau xanh la". Material yellow 800 / green 800. Mau CHU/ICON do mk_btn_set_bg() tu chon theo
+// do sang nen (mk_color_on): nen vang -> chu TOI, nen xanh -> chu SANG.
+#define MR_PAUSEBG   lv_color_hex(0xF9A825)
+#define MR_RESUMEBG  lv_color_hex(0x2E7D32)
 #define COL_ERR    MR_HOTEND
 #define COL_OK     MR_RATE100
 // ===========================================================================
@@ -408,37 +435,47 @@ enum {
 // Hang giua (the SD / FR / FL / SETTINGS) cua man STATUS da THU NHO + doi x de nhuong cho icon
 // WiFi + chu dBm (2026-10-14): cac so MOI nam o ui_page_status.cpp (ST_TILE_SZ/ST_TILE_Y/ST_SET_X/
 // ST_RATE_W/ST_FR_X/ST_FL_X) - o day giu lai toa do GOC cua Marlin de doi chieu.
-#define MR_TIME_X    96                                   // canvas(96, 176, 128, 20)
+// 2026-10-16 (yeu cau nguoi dung: "can lai thoi gian in va phan tram in vao giua progressbar theo
+// chieu ngang"): thanh tien do nay la x=4..232 (MR_BAR_W 228) -> TAM o x=118. Nhom [thoi gian][%]
+// rong 128 + 2 + ~26 = 156 -> dat bat dau o x=32 de tam nhom roi dung vao 118 (truoc day dat o 96..248
+// tuc tam 172 = tam MAN HINH, lech khoi thanh tien do).
+// LUU Y do lai: o THOI GIAN la nhan CANH GIUA trong hop 128 px nen chu that su bat dau o ~52 (khong phai
+// 40); vi vay phai lui them 8 px nua moi dung tam 118 (do duoc: chu 52..199 -> tam 125 truoc khi lui).
+#define MR_TIME_X    32                                   // canvas(32, 176, 128, 20)
 #define MR_TIME_Y    176
 #define MR_TIME_W    128
-#define MR_PCT_X     226                                  // % tien do (cho trong 224..256)
+#define MR_PCT_X     162                                  // % tien do, NGAY SAU o thoi gian
 #define MR_PCT_W     30
 #define MR_BAR_X     4                                    // canvas(4, 198, 312, 9)
 #define MR_BAR_Y     198
-#define MR_BAR_W     312
+// 2026-10-16 (yeu cau nguoi dung: "dich progress bar sang trai 1 chut"): 312 -> 228. Thanh tien do
+// ngan lai tu ben PHAI (dau trai van o x=4) de nhuong cho 2 nut dieu khien o goc duoi phai.
+#define MR_BAR_W     228
 #define MR_BAR_H     9
 #define MR_MSG_X     0                                    // canvas(0, 216, 320, 20)
 #define MR_MSG_Y     216
-#define MR_MSG_W     320
+#define MR_MSG_W     232                                  // ngan lai: nhuong cho 2 nut ben phai
 // ---------------------------------------------------------------------------
-//  3 nut PAUSE / RESUME / STOP o CUOI trang STATUS (2026-10-16, yeu cau nguoi dung: "toi muon la o
-//  man hinh status ay").
+// 2 NUT DIEU KHIEN IN o GOC DUOI PHAI trang STATUS (2026-10-16, yeu cau nguoi dung: "cho xuong goc
+// duoi phai du hien thi 2 nut to mot chut, dich progress bar sang trai 1 chut").
 //
-//  VI SAO DAT O DAY: trang STATUS khong con cho trong nao khac - 3 o nhiet do chiem y=0..100, hang XYZ
-//  y=103..127, FR/FL + 2 nut the SD o y=136..186, dong thoi gian y=176..196, thanh tien do y=198..207.
-//  Khoang trong duy nhat du cho 3 nut bam duoc la HANG CUOI (y=210..232, rong 320).
+//  BAN DAU (nay da thay): 3 nut 102x22 trai deu o hang cuoi y=210. Nguoi dung doi thanh 2 nut TO hon o
+//  goc duoi phai -> thanh tien do ngan lai (MR_BAR_W 312 -> 228) va dong trang thai ngan lai
+//  (MR_MSG_W 320 -> 232) de nhuong cho.
 //
-//  DANH DOI: hang cuoi dang la DONG NHAN TRANG THAI (ten file / "IDLE" / "PAUSED"...). Nen:
-//    - dang IN (hoac TAM DUNG) -> hien 3 NUT, an dong trang thai (luc nay 3 nut noi ro trang thai hon);
-//    - may RANH               -> an 3 nut, hien dong trang thai nhu cu.
-//  An khi ranh vi pause/resume/stop khong co y nghia khi khong in, con dong trang thai thi can.
+//  VI TRI: 38x38 o y=194..232 (vua het vung noi dung), x=238 va 280 -> ket thuc 318 (chua 2 px mep phai).
+//  38 px = "to mot chut": to hon han nut HOME o thanh tieu de (26x20) va de cham hon.
 //
-//  Chieu cao 22 px: bang co nut "II"/"[]" o thanh tieu de (20) va nut PREV/NEXT o thanh day (18) -
-//  vua ngon tay ma khong chiem them cho.
-#define MR_PB_Y      210
-#define MR_PB_H      22
-#define MR_PB_W      102
-#define MR_PB_X(i)   (4 + (i) * (MR_PB_W + 3))            // 3 nut: 4 / 109 / 214, ket thuc 316
+//  O VI TRI 0 CO HAI NUT CHONG NHAU (PAUSE va RESUME, CUNG toa do): dang in thi hien PAUSE, dang TAM
+//  DUNG thi hien RESUME -> nhin ra dung 1 nut TU DOI, dung y nguoi dung ("bam pause thi no chuyen thanh
+//  nut resume"). VI SAO CHONG NHAU CHU KHONG DOI NHAN: doi chu bang lv_label_set_text() tren nhan con
+//  cua nut KHONG VE LAI duoc (do tren board that: "II" = 102 px muc, doi sang "|>"/">>" deu 0 px).
+//  An/hien CA NUT thi chac chan co ve lai (dang dung cho 2 nut o thanh tieu de).
+//
+//  Nut dung ICON Material pause/play/stop (CTRL_GLYPH_*), lui ve chu neu font thieu glyph.
+#define MR_PB_Y      194
+#define MR_PB_SZ     38
+#define MR_PB_X(i)   (238 + (i) * 42)                     // 2 nut: 238 / 280, ket thuc 318
 
 // --- B) cac man con ---
 #define BAR_H      26                                  // dong tieu de: [ten man] ... [LINK][BACK]

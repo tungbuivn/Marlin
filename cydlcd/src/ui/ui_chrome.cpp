@@ -452,6 +452,23 @@ void status_sd_icon_mark(void) {
 //  TITLE_W va LINK_LBL_W la be rong CO DINH nen tong tren la con so chac chan (khong phu thuoc
 //  do dai ten man / ten may); chu dai hon thi TU CUON trong o cua no.
 // ===========================================================================
+const lv_font_t *title_icon_font_get(void) { return title_icon_font(); }
+
+// 1 = font icon hien tai co du 3 glyph pause/play/stop (xem CTRL_GLYPH_* o ui_lvgl_int.h).
+// Tinh MOT LAN roi nho lai: ban build cu (font chua co 3 glyph nay) se lui ve chu ASCII "II"/"[]",
+// khong bao gio hien O VUONG. Cung cach lam voi g_link_icon_ok.
+uint8_t ctrl_icon_ok(void) {
+  static int8_t cached = -1;
+  if (cached < 0) {
+    const lv_font_t *f = title_icon_font();
+    lv_font_glyph_dsc_t gd;
+    cached = (f && lv_font_get_glyph_dsc(f, &gd, 0xE00EU, 0)
+                 && lv_font_get_glyph_dsc(f, &gd, 0xE00FU, 0)
+                 && lv_font_get_glyph_dsc(f, &gd, 0xE010U, 0)) ? 1 : 0;
+  }
+  return (uint8_t)cached;
+}
+
 void build_chrome(void) {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_set_style_bg_color(scr, COL_BG, 0);
@@ -523,8 +540,19 @@ void build_chrome(void) {
   // 2026-10-16 (yeu cau nguoi dung): TAO TRUOC `s_link` de 2 nut nay luon la 2 ICON DAU TIEN cua
   // nhom ben phai (thu tu flex = thu tu tao), roi moi toi icon ket noi / WiFi / BACK o phia phai
   // chung. Luc AN thi flex bo qua nen nhom ben phai bat dau bang icon ket noi nhu cu.
-  s_btn_pause = mk_btn(s_bar, "II", 26, 20, cb_action, (void *)(intptr_t)A_PAUSE);
-  s_btn_stop  = mk_btn(s_bar, "[]", 26, 20, cb_action, (void *)(intptr_t)A_STOP);
+  // 2026-10-16 (yeu cau nguoi dung: "cac nut nay dung icon material play, pause, stop, thay ca icon
+  // tren topbar"): 2 nut nay dung ICON Material thay cho ky hieu chu "II"/"[]".
+  // Van giu du phong chu neu font icon cua ban build nay khong co 3 glyph do (xem ctrl_icon_ok()).
+  s_btn_pause = mk_btn(s_bar, ctrl_icon_ok() ? CTRL_GLYPH_PAUSE : "II", 26, 20,
+                       cb_action, (void *)(intptr_t)A_PAUSE);
+  s_btn_stop  = mk_btn(s_bar, ctrl_icon_ok() ? CTRL_GLYPH_STOP : "[]", 26, 20,
+                       cb_action, (void *)(intptr_t)A_STOP);
+  if (ctrl_icon_ok()) {                 // nhan icon -> phai dat FONT ICON cho nhan con cua nut
+    lv_obj_t *lp = lv_obj_get_child(s_btn_pause, 0);
+    lv_obj_t *ls = lv_obj_get_child(s_btn_stop, 0);
+    if (lp) lv_obj_set_style_text_font(lp, title_icon_font(), 0);
+    if (ls) lv_obj_set_style_text_font(ls, title_icon_font(), 0);
+  }
   lv_obj_add_flag(s_btn_pause, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(s_btn_stop,  LV_OBJ_FLAG_HIDDEN);
 
