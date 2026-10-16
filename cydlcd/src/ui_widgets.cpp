@@ -193,6 +193,33 @@ lv_obj_t *mk_spacer(lv_obj_t *parent, lv_coord_t w, lv_coord_t h, uint8_t grow) 
   return o;
 }
 
+// Do sang cam nhan (xap xi do sang tuong doi cua WCAG, KHONG gamma — du chinh xac de PHAN LOAI).
+// ⚠️ `bg.ch.red/green/blue` la gia tri RGB565 (5/6/5 BIT), KHONG phai 8 bit: voi LV_COLOR_DEPTH 16
+// thi `lv_color_hex()` nhet THANG RGB565 vao `r.full` (xem lv_color_hex trong lvgl/src/misc/lv_color.h).
+// Phai mo rong ve 8 bit TRUOC khi nhan trong so, neu khong MOI mau deu ra "toi" (da mac loi nay that).
+// Cung KHONG dung lv_color_brightness() cua LVGL: cong thuc (3R+G+B)>>3 cho cyan #00E5FF chi 60/255
+// vi R = 0 -> xep cyan vao nhom "nen toi".
+// Nguong 40% tach dung theo bang mau cua UI:
+//     nen TOI : COL_BTN 16% · MR_BG 11% · COL_BAR 7%
+//     nen SANG: COL_ERR 64% · COL_OK 71% · COL_ACCENT 72% · COL_WARN 83%
+static bool bg_is_light(const lv_color_t bg) {
+  const uint32_t r = (uint32_t)((bg.ch.red   << 3) | (bg.ch.red   >> 2));
+  const uint32_t g = (uint32_t)((bg.ch.green << 2) | (bg.ch.green >> 4));
+  const uint32_t b = (uint32_t)((bg.ch.blue  << 3) | (bg.ch.blue  >> 2));
+  return (r * 2126u + g * 7152u + b * 722u) > 1020000u;   // 0.40 * 255 * 10000
+}
+
+// Ve/bo vien "outlined" cho NUT (vat co LV_OBJ_FLAG_USER_2) theo mau NEN HIEN TAI cua no.
+//   nen TOI  -> CAN vien: khong thi nut lan vao nen man hinh (xem ghi chu COL_BTN_OUTLINE).
+//   nen SANG -> BO vien: nut da noi san (>= 7:1); vien sang tren nen sang chi lam roi mat.
+// PHAI goi lai moi khi NEN doi (mk_btn_set_bg, focus_mark) vi vien phu thuoc mau nen.
+static void outline_apply(lv_obj_t *o) {
+  if (!o || !lv_obj_has_flag(o, LV_OBJ_FLAG_USER_2)) return;
+  const bool dark = !bg_is_light(lv_obj_get_style_bg_color(o, 0));
+  lv_obj_set_style_border_width(o, dark ? 1 : 0, 0);
+  if (dark) lv_obj_set_style_border_color(o, COL_BTN_OUTLINE, 0);
+}
+
 void focus_mark(lv_obj_t *o, const bool on) {
   if (!o) return;
   // Vat co LV_OBJ_FLAG_USER_1 = vat TU QUAN LY NEN (xem jg_axis[] o man JOG): nen cua no dang
@@ -202,13 +229,24 @@ void focus_mark(lv_obj_t *o, const bool on) {
   // truc dang chon (sang nut buoc / nut di chuyen) no tra nen nut truc ve COL_BTN -> mat dau
   // "truc dang chon" du s_axis van dung. Nay: "chon" = NEN, "focus" = VIEN.
   const bool own_bg = lv_obj_has_flag(o, LV_OBJ_FLAG_USER_1);
-  lv_obj_set_style_border_width(o, on ? 2 : 0, 0);
-  // Nut truc khi focus co the dang to nen COL_ACCENT -> vien COL_ACCENT se chim vao nen,
-  // nen dung mau sang (MR_FRAME) de van nhin thay focus.
-  lv_obj_set_style_border_color(o, own_bg ? MR_FRAME : COL_ACCENT, 0);
-  // Vat co nen dac (nut, dong menu, bang) -> doi sang COLOR_SELECTION_BG nhu dong dang chon cua Marlin
+  // Vat co nen dac (nut, dong menu, bang) -> doi sang COLOR_SELECTION_BG nhu dong dang chon cua Marlin.
+  // PHAI lam TRUOC khi ve vien: vien "outlined" duoi day phu thuoc mau nen (xem outline_apply).
   if (lv_obj_get_style_bg_opa(o, 0) == LV_OPA_COVER && !own_bg)
     lv_obj_set_style_bg_color(o, on ? MR_SELBG : COL_BTN, 0);
+  if (on) {
+    lv_obj_set_style_border_width(o, 2, 0);
+    // Nut truc khi focus co the dang to nen COL_ACCENT -> vien COL_ACCENT se chim vao nen,
+    // nen dung mau sang (MR_FRAME) de van nhin thay focus.
+    lv_obj_set_style_border_color(o, own_bg ? MR_FRAME : COL_ACCENT, 0);
+  }
+  else if (lv_obj_has_flag(o, LV_OBJ_FLAG_USER_2)) {
+    // NUT co vien "outlined": tra ve vien do. KHONG duoc dat width 0 — lam vay se xoa duong bao
+    // va nut lai lan vao nen man hinh (dung cai loi vua sua).
+    outline_apply(o);
+  }
+  else {
+    lv_obj_set_style_border_width(o, 0, 0);     // vat khac: bo vien focus
+  }
 }
 
 // Ve khung cho vat dang focus (encoder hoac cham) -> nguoi dung biet dang o dau
@@ -227,9 +265,12 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
   lv_obj_set_size(b, w, h);
   lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(b, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+  // Danh dau "nut co vien outlined" de focus_mark() biet duong TRA LAI vien khi focus roi di
+  // (khong duoc dat border_width = 0, lam vay se xoa duong bao — xem outline_apply).
+  lv_obj_add_flag(b, LV_OBJ_FLAG_USER_2);
   lv_obj_set_style_bg_color(b, COL_BTN, 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(b, 0, 0);
+  lv_obj_set_style_border_width(b, 0, 0);        // outline_apply() dat lai theo mau nen ben duoi
   // Bo goc 8 px (truoc la 3): Material 3 dung bo goc lon / pill cho filled button. 8 px van vua moi o
   // (cao nhat 34 px) ma khong an vao vung chu. `mk_hit()` giu 3 vi la vung bam TRONG SUOT (khong thay).
   lv_obj_set_style_radius(b, 8, 0);
@@ -242,6 +283,7 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
   lv_obj_center(l);
   if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, ud);
   if (s_group) lv_group_add_obj(s_group, b);
+  outline_apply(b);                              // nen COL_BTN (toi) -> ve vien outlined
   return b;
 }
 
@@ -262,15 +304,7 @@ lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
 //     nen TOI : COL_BTN 16% · MR_BG 11% · COL_BAR 7%
 //     nen SANG: COL_ERR 64% · COL_OK 71% · COL_ACCENT 72% · COL_WARN 83%
 lv_color_t mk_color_on(const lv_color_t bg) {
-  // ⚠️ `bg.ch.red/green/blue` la gia tri RGB565 (5/6/5 BIT), KHONG phai 8 bit: voi LV_COLOR_DEPTH 16
-  // thi `lv_color_hex()` nhet thang RGB565 vao `r.full` (xem lv_color_hex trong lvgl/src/misc/lv_color.h).
-  // Phai mo rong ve 8 bit TRUOC khi nhan trong so, neu khong moi mau deu ra "toi" (da mac loi nay that:
-  // nhan 2126/7152/722 len gia tri 5 bit lam ca COL_OK lan COL_ACCENT deu < nguong -> chon chu SANG).
-  const uint32_t r = (uint32_t)((bg.ch.red   << 3) | (bg.ch.red   >> 2));
-  const uint32_t g = (uint32_t)((bg.ch.green << 2) | (bg.ch.green >> 4));
-  const uint32_t b = (uint32_t)((bg.ch.blue  << 3) | (bg.ch.blue  >> 2));
-  const uint32_t y = r * 2126u + g * 7152u + b * 722u;
-  return (y > 1020000u) ? COL_ON_ACCENT : COL_TXT;     // 0.40 * 255 * 10000
+  return bg_is_light(bg) ? COL_ON_ACCENT : COL_TXT;
 }
 
 // Doi NEN cua nut VA chon mau CHU tuong phan theo chinh mau nen do. Xem ghi chu o ui_lvgl_int.h.
@@ -284,6 +318,7 @@ void mk_btn_set_bg(lv_obj_t *btn, const lv_color_t bg) {
   lv_obj_t *l = lv_obj_get_child(btn, 0);
   if (l && lv_obj_get_style_text_color(l, 0).full != fg.full)
     lv_obj_set_style_text_color(l, fg, 0);
+  outline_apply(btn);       // vien phu thuoc mau nen -> phai cap nhat lai (xem outline_apply)
 }
 
 void mk_btn_set_sel(lv_obj_t *btn, const bool sel) {
@@ -313,6 +348,8 @@ lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
   // Chu trang tuyet doi tren nen xanh/do (COL_TXT la trang nga -> tuong phan thap hon tren mau dam).
   lv_obj_t *l = lv_obj_get_child(b, 0);
   if (l) lv_obj_set_style_text_color(l, DLG_TXT, 0);
+  // mk_btn() da ve vien theo nen COL_BTN; nay nen doi sang xanh/do dam nen phai ve lai vien cho khop.
+  outline_apply(b);
   return b;
 }
 

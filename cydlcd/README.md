@@ -791,6 +791,43 @@ chỉ `60/255` (vì `R = 0`) nên xếp cyan vào nhóm "nền tối".
 (`bot_sync()` so `scroll_top + scroll_bottom > PAGE_PAD`), lúc đó vùng nội dung bị co còn 192 px.
 Muốn tăng khoảng cách thì phải đo lại bằng bản giả lập trước.
 
+### Nút hoà vào nền màn hình — viền `outlined` (2026-10-16)
+
+**Người dùng báo:** *"bản thân các button có màu nền xanh nhưng như vậy lại lẫn vào màu nền của toàn màn
+hình cũng màu xanh như vậy"*. Đúng — và đây là lỗi **toàn cục**, không riêng trang nào:
+
+| Cặp khối | Tương phản | WCAG 1.4.11 (khối UI ≥ 3:1) |
+|---|---|---|
+| Nền nút `COL_BTN` `#2A2080` vs nền màn hình `MR_BG` `#1E156E` | **1,21:1** | ❌ |
+| Dòng tiêu đề `COL_BAR` `#160C52` vs nền màn hình | **1,13:1** | ❌ |
+| Nền progress bar `MR_PROGBG` vs nền nút | **1,00:1** | ❌ (giống hệt) |
+
+`COL_BTN` và `MR_BG` **cùng tông xanh tím, chỉ chênh 1,81 lần độ chói** → viền nút gần như vô hình.
+
+> ⚠️ **Đổi màu nền KHÔNG cứu được** — đã tính kỹ trước khi chọn cách sửa:
+> - **Nền tối hơn:** dù để **đen tuyệt đối** thì nút/nền cũng chỉ đạt **1,63:1** (vì *cả hai* đều tối, công
+>   thức `(L_nút+0,05)/(L_nền+0,05)` bị chặn trần). Không có màu nền tối nào sửa được.
+> - **Nền sáng hơn:** được về mặt toán (`L_nền ≥ 0,195`, ví dụ `#B0B0B0` → 6,12:1) nhưng đó là **đổi sang
+>   theme sáng** — toàn bộ chữ đang là màu sáng, `COL_TXT` trên nền trắng chỉ còn **1,27:1** → phải làm
+>   lại **cả bảng màu**.
+> - **Đổi cả nền lẫn nút:** có cặp hợp lệ nhưng **mâu thuẫn**: làm nút sáng lên để tách khỏi nền thì chữ
+>   sáng trên nút lại tụt dưới 4,5:1.
+
+**Đã chọn: thêm viền 1 px** — cách duy nhất không đụng tới độ sáng của bất cứ thứ gì:
+
+```c
+#define COL_BTN_OUTLINE lv_color_hex(0x8A7FD0)   // 4,45:1 với nền màn hình · 3,68:1 với nền nút
+```
+
+- Chỉ vẽ viền cho nút **nền TỐI**. Nút nền sáng (`COL_ACCENT`/`COL_OK`/`COL_WARN`/`COL_ERR`) đã nổi sẵn
+  (≥ 7:1) nên **không** viền — `outline_apply()` tự quyết theo `bg_is_light()`.
+- Viền vẽ **vào trong** nên **layout không đổi**: đo lại bằng giả lập, vẫn **22 nút**, chiều cao
+  `[20, 26, 28, 30, 34]`, toạ độ y hệt trước.
+- ⚠️ **`focus_mark()` phải sửa kèm**: nó vốn đặt `border_width = 0` khi focus rời đi → sẽ **xoá viền**.
+  Nay nút được đánh dấu `LV_OBJ_FLAG_USER_2` để `focus_mark()` biết đường **trả lại** viền
+  (`USER_1` = vật tự quản lý **nền**, `USER_2` = nút có **viền**; hai cờ độc lập nhau).
+  Vật KHÔNG phải nút vẫn nhận `border_width = 0` như cũ.
+
 ---
 
 ## Chụp màn hình từ xa — `GET /screen.bmp` (2026-10-16)

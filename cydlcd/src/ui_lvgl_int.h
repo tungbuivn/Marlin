@@ -213,6 +213,14 @@ enum { SD_ST_NONE = 0, SD_ST_NO, SD_ST_OK };
 #define COL_TXT    MR_MENUVAL
 #define COL_DIM    lv_color_hex(0xCAC4D0)   // Material 3 dark on-surface-variant: 6.53 -> 8.88:1
 #define COL_BTN    lv_color_hex(0x2A2080)   // nen nut
+// VIEN cho nut NEN TOI (`COL_BTN`) — kieu "outlined button" cua Material 3.
+// VI SAO CAN: `COL_BTN` #2A2080 va nen man hinh `MR_BG` #1E156E cung tong xanh tim, chi chenh
+// **1.21:1** (WCAG 1.4.11 can >= 3:1 cho khoi giao dien) -> vien nut gan nhu vo hinh.
+// Doi NEN toi hon KHONG cuu duoc: do CA HAI deu toi, nen du nen den tuyet doi thi ti so cung chi
+// 1.63:1. Doi nen SANG thi duoc nhung la DOI SANG THEME (chu dang la mau sang -> phai lam lai ca
+// bang mau). Vi vay chon cach re nhat: giu nguyen mau, chi ve them duong bao.
+// #8A7FD0 dat 4.45:1 voi nen man hinh va 3.68:1 voi nen nut -> nhin ro o ca hai phia.
+#define COL_BTN_OUTLINE lv_color_hex(0x8A7FD0)
 #define COL_ACCENT MR_COLD                   // focus / diem nhan
 // CHU DAT TREN NEN `COL_ACCENT` — dung khi to nen vat dang CHON.
 // VI SAO CAN TOKEN RIENG: COL_ACCENT = #00E5FF la mau SANG, nen chu phai TOI moi dat tuong phan:
