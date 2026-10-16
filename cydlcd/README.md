@@ -364,6 +364,19 @@ Số liệu build thật của **kiểu PUSH** (`pio run -e mks_monster8`):
 Định nghĩa duy nhất ở **`src/app/cydlcd_protocol.h`** — file này **dùng chung y nguyên** với
 `Marlin/src/lcd/extui/cydlcd_serial/cydlcd_protocol.h` (sửa một bên thì copy sang bên kia).
 
+⚠️ **Đã kiểm 2026-10-16 — hai bản copy KHÔNG được phép lệch.** Kết quả kiểm: phần **mã**
+(enum, struct, thứ tự trường, kích thước mảng) **khớp hoàn toàn** giữa 2 bản; chỉ **3 dòng comment**
+khác nhau, và điều đó là **cố ý** vì mỗi bên tham chiếu file của chính nó (CYD ghi `ui_preheat.cpp`,
+Marlin ghi `ui_lvgl.cpp`). Nhưng nếu lệch ở **enum** thì khung lệch **âm thầm**: CYD hiện sai nhiệt độ,
+sai toạ độ, hoặc **không nhận ra máy đã halt** — mà **không có lỗi build nào**. Nên có script canh:
+
+```bash
+python3 cydlcd/tools/check_proto.py     # ĐẠT = 2 bản khớp phần mã (bỏ comment) -> exit 0
+```
+
+Script bỏ comment/`/* */` rồi so từng dòng khai báo. Đã thử phá (đổi `CYDLCD_ST_KILLED` → `_X`) và nó
+bắt được đúng dòng đó. **So từng byte là SAI** — comment hai bên khác nhau có chủ ý.
+
 ```
 [0]=0xA5 [1]=0x5A [2]=type [3]=seq [4]=len [5..]=payload [5+len]=CRC8(poly 0x07)
 ```
