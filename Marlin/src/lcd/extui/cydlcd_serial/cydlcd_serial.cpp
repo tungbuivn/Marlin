@@ -393,6 +393,34 @@ namespace {
     tx_send();
   }
 
+  /**
+   * 2026-10-16 -- FAN doi gia tri thi phai day NGAY, ke ca khi may DUNG YEN.
+   *
+   * LOI NGUOI DUNG BAO: "khi tang giam toc do FAN o trang Nhiet do khong thay % toc do thay doi tren ui".
+   *
+   * NGUYEN NHAN: vong tick chi goi `if (isPrinting()) push_fans();` -> luc may dung yen (dung luc
+   * nguoi dung chinh quat o man NHIET DO) frame FANS chi duoc gui MOT lan trong loat burst luc ket
+   * noi (`push_hello(); ...; push_fans();`), sau do KHONG BAO GIO gui lai. Man hinh van doc
+   * `cydlcd.fans[0].pct` cu -> % dung nguyen. Nang hon: `cb_temp_adj()` o man hinh lay CHINH gia tri
+   * cu do lam moc de cong/ tru -> bam +1 lien tuc thi lan nao cung gui cung mot gia tri.
+   *
+   * CACH SUA: theo doi THAY DOI cua tung quat; chi day khi gia tri THAT SU doi. Khong ton them bang
+   * thong khi may dung yen (khac voi day dinh ky 250 ms), nhung van bat duoc moi thay doi do G-code
+   * (M106 tu man hinh, tu file in, tu terminal...) lan luc dang in.
+   *
+   * Tra ve true neu co it nhat 1 quat doi ke tu lan goi truoc.
+   */
+  bool fans_changed() {
+    static int16_t last[4] = { -32768, -32768, -32768, -32768 };   // -32768 = chua bao gio gui
+    const uint8_t n = FAN_COUNT > 4 ? 4 : FAN_COUNT;
+    bool changed = false;
+    for (uint8_t i = 0; i < n; i++) {
+      const int16_t v = (int16_t)scaled(getTargetFan_percent((fan_t)i), CYDLCD_PCT_SCALE);
+      if (v != last[i]) { last[i] = v; changed = true; }
+    }
+    return changed;
+  }
+
   // Trang thai endstop/probe kieu M119 (frame CYDLCD_F_ENDSTOPS).
   // Doc y nhu Marlin: module/endstops.cpp report_states() -- READ(PIN) != PIN_ENDSTOP_INVERTING.
   // LUU Y may nay: Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN (Configuration.h) => chan Z_MIN chinh la
@@ -1112,7 +1140,10 @@ namespace ExtUI {
       push_status();
       push_temps();
       push_position();
-      if (isPrinting()) push_fans();
+      // 2026-10-16: TRUOC DAY chi co `if (isPrinting()) push_fans();` -> luc may dung yen thi man
+      // hinh khong bao gio nhan duoc gia tri quat moi (loi "chinh FAN o trang Nhiet do khong thay %").
+      // Nay: day khi gia tri DOI (moi luc) HOAC khi dang in (giu nhip cu nhu mot luoi an toan).
+      if (fans_changed() || isPrinting()) push_fans();
     }
     if (isPrinting() && (!next_progress_ms || ELAPSED(now, next_progress_ms))) {
       next_progress_ms = now + CYDLCD_PROGRESS_MS;
