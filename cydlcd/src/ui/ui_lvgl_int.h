@@ -454,7 +454,10 @@ enum {
 #define MR_BAR_H     9
 #define MR_MSG_X     0                                    // canvas(0, 216, 320, 20)
 #define MR_MSG_Y     216
-#define MR_MSG_W     232                                  // ngan lai: nhuong cho 2 nut ben phai
+#define MR_MSG_W     320                                  // DAY CHIEU NGANG khi may RANH
+// 2026-10-16 (yeu cau nguoi dung): "luc chua in thi van phai fill chieu ngang, luc dang in thi moi co
+// chieu rong lai" -> dong trang thai co 2 be rong: ranh = 320 (day), dang in = 232 (nhuong cho 2 nut).
+#define MR_MSG_W_RUN 232                                  // luc DANG IN: co lai de nhuong cho 2 nut
 // ---------------------------------------------------------------------------
 // 2 NUT DIEU KHIEN IN o GOC DUOI PHAI trang STATUS (2026-10-16, yeu cau nguoi dung: "cho xuong goc
 // duoi phai du hien thi 2 nut to mot chut, dich progress bar sang trai 1 chut").

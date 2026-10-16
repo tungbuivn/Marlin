@@ -291,10 +291,14 @@ void page_status_update(void) {
   int16_t cur = 0, tgt = 0;
   const bool homed = (cydlcd.flags & CYDLCD_SF_HOMED) != 0;
 
-  // ---- 2 nut dieu khien doi cho voi DONG NHAN TRANG THAI o goc duoi phai (xem MR_PB_Y) ----
-  // Dang IN hoac TAM DUNG -> hien 2 nut (PAUSE hoac RESUME + STOP), an dong trang thai.
-  // May ranh -> nguoc lai. `lv_obj_add_flag`/`clear_flag` cua LVGL TU BO QUA khi co da dung trang thai
-  // -> goi moi vong (150 ms) khong ton gi va khong gay ve lai.
+  // ---- 2 nut dieu khien + thanh tien do doi cho voi DONG NHAN TRANG THAI (xem MR_PB_Y) ----
+  // YEU CAU NGUOI DUNG 2026-10-16: "luc chua in thi van phai fill chieu ngang chu, luc dang in thi moi co
+  // chieu rong lai... thanh progress, thoi gian in, phan tram in... luc chua in khong can hien thi".
+  //   dang IN / TAM DUNG -> hien 2 nut, AN dong trang thai, CO dong trang thai lai (232) cho vua cho nut.
+  //   may RANH           -> AN thanh tien do + thoi gian in + % in (chi co nghia khi in), va tra dong
+  //                         trang thai ve DAY CHIEU NGANG (320).
+  // `lv_obj_add_flag`/`clear_flag` cua LVGL TU BO QUA khi co da dung trang thai -> goi moi vong (150 ms)
+  // khong ton gi va khong gay ve lai.
   // O vi tri 0 co HAI nut chong nhau: dang in hien PAUSE, dang tam dung hien RESUME.
   {
     const bool printing = ((cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0);
@@ -306,6 +310,23 @@ void page_status_update(void) {
       if (show) lv_obj_clear_flag(st_pb[i], LV_OBJ_FLAG_HIDDEN);
       else      lv_obj_add_flag(st_pb[i],   LV_OBJ_FLAG_HIDDEN);
     }
+    // 3 thu CHI CO NGHIA KHI IN: thanh tien do + thoi gian in + % in.
+    if (st_bar && st_time && st_pct) {
+      if (printing) {
+        lv_obj_clear_flag(st_bar,  LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(st_time, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(st_pct,  LV_OBJ_FLAG_HIDDEN);
+      }
+      else {
+        lv_obj_add_flag(st_bar,  LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(st_time, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(st_pct,  LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+    // Dong trang thai: AN khi dang in (nhuong cho 2 nut), hien khi ranh - va doi be rong theo trang thai.
+    // Chi set lai khi be rong THAT SU doi (`lv_obj_set_width` luon invalidate vat).
+    const lv_coord_t want_w = printing ? (lv_coord_t)MR_MSG_W_RUN : (lv_coord_t)MR_MSG_W;
+    if (lv_obj_get_width(st_msg) != want_w) lv_obj_set_width(st_msg, want_w);
     if (printing) lv_obj_add_flag(st_msg,   LV_OBJ_FLAG_HIDDEN);
     else          lv_obj_clear_flag(st_msg, LV_OBJ_FLAG_HIDDEN);
   }
