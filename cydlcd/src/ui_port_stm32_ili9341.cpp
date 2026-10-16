@@ -15,6 +15,7 @@
 #include <stdio.h>          // snprintf (man hinh ket qua hieu chuan)
   #include "tft_ili9341.h"
   #include "encoder.h"
+  #include "ui_colortest.h"   // bang mau cho lenh `UI COLORTEST`
 
   static ILI9341 s_lcd;
 
@@ -76,6 +77,28 @@ void ui_port_display_init(void) {
   // Driver goc mo SPI transaction va khong dong -> cau hinh lai cho chac chan
   SPI.beginTransaction(SPISettings(TFT_SPI_SPEED, MSBFIRST, SPI_MODE0));
   s_lcd.fillScreen(TFT_BLACK);
+}
+
+// ===========================================================================
+//  KIEM TRA DUONG MAU (lenh `UI COLORTEST`) - xem src/ui_colortest.h
+//
+//  STM32: to bang THANG driver tft_ili9341 (khong qua LVGL) de tach loi "thu tu kenh/dao mau cua panel"
+//  khoi loi o lop UI. LUU Y: board STM32 chi co 1 luong -> `delay()` o day CHAN ca vong lap (frame tu
+//  Marlin co the bi mat trong luc test) => chi chay khi may dang ranh.
+// ===========================================================================
+void ui_port_colortest_raw(void) {
+  Serial.printf("[COLORTEST] BAT DAU: %u mau toan man hinh, moi mau 700 ms\n", (unsigned)UI_COLORTEST_N);
+  for (uint8_t i = 0; i < UI_COLORTEST_N; i++) {
+    const uint16_t c = ui_colortest_rgb565(ui_colortest_bars[i].rgb888);
+    s_lcd.fillScreen(c);
+    Serial.printf("[COLORTEST] %u/%u: %-7s #%06lX -> RGB565 0x%04X\n",
+                  (unsigned)(i + 1), (unsigned)UI_COLORTEST_N, ui_colortest_bars[i].name,
+                  (unsigned long)ui_colortest_bars[i].rgb888, (unsigned)c);
+    delay(700);
+  }
+  s_lcd.fillScreen(ui_colortest_rgb565(ui_colortest_bars[5].rgb888));
+  lv_obj_invalidate(lv_scr_act());
+  Serial.println("[COLORTEST] xong");
 }
 
 // ===========================================================================

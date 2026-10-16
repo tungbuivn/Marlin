@@ -48,6 +48,8 @@ pwsh cydlcd/tools/run_sim.ps1 -OldXyz -Script cydlcd/sim/scenarios/test-xyz-dai.
 | `settle <ms>` | cho đồng hồ giả chạy để LVGL vẽ xong |
 | `shot <ten.bmp>` | ghi ảnh + đếm pixel "có mực" (cảnh báo nếu trang gần như trắng) |
 | `checkxyz` | **kiểm tra tự động** hàng X/Y/Z: nhãn trục và số phải cách nhau ≥ 3 px |
+| `colortest` | gọi đúng `ui_port_colortest_raw()` của firmware: tô 8 màu toàn màn hình, mỗi màu **1 file .bmp** (`colortest-<i>-<TÊN>.bmp`) |
+| `checkcolor` | **kiểm tra tự động** đường màu: đọc lại chính các file .bmp đó, đo màu giữa màn hình và so với `#RRGGBB` (sai số 8/kênh vì RGB565 chỉ 5-6 bit/kênh) |
 | `ui <lenh UI ...>` | gọi đúng `ui_console_dispatch()` của firmware (vd `ui HIT 5`, `ui BOX`, `ui CFG`) |
 | `echo <chu>` / `# ...` | in ra console / chú thích |
 
@@ -65,6 +67,20 @@ Bằng chứng bẫy này có thật sự bắt được lỗi (đã chạy, 202
 
 Chạy lại bố cục cũ bất cứ lúc nào: `pwsh cydlcd/tools/run_sim.ps1 -OldXyz -Script cydlcd/sim/scenarios/test-xyz-dai.txt`
 (macro `MR_XYZ_*` trong `src/ui_lvgl_int.h` được bọc `#ifndef` để ghi đè từ ngoài — đó là mục đích của việc bọc).
+
+## Kiểm tra đường MÀU (`colortest` + `checkcolor`)
+
+Dùng khi *"màu trên board ≠ màu bản giả lập"* (xem `cydlcd/README.md` §“Kiểm tra đường màu”):
+
+```powershell
+pwsh cydlcd/tools/run_sim.ps1 -Script cydlcd/sim/scenarios/test-color.txt
+```
+
+`colortest` xuất 8 ảnh `out/colortest-<i>-<TÊN>.bmp` (đỏ/lá/xanh dương/trắng/đen + 3 màu thật của UI
+`BG #1E156E` · `CYAN #00E5FF` · `HOTEND #FF8A80`), `checkcolor` **đọc lại chính các ảnh đó** và đo màu ở
+giữa màn hình so với `#RRGGBB` (sai số 8/kênh — RGB565 chỉ có 5-6 bit/kênh). Kết quả chạy thật: **8/8 OK**
+⇒ đường "bảng màu UI → LVGL RGB565 → ảnh" là **đúng**, nên nếu màn hình thật lệch thì lỗi ở tầng panel
+(`TFT_RGB_ORDER` hoặc đảo màu), không phải ở code UI. Đối chiếu với board bằng lệnh `UI COLORTEST`.
 
 ## KHÔNG thay thế được gì
 

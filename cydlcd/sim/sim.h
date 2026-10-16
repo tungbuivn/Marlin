@@ -40,6 +40,14 @@ void sim_tap(int x, int y);
 /** So lan cham con lai trong hang doi (de kich ban biet da bam xong chua). */
 int  sim_tap_pending(void);
 
+/** Thu muc ghi anh .bmp (do sim_main.cpp dat tu tham so --out). */
+extern char g_sim_outdir[512];
+
+/** Doc 1 diem anh tu file .bmp 24-bit do `sim_dump_bmp()` ghi ra. Tra ve false neu loi.
+ *  Dung cho lenh `checkcolor`: kiem tra CHINH file anh (khong doc framebuffer) de chung minh ca
+ *  duong "RGB565 -> BMP" la dung. */
+bool sim_bmp_get(const char *path, int x, int y, int *r, int *g, int *b);
+
 #ifdef __cplusplus
 }
 #endif

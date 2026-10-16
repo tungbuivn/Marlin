@@ -24,6 +24,7 @@
 #include "lvgl.h"
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"        // UI_LCD_HOR_RES/VER_RES
+#include "ui_colortest.h"       // bang mau + ui_colortest_rgb565 (lenh `checkcolor`)
 #include "cydlcd_config.h"
 #include "sim.h"
 
@@ -120,6 +121,30 @@ void ui_port_perf_report(void) {
   printf("[SIM] flush: %lu lan, %lu pixel (khong co SPI that)\n",
          (unsigned long)s_flush_n, (unsigned long)s_flush_px);
   s_flush_n = s_flush_px = 0;
+}
+
+// ===========================================================================
+//  KIEM TRA DUONG MAU (lenh `UI COLORTEST` / kich ban `checkcolor`)
+//
+//  Ban gia lap KHONG co TFT_eSPI, nen "to man hinh" = to framebuffer bang dung gia tri RGB565 ma
+//  board that se gui di (`ui_colortest_rgb565`) roi xuat ra 1 file .bmp cho MOI mau. Nho vay:
+//    - anh .bmp = cai ma board PHAI hien thi (neu board khac => loi o panel/TFT_eSPI, khong phai o UI);
+//    - lenh `checkcolor` doc lai chinh cac file .bmp nay de CHUNG MINH duong mau cua UI + bo ghi BMP
+//      la dung (do R/G/B cua tung file phai khop #RRGGBB trong bang mau).
+// ===========================================================================
+void ui_port_colortest_raw(void) {
+  printf("[SIM] COLORTEST: %u mau, moi mau 1 file .bmp\n", (unsigned)UI_COLORTEST_N);
+  char path[640];
+  for (uint8_t i = 0; i < UI_COLORTEST_N; i++) {
+    const uint16_t c = ui_colortest_rgb565(ui_colortest_bars[i].rgb888);
+    for (int p = 0; p < SIM_W * SIM_H; p++) s_fb[p] = c;
+    snprintf(path, sizeof(path), "%s/colortest-%u-%s.bmp", g_sim_outdir, (unsigned)i, ui_colortest_bars[i].name);
+    if (sim_dump_bmp(path))
+      printf("[SIM]   %u/%u: %-7s #%06lX -> RGB565 0x%04X | anh: %s\n",
+             (unsigned)(i + 1), (unsigned)UI_COLORTEST_N, ui_colortest_bars[i].name,
+             (unsigned long)ui_colortest_bars[i].rgb888, (unsigned)c, path);
+  }
+  printf("[SIM] COLORTEST xong (man hinh dang la mau cuoi: %s)\n", ui_colortest_bars[UI_COLORTEST_N - 1].name);
 }
 
 // ===========================================================================
@@ -235,6 +260,30 @@ bool sim_dump_bmp(const char *path) {  FILE *f = fopen(path, "wb");
   }
   free(line);
   fclose(f);
+  return true;
+}
+
+// Doc 1 diem anh tu file .bmp 24-bit (dinh dang do `sim_dump_bmp` ghi: 54 B header, BGR, duoi len).
+bool sim_bmp_get(const char *path, int x, int y, int *r, int *g, int *b) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return false;
+  uint8_t hdr[54];
+  if (fread(hdr, 1, sizeof(hdr), f) != sizeof(hdr)) { fclose(f); return false; }
+  if (hdr[0] != 'B' || hdr[1] != 'M') { fclose(f); return false; }
+  int32_t w = 0, h = 0, off = 0;
+  memcpy(&off, &hdr[10], 4);
+  memcpy(&w, &hdr[18], 4);
+  memcpy(&h, &hdr[22], 4);
+  if (x < 0 || y < 0 || x >= w || y >= h) { fclose(f); return false; }
+  const int row = ((w * 3) + 3) & ~3;                 // moi hang chia het cho 4 byte
+  const int fy = h - 1 - y;                           // BMP luu tu duoi len
+  if (fseek(f, off + (long)fy * row + (long)x * 3, SEEK_SET) != 0) { fclose(f); return false; }
+  uint8_t px[3];
+  if (fread(px, 1, 3, f) != 3) { fclose(f); return false; }
+  fclose(f);
+  if (b) *b = px[0];
+  if (g) *g = px[1];
+  if (r) *r = px[2];
   return true;
 }
 

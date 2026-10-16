@@ -695,11 +695,51 @@ TRAM <phase> <mode> <idx> <ref> <d0> <d1> <d2> <d3> <A0> <A1> <A2> <A3> <active>
 | Nhiệt độ nhảy loạn | đường serial nhiễu: giảm baud 2 bên (`CYDLCD_MARLIN_BAUD` + `BAUDRATE_2`) hoặc dùng cáp ngắn/xoắn |
 | ESP32 build lỗi `lv_conf.h` | phải có `src/lv_conf.h` và cờ `-DLV_CONF_INCLUDE_SIMPLE -Isrc` (đã có trong env). Nếu LVGL báo `Possible failure to include lv_conf.h` thì include path sai (đừng dùng `${PROJECT_DIR}` — nó bị expand sai trong project này) |
 | CYD: chạm không ăn / lệch | TFT_eSPI giả định XPT2046 **chung bus SPI với LCD** (chỉ khác CS) nên `tft.getTouch()` **không** đọc được XPT2046 trên CYD; `ui_port_cyd_st7789.cpp` đã bit-bang SPI mềm cho touch (T_CLK 25 / T_DIN 32 / T_DO 39 / T_CS 33 / T_IRQ 36). **Đừng sửa macro bằng tay nữa — chạy hiệu chuẩn 4 góc** (menu `Calibrate touch`, hoặc giữ tay lúc cấp điện) rồi xem **§5.5**; kết quả lưu vào NVS nên không cần build lại. Muốn thử lại đường TFT_eSPI thì `#define CYDLCD_CYD_TOUCH_USE_TFTESPI` (khi đó **không** hiệu chuẩn được) |
-| CYD: màu bị đảo | `tools/tft_setup_cyd/User_Setup.h` **đang** bật `TFT_INVERSION_ON` (ST7789 thường cần): trắng↔đen ngược thì **comment dòng đó**; xanh↔đỏ thì `TFT_RGB_ORDER TFT_BGR` |
+| CYD: màu không giống bản giả lập / sai màu | **Chạy `UI COLORTEST`** (mục “Kiểm tra đường màu” ngay dưới) rồi đối chiếu: đỏ↔xanh dương ⇒ **sai thứ tự kênh** (`TFT_RGB_ORDER`); trắng↔đen ngược ⇒ **panel bị đảo màu** (inversion). ⚠️ `TFT_INVERSION_ON` trong `User_Setup.h` **không có tác dụng** với driver ST7789 của TFT_eSPI 2.5.43 (xem mục dưới) |
 | CYD: không đèn nền / màn tối | `TFT_BL` mặc định **GPIO21**; nhiều bản ST7789 dùng **GPIO27** — bật `-DCYDLCD_CYD_DEBUG=1` + thử lần lượt, và thử `fillScreen(TFT_RED)` để tách lỗi đèn nền khỏi lỗi driver/SPI |
 | TFT_eSPI không thấy file setup | **bắt buộc** có `-DUSER_SETUP_LOADED=1 -include tools/tft_setup_cyd/User_Setup.h` trong `build_flags` — env CYD **đã có sẵn**; thiếu thì TFT_eSPI dùng setup mặc định (ILI9341, không có `TFT_BL`) và `ui_port_cyd_st7789.cpp` in `#warning` |
 | ESP32 build lỗi `PermissionError: [Errno 13] … _contrib\intelhex\__init__.py` | ACL của `%USERPROFILE%\.platformio` bị hỏng (esptool không chạy được) → chạy **`tools/fix_platformio_acl.ps1`** bằng PowerShell **Administrator** — xem §8 |
 | Muốn xem màn hình CYD nhận/gửi gì | bật `-DUSBD_USE_CDC -DHAL_PCD_MODULE_ENABLED` trong env F411 **và** `#define CYDLCD_DEBUG` trong `cydlcd_config.h` → log ra SerialUSB |
+
+---
+
+## Kiểm tra đường màu (`UI COLORTEST`) — màu trên board ≠ màu bản giả lập (2026-10-16)
+
+**Người dùng báo:** *"màu trên board thật không giống bản sim, có phải thứ tự RGB không đúng?"*.
+Đã rà **cả 3 tầng** của đường màu — **không có lỗi ở code UI/LVGL**; khác biệt (nếu có) chỉ có thể đến từ
+**cấu hình panel**, và có đúng 2 khả năng, mỗi cái là **1 dòng**:
+
+| Tầng | Kiểm chứng |
+|---|---|
+| **1. Màu gốc** (`src/ui_colortest.h`, `ui_lvgl_int.h`) | Dùng `#RRGGBB` chuẩn, khớp `tft_color.h` của Marlin (vd `MR_BG = lv_color_hex(0x1E156E)` ⇔ Marlin `COLOR_BACKGROUND 0x20AC // #1E156E`) |
+| **2. Đường flush** (`ui_port_cyd_st7789.cpp`) | `pushColors(px, n, swap=true)` — tham số `true` **chỉ đổi 2 byte** (endianness ST7789), **không đổi kênh màu**. `lv_conf.h`: `LV_COLOR_DEPTH 16` + `LV_COLOR_16_SWAP 0` ⇒ nhất quán (bật SWAP=1 mới sai hết). `TFT_RED 0xF800` / `TFT_BLUE 0x001F` của TFT_eSPI **cùng quy ước** RGB565 với LVGL ⇒ hai thư viện không lệch nhau |
+| **3. Panel** (`tools/tft_setup_cyd/User_Setup.h`) | Thứ tự kênh do **`TFT_RGB_ORDER`** quyết định. Dòng đó **đang comment** ⇒ TFT_eSPI 2.5.43 lấy mặc định **`TFT_MAD_RGB`** (`TFT_Drivers/ST7789_Defines.h`). Nếu panel thật là **BGR** ⇒ **đỏ ↔ xanh dương đổi nhau** |
+
+⚠️ **Phát hiện quan trọng**: `ST7789_Init.h:102` của TFT_eSPI 2.5.43 gửi **`ST7789_INVON` VÔ ĐIỀU KIỆN** —
+nó **không đọc** `TFT_INVERSION_ON`/`TFT_INVERSION_OFF` (đã grep cả file: chỉ có 1 dòng `INVON`, không có
+`#if` nào quanh nó). Nên:
+* dòng `#define TFT_INVERSION_ON` đang có trong `User_Setup.h` **không có tác dụng gì** với ST7789;
+* panel nào **không** cần đảo màu ⇒ cả màn hình bị **"âm bản"** (trắng↔đen ngược);
+* cách tắt thật: gọi `invertDisplay(false)` **sau** init → nay đã có sẵn cờ
+  **`-DCYDLCD_CYD_INVERT_OFF=1`** trong `build_flags` của env `cydlcd_esp32` (xem `ui_port_cyd_st7789.cpp`).
+
+**Cách xác định trong 30 giây (không cần đoán):**
+
+```text
+1) Board  : cắm USB, monitor 115200, gõ `UI COLORTEST`   (hoặc gửi qua COM7)
+2) PC     : pwsh cydlcd/tools/run_sim.ps1 -Script cydlcd/sim/scenarios/test-color.txt
+            -> 8 ảnh `cydlcd/sim/out/colortest-<i>-<TEN>.bmp` = màu ĐÚNG (đã tự kiểm bằng pixel)
+3) So 8 màu trên màn hình với 8 ảnh:
+     đỏ hiện ra xanh dương  -> bỏ comment `#define TFT_RGB_ORDER TFT_BGR` trong User_Setup.h (hoặc ngược lại)
+     trắng <-> đen ngược    -> thêm `-DCYDLCD_CYD_INVERT_OFF=1` vào build_flags env CYD
+     giống hệt              -> đường màu OK, khác biệt nằm ở độ sáng/tương phản/đèn nền
+```
+
+Bản giả lập dùng **chính bảng màu đó** (`src/ui_colortest.h`) và có kiểm tra tự động `checkcolor`: nó **đọc
+lại file .bmp** rồi đo màu giữa màn hình, so với `#RRGGBB` (sai số 8/kênh vì RGB565 chỉ 5-6 bit/kênh). Kết
+quả chạy thật: `RED #FF0000 OK · GREEN #00FF00 OK · BLUE #0000FF OK · WHITE/ BLACK OK · BG #18146B (~#1E156E) OK
+· CYAN #00E7FF (~#00E5FF) OK · HOTEND #FF8A84 (~#FF8A80) OK` ⇒ **tầng 1+2 đúng**, nên nếu board lệch thì
+chắc chắn ở tầng 3.
 
 ---
 

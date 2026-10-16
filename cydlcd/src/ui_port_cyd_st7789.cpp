@@ -14,6 +14,7 @@
 #include <SPI.h>
 #include <stdio.h>          // snprintf (man hinh ket qua hieu chuan)
 #include "ui_lang.h"        // T() - da ngon ngu (chu tren man HIEU CHUAN cam ung)
+#include "ui_colortest.h"   // bang mau cho lenh `UI COLORTEST` (ui_port_colortest_raw)
   #include <TFT_eSPI.h>
   #include <Preferences.h>          // luu ket qua hieu chuan cam ung vao NVS (khong mat khi reset)
   static TFT_eSPI s_lcd;
@@ -414,6 +415,20 @@ uint32_t ui_port_millis(void) { return millis(); }
       digitalWrite(CYDLCD_BL_PIN, CYDLCD_BL_ON_LEVEL);
     #endif
     s_lcd.fillScreen(TFT_BLACK);
+
+    // ---------------------------------------------------------------------------
+    // DAO MAU CUA PANEL (2026-10-16)
+    // VI SAO CAN: TFT_eSPI 2.5.43 (TFT_Drivers/ST7789_Init.h:102) gui `ST7789_INVON` **VO DIEU KIEN** -
+    // no KHONG doc `TFT_INVERSION_ON`/`TFT_INVERSION_OFF` trong User_Setup.h (nen dong
+    // `#define TFT_INVERSION_ON` dang co chi la "cho vui", khong co tac dung voi driver ST7789).
+    // Hau qua: panel nao KHONG can dao mau thi ca man hinh bi "am ban" (trang<->den nguoc, mau nguoc).
+    // Cach tat that: goi `invertDisplay(false)` SAU init (gui INVOFF) - bat binh thuong chi can
+    //     -DCYDLCD_CYD_INVERT_OFF=1
+    // trong build_flags cua env (xem cydlcd/README.md muc "Kiem tra duong mau").
+    // ---------------------------------------------------------------------------
+    #if defined(CYDLCD_CYD_INVERT_OFF)
+      s_lcd.invertDisplay(false);
+    #endif
     #if defined(CYDLCD_CYD_DEBUG)
       // Bat lai bang -DCYDLCD_CYD_DEBUG=1 trong env cydlcd_esp32_cyd khi can chan doan:
       // muon biet den nen di chan nao thi doi CYDLCD_BL_PIN giua 21 / 27, va thu fillScreen(TFT_RED)
@@ -431,6 +446,30 @@ uint32_t ui_port_millis(void) { return millis(); }
     #endif
   }
 
+
+// ===========================================================================
+//  KIEM TRA DUONG MAU (lenh `UI COLORTEST`) - xem src/ui_colortest.h
+//
+//  To TOAN MAN HINH 8 mau bang THANG driver (fillScreen), KHONG qua LVGL: nhu vay neu mau sai thi
+//  chac chan sai o lop panel/TFT_eSPI (thu tu kenh `TFT_RGB_ORDER`, dao mau/inversion), khong phai o UI.
+//  Sau khi xong: ep LVGL ve lai toan man (man hinh vua bi ghi de ngoai y LVGL).
+// ===========================================================================
+void ui_port_colortest_raw(void) {
+  Serial.printf("[COLORTEST] BAT DAU: %u mau toan man hinh, moi mau 700 ms\n", (unsigned)UI_COLORTEST_N);
+  Serial.println("[COLORTEST] Doi chieu: DO->xanh duong = sai thu tu kenh (TFT_RGB_ORDER TFT_BGR); "
+                 "trang<->den nguoc = panel bi dao mau (bat -DCYDLCD_CYD_INVERT_OFF=1)");
+  for (uint8_t i = 0; i < UI_COLORTEST_N; i++) {
+    const uint16_t c = ui_colortest_rgb565(ui_colortest_bars[i].rgb888);
+    s_lcd.fillScreen(c);
+    Serial.printf("[COLORTEST] %u/%u: %-7s #%06lX -> RGB565 0x%04X (man hinh phai la mau nay)\n",
+                  (unsigned)(i + 1), (unsigned)UI_COLORTEST_N, ui_colortest_bars[i].name,
+                  (unsigned long)ui_colortest_bars[i].rgb888, (unsigned)c);
+    delay(700);
+  }
+  s_lcd.fillScreen(ui_colortest_rgb565(ui_colortest_bars[5].rgb888));   // tra ve mau nen cua UI (BG)
+  lv_obj_invalidate(lv_scr_act());     // man hinh bi ghi de ngoai LVGL -> bat LVGL ve lai
+  Serial.println("[COLORTEST] xong (da tra ve man hinh binh thuong)");
+}
 
 // ===========================================================================
 //  Flush callback cua LVGL (CYD: TFT_eSPI)

@@ -103,6 +103,7 @@ void ui_console_dispatch(const char *a3) {
   else if (!strcasecmp(a3, "HELLO"))     ui_lvgl_test_hello();
   else if (!strcasecmp(a3, "RX"))        ui_lvgl_test_rx();
   else if (!strcasecmp(a3, "PERF"))      ui_lvgl_test_perf();
+  else if (!strcasecmp(a3, "COLORTEST")) ui_port_colortest_raw();
   else if (!strcasecmp(a3, "BUSY"))      ui_lvgl_dump_busy();
   else if (!strncasecmp(a3, "LANG", 4))  ui_lvgl_test_lang(a3 + 4);
   else if (!strncasecmp(a3, "PRE", 3))   preheat_test_cmd(a3 + 3);

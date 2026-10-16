@@ -1,0 +1,28 @@
+# ===========================================================================
+#  cydlcd/sim/scenarios/test-color.txt
+#
+#  Kiem tra DUONG MAU (khong can board):
+#    1) `colortest`  -> to 8 mau toan man hinh va xuat 8 anh .bmp (colortest-<i>-<TEN>.bmp)
+#    2) `checkcolor` -> doc lai CHINH cac anh do, do mau o giua man hinh va so voi #RRGGBB trong bang mau
+#
+#  Chay:  pwsh cydlcd/tools/run_sim.ps1 -Script cydlcd/sim/scenarios/test-color.txt
+#  Exit code = so kiem tra that bai (0 = dat).
+#
+#  Y NGHIA: neu checkcolor dat nghia la "UI -> LVGL RGB565 -> anh" la DUNG. Khi do, neu man hinh THAT
+#  hien mau khac thi nguyen nhan nam o lop panel/TFT_eSPI:
+#     - DO hien ra XANH DUONG  -> sai thu tu kenh: bo comment `#define TFT_RGB_ORDER TFT_BGR`
+#       trong cydlcd/tools/tft_setup_cyd/User_Setup.h (hoac nguoc lai doi sang TFT_RGB)
+#     - trang <-> den nguoc (am ban) -> panel bi dao mau: bat `-DCYDLCD_CYD_INVERT_OFF=1`
+#       (TFT_eSPI 2.5.43 luon gui INVON cho ST7789, khong doc TFT_INVERSION_ON/OFF)
+#     - mau giong het anh -> duong mau OK
+#  Doi chieu tren board: go `UI COLORTEST` (Serial 115200 se in mau nao dang hien).
+# ===========================================================================
+state basic
+page STATUS
+settle 200
+
+echo --- to 8 mau + xuat anh ---
+colortest
+
+echo --- doc lai anh va do mau ---
+checkcolor

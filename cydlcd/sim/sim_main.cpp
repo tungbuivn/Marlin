@@ -29,6 +29,7 @@
 #include "ui_lvgl_int.h"
 #include "cydlcd_link.h"
 #include "cydlcd_protocol.h"
+#include "ui_colortest.h"       // bang mau cho `colortest`/`checkcolor`
 #include "sim.h"
 
 // ===========================================================================
@@ -136,11 +137,11 @@ static void state_home(void) {
 // ===========================================================================
 //  Kich ban
 // ===========================================================================
-static char s_outdir[512] = "cydlcd/sim/out";
 static int  s_fails = 0;                        // so kiem tra TU DONG that bai (exit code = so nay)
+char        g_sim_outdir[512] = "cydlcd/sim/out";   // xem sim.h (sim_port.cpp can de tu ghi anh COLORTEST)
 
 static void out_path(char *dst, size_t n, const char *name) {
-  snprintf(dst, n, "%s/%s", s_outdir, name);
+  snprintf(dst, n, "%s/%s", g_sim_outdir, name);
 }
 
 // Ten file an toan: 'FEED/FLOW' -> 'FEED-FLOW', 'NHIET DO' -> 'NHIET-DO'
@@ -199,6 +200,37 @@ static void check_xyz(const char *which) {
   }
 }
 
+// ---------------------------------------------------------------------------
+//  KIEM TRA DUONG MAU (lenh kich ban `checkcolor`)
+//
+//  Doc lai CHINH cac file .bmp ma `colortest` vua ghi (o giua man hinh) roi so voi #RRGGBB trong bang
+//  mau. Day la bang chung: duong "UI -> LVGL RGB565 -> bo ghi BMP" la DUNG, nen neu man hinh THAT khac
+//  thi loi nam o panel/TFT_eSPI (`TFT_RGB_ORDER` hoac dao mau), khong phai o code UI.
+//  Sai so cho phep 8/kenh: RGB565 chi co 5-6 bit/kenh nen mau #1E156E luu xuong 565 roi doi nguoc se
+//  lech vai don vi (do la BAN CHAT cua 565, khong phai loi).
+// ---------------------------------------------------------------------------
+static void check_color(void) {
+  const int cx = UI_LCD_HOR_RES / 2, cy = UI_LCD_VER_RES / 2;
+  printf("[SIM] --- kiem duong mau (%u mau, doc lai tu file .bmp) ---\n", (unsigned)UI_COLORTEST_N);
+  for (uint8_t i = 0; i < UI_COLORTEST_N; i++) {
+    char path[640];
+    snprintf(path, sizeof(path), "%s/colortest-%u-%s.bmp", g_sim_outdir, (unsigned)i, ui_colortest_bars[i].name);
+    int r = -1, g = -1, b = -1;
+    const uint32_t want = ui_colortest_bars[i].rgb888;
+    const int wr = (want >> 16) & 0xFF, wg = (want >> 8) & 0xFF, wb = want & 0xFF;
+    if (!sim_bmp_get(path, cx, cy, &r, &g, &b)) {
+      printf("[SIM]   %-7s <-- KHONG doc duoc anh %s\n", ui_colortest_bars[i].name, path);
+      s_fails++;
+      continue;
+    }
+    const bool ok = (abs(r - wr) <= 8) && (abs(g - wg) <= 8) && (abs(b - wb) <= 8);
+    printf("[SIM]   %-7s trong anh = #%02X%02X%02X | phai la #%06lX | %s\n",
+           ui_colortest_bars[i].name, r, g, b, (unsigned long)want, ok ? "OK" : "<-- SAI!");
+    if (!ok) s_fails++;
+  }
+  printf("[SIM]   (neu cac dong tren deu OK thi duong mau cua UI + bo ghi BMP la DUNG)\n");
+}
+
 static void run_line(char *line) {
   char *hash = strchr(line, '#');                 // chu thich cuoi dong
   if (hash) *hash = '\0';
@@ -222,6 +254,8 @@ static void run_line(char *line) {
   else if (!strcmp(cmd, "settle")){ sim_settle((uint32_t)atoi(a1)); }
   else if (!strcmp(cmd, "shot"))  { do_shot(a1); }
   else if (!strcmp(cmd, "checkxyz")) { check_xyz(a1); }
+  else if (!strcmp(cmd, "colortest")) { ui_port_colortest_raw(); }
+  else if (!strcmp(cmd, "checkcolor")) { check_color(); }
   // `pos <x_mm> <y_mm> <z_mm>`: doi toa do gia (de thu so DAI, vd -1234.56 - xem scenario test-xyz-dai.txt)
   else if (!strcmp(cmd, "pos")) {
     char a3[64] = {0};
@@ -268,12 +302,12 @@ static void run_default(void) {
 int main(int argc, char **argv) {
   const char *script = nullptr;
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "--out") && i + 1 < argc)       { snprintf(s_outdir, sizeof(s_outdir), "%s", argv[++i]); }
+    if (!strcmp(argv[i], "--out") && i + 1 < argc)       { snprintf(g_sim_outdir, sizeof(g_sim_outdir), "%s", argv[++i]); }
     else if (!strcmp(argv[i], "--script") && i + 1 < argc){ script = argv[++i]; }
     else if (argv[i][0] != '-')                           { script = argv[i]; }
   }
-  _mkdir(s_outdir);
-  printf("[SIM] ban gia lap UI cydlcd | thu muc anh: %s\n", s_outdir);
+  _mkdir(g_sim_outdir);
+  printf("[SIM] ban gia lap UI cydlcd | thu muc anh: %s\n", g_sim_outdir);
 
   state_basic();
   ui_lvgl_begin();          // tao LVGL + chrome + mo trang STATUS (code THAT cua firmware)

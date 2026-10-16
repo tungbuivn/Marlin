@@ -96,6 +96,12 @@ void ui_lvgl_test_rx(void);
 // LVGL. Goi 2 lan cach nhau N giay: lan 1 xoa bo dem, lan 2 doc so cua khoang do. Xem ui_lvgl_test_perf().
 void ui_lvgl_test_perf(void);
 
+// CHAN DOAN DUONG MAU (lenh `UI COLORTEST`): to lan luot 8 mau toan man hinh (do/la/xanh duong/trang/den
+// + 3 mau that cua UI) va in ro mau dang hien ra Serial. Dung de phan biet: (a) dao kenh R<->B
+// (`TFT_RGB_ORDER` sai), (b) panel bi dao mau/am ban (inversion), (c) duong mau OK. Bang mau nam trong
+// `src/ui_colortest.h` (dung CHUNG voi ban gia lap tren PC de so anh 1-1). Xem dau file do de biet chi tiet.
+void ui_port_colortest_raw(void);
+
 // ===========================================================================
 //  DA LUONG (B3, 2026-10-15 - xem cydlcd/docs/ke-hoach-da-luong.md)
 // ===========================================================================
