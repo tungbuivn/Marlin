@@ -266,6 +266,23 @@ static void run_line(char *line) {
     cydlcd.fans[0].pct = (int16_t)(atoi(a1) * 100);
     printf("[SIM] fan = %s%%\n", a1);
   }
+  // `alert <sev> <chu>`: bom 1 thong bao voi MUC DO bat ky. Gia tri THUC cua enum (cydlcd_protocol.h):
+  //   0 = INFO, 1 = WARN, 2 = ERROR, 3 = FATAL   (KHONG co NOTICE; ngoai dai -> hien "THONG BAO").
+  // Dung de kiem tra CYD xu ly tung muc the nao - dac biet 4 = FATAL, dung nhu Marlin goi
+  // onPrinterKilled() -> push_message(CYDLCD_SEV_FATAL, ...) khi may bi halt.
+  // Xem ui_boxes.cpp: hien tai MOI muc deu di vao trang /status (CYDLCD_MSG_BOX_ON_LCD = 0).
+  else if (!strcmp(cmd, "alert")) {
+    cydlcd.message_sev = (uint8_t)atoi(a1);
+    // Lay PHAN CON LAI cua dong lam chu (co khoang trang) chu KHONG dung a2 (sscanf chi lay 1 tu).
+    const char *p = line;
+    for (uint8_t sp = 0; *p && sp < 2; p++) if (*p == ' ') sp++;
+    if (*p == '"') p++;                       // bo dau ngoac kep neu co
+    size_t n = strlen(p);
+    if (n && p[n - 1] == '"') n--;            // va bo dau dong o cuoi
+    snprintf(cydlcd.message, sizeof(cydlcd.message), "%.*s", (int)n, p);
+    cydlcd.message_ms = sim_millis();
+    printf("[SIM] alert sev=%s : \"%s\"\n", a1, cydlcd.message);
+  }
   else if (!strcmp(cmd, "checkxyz")) { check_xyz(a1); }
   else if (!strcmp(cmd, "colortest")) { ui_port_colortest_raw(); }
   else if (!strcmp(cmd, "checkcolor")) { check_color(); }
