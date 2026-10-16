@@ -389,7 +389,24 @@ Số nguyên little-endian; nhiệt độ = °C×100 (i16), vị trí = mm×1000
 Marlin đẩy `STATUS`+`TEMPS`+`POSITION` mỗi 250 ms, `PROGRESS` mỗi 1 s khi đang in, và các sự kiện
 ngay khi xảy ra; màn hình CYD gửi `PING` 1 s/lần để hai bên biết còn sống (mất liên kết sau 3 s).
 
-### 4.1 Kiểm thử trên máy tính (không cần board)
+### 4.1 Xem TOÀN BỘ màn hình + dialog không cần board (thư viện ảnh)
+
+```bash
+python3 cydlcd/tools/make_gallery.py          # -> cydlcd/sim/out/gallery.png
+```
+
+Chạy bản giả lập với `sim/scenes_all.txt` (14 trang + 6 dialog: cây menu, hộp xác nhận, lớp phủ SỬA,
+hộp ô mesh, **bàn phím**, màn hình lỗi nặng đỏ) rồi ghép 20 ảnh thành **một bảng có chú thích**. Cảnh
+nào gần như trống thì script **báo động** (đó thường là lỗi UI, ví dụ phím bàn phím không có glyph).
+Sửa danh sách cảnh trong `sim/scenes_all.txt`, mỗi dòng một lệnh của bản giả lập.
+
+⚠️ **Bàn phím trong bản giả lập**: board CYD bật `LV_USE_KEYBOARD`/`LV_USE_TEXTAREA` trong
+`src/gfx/lv_conf_cydlcd.h`, còn `lv_conf.h` dùng chung thì không — nên bản giả lập phải bật lại trong
+`sim/lv_conf_sim.h`. Đổi file cấu hình ⇒ **phải build lại LVGL** (`run_sim.sh --rebuild`); script đã tự
+phát hiện file cấu hình mới hơn và ép rebuild (trước đây chỉ so `.c` với `.o` nên đổi cấu hình **không**
+dịch lại, dẫn tới lỗi link `undefined reference to lv_keyboard_create`).
+
+### 4.2 Kiểm thử trên máy tính (không cần board)
 
 ```powershell
 pwsh cydlcd/tools/run_host_test.ps1

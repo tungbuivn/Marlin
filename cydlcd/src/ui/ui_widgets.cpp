@@ -383,8 +383,108 @@ lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
 // kho doc (yeu cau nguoi dung 2026-10-15: "ban phim touch chua co mau nen nen khong nhin ro chu").
 // Dat: nen dam (COL_BAR) + vien sang (COL_ACCENT) cho CA ban phim; tung PHIM co nen COL_BTN + chu
 // trang; phim dang bam (PRESSED) doi sang COL_ACCENT. O nhap (ta) cung dat nen toi + chu trang.
+// ===========================================================================
+//  BANG PHIM THAY THE: doi 6 nhan `LV_SYMBOL_*` thanh CHU ASCII
+//
+//  YEU CAU NGUOI DUNG 2026-10-16: "khi hien thi ban phim co mot so text khong hien thi".
+//  NGUYEN NHAN: ban phim cua LVGL dan nhan cac phim dac biet bang `LV_SYMBOL_*` = U+F00C (OK),
+//  U+F00D (CLOSE), U+F053 (LEFT), U+F054 (RIGHT), U+F11C (KEYBOARD), U+F55A (BACKSPACE),
+//  U+F8A2 (NEW_LINE). Font cua project CHI co 5 dai (ascii U+0020..U+00FF + vn1..vn4) nen 6 ma do
+//  KHONG co glyph -> LVGL ve ra O TRONG (dung 6 phim do bi "mat chu", cac phim chu/so van binh thuong).
+//
+//  CACH SUA: KHONG the sinh lai font (may build khong co file Segoe UI .ttf), va ban LVGL nay khong co
+//  `lv_btnmatrix_set_btn_text()` de doi nhan tung phim. Cach dung duoc: `lv_keyboard_set_map()` voi bang
+//  cua project - chep Y NGUYEN bang mac dinh cua LVGL (lv_keyboard.c) va chi thay 6 cho:
+//      LV_SYMBOL_BACKSPACE -> "DEL"    LV_SYMBOL_NEW_LINE -> "ENT"
+//      LV_SYMBOL_KEYBOARD  -> "123" (o bang chu) / "abc" (o bang so)
+//      LV_SYMBOL_LEFT      -> "<"      LV_SYMBOL_RIGHT    -> ">"
+//      LV_SYMBOL_OK        -> "OK"
+//  Dat cho CA 4 CHE DO (thuong/thuong-hoa/dac biet/so) nen doi che do khong lam mat nhan da sua.
+//  Bang ctrl chep nguyen (no danh theo VI TRI o, khong lien quan chu tren phim).
+// ===========================================================================
+// ⚠️ Phai boc `#if LV_USE_KEYBOARD`: env STM32 (`cydlcd_f407vgz_lvgl`) KHONG bat ban phim (xem
+// src/gfx/lv_conf.h) nen `LV_KEYBOARD_CTRL_BTN_FLAGS` / `lv_keyboard_mode_t` khong ton tai -> build loi.
+#if LV_USE_KEYBOARD
+#define KB_BTN(w)  (LV_BTNMATRIX_CTRL_POPOVER | (w))          // = LV_KB_BTN() (macro noi bo cua LVGL)
+
+static const char *const kb_map_lc[] = {
+  "1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "DEL", "\n",
+  "ABC", "a", "s", "d", "f", "g", "h", "j", "k", "l", "ENT", "\n",
+  "_", "-", "z", "x", "c", "v", "b", "n", "m", ".", ",", ":", "\n",
+  "123", "<", " ", ">", "OK", ""
+};
+static const char *const kb_map_uc[] = {
+  "1#", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "DEL", "\n",
+  "abc", "A", "S", "D", "F", "G", "H", "J", "K", "L", "ENT", "\n",
+  "_", "-", "Z", "X", "C", "V", "B", "N", "M", ".", ",", ":", "\n",
+  "123", "<", " ", ">", "OK", ""
+};
+static const char *const kb_map_spec[] = {
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "DEL", "\n",
+  "abc", "+", "&", "/", "*", "=", "%", "!", "?", "#", "<", ">", "\n",
+  "\\", "@", "$", "(", ")", "{", "}", "[", "]", ";", "\"", "'", "\n",
+  "123", "<", " ", ">", "OK", ""
+};
+static const char *const kb_map_num[] = {
+  "1", "2", "3", "abc", "\n",
+  "4", "5", "6", "OK", "\n",
+  "7", "8", "9", "DEL", "\n",
+  "+/-", "0", ".", "<", ">", ""
+};
+static const lv_btnmatrix_ctrl_t kb_ctrl_lc[] = {
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 5, KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4),
+  KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), LV_BTNMATRIX_CTRL_CHECKED | 7,
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 6, KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3),
+  KB_BTN(3), KB_BTN(3), KB_BTN(3), LV_BTNMATRIX_CTRL_CHECKED | 7,
+  LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1),
+  LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1),
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6,
+  LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+};
+static const lv_btnmatrix_ctrl_t kb_ctrl_uc[] = {
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 5, KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4),
+  KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), LV_BTNMATRIX_CTRL_CHECKED | 7,
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 6, KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3), KB_BTN(3),
+  KB_BTN(3), KB_BTN(3), KB_BTN(3), LV_BTNMATRIX_CTRL_CHECKED | 7,
+  LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1),
+  LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | KB_BTN(1),
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6,
+  LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+};
+static const lv_btnmatrix_ctrl_t kb_ctrl_spec[] = {
+  KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), LV_BTNMATRIX_CTRL_CHECKED | 2,
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 2, KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  KB_BTN(1), KB_BTN(1), KB_BTN(1),
+  LV_KEYBOARD_CTRL_BTN_FLAGS | 2, LV_BTNMATRIX_CTRL_CHECKED | 2, 6,
+  LV_BTNMATRIX_CTRL_CHECKED | 2, LV_KEYBOARD_CTRL_BTN_FLAGS | 2
+};
+static const lv_btnmatrix_ctrl_t kb_ctrl_num[] = {
+  1, 1, 1, LV_KEYBOARD_CTRL_BTN_FLAGS | 2,
+  1, 1, 1, LV_KEYBOARD_CTRL_BTN_FLAGS | 2,
+  1, 1, 1, 2,
+  1, 1, 1, 1, 1
+};
+
+/// Dat bang phim cua project (nhan ASCII) cho CA 4 che do. Goi trong style_keyboard().
+static void kb_apply_maps(lv_obj_t *kb) {
+  if (!kb) return;
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_TEXT_LOWER,   (const char **)kb_map_lc,   kb_ctrl_lc);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_TEXT_UPPER,   (const char **)kb_map_uc,   kb_ctrl_uc);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_SPECIAL, (const char **)kb_map_spec, kb_ctrl_spec);
+  lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_NUMBER,       (const char **)kb_map_num,  kb_ctrl_num);
+}
+#endif  // LV_USE_KEYBOARD
+
 void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
   if (kb) {
+#if LV_USE_KEYBOARD
+    kb_apply_maps(kb);        // nhan ASCII cho 6 phim dac biet (xem khoi bang phim o tren)
+#endif
     // 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1 loai font hien thi chu"): ban phim va o
     // nhap la widget LVGL tao truc tiep (khong qua mk_label/mk_btn) nen truoc day dung font MAC DINH
     // cua LVGL (Montserrat 14) -> man WIFI / NHIET DO bi lech ho font. Gan font chung o day.

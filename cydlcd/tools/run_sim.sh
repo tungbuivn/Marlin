@@ -214,6 +214,23 @@ LVGLLIB="$BLDLIB/liblvgl.a"
 NEED_LVGL=0
 [ "$REBUILD" = 1 ] && NEED_LVGL=1
 [ -f "$LVGLLIB" ] || NEED_LVGL=1
+# ⚠️ 2026-10-16: vong lap duoi chi so *.c voi *.o nen doi `lv_conf.h` (vd bat LV_USE_KEYBOARD/TEXTAREA)
+# KHONG lam rebuild -> board co ban phim ma ban gia lap khong co (undefined reference luc link). Phai
+# theo doi RIENG lv_conf.h (no la HEADER, khong nam trong find *.c).
+# Hai file cau hinh ma ban gia lap dung: `sim/lv_conf_sim.h` (include tiep `src/gfx/lv_conf.h`).
+# Theo doi CA HAI - doi widget nao trong do cung phai build lai LVGL.
+if [ "$NOBUILD" = 0 ]; then
+  for LCONF in "$SIM/lv_conf_sim.h" "$SRC/gfx/lv_conf.h"; do
+    if [ -f "$LCONF" ] && [ "$LCONF" -nt "$LVGLLIB" ]; then
+      echo "  $(basename "$LCONF") moi hon liblvgl.a -> build lai LVGL"
+      NEED_LVGL=1
+      # ⚠️ PHAI ep REBUILD: vong lap duoi chi so tung file .c voi .o cua no, ma doi lv_conf.h thi KHONG
+      # file .c nao moi hon -> khong object nao duoc dich lai, chi dong lai lib tu object CU (da tung
+      # lam mat LV_USE_KEYBOARD/TEXTAREA o ban gia lap). Ep rebuild de moi widget duoc dich lai.
+      REBUILD=1
+    fi
+  done
+fi
 
 if [ "$NOBUILD" = 0 ] && [ "$NEED_LVGL" = 1 ]; then
   echo "Biên dịch LVGL (lần đầu, hơi lâu)..."

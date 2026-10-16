@@ -1,0 +1,78 @@
+# THU VIEN ANH: TOAN BO MAN HINH + DIALOG (sinh tu dong)
+state basic
+settle 600
+page STATUS
+settle 600
+shot page-00-STATUS
+page MENU
+settle 600
+shot page-01-MENU
+page RATE
+settle 600
+shot page-02-RATE
+page TEMP
+settle 600
+shot page-03-TEMP
+page JOG
+settle 600
+shot page-04-JOG
+page FILES
+settle 600
+shot page-05-FILES
+page SETTINGS
+settle 600
+shot page-06-SETTINGS
+page MESH
+settle 600
+shot page-07-MESH
+page CUSTOM
+settle 600
+shot page-08-CUSTOM
+page TBT
+settle 600
+shot page-09-TBT
+page INFO
+settle 600
+shot page-10-INFO
+page ENDSTOP
+settle 600
+shot page-11-ENDSTOP
+page WIFI
+settle 600
+shot page-12-WIFI
+page SUBMENU
+settle 600
+shot page-13-SUBMENU
+# --- dialog ---
+page STATUS
+settle 400
+ui CFG
+settle 600
+shot dlg-01-menu-tree
+ui TESTBOX
+settle 600
+shot dlg-02-confirm
+ui TAP K
+settle 500
+page SETTINGS
+settle 500
+ui EDIT 3
+settle 600
+shot dlg-03-edit-overlay
+page MESH
+settle 500
+ui MCELL 0 0
+settle 600
+shot dlg-04-mesh-cell
+page TEMP
+settle 500
+ui PRE DEL 2
+ui PRE KB
+settle 700
+shot dlg-05-keyboard
+ui CRIT
+settle 600
+shot dlg-06-fatal-red
+ui CRIT OFF
+settle 400
+ui PRE DEL 1

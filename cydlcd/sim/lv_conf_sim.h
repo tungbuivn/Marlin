@@ -20,3 +20,12 @@
 // nen bat o day - xem ghi chu o ui_overlay.cpp (OV_FONT_BIG).
 #undef  LV_FONT_MONTSERRAT_20
 #define LV_FONT_MONTSERRAT_20 1
+
+// Ban gia lap mo phong MAN HINH THAT. Board CYD bat ban phim + o nhap trong `lv_conf_cydlcd.h`
+// (`-DLV_CONF_PATH=lv_conf_cydlcd.h`), con `lv_conf.h` dung chung thi KHONG -> ban gia lap phai bat o
+// day, neu khong se link loi "undefined reference to lv_keyboard_create" va khong xem duoc dialog BAN
+// PHIM (xem ui_widgets.cpp: kb_apply_maps() + style_keyboard()).
+#undef  LV_USE_KEYBOARD
+#define LV_USE_KEYBOARD 1
+#undef  LV_USE_TEXTAREA
+#define LV_USE_TEXTAREA 1
