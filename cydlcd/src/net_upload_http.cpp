@@ -29,6 +29,7 @@
 #include "cyd_sd.h"
 #include "net_wifi.h"
 #include "cydlcd_link.h"
+#include "ui_lvgl.h"          // ui_shot_band(): chup man hinh (ui_lvgl.h tu guard bang CYDLCD_USE_LVGL)
 
 #if defined(CYDLCD_CYD_DEBUG)
   #define HLOG(...)   do { Serial.printf(__VA_ARGS__); } while (0)
@@ -685,6 +686,75 @@ void handle_delete(void) {
 }  // namespace
 
 // ===========================================================================
+//  /screen.bmp — CHUP MAN HINH (tra ve anh BMP 24-bit 240x320)
+//
+//  VI SAO CO: man hinh CYD khong co framebuffer (driver ve thang ra SPI) nen KHONG chup duoc tu PC,
+//  va 240x320x2 = 150 KB thi khong du RAM giu mot ban sao. Truoc day moi lan kiem tra mau/bo cuc deu
+//  phai nho nguoi ngoi nhin man hinh — trong khi vu loi mau panel (2026-10-16) phai doi chieu nhieu
+//  lan. API nay doc NGUOC RAM cua panel qua ST7789_RAMRD theo tung dai 16 dong roi tra ve 1 file .bmp:
+//      curl -o shot.bmp http://<ip>/screen.bmp
+//  la xem duoc, ke ca khi ngoi tu xa.
+//
+//  Anh = 54 + 320*240*3 = 230.454 byte. HE TOA DO LA LANDSCAPE 320x240 (ui_port_cyd_st7789.cpp goi
+//  setRotation(1)) — doc nham 240x320 se chi lay 240 cot dau va tran chieu cao. BMP ghi DAY-LEN
+//  (height duong) nen phai doc dai TU DAY man hinh tro len, trong moi dai ghi dong tu duoi len.
+//  320*3 = 960 chia het cho 4 -> khong can pad.
+//
+//  Viec doc panel phai do task `ui` lam (moi truy cap TFT_eSPI phai nam trong MOT task); o day chi
+//  goi ui_shot_band() roi DOI SEMAPHORE, nen task `ui` van chay binh thuong trong luc cho.
+// ===========================================================================
+#define SHOT_W 320
+#define SHOT_H 240
+#define SHOT_BAND 8
+
+void handle_screen(void) {
+  // 1 lan cap phat: [dai RGB888][1 dong BGR] — tranh ca .bss (DRAM ESP32 da sat) lan stack cua
+  // task `net` (6 KB).
+  uint8_t *band = (uint8_t *)malloc((size_t)SHOT_W * SHOT_BAND * 3 + SHOT_W * 3);
+  if (!band) { server.send(500, "text/plain", "het RAM"); return; }
+  uint8_t *row = band + (size_t)SHOT_W * SHOT_BAND * 3;
+
+  const uint32_t rowbytes = SHOT_W * 3;
+  const uint32_t imgsize  = rowbytes * SHOT_H;
+  const uint32_t filesize = 54 + imgsize;
+
+  uint8_t hdr[54];
+  memset(hdr, 0, sizeof(hdr));
+  hdr[0] = 'B'; hdr[1] = 'M';
+  hdr[2]  = (uint8_t)(filesize);        hdr[3]  = (uint8_t)(filesize >> 8);
+  hdr[4]  = (uint8_t)(filesize >> 16);  hdr[5]  = (uint8_t)(filesize >> 24);
+  hdr[10] = 54;                                    // offset to pixel data
+  hdr[14] = 40;                                    // DIB header size
+  hdr[18] = (uint8_t)(SHOT_W);          hdr[19] = (uint8_t)(SHOT_W >> 8);
+  hdr[22] = (uint8_t)(SHOT_H);          hdr[23] = (uint8_t)(SHOT_H >> 8);   // duong = bottom-up
+  hdr[26] = 1;                                     // planes
+  hdr[28] = 24;                                    // bits/pixel
+  hdr[34] = (uint8_t)(imgsize);         hdr[35] = (uint8_t)(imgsize >> 8);
+  hdr[36] = (uint8_t)(imgsize >> 16);   hdr[37] = (uint8_t)(imgsize >> 24);
+
+  server.setContentLength(filesize);
+  server.send(200, "image/bmp", "");
+  server.sendContent((const char *)hdr, sizeof(hdr));
+
+  bool ok = true;
+  for (int y = SHOT_H - SHOT_BAND; y >= 0 && ok; y -= SHOT_BAND) {
+    ok = ui_shot_band(y, SHOT_BAND, SHOT_W, band, 3000);
+    if (!ok) { Serial.printf("[SHOT] chup dai y=%d that bai\n", y); break; }
+    for (int r = SHOT_BAND - 1; r >= 0; r--) {     // BMP bottom-up: ghi dong duoi truoc
+      const uint8_t *src = band + (size_t)r * SHOT_W * 3;
+      for (int x = 0; x < SHOT_W; x++) {
+        row[3 * x + 0] = src[3 * x + 2];           // B
+        row[3 * x + 1] = src[3 * x + 1];           // G
+        row[3 * x + 2] = src[3 * x + 0];           // R
+      }
+      server.sendContent((const char *)row, rowbytes);
+    }
+  }
+  free(band);
+  Serial.printf("[SHOT] %s (240x320)\n", ok ? "da tra anh" : "tra anh THAT BAI");
+}
+
+// ===========================================================================
 // API
 // ===========================================================================
 void net_upload_http_begin(void) {
@@ -693,6 +763,7 @@ void net_upload_http_begin(void) {
   cyd_sd_begin();                   // mount the TF + don file tam mo coi
   server.on("/", HTTP_GET, handle_root);
   server.on("/status", HTTP_GET, handle_status);
+  server.on("/screen.bmp", HTTP_GET, handle_screen);   // chup man hinh (doc nguoc tu panel)
   server.on("/upload", HTTP_POST, handle_upload_done, handle_upload_stream);
   server.on("/files", HTTP_GET, handle_files);
   server.on("/delete", HTTP_POST, handle_delete);

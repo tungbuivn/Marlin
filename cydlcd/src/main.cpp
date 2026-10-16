@@ -207,6 +207,9 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             // "man hinh that lech mau" la do THU TU KENH (TFT_RGB_ORDER) hay do DAO MAU (inversion)
             // hay do chinh code UI. Xem src/ui_colortest.h.
             else if (strcasecmp(a3, "COLORTEST") == 0) ui_port_colortest_raw();
+            // `UI READTEST` = chung minh doc NGUOC duoc tu panel (can cho API chup man hinh):
+            // to 3 dai mau da biet roi doc lai bang TFT_eSPI.readRect() va in ket qua ra Serial.
+            else if (strcasecmp(a3, "READTEST") == 0) ui_port_readtest();
             else if (strcasecmp(a3, "BUSY") == 0)    ui_lvgl_dump_busy();
             else if (strcasecmp(a3, "SET") == 0)     page_settings_dump();
             // `UI CFG` = in CA CAY menu Configuration (moi nhom + so dong hien duoc);

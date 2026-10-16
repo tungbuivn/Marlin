@@ -101,6 +101,19 @@ void ui_lvgl_test_perf(void);
 // (`TFT_RGB_ORDER` sai), (b) panel bi dao mau/am ban (inversion), (c) duong mau OK. Bang mau nam trong
 // `src/ui_colortest.h` (dung CHUNG voi ban gia lap tren PC de so anh 1-1). Xem dau file do de biet chi tiet.
 void ui_port_colortest_raw(void);
+// Doc NGUOC tu panel de kiem tra (lenh `UI READTEST`): to 3 dai mau da biet roi doc lai bang
+// TFT_eSPI.readRect(), in ket qua ra Serial. Chung minh chan SDO (IO12/TFT_MISO) co noi truoc khi
+// xay API chup man hinh. Xem ui_port_cyd_st7789.cpp.
+void ui_port_readtest(void);
+// Chup 1 dai `h` dong (tu y), rong `w` pixel -> RGB888 vao `rgb` (w*h*3 byte).
+// CHI goi tu task `ui` (moi truy cap TFT_eSPI phai o task do). Doc nguoc tu RAM cua panel
+// qua ST7789_RAMRD; xem giai thich + 2 cai bay da gap o dau ui_port_cyd_st7789.cpp.
+bool ui_port_capture_band(int y, int h, uint8_t *rgb, int w);
+
+// Chup man hinh cho task khac (vd task `net` phuc vu HTTP): yeu cau task `ui` chup roi doi.
+// `w`/`h` theo HE TOA DO DANG XOAY cua man hinh (CYD: setRotation(1) -> 320x240 landscape).
+// Tra ve false neu het thoi gian cho. Xem ui_shot_band() trong ui_lvgl.cpp.
+bool ui_shot_band(int y, int h, int w, uint8_t *rgb, uint32_t timeout_ms);
 
 // ===========================================================================
 //  DA LUONG (B3, 2026-10-15 - xem cydlcd/docs/ke-hoach-da-luong.md)

@@ -905,6 +905,13 @@ static void ui_lvgl_task_body(void) {
   #define UI_CMD_LEN  40
   static QueueHandle_t s_cmd_q = nullptr;
   static TaskHandle_t  s_ui_task_h = nullptr;
+  // ---- CHUP MAN HINH (yeu cau tu task `net`, thuc hien o task `ui`) ----
+  // Moi truy cap TFT_eSPI phai nam trong MOT task (task `ui`), nen task `net` khong tu doc panel
+  // duoc. Thay vao do: net dat yeu cau + doi semaphore, task ui thay co thi chup roi tra semaphore.
+  static volatile int  s_shot_y = 0, s_shot_h = 0, s_shot_w = 0;
+  static uint8_t      *s_shot_dst = nullptr;
+  static volatile bool s_shot_req = false;
+  static SemaphoreHandle_t s_shot_sem = nullptr;
 #endif
 
 void ui_post_cmd(const char *arg) {
@@ -917,6 +924,26 @@ void ui_post_cmd(const char *arg) {
     Serial.printf("[UI] CANH BAO: hang doi lenh UI day -> bo \"%s\"\n", b);
 #else
   ui_console_dispatch(arg);
+#endif
+}
+
+// Chup man hinh: goi tu task KHAC (vd task `net`). Tra ve false neu qua thoi gian cho.
+bool ui_shot_band(int y, int h, int w, uint8_t *rgb, uint32_t timeout_ms) {
+#if defined(CYDLCD_BOARD_CYD)
+  if (!s_ui_task_h) return false;
+  if (!s_shot_sem) s_shot_sem = xSemaphoreCreateBinary();
+  if (!s_shot_sem) return false;
+  s_shot_y = y; s_shot_h = h; s_shot_w = w; s_shot_dst = rgb;
+  s_shot_req = true;
+  xTaskNotifyGive(s_ui_task_h);                 // danh thuc task ui ngay, khong doi het nhip 33 ms
+  if (xSemaphoreTake(s_shot_sem, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+    s_shot_req = false;                         // huy yeu cau (task ui se thay co = false)
+    return false;
+  }
+  return true;
+#else
+  (void)y; (void)h; (void)rgb; (void)timeout_ms;
+  return false;
 #endif
 }
 
@@ -939,6 +966,12 @@ static void ui_cmd_task(void *) {
   for (;;) {
     ui_cmd_drain(3);
     ui_lvgl_task();
+    // Chup man hinh: lam SAU ui_lvgl_task() de khong chen vao giua luc LVGL dang ve.
+    if (s_shot_req && s_shot_dst) {
+      ui_port_capture_band(s_shot_y, s_shot_h, s_shot_dst, s_shot_w);
+      s_shot_req = false;
+      xSemaphoreGive(s_shot_sem);
+    }
     g_hb_ui++;                                  // heartbeat cho task chan doan (xem main.cpp: g_hb_*)
     // NHIP 30 Hz (33 ms) - CHOT 2026-10-15 sau khi thu 60 Hz: nguoi dung doi lai 30 Hz (60 Hz khong can thiet,
     // va 30 Hz do duoc la ~5% CPU core 0, con 60 Hz gap doi so lan goi lv_timer_handler() ma mat nguoi khong

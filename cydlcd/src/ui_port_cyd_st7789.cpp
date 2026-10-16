@@ -13,6 +13,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <stdio.h>          // snprintf (man hinh ket qua hieu chuan)
+#include <stdlib.h>         // malloc/free (buffer doc nguoc panel khi chup man hinh)
+#include <string.h>         // memcpy (pixel cuoi cua dai chup)
 #include "ui_lang.h"        // T() - da ngon ngu (chu tren man HIEU CHUAN cam ung)
 #include "ui_colortest.h"   // bang mau cho lenh `UI COLORTEST` (ui_port_colortest_raw)
   #include <TFT_eSPI.h>
@@ -469,6 +471,115 @@ void ui_port_colortest_raw(void) {
   s_lcd.fillScreen(ui_colortest_rgb565(ui_colortest_bars[5].rgb888));   // tra ve mau nen cua UI (BG)
   lv_obj_invalidate(lv_scr_act());     // man hinh bi ghi de ngoai LVGL -> bat LVGL ve lai
   Serial.println("[COLORTEST] xong (da tra ve man hinh binh thuong)");
+}
+
+// ===========================================================================
+//  CHUP MAN HINH: doc nguoc tu panel (lenh `UI READTEST` de tu kiem tra)
+//
+//  VI SAO PHAI DOC NGUOC: man hinh CYD KHONG co framebuffer — driver ve thang ra SPI, va
+//  240x320x2 = 150 KB thi khong du RAM (heap luc chay ~104 KB). Nen muon "chup man hinh" thi
+//  phai doc lai chinh RAM cua panel qua lenh ST7789_RAMRD (0x2E). Duong do chi chay duoc neu
+//  chan SDO cua panel co noi xuong ESP32 — tren CYD 2432S028R la IO12 (= TFT_MISO trong
+//  User_Setup.h, dung theo PINS.md cua witnessmenow/ESP32-Cheap-Yellow-Display).
+//
+//  HAI CAI BAY DA GAP THAT (2026-10-16), ghi lai de khong mat thoi gian lan sau:
+//   1) `TFT_eSPI.readRect()` doc 3 BYTE/pixel (dinh dang 18-bit), nhung init cua TFT_eSPI dat
+//      COLMOD = 0x55 (16-bit). Doc 3 byte tren luong 2 byte/pixel thi LECH HOAN TOAN
+//      (do duoc: ghi 0xF800 -> doc ra 0xE007). Cach xu ly: TAM doi COLMOD sang 0x66 (18-bit)
+//      cho khop, doc xong tra ve 0x55. RAM panel von luu 18-bit/pixel nen ANH KHONG DOI,
+//      chi doi dinh dang tren duong SPI trong luc doc.
+//   2) `readRect()` con GHEP KENH SAI cho ST7789 (noi bo dung color565() voi 3 byte doc duoc,
+//      nhung byte dau bi lech) -> phai dung `readRectRGB()` de lay BYTE THO roi tu giai ma.
+//
+//  LAYOUT DO DUOC tu panel (bang `UI READTEST`, xem bang chung trong lich su commit):
+//      raw[0]      = 1 byte thua (lech do byte "dummy" cua ST7789)
+//      raw[1+3i]   = R6      (gia tri 6 bit nam o 6 bit CAO -> phai >> 2)
+//      raw[2+3i]   = G6
+//      raw[3+3i]   = B6
+//  => pixel cuoi cung cua moi lan doc bi thieu 1 byte (vi byte thua o dau), nen no duoc chep
+//     tu pixel lien truoc — 1 pixel/dai, khong dang ke voi anh 240x320.
+// ===========================================================================
+
+// Nhu tren nhung tra BYTE THO (readRectRGB: 3 byte/pixel, gia tri 6 bit nam o 6 bit CAO cua moi byte).
+// Dung de do chinh xac layout thay vi suy doan tu readRect() (readRect ghep kenh sai cho ST7789).
+static void panel_read_raw_18bit(int x, int y, int w, int h, uint8_t *dst) {
+  s_lcd.writecommand(0x3A); s_lcd.writedata(0x66);   // COLMOD = 18 bit/pixel
+  delay(2);
+  s_lcd.readRectRGB(x, y, w, h, dst);
+  s_lcd.writecommand(0x3A); s_lcd.writedata(0x55);   // COLMOD = 16 bit/pixel (nhu init)
+  delay(2);
+}
+
+// Chup 1 dai `h` dong (bat dau tu y), rong `w` pixel -> tra ve RGB888 (w*h*3 byte).
+// CHI duoc goi tu task `ui` (moi truy cap TFT_eSPI phai nam trong task do) — xem ui_shot_band().
+bool ui_port_capture_band(int y, int h, uint8_t *rgb, int w) {
+  if (w <= 0 || h <= 0 || !rgb) return false;
+  const int n = w * h;
+  uint8_t *raw = (uint8_t *)malloc((size_t)3 * (size_t)n);
+  if (!raw) { Serial.println("[SHOT] het RAM cho buffer doc"); return false; }
+
+  s_lcd.writecommand(0x3A); s_lcd.writedata(0x66);   // COLMOD = 18 bit/pixel (khop readRectRGB)
+  delay(2);
+  s_lcd.readRectRGB(0, y, w, h, raw);
+  s_lcd.writecommand(0x3A); s_lcd.writedata(0x55);   // COLMOD = 16 bit/pixel (nhu init)
+  delay(2);
+
+  for (int i = 0; i < n - 1; i++) {
+    const uint8_t *p = raw + 1 + 3 * i;
+    // DU LIEU DOC VE BI DICH PHAI 1 BIT (bit-slip cua duong doc ST7789). Chung minh bang chuoi bit:
+    //   dung  : 00011000 00010100 01101000   (BG 0x18AD -> R6=6 G6=5 B6=26)
+    //   doc ve: 00001100 00001010 00110100   = chuoi tren >> 1
+    // Vi gia tri 6 bit nam o 6 bit CAO (2 bit thap luon 0) nen >> 1 khong mat du lieu -> << 1 la khoi phuc.
+    // Do duoc bang `UI READTEST`: BLACK 0x0000, WHITE 0xFFFF, BG 0x18AD deu khop sau khi dich.
+    const uint8_t r6 = (uint8_t)((uint8_t)(p[0] << 1) >> 2);
+    const uint8_t g6 = (uint8_t)((uint8_t)(p[1] << 1) >> 2);
+    const uint8_t b6 = (uint8_t)((uint8_t)(p[2] << 1) >> 2);
+    rgb[3 * i + 0] = (uint8_t)((r6 << 2) | (r6 >> 4));
+    rgb[3 * i + 1] = (uint8_t)((g6 << 2) | (g6 >> 4));
+    rgb[3 * i + 2] = (uint8_t)((b6 << 2) | (b6 >> 4));
+  }
+  if (n >= 2) memcpy(rgb + 3 * (n - 1), rgb + 3 * (n - 2), 3);   // pixel cuoi thieu 1 byte
+  free(raw);
+  return true;
+}
+
+void ui_port_readtest(void) {
+  // Kiem tra ANH XA MAU: voi moi mau, tinh gia tri RGB888 ma PANEL thuc su hien thi (RGB565 ->
+  // mo rong 5/6 bit -> 18 bit -> 8 bit) roi so voi gia tri chup duoc. Dung ca tong trung gian
+  // (BG 0x18AD) vi mau thuan (0 va max) luon dung du cong thuc sai.
+  const uint16_t pat[5] = { 0x0000, 0x18AD, 0xFFFF, 0xF800, 0x07E0 };
+  const char *nm[5] = { "BLACK", "BG   ", "WHITE", "RED  ", "GREEN" };
+  uint8_t *rgb = (uint8_t *)malloc(240 * 3);      // heap, khong static (DRAM ESP32 da sat)
+  if (!rgb) { Serial.println("[READTEST] het RAM"); return; }
+  Serial.println("[READTEST] kiem tra anh xa mau (da bu bit-slip)");
+  uint8_t ok = 0;
+  for (uint8_t i = 0; i < 5; i++) {
+    s_lcd.fillRect(0, 120, 240, 16, pat[i]);
+    delay(10);
+    if (!ui_port_capture_band(125, 1, rgb, 240)) { Serial.println("[READTEST] chup loi"); continue; }
+    const uint8_t r5 = (uint8_t)((pat[i] >> 11) & 0x1F);
+    const uint8_t g6 = (uint8_t)((pat[i] >>  5) & 0x3F);
+    const uint8_t b5 = (uint8_t)( pat[i]        & 0x1F);
+    const uint8_t R6 = (uint8_t)((r5 << 1) | (r5 >> 4));   // mo rong chuan 5 -> 6 bit
+    const uint8_t B6 = (uint8_t)((b5 << 1) | (b5 >> 4));
+    const int er = (R6 << 2) | (R6 >> 4);
+    const int eg = (g6 << 2) | (g6 >> 4);
+    const int eb = (B6 << 2) | (B6 >> 4);
+    const int px = 120;                                     // pixel giua dai
+    const int ar = rgb[3 * px + 0], ag = rgb[3 * px + 1], ab = rgb[3 * px + 2];
+    const int dr = er > ar ? er - ar : ar - er;
+    const int dg = eg > ag ? eg - ag : ag - eg;
+    const int db = eb > ab ? eb - ab : ab - eb;
+    const bool good = (dr <= 4 && dg <= 4 && db <= 4);
+    if (good) ok++;
+    Serial.printf("[READTEST] %s 0x%04X -> chup RGB(%3d,%3d,%3d), panel hien thi (%3d,%3d,%3d) "
+                  "| lech %d,%d,%d -> %s\n",
+                  nm[i], (unsigned)pat[i], ar, ag, ab, er, eg, eb, dr, dg, db, good ? "OK" : "SAI");
+  }
+  free(rgb);
+  lv_obj_invalidate(lv_scr_act());
+  Serial.printf("[READTEST] KET LUAN: %u/5 -> %s\n", (unsigned)ok,
+                ok == 5 ? "CHUP MAN HINH DUNG MAU" : "CON LECH, xem so lieu tren");
 }
 
 // ===========================================================================
