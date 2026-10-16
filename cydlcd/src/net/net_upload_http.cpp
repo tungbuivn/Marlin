@@ -97,8 +97,13 @@ const char HTML_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html><html lang="vi"><head>
 <div class="s">Gui G-code tu dien thoai/PC -> cydlcd ghi vao the TF -> M22/M21 cho Marlin doc lai.</div>
 <div class="card up">
   <input type="text" id="tok" placeholder="token (vd TBT-3D-up)" value="%%TOKEN%%">
-  <input type="file" id="f" onchange="updGo()">
+  <!-- `multiple`: chon NHIEU file cung luc (yeu cau nguoi dung 2026-10-16). Chung se duoc gui LAN LUOT
+       vi man hinh CYD chi nhan 1 phien upload tai mot thoi diem (xem sendNext() trong JS). -->
+  <input type="file" id="f" onchange="updGo()" multiple>
   <button id="go" onclick="send()" disabled>Gui file</button>
+  <!-- DONG RIENG cho tien do gui NHIEU file. KHONG dung o #log vi `poll()` ghi de o do moi 700 ms
+       trong luc upload -> tien do se bi xoa ngay. -->
+  <div id="sel" class="s" style="margin:6px 0 0"></div>
   <div id="bar"><i id="bi"></i></div>
   <!-- THONG BAO status: hop thong bao tren LCD (co nut OK + tu an) KHONG hien tren man hinh nua ma hien o
        day; giu lai message LAN CUOI, het thoi gian tu an (neu co) thi tu mat, khong co thoi gian thi de lai -->
@@ -140,8 +145,75 @@ function apiFetch(url,opt){
 // Nut "Gui file": CHI bat khi DA CHON FILE va KHONG dang gui.
 // CSS da co `button:disabled{opacity:.5}` va trinh duyet chan click khi nut bi disabled.
 function updGo(){
-  var hasFile=document.getElementById('f').files.length>0;
-  document.getElementById('go').disabled=(!hasFile || upBusy);
+  var n=document.getElementById('f').files.length;
+  document.getElementById('go').disabled=(n<1 || upBusy);
+  // Dong tien do: chi cap nhat khi DANG RANH (luc dang gui thi sendNext() viet vao do).
+  if(!upBusy) document.getElementById('sel').textContent =
+    (n ? (n+' file da chon - se gui LAN LUOT (gui xong tung file mot)') : '');
+}
+
+// ---------------------------------------------------------------------------
+//  GUI NHIEU FILE (yeu cau nguoi dung 2026-10-16: "sua upload cho phep chon multiple file tren trinh duyet")
+//
+//  VI SAO GUI LAN LUOT chu khong song song: WebServer cua ESP32 phuc vu 1 request mot lan, va
+//  net_upload_http TU CHOI phien thu 2 bang 409 "dang nhan file". Ngoai ra moi file gui xong deu lam
+//  Marlin mount lai the (M22/M21) -> gui chong se lam hong ca hai.
+//
+//  TIEN DO dat o #sel (khong phai #log): trong luc upload, `poll()` ghi de #log moi 700 ms.
+// ---------------------------------------------------------------------------
+var upQueue=[], upTotal=0, upDone=0, upFail=0;
+
+function send(){
+  var fs=document.getElementById('f').files;
+  if(!fs.length){log('chua chon file');updGo();return;}
+  if(upBusy){log('dang gui file khac - doi xong da');updGo();return;}
+  // Chup lai danh sach ngay (nguoi dung co the doi lua chon giua chung -> khong anh huong lan gui nay).
+  upQueue=Array.prototype.slice.call(fs);
+  upTotal=upQueue.length; upDone=0; upFail=0;
+  upBusy=true; updGo();
+  sendNext();
+}
+
+function sendNext(){
+  if(!upQueue.length){                       // het hang doi -> tong ket
+    // KHONG goi updGo() o day: no ghi de #sel bang dong "N file da chon" -> mat thong bao XONG.
+    // Cap nhat nut bang tay roi moi viet tong ket.
+    upBusy=false;
+    var n=document.getElementById('f').files.length;
+    document.getElementById('go').disabled=(n<1);
+    document.getElementById('sel').textContent =
+      'XONG: '+upDone+'/'+upTotal+' file'+(upFail?(' - '+upFail+' file LOI (xem o log)'):'');
+    log('gui xong '+upDone+'/'+upTotal+' file'+(upFail?(' - '+upFail+' LOI'):''));
+    pollErr=0; poll(true);
+    return;
+  }
+  var f=upQueue.shift();
+  var tok=document.getElementById('tok').value;
+  var fd=new FormData(); fd.append('name',f.name); fd.append('size',f.size); fd.append('file',f, f.name);
+  var x=new XMLHttpRequest();
+  x.open('POST','/upload?token='+encodeURIComponent(tok));
+  x.setRequestHeader('X-CYDLCD-Token',tok);
+  var idx=upDone+upFail+1;
+  document.getElementById('bi').style.width='0%';
+  document.getElementById('sel').textContent='dang gui '+idx+'/'+upTotal+': '+f.name;
+  x.upload.onprogress=function(e){
+    var p=e.lengthComputable?Math.round(e.loaded*100/e.total):0;
+    document.getElementById('bi').style.width=p+'%';
+    document.getElementById('sel').textContent='dang gui '+idx+'/'+upTotal+': '+f.name+' ('+p+'%)';
+  };
+  // Xong 1 file -> goi sendNext() cho file ke tiep (KHONG doi poll xong).
+  x.onload=function(){
+    var ok=(x.status===200 && x.responseText.indexOf('"Ok"')>=0);
+    if(ok) upDone++; else { upFail++; log('LOI '+idx+'/'+upTotal+' '+f.name+': '+x.responseText); }
+    document.getElementById('bi').style.width='0%';
+    sendNext();
+  };
+  x.onerror=function(){
+    upFail++; log('LOI ket noi khi gui '+idx+'/'+upTotal+' '+f.name);
+    document.getElementById('bi').style.width='0%';
+    sendNext();
+  };
+  x.send(fd);
 }
 function fmtB(n){ if(n>=1048576) return (n/1048576).toFixed(2)+' MB'; if(n>=1024) return Math.round(n/1024)+' KB'; return n+' B'; }
 // `reloadAtEnd`: sau khi phien upload KET THUC (done/error) thi moi nap lai danh sach file -> /files luon
@@ -215,24 +287,6 @@ function delFile(n,isdir,row,btn){
      if(btn) btn.disabled=false;
    });
 }
-function send(){
-  var f=document.getElementById('f').files[0];
-  if(!f){log('chua chon file');updGo();return;}
-  if(upBusy){log('dang gui file khac - doi xong da');updGo();return;}
-  var tok=document.getElementById('tok').value;
-  var fd=new FormData(); fd.append('name',f.name); fd.append('size',f.size); fd.append('file',f, f.name);
-  var x=new XMLHttpRequest();
-  x.open('POST','/upload?token='+encodeURIComponent(tok));
-  x.setRequestHeader('X-CYDLCD-Token',tok);
-  x.upload.onprogress=function(e){document.getElementById('bi').style.width=
-     (e.lengthComputable?Math.round(e.loaded*100/e.total):0)+'%';};
-  // Gui xong -> poll(true): theo doi tiep cho den khi done/error ROI MOI nap lai danh sach file.
-  x.onload=function(){log('tra loi: '+x.responseText);upBusy=false;updGo();pollErr=0;poll(true);};
-  x.onerror=function(){log('loi ket noi toi cydlcd');upBusy=false;updGo();};
-  x.send(fd); log('dang gui '+f.name+' ('+f.size+' B)...');
-  upBusy=true; updGo();                // KHOA nut ngay khi bat dau gui (tranh bam 2 lan)
-}
-
 // ---- CHUP MAN HINH: nut "Chup man hinh" o tieu de goi ham nay ----
 // Lay GET /screen.bmp (man hinh doc nguoc panel) -> hien trong lop phu #snapov + cho LUU ve may.
 // PHAI them ?t=<ms>: khong co thi trinh duyet dung lai anh CU trong cache, bam lan sau van ra anh cu.
