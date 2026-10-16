@@ -406,8 +406,9 @@ void page_mesh_update(void) {
     // Xanh = dang bat (co bu mesh), Vang = dang tat. Neu BAT ma chua co mesh nao duoc luu thi canh bao do.
     lv_color_t c = cydlcd.mesh_on ? (cydlcd.mesh_valid ? COL_OK : COL_ERR) : COL_WARN;
     lv_obj_set_style_text_color(me_info, c, 0);
-    if (me_btn_on)  lv_obj_set_style_bg_color(me_btn_on,  cydlcd.mesh_on  ? COL_OK   : COL_BTN, 0);
-    if (me_btn_off) lv_obj_set_style_bg_color(me_btn_off, cydlcd.mesh_on  ? COL_BTN  : COL_WARN, 0);
+    if (me_btn_on)  mk_btn_set_bg(me_btn_on,  cydlcd.mesh_on ? COL_OK  : COL_BTN);
+    // COL_OK va COL_WARN deu la mau SANG -> mk_btn_set_bg() tu chon chu toi (truoc chi doi nen -> 1.10-1.58:1)
+    if (me_btn_off) mk_btn_set_bg(me_btn_off, cydlcd.mesh_on ? COL_BTN : COL_WARN);
   }
 }
 

@@ -253,11 +253,30 @@ lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
   return b;
 }
 
-// Dat trang thai CHON cho nut: doi CA NEN va MAU CHU cung luc (xem ghi chu o ui_lvgl_int.h).
-void mk_btn_set_sel(lv_obj_t *btn, const bool sel) {
+// Mau CHU tuong phan voi mau NEN (xem ghi chu o ui_lvgl_int.h).
+// Do sang cam nhan xap xi do sang tuong doi cua WCAG (KHONG gamma — du chinh xac de PHAN LOAI):
+//     y = 0.2126*R + 0.7152*G + 0.0722*B      (nhan 10000 de dung so nguyen)
+// KHONG dung lv_color_brightness(): cong thuc cua LVGL la (3R+G+B)>>3, cho cyan #00E5FF chi 60/255
+// (vi R = 0) -> se xep cyan vao nhom "nen toi" va chon chu SANG, dung lai loi cu.
+// Nguong 40% tach dung theo bang mau hien co cua UI:
+//     nen TOI : COL_BTN 16% · MR_BG 11% · COL_BAR 7%
+//     nen SANG: COL_ERR 64% · COL_OK 71% · COL_ACCENT 72% · COL_WARN 83%
+lv_color_t mk_color_on(const lv_color_t bg) {
+  // ⚠️ `bg.ch.red/green/blue` la gia tri RGB565 (5/6/5 BIT), KHONG phai 8 bit: voi LV_COLOR_DEPTH 16
+  // thi `lv_color_hex()` nhet thang RGB565 vao `r.full` (xem lv_color_hex trong lvgl/src/misc/lv_color.h).
+  // Phai mo rong ve 8 bit TRUOC khi nhan trong so, neu khong moi mau deu ra "toi" (da mac loi nay that:
+  // nhan 2126/7152/722 len gia tri 5 bit lam ca COL_OK lan COL_ACCENT deu < nguong -> chon chu SANG).
+  const uint32_t r = (uint32_t)((bg.ch.red   << 3) | (bg.ch.red   >> 2));
+  const uint32_t g = (uint32_t)((bg.ch.green << 2) | (bg.ch.green >> 4));
+  const uint32_t b = (uint32_t)((bg.ch.blue  << 3) | (bg.ch.blue  >> 2));
+  const uint32_t y = r * 2126u + g * 7152u + b * 722u;
+  return (y > 1020000u) ? COL_ON_ACCENT : COL_TXT;     // 0.40 * 255 * 10000
+}
+
+// Doi NEN cua nut VA chon mau CHU tuong phan theo chinh mau nen do. Xem ghi chu o ui_lvgl_int.h.
+void mk_btn_set_bg(lv_obj_t *btn, const lv_color_t bg) {
   if (!btn) return;
-  const lv_color_t bg = sel ? COL_ACCENT    : COL_BTN;
-  const lv_color_t fg = sel ? COL_ON_ACCENT : COL_TXT;
+  const lv_color_t fg = mk_color_on(bg);
   // Chi set khi THAT SU doi: lv_obj_set_style_* luon invalidate vat -> goi vo dieu kien moi chu ky
   // cap nhat se lam man nhap nhay va ton bang thong SPI (xem jog_axis_mark / ov_marks).
   if (lv_obj_get_style_bg_color(btn, 0).full != bg.full)
@@ -265,6 +284,10 @@ void mk_btn_set_sel(lv_obj_t *btn, const bool sel) {
   lv_obj_t *l = lv_obj_get_child(btn, 0);
   if (l && lv_obj_get_style_text_color(l, 0).full != fg.full)
     lv_obj_set_style_text_color(l, fg, 0);
+}
+
+void mk_btn_set_sel(lv_obj_t *btn, const bool sel) {
+  mk_btn_set_bg(btn, sel ? COL_ACCENT : COL_BTN);
 }
 
 // ---------------------------------------------------------------------------

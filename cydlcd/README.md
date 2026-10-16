@@ -743,31 +743,48 @@ chắc chắn ở tầng 3.
 
 ### Tương phản chữ trên nền — bẫy "đổi nền mà quên đổi chữ" (2026-10-16)
 
-`COL_ACCENT` (`#00E5FF`) là màu **SÁNG**. Khi dùng nó làm **NỀN** cho vật đang chọn thì chữ phải là màu
-**TỐI**, nếu không chữ gần như vô hình:
+UI có **4 màu nền SÁNG**: `COL_ACCENT` `#00E5FF`, `COL_OK` `#81C784`, `COL_WARN` `#FFD54F`,
+`COL_ERR` `#FF8A80`. `mk_btn()` luôn đặt chữ là `COL_TXT` (sáng) **bất kể nền**, nên khi ai đó đổi
+**nền** mà quên đổi **chữ** thì chữ gần như tan vào nền:
 
-| Cặp màu | Tương phản | |
+| Chữ `COL_TXT` `#E6E1E5` trên nền | Tương phản | |
 |---|---|---|
-| `COL_TXT` `#E6E1E5` trên `COL_ACCENT` | **1,19:1** | ❌ còn xa mức 4,5:1 |
-| `COL_ON_ACCENT` `#102030` trên `COL_ACCENT` | **10,66:1** | ✅ |
+| `COL_ACCENT` (cyan) | **1,19:1** | ❌ |
+| `COL_OK` (xanh lá) | **1,58:1** | ❌ |
+| `COL_WARN` (vàng) | **1,10:1** | ❌ |
+| *(chuẩn WCAG / Material 3 cần)* | *≥ 4,5:1* | |
 
-Đã từng có **4 màn hình** (JOG, BED MESH, NHIỆT ĐỘ, THÔNG SỐ) chỉ đổi **nền** sang accent mà quên đổi
-**chữ** → chữ trên ô đang chọn tan vào nền. Hai chỗ khác (danh sách FILE, roller WIFI) tự đặt màu tối
-`0x102030` nên **đúng** — tức tác giả đã biết cách làm, chỉ là không có gì ép buộc.
+Đã từng có **6 chỗ ở 5 màn hình** mắc lỗi này: JOG (trục đang chọn) · BED MESH (nút ON **và** nút OFF) ·
+NHIỆT ĐỘ (ô vật liệu + nút bước) · THÔNG SỐ (nút bước) · CUSTOM (nút RUNOUT). Hai chỗ khác (danh sách
+FILE, roller WIFI) tự đặt màu tối `0x102030` nên **đúng** — tức tác giả đã biết cách làm, chỉ là không
+có gì ép buộc.
 
-Nay gom về **một token + một hàm** để không thể quên nữa:
+Nay gom về **một hàm tự chọn màu chữ theo độ sáng của nền**, để không thể quên nữa:
 
 ```c
-#define COL_ON_ACCENT lv_color_hex(0x102030)    // ui_lvgl_int.h
-void mk_btn_set_sel(lv_obj_t *btn, bool sel);   // ui_widgets.cpp: đổi CẢ nền và chữ
+lv_color_t mk_color_on(lv_color_t bg);            // nền sáng -> chữ tối, nền tối -> chữ sáng
+void mk_btn_set_bg(lv_obj_t *btn, lv_color_t bg); // ui_widgets.cpp: đổi NỀN + đặt CHỮ tương phản
+void mk_btn_set_sel(lv_obj_t *btn, bool sel);     // = mk_btn_set_bg(sel ? COL_ACCENT : COL_BTN)
+#define COL_ON_ACCENT lv_color_hex(0x102030)      // màu chữ tối dùng chung
 ```
 
-**Quy tắc:** mọi chỗ tô nền `COL_ACCENT` cho vật đang chọn thì gọi `mk_btn_set_sel(obj, đang_chọn)`,
-KHÔNG tự gọi `lv_obj_set_style_bg_color()`. Hàm tự bỏ qua khi màu không đổi (tránh nhấp nháy + tốn SPI —
-các màn cập nhật 150–400 ms một lần).
+**Quy tắc:** mọi chỗ đổi nền nút thì gọi `mk_btn_set_bg()`, KHÔNG tự gọi `lv_obj_set_style_bg_color()`.
+Hàm tự bỏ qua khi màu không đổi (tránh nhấp nháy + tốn SPI — các màn cập nhật 150–400 ms một lần).
+Đã kiểm công thức trên **cả 12 màu** của bảng màu: tương phản thấp nhất **5,09:1** ✓.
 
-Kiểm chứng trên board thật (đọc pixel từ ảnh `/screen.bmp`): nút X trang JOG `101 px` glyph tối,
-nút bước trang BED MESH `108 px`; tương phản `10,91:1` (trước là `1,19:1`).
+Kiểm chứng trên board thật (đọc pixel từ ảnh `/screen.bmp`): nút X trang JOG `10,90:1` · nút ON trang
+BED MESH `8,24:1` · nút RUNOUT trang CUSTOM `8,24:1` (trước là `1,19` / `1,24` / `1,58`).
+
+#### ⚠️ Bẫy khi tự tính độ sáng: `lv_color_hex()` KHÔNG trả về 8 bit
+
+Với `LV_COLOR_DEPTH 16`, `lv_color_hex(0x81C784)` **nhét thẳng RGB565** vào `r.full`
+(xem `lv_color_hex` trong `lvgl/src/misc/lv_color.h`), nên `bg.ch.red/green/blue` là giá trị
+**5/6/5 bit** — `(1, 7, 4)` chứ KHÔNG phải `(129, 199, 132)`. Nhân trọng số 8 bit (`2126/7152/722`)
+lên giá trị 5 bit làm **mọi màu đều ra "tối"** ⇒ luôn chọn chữ sáng ⇒ **dựng lại đúng lỗi cũ**.
+`mk_color_on()` phải mở rộng về 8 bit **trước** khi tính (đã mắc lỗi này thật một lần).
+
+Cũng **đừng dùng** `lv_color_brightness()` của LVGL: công thức là `(3R+G+B)>>3`, cho cyan `#00E5FF`
+chỉ `60/255` (vì `R = 0`) nên xếp cyan vào nhóm "nền tối".
 
 **Material 3 — bo góc:** `mk_btn()` đổi **3 → 8 px** (filled button của M3 dùng bo góc lớn/pill).
 **`GAP` CỐ Ý giữ nguyên 2 px**: tăng lên 4 làm trang JOG vượt ngưỡng và **bật thanh trạng thái dưới**

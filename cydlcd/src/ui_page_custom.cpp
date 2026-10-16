@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ui_page_custom.cpp -- man CUSTOM cua UI LVGL (man hinh CYD): G34 / Init SD /
  * M119 endstop / M412 filament / reboot DFU - cac muc khong con cho o MENU.
  *
@@ -30,9 +30,9 @@ static bool s_runout_on = true;
 static void runout_mark(void) {
   if (!cu_runout) return;
   set_text(lv_obj_get_child(cu_runout, 0), T(s_runout_on ? UI_T_CUST_RUNOUT_ON : UI_T_CUST_RUNOUT_OFF));
-  const lv_color_t want = s_runout_on ? COL_OK : COL_BTN;
-  if (lv_obj_get_style_bg_color(cu_runout, 0).full != want.full)
-    lv_obj_set_style_bg_color(cu_runout, want, 0);
+  // mk_btn_set_bg() doi NEN VA chon CHU tuong phan theo chinh mau nen: COL_OK (#81C784) la mau SANG
+  // nen chu phai la mau toi. Chi doi nen thoi thi chu con 1.58:1 — gan nhu vo hinh.
+  mk_btn_set_bg(cu_runout, s_runout_on ? COL_OK : COL_BTN);
 }
 
 static void cb_runout_toggle(lv_event_t *e) {

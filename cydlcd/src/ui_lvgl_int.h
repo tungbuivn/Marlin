@@ -495,16 +495,29 @@ lv_obj_t *mk_btn(lv_obj_t *parent, const char *txt, lv_coord_t w, lv_coord_t h,
 lv_obj_t *mk_btn_grow(lv_obj_t *parent, const char *txt, lv_coord_t h,
                       lv_event_cb_t cb, void *ud);
 /**
- * Dat trang thai CHON cho mot nut do `mk_btn()` tao ra: doi CA NEN va MAU CHU cung luc.
- *
- * VI SAO CO HAM NAY (thay vi moi noi tu goi lv_obj_set_style_bg_color):
- * nen `COL_ACCENT` la mau SANG nen chu phai doi sang `COL_ON_ACCENT` (mau toi), neu khong tuong phan
- * chi con 1.19:1 — chu gan nhu vo hinh. Da tung co 4 man hinh (JOG/MESH/PREHEAT/SETTINGS) chi doi nen
- * ma quen doi chu. Gom vao mot ham thi khong the quen nua.
- *
- * Chi set khi mau THAT SU doi (lv_obj_set_style_* luon invalidate vat -> goi vo dieu kien moi chu ky
- * se lam man nhap nhay va ton bang thong SPI).
+ * Mau CHU tuong phan voi mot mau NEN bat ky: nen SANG -> chu toi (`COL_ON_ACCENT`), nen TOI -> chu sang
+ * (`COL_TXT`). Xem `mk_btn_set_bg()`.
  */
+lv_color_t mk_color_on(lv_color_t bg);
+
+/**
+ * Doi NEN cua mot nut do `mk_btn()` tao ra VA chon mau CHU tuong phan theo chinh mau nen do.
+ *
+ * VI SAO CO HAM NAY (thay vi moi noi tu goi `lv_obj_set_style_bg_color`):
+ * UI co nhieu mau nen SANG (`COL_ACCENT` #00E5FF, `COL_OK` #81C784, `COL_WARN` #FFD54F,
+ * `COL_ERR` #FF8A80). `mk_btn()` luon dat chu la `COL_TXT` (sang) bat ke nen, nen hien tuong
+ * "doi nen ma quen doi chu" lam chu gan nhu vo hinh:
+ *     COL_TXT tren COL_ACCENT = 1.19:1 · tren COL_OK = 1.58:1 · tren COL_WARN = 1.10:1
+ *     (WCAG / Material 3 can >= 4.5:1; dung ham nay thi >= 9:1)
+ * Da tung co 6 cho mac loi nay o 5 man hinh (JOG · BED MESH x2 · NHIET DO · THONG SO · CUSTOM).
+ * Gom vao mot ham thi khong the quen nua.
+ *
+ * Chi set khi mau THAT SU doi (`lv_obj_set_style_*` luon invalidate vat -> goi vo dieu kien moi chu ky
+ * cap nhat se lam man nhap nhay va ton bang thong SPI; cac man nay cap nhat 150-400 ms/lan).
+ */
+void mk_btn_set_bg(lv_obj_t *btn, lv_color_t bg);
+
+/** Truong hop hay dung nhat: vat dang CHON (nen `COL_ACCENT`) hay khong (nen `COL_BTN`). */
 void mk_btn_set_sel(lv_obj_t *btn, bool sel);
 /** Vung BAM trong suot co toa do tuyet doi (cb == NULL: khong vao group). */
 lv_obj_t *mk_hit(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h,
