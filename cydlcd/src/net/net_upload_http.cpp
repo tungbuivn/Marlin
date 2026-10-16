@@ -478,6 +478,15 @@ void handle_upload_stream(void) {
       // (dat roi thi khong con phan biet duoc nua). Day la tin hieu GOC de cyd_sd_temp_open() biet
       // phai MO DANG GHI (truncate) hay GHI TIEP (append) - xem ghi chu o cyd_sd_temp_open().
       const bool new_sess = !s_sess_busy;
+      // 2026-10-16 -- TAT MODEM SLEEP khi day file. `net_wifi_ps(false)` DA CO SAN tu truoc nhung
+      // KHONG AI GOI (comment o net_wifi.cpp ghi "net_wifi_ps(false) khi day file" nhung chua noi day)
+      // => moi lan upload deu chay voi modem sleep BAT: radio ngu giua cac beacon (~100 ms) nen moi dot
+      // nhan/gui deu phai cho thuc day -> do duoc chi ~180 KB/s (1,4 Mbit) trong khi do KHONG ghi the.
+      // Xong phien thi bat lai (tiet kiem dien).
+      if (new_sess) {
+        net_wifi_ps(false);
+        HLOG("[HTTP] upload bat dau: TAT modem sleep WiFi (do throughput)\n");
+      }
       // Ranh gioi request: phan file DAU TIEN cua 1 request = phien moi (dem lai parts/chunks/tong).
       if (!s_sess_busy) {
         s_sess_busy = true;
@@ -590,6 +599,7 @@ void handle_upload_stream(void) {
       s_http_state = HS_ERR;
       s_sess_busy = false;
       s_parts = 0;                                 // don luon bo dem part (phong khi request sau khong reset)
+      net_wifi_ps(true);                           // bat lai modem sleep (phien bi ngat)
       snprintf(s_msg, sizeof(s_msg), "client ngat giua luc gui");
       HLOG("[HTTP] %s (phan #%u, %u chunk, da nhan %lu B)\n",
            s_msg, (unsigned)s_parts, (unsigned)s_chunks, (unsigned long)s_rx);
@@ -599,6 +609,10 @@ void handle_upload_stream(void) {
 
 void handle_upload_done(void) {
   char js[256];
+  // Het request -> BAT LAI modem sleep (tiet kiem dien). Phai dat o DAU ham vi ham nay co nhieu
+  // duong thoat som (sai token / dang in / loi). Duong NGAT (UPLOAD_FILE_ABORTED) khong di qua day
+  // nen nhanh `default` cua handle_upload_stream cung phai bat lai.
+  net_wifi_ps(true);
   // Het request (du thanh cong hay loi): mo phien ra de request sau lai la "phien moi".
   // Ghi chu chan doan: `parts`>1 nghia la client gui file thanh NHIEU PHAN (multipart nhieu phan file).
   if (!token_ok()) {

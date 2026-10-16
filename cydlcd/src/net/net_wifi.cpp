@@ -164,16 +164,41 @@ bool start_sta(const bool want) {
     WiFi.persistent(false);            // KHONG de core ghi credential xuong NVS cua no
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);       // driver tu ket noi lai khi mat (chot ha o net_wifi_poll)
-    WiFi.setSleep(true);               // tiet kiem dien; net_wifi_ps(false) khi day file
+    // ---------------------------------------------------------------------------
+    // 2026-10-16 -- TAT HAN MODEM SLEEP (truoc day `setSleep(true)`).
+    //
+    //  DO DUOC (nguoi dung than: "tool bao speed upload chi ~1,6 Megabit trong khi WiFi 10 Megabit"):
+    //    * RTT toi man hinh qua /status: 29..108 ms (trung binh ~50 ms) - QUA CAO cho mang LAN.
+    //    * Tai trang chu 16 KB (khong qua parser multipart): 85..175 KB/s.
+    //    * Upload 1 MB: 112..120 KB/s; do RIENG mang (token sai -> khong ghi the): 177..186 KB/s.
+    //  => Throughput bi chan boi  throughput ~= TCP window / RTT. Window mac dinh cua ESP32 ~5,7 KB,
+    //     RTT ~30 ms -> ~190 KB/s: khop dung so do. Modem sleep lam radio ngu giua cac beacon nen moi
+    //     dot trao doi deu phai cho thuc day -> RTT cao va thay doi that thuong.
+    //
+    //  MAN HINH CYD CAM DIEN TU MAY IN (khong chay pin) nen tiet kiem dien KHONG co y nghia; doi lai
+    //  duoc RTT thap hon -> throughput cao hon (cung window). `net_wifi_ps()` van giu de bat lai khi
+    //  that su can.
+    // ---------------------------------------------------------------------------
+    WiFi.setSleep(false);
     // ---------------------------------------------------------------------------
     // GIAM CONG SUAT PHAT WiFi (2026-10-15). LY DO (do tren may that): ghi file upload qua WiFi bi
     // "ghi the TF loi" CHAP CHON (co lan ghi tron 4,3 MB, co lan chet o ~1-2 MB) trong khi ghi TRUC
     // TIEP len the (khong co WiFi) thi LUON duoc => nghi nguon 3V3 sut khi WiFi PHAT cong voi the SD
     // dang ghi (dien tro/tu loc tren board CYD rat mong). Mac dinh cua core la 19,5 dBm (toi da).
-    // Ha xuong 8,5 dBm: RSSI dang ~-50 dBm (rat tot) nen khong anh huong thuc te, ma dong dinh giam
-    // dang ke -> ghi the on dinh hon. Neu sau nay can xa hon: doi so nay (WIFI_POWER_11dBm...).
     // ---------------------------------------------------------------------------
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    // 2026-10-16 -- DOI tu 8,5 dBm len 15 dBm (THU NGHIEM de tim nguyen nhan upload cham).
+    // Do duoc: tong toc do KHONG tang khi mo nhieu ket noi song song (1/4/8/16 ket noi: 132/149/81/69
+    // KB/s) => khong phai window TCP / parser / the SD, ma la CHINH LINK WiFi. TX power tut 11 dB so
+    // voi mac dinh 19,5 dBm lam duong NGUOC (AP nhan tin hieu cua CYD) yeu di -> AP ha MCS -> cham.
+    //
+    // 8,5 dBm duoc chon truoc do de chua loi "ghi the TF chap chon khi vua phat WiFi" (nguon 3V3 sut).
+    // Nay loi do da co them lop chong (ghi lai kieu FILE_APPEND o sd_recover_part) nen nang duoc len 15 dBm.
+    // DA DO CA 3 MUC (tai trang 16 KB, huong CYD->PC): 8,5 dBm = 85..175 KB/s | 15 dBm = 203..246 KB/s
+    // | 19,5 dBm = 150..203 KB/s. Chon 15 dBm: nhanh nhat do duoc VA con cach muc toi da 4,5 dB nen it
+    // rui ro sut nguon 3V3 (kiem tra 4 MB upload o 15 dBm: chi 2 lan "the ghi thieu", phuc hoi duoc,
+    // file dung 4194304 B). NEU GHI THE LAI CHAP CHON thi ha ve 11 dBm roi 8,5 dBm.
+    // ---------------------------------------------------------------------------
+    WiFi.setTxPower(WIFI_POWER_15dBm);
     s_started = true;
   }
   WiFi.begin(s_ssid, s_pass);
