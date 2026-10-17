@@ -1523,7 +1523,12 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
 bool cyd_sd_write_test(const uint32_t kb) {
   CardLock lk(0); if (!lk.ok) return false;
   const uint32_t total = kb ? (kb * 1024u) : (4u * 1024u * 1024u);
-  static uint8_t buf[1436];                       // dung bang kich thuoc chunk cua WebServer
+  // 2026-10-17 (don DRAM): TRUOC DAY la `static uint8_t buf[1436]` -> 1.436 B DRAM VINH VIEN chi de
+  // phuc vu lenh chan doan `UI WTEST` (khong bao gio chay khi may in). Nay cap phat DONG, xong thi tra.
+  // Buffer van giu dung 1436 B = kich thuoc chunk cua WebServer de phep thu giu nguyen y nghia.
+  uint8_t *buf = (uint8_t *)malloc(1436);
+  if (!buf) { ELOG("[UP] WTEST: het RAM\n"); return false; }
+  struct BufGuard { uint8_t *p; ~BufGuard() { free(p); } } guard{buf};
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = (uint8_t)(i * 7u + 3u);
   ELOG("[UP] WTEST: ghi thu %lu KB bang duong upload (khong qua WiFi)\n", (unsigned long)(total / 1024u));
   if (!cyd_sd_temp_open("WTEST.BIN", total, 1, true)) {   // true = phien moi (truncate)

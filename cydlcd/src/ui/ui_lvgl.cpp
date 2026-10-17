@@ -657,7 +657,12 @@ void show_page(uint8_t p) {
 // ~100 KB heap va truoc day chi con ~22 KB -> SPP server khong len duoc (Windows: 10108
 // "No such service is known"). Ve theo dai 20 dong thay vi 40: them vai lan flush SPI,
 // cham hon khong dang ke (khong dung DMA, van 1 buffer nhu cu).
-#define LV_DRAW_BUF_LINES 20
+// 2026-10-17 (don DRAM): 20 -> 10 dong. 320 * 10 * 2 = 6.400 B (truoc 12.800 B) -> tiet kiem 6,4 KB.
+// Doi lai: gap doi so lan flush SPI (moi lan 10 dong thay vi 20). Comment cu da ghi ro "ve theo dai 20
+// dong thay vi 40: chi them vai lan flush SPI, cham hon khong dang ke" -> 10 dong cung vay.
+// KHONG giam tiep duoi 10: LVGL can buffer toi thieu bang 1/10 chieu cao man hinh (240/10 = 24 > 10 nen
+// van tren nguong, nhung cang nho thi chi phi goi flush_cb cang lon).
+#define LV_DRAW_BUF_LINES 10
 
 void ui_lvgl_begin(void) {
   lv_init();
@@ -1514,13 +1519,17 @@ void ui_lvgl_test_perf(void) {
   // khong co `ESP` => TRUOC DAY dong nay lam 2 env STM32 BAO LOI BUILD
   // ("'ESP' was not declared in this scope", ui_lvgl.cpp). Nay tach theo board (sua 2026-10-16).
   #if defined(CYDLCD_BOARD_CYD)
-    Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap %u B\n",
+    // 2026-10-17: them `max_used` = DINH that cua pool (LVGL tu theo doi) - de quyet dinh ha LV_MEM_SIZE
+    // ma khong doan. Doc dong nay SAU KHI da mo du cac trang.
+    Serial.printf("[PERF] lvmem: %lu/%lu B (max_used %lu, frag %u%%, max free %lu B) | heap %u B\n",
                   (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
-                  (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size, (unsigned)ESP.getFreeHeap());
+                  (unsigned long)lm.max_used, (unsigned)lm.frag_pct,
+                  (unsigned long)lm.free_biggest_size, (unsigned)ESP.getFreeHeap());
   #else
-    Serial.printf("[PERF] lvmem: %lu/%lu B (frag %u%%, max free %lu B) | heap: khong co ESP\n",
+    Serial.printf("[PERF] lvmem: %lu/%lu B (max_used %lu, frag %u%%, max free %lu B) | heap: khong co ESP\n",
                   (unsigned long)(lm.total_size - lm.free_size), (unsigned long)lm.total_size,
-                  (unsigned)lm.frag_pct, (unsigned long)lm.free_biggest_size);
+                  (unsigned long)lm.max_used, (unsigned)lm.frag_pct,
+                  (unsigned long)lm.free_biggest_size);
   #endif
   s_pf_loop_n = s_pf_hdl_us = s_pf_hdl_max_us = 0;
   s_pf_task_n = s_pf_task_us = s_pf_task_max_us = 0;
