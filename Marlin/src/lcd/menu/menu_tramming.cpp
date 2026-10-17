@@ -62,7 +62,7 @@
 //   - DONE tu di toi goc CAN CHINH ke tiep (bo qua goc MOC va cac goc da DAT) + probe luon goc do
 //   - khi khong con goc nao -> tu HOME lai Z + probe lai CA 4 GOC (vong moi, moc moi)
 //   - BACK: thoat ve man hinh chinh
-// "DAT" (auto-done) khi |delta| <= TBT_DONE_MM (0.01mm) - nguong nhieu cua probe.
+// "DAT" (auto-done) khi |r_i - R| <= TBT_DONE_MM (0.02mm), R = moc (diem cao nhat o che do MAX).
 #define BTN_PROBE 0   // probe lai goc dang dung
 #define BTN_WORST 1   // doi chien luoc: MAX (moc = Z-MIN) <-> MIN (moc = Z-MAX)
 #define BTN_BACK  2   // thoat ve man hinh chinh

@@ -71,8 +71,6 @@ void (*enter_idle_hook)() = nullptr;
 // ---------------------------------------------------------------------------
 uint8_t state;                             // TR_*
 uint8_t probe_state;                       // PR_*
-// 2026-10-17: GOC MOC (goc khong can van) LUU THEO CHI SO. Xem giai thich o set_ref().
-uint8_t ref_index;
 uint8_t worst_index,                       // goc lech nhieu nhat (nozzle dang o day)
         step_index;                        // dang probe toi goc thu may
 bool    all_dat;                           // CA 4 GOC da dat -> chi con nut BACK
@@ -103,10 +101,9 @@ float ref_max() { return z_ref_max; }
 
 // MOC SO SANH = Z-MIN hoac Z-MAX cua cac goc da do (KHONG phai trung binh):
 //
-//   tramming_worst_max = true  (dang chinh goc CAO NHAT) -> MOC = Z-MIN (goc thap nhat)
-//        so cua moi goc = z_i - Z_MIN >= 0  => "phai HA xuong bao nhieu mm"  (van CCW)
-//   tramming_worst_max = false (dang chinh goc THAP NHAT) -> MOC = Z-MAX (goc cao nhat)
-//        so cua moi goc = z_i - Z_MAX <= 0  => "phai NANG len bao nhieu mm"  (van CW)
+//   tramming_worst_max = true  (che do MAX) -> MOC = Z-MAX (goc CAO NHAT)
+//   tramming_worst_max = false (che do MIN) -> MOC = Z-MIN (goc THAP NHAT)
+//   So hien thi = r_i = z_i - Z-home (tam ban), khong doi moc giua chung.
 //
 // Chien luoc MOT CHIEU: hoac chi HA cac goc cao xuong bang goc thap nhat, hoac chi NANG cac goc
 // thap len bang goc cao nhat -> khong bao gio phai vua nang vua ha, va khong dung tới Z-home.
@@ -127,15 +124,28 @@ static float extreme_probed(const bool want_max) {
   return v;
 }
 
+// MOC = diem CAO NHAT khi che do MAX (vd r3), diem THAP NHAT khi che do MIN.
+// 2026-10-17 (nguoi dung dua thuat toan): TRUOC DAY nguoc - che do MAX lai lay Z-MIN lam moc.
+// Thuat toan dung:
+//   1/ home
+//   2/ do p1..p4
+//   3/ r_i = p_i - Z-home (chinh la so DANG HIEN THI)
+//   4/ moc R = r LON NHAT (che do MAX; gia su r3) - goc nay KHONG can van
+//   5/ van vit o goc lech nhat, probe lai -> r_moi
+//   6/ DAT khi |r_moi - R| <= TBT_DONE_MM (0,02 mm)
 float ref() {
-  if (!z_ref_set) return extreme_probed(!tramming_worst_max);
-  return tramming_worst_max ? z_ref_min : z_ref_max;
+  if (!z_ref_set) return extreme_probed(tramming_worst_max);
+  return tramming_worst_max ? z_ref_max : z_ref_min;
 }
 
 // MOC dung de HIEN THI: khi CA 4 GOC DA DAT thi doi sang so voi TAM BAN (= diem home Z,
 // base_home_pos) de biet moi goc CAO HON hay THAP HON tam (so DUONG = goc cao hon tam).
 // (Man 12864 va man hinh CYD dung cung ham nay -> 2 man hien ra so GIONG NHAU.)
-float display_ref() { return all_dat ? base_home_pos(Z_AXIS) : ref(); }
+// 2026-10-17 (nguoi dung chi ra): truoc day ham nay DOI MOC giua chung - luc dau so voi `ref()`
+// (Z-MIN/Z-MAX), khi ca 4 goc dat thi doi sang `base_home_pos` (tam ban) -> so hien tren man hinh
+// NHẢY MOC, khong biet dang doc theo chuan nao. Nay LUON so voi Z-HOME (tam ban) cho moi truong hop;
+// con viec QUYET DINH "goc nay da dat chua" thi so voi Z-MIN/Z-MAX trong need_adjust().
+float display_ref() { return base_home_pos(Z_AXIS); }
 
 // Chot moc tu cac goc vua do (lay CA Z-MIN lan Z-MAX). Chi nhan khi du >= 3 goc (nguong cua G35).
 static void set_ref() {
@@ -145,20 +155,6 @@ static void set_ref() {
     z_ref_min = extreme_probed(false);   // goc THAP nhat
     z_ref_max = extreme_probed(true);    // goc CAO nhat
     z_ref_set = true;
-    // 2026-10-17 (SUA LOI "bam PROBE khong van gi ma tu nhay sang goc khac"):
-    //   Goc MOC = goc THAP nhat khi chinh MAX, goc CAO nhat khi chinh MIN. Truoc day no duoc nhan dien
-    //   LUC CHAY bang cach so gia tri: `z_delta[i] <= z_ref_min + 0.0005`. Nhung z_ref_min da CHOT
-    //   (dong bang) sau lan do 4 goc, con PROBE lai mot goc thi z_delta cua goc do CO THE vuot qua
-    //   moc (sai so probe / ban nhun). Khi do chinh GOC VUA DO bi coi la moc -> need_adjust() tra
-    //   false -> wizard tu nhay sang goc ke tiep du chua van vit gi.
-    //   Do that 2026-10-17: BR +0.187 -> -0.247 sau mot lan bam PROBE (lech 0,434 mm), roi tu nhay
-    //   sang goc 3. Nay chot CHI SO ngay luc set_ref() -> mien nhiem voi viec gia tri troi.
-    uint8_t n2 = 0;
-    LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) ++n2;
-    if (n2) {
-      const float want = tramming_worst_max ? z_ref_min : z_ref_max;
-      LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i] && z_delta[i] == want) { ref_index = i; break; }
-    }
   }
   DEBUG_ECHOLNPGM("tramming: chot MOC Z-MIN=", z_ref_min, " Z-MAX=", z_ref_max, " (", n, " goc)");
 }
@@ -176,11 +172,15 @@ static bool probe_xy(const float x, const float y, float &out_z) {
 //   tramming_worst_max = false -> goc THAP NHAT (z_delta nho nhat)
 // roi di nozzle toi do (de nguoi dung van vit goc do).
 void goto_worst() {
+  // Goc can van = goc XA MOC NHAT: |r_i - R| lon nhat (thuong la goc nguoc dau voi moc).
+  // Truoc day chon theo cuc tri (MAX->cao nhat), sai voi thuat toan: moc da la cao nhat thi goc
+  // "cao nhat" chinh la moc, van vao no la vo nghia.
+  const float R = ref();
   float best = 0;
   bool found = false;
   LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
-    const float d = z_delta[i];
-    if (!found || (tramming_worst_max ? d > best : d < best)) { best = d; worst_index = i; found = true; }
+    const float d = ABS(z_delta[i] - R);
+    if (!found || d > best) { best = d; worst_index = i; found = true; }
   }
   if (!found) { DEBUG_ECHOLNPGM("tramming: khong probe duoc diem nao"); return; }
 
@@ -238,14 +238,16 @@ static void goto_index(const uint8_t i) {
 // ---------------------------------------------------------------------------
 // Goc nay CON phai chinh khong?
 //   - goc nguoi dung DA BAM DONE (z_accepted) thi KHONG: coi nhu xong, du delta chua vao nguong
-//   - goc dinh nghia MOC (Z-MIN o che do MAX, Z-MAX o che do MIN) thi KHONG: no chinh la chuan
-//   - goc da trong nguong nhieu (|delta| <= TBT_DONE_MM = 0.01mm) thi KHONG -> coi nhu "auto DAT"
+//   - goc MOC (Z-MAX o che do MAX, Z-MIN o che do MIN) tu ra 0 nen tu dong DAT, khong can nhan dien rieng
+//   - goc da trong nguong (|r_i - R| <= TBT_DONE_MM = 0.02mm) thi KHONG -> coi nhu "auto DAT"
 // ---------------------------------------------------------------------------
 bool need_adjust(const uint8_t i) {
   if (z_accepted[i]) return false;                // nguoi dung da chap nhan goc nay
   if (!z_ok[i]) return true;                      // chua do duoc -> van phai toi kiem tra
-  // Goc MOC: so theo CHI SO da chot trong set_ref(), KHONG so gia tri (xem giai thich o set_ref).
-  if (z_ref_set && i == ref_index) return false;
+  // DAT khi |r_i - R| <= TBT_DONE_MM, voi r = z_delta - Z-home (so dang hien thi) va R = moc o ref().
+  // Goc MOC tu no ra 0 -> tu dong DAT, KHONG can nhan dien rieng (truoc day co phep "z_i <= z_ref_min
+  // thi coi la moc" -> khi probe lai lam z tut qua moc thi chinh goc do bi coi la moc va bi danh
+  // "xong" du chua van vit gi - dung loi nguoi dung bao 2026-10-17).
   return ABS(z_delta[i] - ref()) > TBT_DONE_MM;
 }
 

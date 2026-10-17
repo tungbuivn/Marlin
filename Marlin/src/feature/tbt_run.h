@@ -40,7 +40,7 @@ enum TramProbeState : uint8_t {
 
 // Nguong "auto DAT": |delta| <= so nay (mm) thi coi nhu goc do da xong.
 // 0.01mm = muc nhieu that cua probe (do lai 20 lan lech 7-10um), duoi muc nay van nua la vo nghia.
-#define TBT_DONE_MM 0.01f
+#define TBT_DONE_MM 0.02f
 
 namespace tbt_run {
 
@@ -73,7 +73,7 @@ namespace tbt_run {
   float   ref_min();                   // MOC Z-MIN da chot
   float   ref_max();                   // MOC Z-MAX da chot
   float   ref();                       // MOC dang dung (tramming_ref cu)
-  float   display_ref();               // all_dat ? base_home_pos(Z_AXIS) : ref()  (nhu man 12864)
+  float   display_ref();               // LUON = base_home_pos(Z_AXIS): so hien thi luon la r_i = z_i - Z-home
   bool    need_adjust(const uint8_t i);
   bool    any_need_adjust();
   bool    next_need_adjust();          // doi worst_index; false = het goc
