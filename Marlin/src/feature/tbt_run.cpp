@@ -306,7 +306,7 @@ static bool may_auto_move() { return auto_move && can_move_now(); }
 void toggle_auto() {
   // KHONG doi `active`: day la cai dat che do, phai bam duoc ca khi man hinh dang READY.
   auto_move = !auto_move;
-  // 2026-10-17: log TAM THOI de chan doan (DEBUG_ECHOLNPGM co the bi tat).
+  // Log luon in ra (DEBUG_ECHOLNPGM co the bi tat) - giu lai de sau nay chan doan nhanh.
   SERIAL_ECHOLNPGM("TBT-AUTO toggle -> ", auto_move ? 1 : 0);
   DEBUG_ECHOLNPGM("tramming: AUTO = ", auto_move ? "ON" : "OFF");
   refresh();

@@ -385,6 +385,7 @@ static inline char tbt_cmd_parse_exact(const char *line) {
     case TBT_CMD_GOTO2:
     case TBT_CMD_GOTO3:
     case TBT_CMD_AUTO:
+      break;            // ⚠️ BAT BUOC: thieu break thi cac case tren ROI XUONG default -> return 0
     default:
       return 0;
   }
