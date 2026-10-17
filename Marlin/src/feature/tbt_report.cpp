@@ -113,7 +113,11 @@ bool tbt_report_cmd(const char cmd) {
       break;
 
     case TBT_CMD_PROBE:
-      if (can_act) tbt_run::probe_here();              // tu kiem tra active
+      if (can_act) tbt_run::probe_here();
+      break;
+    // 2026-10-17: bam nhan goc tren man hinh CYD -> di chuyen toi goc do
+    case TBT_CMD_GOTO0: case TBT_CMD_GOTO1: case TBT_CMD_GOTO2: case TBT_CMD_GOTO3:
+      if (can_act) tbt_run::goto_corner((uint8_t)(c - TBT_CMD_GOTO0));
       break;
 
     case TBT_CMD_DONE:

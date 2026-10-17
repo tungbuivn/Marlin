@@ -73,8 +73,7 @@ namespace tbt_run {
   float   ref_min();                   // MOC Z-MIN da chot
   float   ref_max();                   // MOC Z-MAX da chot
   // MOC dung de QUYET DINH (MAX -> Z-MAX, MIN -> Z-MIN). KHAC `display_ref()` = Z-home (chi de hien thi).
-  float   ref();
-  float   ref();                       // MOC dang dung (tramming_ref cu)
+  float   ref();                       // MOC dang dung (MAX -> Z-MAX, MIN -> Z-MIN)
   float   display_ref();               // LUON = base_home_pos(Z_AXIS): so hien thi luon la r_i = z_i - Z-home
   bool    need_adjust(const uint8_t i);
   bool    any_need_adjust();
@@ -87,6 +86,7 @@ namespace tbt_run {
   void exit();                         // thoat: stow probe + danh dau Z chua home
   void step();                         // 1 buoc cua may trang thai (giu nguyen thu tu cu)
   void probe_here();                   // PROBE: probe lai goc dang dung
+  void goto_corner(const uint8_t i);   // bam nhan goc tren man hinh CYD -> di chuyen toi goc do
   void done();                         // DONE: goc nay xong -> goc ke tiep / home+probe lai
   void toggle_minmax();                // doi chien luoc MAX <-> MIN (chi trong phien) roi di goc lech nhat
   void restart();                      // home lai Z + probe lai CA 4 GOC (moc moi)

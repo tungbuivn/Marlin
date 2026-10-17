@@ -65,6 +65,15 @@ void page_tbt_create(lv_obj_t *p) {
       const uint8_t i = (uint8_t)(r * 2 + k);
       tr_corner[i] = mk_label_w(row, "-", COL_TXT, 100);
       lv_obj_set_flex_grow(tr_corner[i], 1);
+      // 2026-10-17 (yeu cau nguoi dung): BAM VAO NHAN GOC -> di chuyen nozzle toi dung goc do.
+      // Marlin van giu `worst_index` = goc dang dung nen dau '*' bam theo nhu cu.
+      // Lenh TBT la 1 byte -> dung 4 ma rieng TBT_CMD_GOTO0..3 ('0'..'3').
+      // Nen khong dat nhan trong btn: nhan la con truc tiep cua trang nen `set_text` van ve binh thuong.
+      lv_obj_add_flag(tr_corner[i], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_add_event_cb(tr_corner[i], cb_tbt_cmd, LV_EVENT_CLICKED,
+                          (void *)(intptr_t)(TBT_CMD_GOTO0 + i));
+      // Phan hoi khi cham: doi mau chu, de biet da bam trung.
+      lv_obj_set_style_text_color(tr_corner[i], COL_ACCENT, LV_STATE_PRESSED);
     }
   }
 

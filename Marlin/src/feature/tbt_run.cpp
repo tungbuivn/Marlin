@@ -59,6 +59,10 @@
 
 namespace tbt_run {
 
+// Khai bao truoc: dinh nghia o duoi (khu "CHAN AN TOAN"), nhung probe_xy/goto_worst/goto_index
+// nam TRUOC do nen phai biet ten.
+static bool can_move_now();
+
 // ---------------------------------------------------------------------------
 // Hook UI (menu_tramming dat; link serial de NULL)
 // ---------------------------------------------------------------------------
@@ -161,6 +165,7 @@ static void set_ref() {
 
 // Nang len do cao an toan, di toi (x, y), roi probe
 static bool probe_xy(const float x, const float y, float &out_z) {
+  if (!can_move_now()) { out_z = NAN; return false; }
   do_blocking_move_to_z(TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, Z_CLEARANCE_BETWEEN_PROBES));
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
@@ -172,6 +177,7 @@ static bool probe_xy(const float x, const float y, float &out_z) {
 //   tramming_worst_max = false -> goc THAP NHAT (z_delta nho nhat)
 // roi di nozzle toi do (de nguoi dung van vit goc do).
 void goto_worst() {
+  if (!can_move_now()) return;
   // Goc can van = goc XA MOC NHAT: |r_i - R| lon nhat (thuong la goc nguoc dau voi moc).
   // Truoc day chon theo cuc tri (MAX->cao nhat), sai voi thuat toan: moc da la cao nhat thi goc
   // "cao nhat" chinh la moc, van vao no la vo nghia.
@@ -228,6 +234,7 @@ static void probe_here_raw() {
 // Phai probe lai vi sau khi vua van mot goc thi cac goc kia da lech di (so cu khong con dung)
 // - co so MOI trong cung khung Z thi moi biet can van bao nhieu.
 static void goto_index(const uint8_t i) {
+  if (!can_move_now()) return;
   worst_index = i;
   DEBUG_ECHOLNPGM("tramming: di toi goc ", i);
   do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
@@ -265,6 +272,22 @@ bool next_need_adjust() {
     const uint8_t i = uint8_t((worst_index + 1 + k) % G35_PROBE_COUNT);
     if (need_adjust(i)) { worst_index = i; return true; }
   }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// CHAN AN TOAN: KHONG BAO GIO DI CHUYEN KHI TRUC CHUA HOME
+//
+// LOI THAT 2026-10-17: nguoi dung nap lai firmware roi BAT NGUON 24V; trong luc chua home, lenh
+// MAX/MIN (toggle_minmax -> goto_worst) va PROBE (probe_here -> probe_here_raw -> probe_xy) van
+// goi do_blocking_move_to_* -> dau in di chuyen theo toa do tuong doi, SUYT DAM VAO MAY.
+// Nguyen nhan: `active` duoc set ngay trong begin() TRUOC khi home xong, trong khi chi `step()`
+// co nhanh TR_HOMING cho`all_axes_homed()`. Moi duong hanh dong khac deu khong kiem tra.
+// => Moi ham CO DI CHUYEN deu phai qua can_move_now().
+static bool can_move_now() {
+  if (!active) return false;
+  if (all_axes_homed()) return true;
+  DEBUG_ECHOLNPGM("tramming: TU CHOI di chuyen - truc CHUA HOME");
   return false;
 }
 
@@ -319,17 +342,34 @@ void begin() {
 
 // PROBE: probe lai goc dang dung. Goc vua probe DA DAT -> TU DI TIEP (khong can bam DONE).
 void probe_here() {
-  if (!active) return;
+  if (!can_move_now()) return;
   busy = true;
   probe_here_raw();
   busy = false;
   if (!need_adjust(worst_index)) state = TR_AUTO;
 }
 
+// BAM VAO NHAN GOC (BR/BL/FL/FR) tren man hinh CYD -> di chuyen toi dung goc do (yeu cau 2026-10-17).
+// Van giu nguyen `worst_index` = goc dang dung -> dau '*' tren man hinh bam theo.
+// Tu choi neu chua home (xem can_move_now) hoac chi so ngoai pham vi.
+void goto_corner(const uint8_t i) {
+  if (i >= G35_PROBE_COUNT) return;
+  if (!can_move_now()) return;
+  busy = true;
+  state = TR_POINT;
+  refresh();
+  goto_index(i);
+  state = TR_IDLE;
+  probe_state = PR_NONE;
+  busy = false;
+  if (enter_idle_hook) enter_idle_hook();
+  refresh();
+}
+
 // MAX<->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) - CHI TRONG PHIEN, khong luu EEPROM - roi
 // DI NGAY toi goc lech nhat cua che do moi VA PROBE luon goc do.
 void toggle_minmax() {
-  if (!active) return;
+  if (!can_move_now()) return;      // chua home -> khong doi che do, khong di chuyen
   busy = true;
   worst_toggle();
   state = TR_POINT;                      // man hinh hien "Go to point"
@@ -345,7 +385,7 @@ void toggle_minmax() {
 // nguong) => lan sau khong quay lai goc nay nua, di thang toi goc can chinh ke tiep CHUA duoc
 // chap nhan. Het goc -> home lai Z + probe lai CA 4 GOC (vong moi).
 void done() {
-  if (!active) return;
+  if (!can_move_now()) return;
   z_accepted[worst_index] = true;
   if (next_need_adjust()) {
     busy = true;

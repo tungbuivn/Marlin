@@ -72,6 +72,12 @@
 #define TBT_CMD_RESTART  'R'
 #define TBT_CMD_BACK     'B'
 #define TBT_CMD_QUERY    'Q'
+// 2026-10-17: bam vao nhan goc tren man hinh CYD -> di chuyen toi goc do.
+// Dung 4 ma rieng (chu so) de khong phai gui kem tham so (lenh TBT la 1 byte).
+#define TBT_CMD_GOTO0    '0'
+#define TBT_CMD_GOTO1    '1'
+#define TBT_CMD_GOTO2    '2'
+#define TBT_CMD_GOTO3    '3'
 
 // ---------------------------------------------------------------------------
 // phase (khop TR_IDLE..TR_AUTO cua tbt_run.h phia Marlin)
@@ -334,6 +340,10 @@ static inline char tbt_cmd_parse(const char *line) {
     case TBT_CMD_RESTART:
     case TBT_CMD_BACK:
     case TBT_CMD_QUERY:
+    case TBT_CMD_GOTO0:
+    case TBT_CMD_GOTO1:
+    case TBT_CMD_GOTO2:
+    case TBT_CMD_GOTO3:
       return c;
     default:
       return 0;
