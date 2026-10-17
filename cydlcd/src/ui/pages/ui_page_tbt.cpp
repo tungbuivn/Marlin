@@ -12,6 +12,9 @@
 
 #include <stdio.h>                  // snprintf
 #include <string.h>                 // strcmp
+#if defined(CYDLCD_BOARD_CYD)
+  #include <Arduino.h>              // Serial cho WIFILOG (log chan doan COM7)
+#endif
 
 #if CYDLCD_USE_LVGL
 
@@ -40,6 +43,8 @@ static const char *const TBT_NAME[TBT_PROTO_POINTS] = { "BR", "BL", "FL", "FR" }
 // Bam 1 trong 4 nut -> gui dung 1 ky tu lenh xuong Marlin (xem tbt_protocol.h)
 static void cb_tbt_cmd(lv_event_t *e) {
   const char c = (char)(intptr_t)lv_event_get_user_data(e);
+  // 2026-10-17: log chan doan - de biet cu cham co toi duoc day khong (xem COM7).
+  WIFILOG("[UI] TBT bam -> gui '%c' (0x%02X)\n", c, (unsigned)c);
   tbt_link_send(c);
   // (2026-10-17) Truoc day con nhanh `if (c == TBT_CMD_BACK) show_page(PG_MENU);` cho nut BACK o hang
   // 4 nut. Nut do da bo theo yeu cau nguoi dung.
@@ -98,6 +103,12 @@ void page_tbt_create(lv_obj_t *p) {
     lv_obj_set_style_pad_all(kheap, 0, 0);
     tr_auto_on  = mk_btn(kheap, "AUTO ON",  96, 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_AUTO);
     tr_auto_off = mk_btn(kheap, "AUTO OFF", 96, 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_AUTO);
+    // 2026-10-17 (yeu cau nguoi dung): to mau de thay trang thai - XANH = ON, DO = OFF.
+    // USER_1: vat tu quan ly nen -> focus khong ghi de mau (xem ui_lvgl_int.h).
+    mk_btn_set_bg(tr_auto_on,  MR_RESUMEBG);
+    mk_btn_set_bg(tr_auto_off, MR_STOPBG);
+    lv_obj_add_flag(tr_auto_on,  LV_OBJ_FLAG_USER_1);
+    lv_obj_add_flag(tr_auto_off, LV_OBJ_FLAG_USER_1);
     lv_obj_set_pos(tr_auto_on, 0, 0);
     lv_obj_set_pos(tr_auto_off, 0, 0);
   }
