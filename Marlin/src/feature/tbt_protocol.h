@@ -378,6 +378,13 @@ static inline char tbt_cmd_parse_exact(const char *line) {
     case TBT_CMD_BACK:
     case TBT_CMD_QUERY:
       break;
+    // 2026-10-17: lenh MOI phai duoc them o CA HAI ham parse (tbt_cmd_parse va tbt_cmd_parse_exact).
+    // Thieu o day thi tbt_report_cmd() tu choi ngay -> bam nut tren CYD khong co tac dung gi.
+    case TBT_CMD_GOTO0:
+    case TBT_CMD_GOTO1:
+    case TBT_CMD_GOTO2:
+    case TBT_CMD_GOTO3:
+    case TBT_CMD_AUTO:
     default:
       return 0;
   }
