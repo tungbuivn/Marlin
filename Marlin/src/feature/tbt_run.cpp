@@ -288,8 +288,12 @@ bool next_need_adjust() {
 // Nguyen nhan: `active` duoc set ngay trong begin() TRUOC khi home xong, trong khi chi `step()`
 // co nhanh TR_HOMING cho`all_axes_homed()`. Moi duong hanh dong khac deu khong kiem tra.
 // => Moi ham CO DI CHUYEN deu phai qua can_move_now().
+// 2026-10-17 (sua lan 2): TRUOC DAY ham nay doi ca `active`, nen khi man hinh dang READY (wizard chua
+// chay) thi MOI thao tac tay (bam nhan goc de di chuyen, bam AUTO) deu bi bo qua IM LANG. Nguoi dung
+// bao "bam ma khong di chuyen, bam auto khong thay doi".
+// Nay `can_move_now()` CHI la chan AN TOAN: truc phai home xong. Viec "co tu dong di chuyen hay khong"
+// do `auto_move` (may_auto_move) quyet dinh, tach rieng.
 static bool can_move_now() {
-  if (!active) return false;
   if (all_axes_homed()) return true;
   DEBUG_ECHOLNPGM("tramming: TU CHOI di chuyen - truc CHUA HOME");
   return false;
@@ -300,7 +304,7 @@ static bool may_auto_move() { return auto_move && can_move_now(); }
 
 // Bat/tat che do tu di chuyen (nut AUTO tren man CYD / 12864).
 void toggle_auto() {
-  if (!active) return;
+  // KHONG doi `active`: day la cai dat che do, phai bam duoc ca khi man hinh dang READY.
   auto_move = !auto_move;
   DEBUG_ECHOLNPGM("tramming: AUTO = ", auto_move ? "ON" : "OFF");
   refresh();
