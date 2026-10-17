@@ -275,6 +275,29 @@ bool printer_busy(void) {
   return (cydlcd.flags & (CYDLCD_SF_SD_PRINTING | CYDLCD_SF_PAUSED)) != 0;
 }
 
+// ===========================================================================
+//  CHAN CUNG MOI THAO TAC THE CUA MAN HINH KHI MAY DANG IN
+//
+//  YEU CAU NGUOI DUNG 2026-10-17: "tuyet doi khong dung the khi dang in ... cac thao tac khac voi the
+//  deu phai bi BUSY".
+//
+//  VI SAO: khi in, CYD la MAY CHU THE cua Marlin (`CYDLCD_SD_UART 1`) - Marlin doc/ghi TUNG SECTOR qua
+//  UART va chi cho 1000 ms/sector. Moi thao tac the khac cua man hinh (liet ke, xoa, mount lai, doc
+//  metadata, ghi file upload) deu lam Marlin phai CHO va co the lam hong phien doc -> dung in.
+//  Truoc day chi co `cyd_sd_yield_to_marlin()` = "Marlin vua doc the trong 400 ms" -> chi la NO LUC
+//  TOT NHAT: Marlin buffer truoc mot doan la CYD tuong the ranh va van dung (da gap that: mot lan goi
+//  `GET /files` trong luc dang in van tra ve duoc danh sach => no DA mo the).
+//  Nay: ham nao cua MAN HINH cham the cung tu choi khi `printer_busy()` (dang in HOAC dang tam dung).
+//
+//  DUONG `link` (phuc vu sector cho Marlin) KHONG bi chan - do chinh la duong duoc uu tien.
+// ===========================================================================
+static bool card_busy_for_ui(void) {
+  // KHONG dat bien dem tinh o day: DRAM cua CYD da sat tran (mot `static uint32_t` 4 byte lam linker
+  // bao `dram0_0_seg overflowed by 8 bytes`). Viec bi tu choi da duoc bao o phia web (`/files` tra
+  // "busy") nen khong can dem trong firmware.
+  return printer_busy();
+}
+
 // Ten file an toan (bo duong dan, ky tu la, gioi han do dai + duoi .gco).
 // VI SAO goi `cyd_sd_name_clean()`: de TAP KY TU CHO PHEP chi co MOT dinh nghia duy nhat
 // (`name_char_ok()` + CYDLCD_NAME_ALLOW_EXTRA) - khong the co chuyen lop bao mat web va lop lam sach ten
@@ -523,11 +546,13 @@ bool cyd_sd_ready(void) {
 }
 
 void cyd_sd_retry(void) {
+  if (card_busy_for_ui()) return;
   s_sd_retry_req = true;
   s_sd_retry_ms = millis() - CYDLCD_SD_RETRY_MS;    // cho phep chay ngay o vong lap ke tiep
 }
 
 bool cyd_sd_mount_now(void) {
+  if (card_busy_for_ui()) return false;
   CardLock lk(0); if (!lk.ok) return false;
   return sd_mount(true);
 }
@@ -621,6 +646,7 @@ bool cyd_sd_raw_write(const uint32_t sector, const uint8_t *src) {
 }
 
 bool cyd_sd_delete(const char *name) {
+  if (card_busy_for_ui()) return false;
   CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
   s_sd_last_op = CYDLCD_SDOP_OK;                    // mac dinh: khong phai 'ban vi Marlin'
   // UU TIEN MARLIN: dang in/doc the thi KHONG xoa (xem khoi chu thich o dau file).
@@ -657,6 +683,7 @@ bool cyd_sd_delete(const char *name) {
 //   >= 0 = so muc con,  -1 = khong phai thu muc / khong mo duoc,  **-2 = BAN** (Marlin dang doc/ghi the SD
 //   -> nguoi goi phai hieu la "thu lai sau", KHONG phai loi that).
 int cyd_sd_dir_count(const char *name) {
+  if (card_busy_for_ui()) return 0;
   CardLock lk(0); if (!lk.ok) return -1;
 #if CYDLCD_SD_UART
   if (!s_sd_ready || !name || !name[0]) return -1;
@@ -689,6 +716,7 @@ int cyd_sd_dir_count(const char *name) {
 // The dang o khe MAN HINH CYD (CYDLCD_SD_UART) nen man hinh tu xoa bang FATFS: ESP32 VFS `remove()`
 // goi rmdir() khi duong dan la thu muc, va rmdir chi xoa duoc thu muc RONG.
 bool cyd_sd_delete_dir(const char *name, bool *not_empty) {
+  if (card_busy_for_ui()) return false;
   CardLock lk(0); if (!lk.ok) { if (not_empty) *not_empty = false; return false; }
   s_sd_last_op = CYDLCD_SDOP_OK;
   // UU TIEN MARLIN: dang in/doc the thi KHONG xoa.
@@ -740,6 +768,7 @@ static File s_list_dir;              // thu muc goc dang duyet (chi 1 phien duye
 static bool s_list_open = false;
 
 bool cyd_sd_list_begin(void) {
+  if (card_busy_for_ui()) return false;
   // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
   // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
@@ -766,6 +795,7 @@ bool cyd_sd_list_begin(void) {
 }
 
 bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir) {
+  if (card_busy_for_ui()) return false;
   // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
   // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
@@ -823,6 +853,7 @@ const char *cyd_sd_temp_err(void) { return s_err; }
 // man hinh khac ten THAT tren the thi `M23 <ten>` se khong mo duoc file (bam PRINT khong in duoc) -
 // ham nay in ten DAY DU doc thang tu FATFS de doi chieu.
 void cyd_sd_log_dir(const char *path) {
+  if (card_busy_for_ui()) return;
   // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
   // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
@@ -897,6 +928,7 @@ static uint8_t parts_scan_max(void) {
 }
 
 bool cyd_sd_temp_open(const char *name, uint32_t size_hint, const uint8_t part, const bool new_session) {
+  if (card_busy_for_ui()) return false;
   CardLock lk(0); if (!lk.ok) return false;   // KHOA THE (B2a)
   s_err[0] = '\0';
   s_result[0] = '\0';
@@ -1546,7 +1578,11 @@ void cyd_sd_task(void) {
   if (s_fatfs_sync_req) { s_fatfs_sync_req = false; fatfs_sync(); }
   // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): Marlin dang doc the (dang in / mo danh sach file) thi
   // MAN HINH KHONG cham vao the nua - bo qua kiem the/don rac/mount lai o vong nay (tru khi dang upload).
-  if (cyd_sd_yield_to_marlin()) return;
+  // 2026-10-17 (yeu cau nguoi dung: "tuyet doi khong dung the khi dang in"): them `card_busy_for_ui()`
+  // = CHAN CUNG theo trang thai in, khong chi dua vao 400 ms luu luong (Marlin buffer truoc la lot).
+  // Dat SAU khoi `s_fatfs_sync_req` o tren: viec dong bo FATFS dang cho thi phai lam cho xong, khong bo
+  // do giua chung (no chi phat sinh khi duong `link` vua GHI tho, tuc may dang ghi chu khong phai dang in).
+  if (card_busy_for_ui() || cyd_sd_yield_to_marlin()) return;
 #if CYDLCD_SD_SHARED
   // The dung chung: khi man hinh CYD ranh thi bus thuoc Marlin => TUYET DOI khong cham vao the (khong
   // kiem tra 1 Hz, khong mount lai). Trang thai the lay tu Marlin (co CYDLCD_SF_MEDIA trong PUSH).
@@ -1642,6 +1678,7 @@ void cyd_sd_perf_report(void) {
 }
 
 void cyd_sd_log(void) {
+  if (card_busy_for_ui()) return;
   // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
   // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.

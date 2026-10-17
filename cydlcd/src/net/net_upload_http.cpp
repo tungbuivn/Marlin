@@ -718,10 +718,15 @@ void handle_files(void) {
   // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): Marlin dang doc/ghi the thi MAN HINH KHONG quet the ->
   // tra ve trang thai BUSY RO RANG (khac voi loi that) de trang web bao "thu lai sau" chu KHONG hien
   // danh sach rong (de bi hieu la the het file).
-  if (cyd_sd_yield_to_marlin()) {
-    HLOG("[HTTP] GET /files -> BAN: Marlin dang doc/ghi the SD (tra loi 'thu lai sau')\n");
+  // 2026-10-17 (yeu cau nguoi dung: "tuyet doi khong dung the khi dang in"): them `cyd_sd_printer_busy()`
+  // -> dang IN hoac TAM DUNG thi tra "Busy" NGAY, khong doi toi `cyd_sd_list_begin()` (ham do gio cung
+  // tu choi, nhung neu chi dua vao no thi trang web se nhan danh sach RONG voi status "Ok" -> hieu nham
+  // la the het file). `cyd_sd_yield_to_marlin()` van giu: no bat them truong hop Marlin dang doc the ma
+  // KHONG phai dang in (vd dang mo danh sach file tren man 12864).
+  if (cyd_sd_printer_busy() || cyd_sd_yield_to_marlin()) {
+    HLOG("[HTTP] GET /files -> BAN: may dang in (hoac Marlin dang doc the) -> tra loi 'thu lai sau'\n");
     send_json(200, "{\"status\":\"Busy\",\"sd\":1,\"files\":[],\"count\":0,"
-                   "\"message\":\"Marlin dang doc/ghi the SD - thu lai sau\"}");
+                   "\"message\":\"May dang in - khong doc the, thu lai sau\"}");
     return;
   }
   js += ",\"files\":[";
