@@ -300,6 +300,11 @@ void sd_mux_marlin(void);
 void sd_release_to_marlin(bool reinit_marlin);
 #endif
 bool sd_mount(const bool verbose) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (s_sd_ready) return true;
 #if CYDLCD_SD_SHARED
   sd_mux_panel();                       // gianh bus SPI the ve phia ESP32 TRUOC khi mount
@@ -324,11 +329,21 @@ bool sd_mount(const bool verbose) {
 }
 
 bool sd_alive(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (!s_sd_ready) return false;
   return SD.exists("/");
 }
 
 void sd_lost(const char *why) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (!s_sd_ready) return;
   if (s_file) s_file.close();
   s_sd_ready = false;
@@ -356,6 +371,11 @@ uint32_t s_raw_rd_refused = 0;          // so lan TU CHOI doc tho vi dang nhan/g
 uint32_t s_raw_wr_refused = 0;          // so lan TU CHOI ghi tho vi dang nhan/ghi upload (xem cyd_sd_raw_write)
 
 void fatfs_sync(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (!s_sd_ready) return;
   SD.end();                        // unmount: flush het cache + dong volume
   s_sd_ready = false;
@@ -409,6 +429,11 @@ void sd_mux_marlin(void) {
 // Tra bus SPI ve Marlin. `reinit_marlin` = gui M22+M21 de Marlin mount lai the (bat buoc sau khi
 // man hinh CYD VUA GHI vao the: FAT cua Marlin dang cache trang thai cu) roi xin lai danh sach file.
 void sd_release_to_marlin(const bool reinit_marlin) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (s_file) s_file.close();
   if (s_sd_ready) {
     SD.end();                             // flush FATFS + tra chan SPI ve trang thai input
@@ -430,6 +455,11 @@ void sd_release_to_marlin(const bool reinit_marlin) {
 // nhung FAT cung duoc ghi bang chinh dong ho do -> hieu so van dung trong cung lan cap dien; sau khi
 // reboot thi `now < mtime` -> coi nhu file CU (rac cua lan chay truoc) va xoa.
 uint16_t clean_dir(const char *why, const bool verbose, const uint32_t min_age_s = 0) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (!s_sd_ready) return 0;
   if (!SD.exists(CYDLCD_UPLOAD_TMP_DIR)) {
     SD.mkdir(CYDLCD_UPLOAD_TMP_DIR);
@@ -710,6 +740,11 @@ static File s_list_dir;              // thu muc goc dang duyet (chi 1 phien duye
 static bool s_list_open = false;
 
 bool cyd_sd_list_begin(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
 #if CYDLCD_SD_UART
   if (s_list_open) cyd_sd_list_end();          // phien duyet truoc bi bo quen -> dong lai
   if (!s_sd_ready) return false;
@@ -731,6 +766,11 @@ bool cyd_sd_list_begin(void) {
 }
 
 bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
 #if CYDLCD_SD_UART
   if (!s_list_open || !name || name_n == 0) return false;
   for (;;) {
@@ -753,6 +793,11 @@ bool cyd_sd_list_next(char *name, size_t name_n, bool *isdir) {
 }
 
 void cyd_sd_list_end(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
 #if CYDLCD_SD_UART
   if (s_list_open) { s_list_dir.close(); s_list_open = false; }
 #endif
@@ -778,6 +823,11 @@ const char *cyd_sd_temp_err(void) { return s_err; }
 // man hinh khac ten THAT tren the thi `M23 <ten>` se khong mo duoc file (bam PRINT khong in duoc) -
 // ham nay in ten DAY DU doc thang tu FATFS de doi chieu.
 void cyd_sd_log_dir(const char *path) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
 #if CYDLCD_SD_UART
   if (!s_sd_ready) { ELOG("[UP] goc the: chua co the\n"); return; }
   // UU TIEN MARLIN (yeu cau nguoi dung 2026-10-15): dang in/doc the -> KHONG liet ke (tra loi ngay, khong
@@ -824,6 +874,11 @@ static void merged_path(char *dst, const size_t n) {
 
 // Xoa file part (1..maxk) + file .tmp cua phien hien tai (dung khi loi/bi bo phien / don phien moi).
 static uint16_t parts_remove_all(const uint8_t maxk) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   uint16_t n = 0;
   char p[72];
   for (uint8_t k = 1; k <= maxk; k++) {
@@ -1051,6 +1106,11 @@ static void up_progress_log(void) {
 //  gio de mot file .gcode cut/lech nam trong goc the (in ra la hong ban in).
 // ---------------------------------------------------------------------------
 static bool sd_recover_part(const uint32_t expect) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (s_tmp[0] == '\0' || !s_sd_ready) return false;
   ELOG("[UP] PHUC HOI (KHONG mount lai the): dong + mo lai file part o che do GHI TIEP (can %lu B)\n",
        (unsigned long)expect);
@@ -1078,6 +1138,11 @@ static bool sd_recover_part(const uint32_t expect) {
 // KIEN NHAN KHI THE "DUT": bang cho tang dan (tong ~7,4 s) thay vi bo phien ngay - do that cho thay the
 // mat ket noi vai giay roi TU HOI (sd=1 lai), nen cho doi re hon nhieu so voi bat nguoi dung gui lai 4,5 MB.
 static size_t sd_wbuf_flush(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (!s_wbuf_n || !s_wbuf) { s_wbuf_n = 0; return 0; }
   if (!s_file) { s_wbuf_n = 0; return 0; }
   const uint16_t want = s_wbuf_n;
@@ -1235,6 +1300,11 @@ void cyd_sd_temp_abort(void) {
 // luan SAI la file thieu byte roi XOA mot file vua ghi dung (da tung xay ra kieu loi nay o buoc doi ten).
 // Co THU LAI vai lan (backoff) de cho the hoi.
 static uint32_t file_size_on_card(const char *path, bool *opened = nullptr) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   if (opened) *opened = false;
   if (!s_sd_ready || !path || !path[0]) return 0;
   static const uint16_t rback[] = { 100, 200, 400, 800, 1500 };   // ~3 s
@@ -1257,6 +1327,11 @@ static uint32_t file_size_on_card(const char *path, bool *opened = nullptr) {
 // Doi ten file tren the, CO THU LAI KIEN NHAN (the co the "dut" vai giay roi tu hoi - do that 2026-10-15:
 // 1/3 lan upload 4,5 MB bi loi ngay o buoc doi ten, ngay sau do log 1 Hz bao free=0KB, sd=0).
 static bool rename_with_retry(const char *src, const char *dst) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   static const uint16_t rback[] = { 100, 200, 300, 500, 800, 1000, 1500, 2000, 2000 };  // ~8,4 s
   const uint8_t n_back = (uint8_t)(sizeof(rback) / sizeof(rback[0]));
   for (uint8_t i = 0;; i++) {
@@ -1567,6 +1642,11 @@ void cyd_sd_perf_report(void) {
 }
 
 void cyd_sd_log(void) {
+  // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
+  // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
+  // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
+  // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
+  CardLock lk(0);
   const uint32_t t_log = micros();
   const uint32_t heap = ESP.getFreeHeap();
   if (heap < s_heap_min) s_heap_min = heap;
