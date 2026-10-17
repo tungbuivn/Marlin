@@ -78,6 +78,8 @@
 #define TBT_CMD_GOTO1    '1'
 #define TBT_CMD_GOTO2    '2'
 #define TBT_CMD_GOTO3    '3'
+// 2026-10-17: bat/tat che do TU DI CHUYEN (nut AUTO tren man CYD).
+#define TBT_CMD_AUTO     'A'
 
 // ---------------------------------------------------------------------------
 // phase (khop TR_IDLE..TR_AUTO cua tbt_run.h phia Marlin)
@@ -121,6 +123,9 @@ typedef struct {
   // Che do TRAM khong co frame PUSH (ExtUI) nen phai gui kem o day, neu khong man MAN HINH CYD khong co
   // nhiet do nao. Phia doc cu (khong biet 4 token nay) van chay binh thuong vi parser bo qua token thua.
   int16_t t_e0, t_bed, t_e0_tgt, t_bed_tgt;
+  // 2026-10-17: 1 = che do TU DI CHUYEN dang BAT (nut AUTO). Token MO RONG nua o cuoi dong;
+  // ban doc cu bo qua duoc, ban moi thieu token cung mac dinh ON.
+  uint8_t auto_on;
 } tbt_status_t;
 
 // ---------------------------------------------------------------------------
@@ -186,7 +191,8 @@ static inline int tbt_status_format(char *buf, const int len, const tbt_status_t
               st->hint[0] ? st->hint : "-");
 
   // 4 token nhiet do (do C * 100) - xem chu thich trong tbt_status_t.
-  TBT_APPEND(" %d %d %d %d\n", (int)st->t_e0, (int)st->t_bed, (int)st->t_e0_tgt, (int)st->t_bed_tgt);
+  TBT_APPEND(" %d %d %d %d", (int)st->t_e0, (int)st->t_bed, (int)st->t_e0_tgt, (int)st->t_bed_tgt);
+  TBT_APPEND(" %u\n", (unsigned)(st->auto_on ? 1U : 0U));
 
   #undef TBT_APPEND
   return n;
@@ -324,6 +330,11 @@ static inline bool tbt_status_parse(const char *line, tbt_status_t *st) {
     }
   }
 
+  // Token AUTO (2026-10-17): thieu -> mac dinh ON (tuong thich voi Marlin cu).
+  st->auto_on = 1;
+  t = tbt_next_tok(&p, &l);
+  if (t) { const int a = tbt_tok_uint(t, l); if (a >= 0) st->auto_on = (uint8_t)(a ? 1U : 0U); }
+
   return true;
 }
 
@@ -344,6 +355,7 @@ static inline char tbt_cmd_parse(const char *line) {
     case TBT_CMD_GOTO1:
     case TBT_CMD_GOTO2:
     case TBT_CMD_GOTO3:
+    case TBT_CMD_AUTO:
       return c;
     default:
       return 0;

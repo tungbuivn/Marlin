@@ -62,6 +62,10 @@ namespace tbt_run {
 // Khai bao truoc: dinh nghia o duoi (khu "CHAN AN TOAN"), nhung probe_xy/goto_worst/goto_index
 // nam TRUOC do nen phai biet ten.
 static bool can_move_now();
+// 2026-10-17 (yeu cau nguoi dung): che do TU DI CHUYEN (AUTO).
+//   ON  = wizard tu nhay toi goc can van (hanh vi cu)
+//   OFF = KHONG tu di chuyen; nguoi dung bam vao nhan goc (BR/BL/FL/FR) tren man CYD de di chuyen.
+bool auto_move = true;
 
 // ---------------------------------------------------------------------------
 // Hook UI (menu_tramming dat; link serial de NULL)
@@ -291,6 +295,17 @@ static bool can_move_now() {
   return false;
 }
 
+// Chi tu di chuyen khi AUTO dang BAT va truc da home.
+static bool may_auto_move() { return auto_move && can_move_now(); }
+
+// Bat/tat che do tu di chuyen (nut AUTO tren man CYD / 12864).
+void toggle_auto() {
+  if (!active) return;
+  auto_move = !auto_move;
+  DEBUG_ECHOLNPGM("tramming: AUTO = ", auto_move ? "ON" : "OFF");
+  refresh();
+}
+
 // ---------------------------------------------------------------------------
 // Hanh dong (dung chung cho menu 12864 VA link serial)
 // ---------------------------------------------------------------------------
@@ -346,7 +361,8 @@ void probe_here() {
   busy = true;
   probe_here_raw();
   busy = false;
-  if (!need_adjust(worst_index)) state = TR_AUTO;
+  // AUTO tat -> o lai goc nay, KHONG tu nhay sang goc ke tiep du da dat.
+  if (auto_move && !need_adjust(worst_index)) state = TR_AUTO;
 }
 
 // BAM VAO NHAN GOC (BR/BL/FL/FR) tren man hinh CYD -> di chuyen toi dung goc do (yeu cau 2026-10-17).
@@ -354,7 +370,12 @@ void probe_here() {
 // Tu choi neu chua home (xem can_move_now) hoac chi so ngoai pham vi.
 void goto_corner(const uint8_t i) {
   if (i >= G35_PROBE_COUNT) return;
-  if (!can_move_now()) return;
+  // KHONG doi `active`: nguoi dung duoc phep bam nhan goc de di chuyen ca khi wizard chua chay
+  // (man hinh dang READY) - mien la truc DA HOME. Chua home -> tu choi (an toan).
+  if (!all_axes_homed()) {
+    DEBUG_ECHOLNPGM("tramming: TU CHOI goto_corner - truc CHUA HOME");
+    return;
+  }
   busy = true;
   state = TR_POINT;
   refresh();
@@ -372,10 +393,13 @@ void toggle_minmax() {
   if (!can_move_now()) return;      // chua home -> khong doi che do, khong di chuyen
   busy = true;
   worst_toggle();
-  state = TR_POINT;                      // man hinh hien "Go to point"
-  refresh();
-  goto_worst();
-  probe_here_raw();
+  // AUTO tat -> chi doi chien luoc, KHONG tu di chuyen (nguoi dung tu bam nhan goc).
+  if (auto_move) {
+    state = TR_POINT;                    // man hinh hien "Go to point"
+    refresh();
+    goto_worst();
+    probe_here_raw();
+  }
   busy = false;
   // Goc lech nhat cua che do moi ma da DAT => tat ca da dat -> tu di tiep / home lai
   state = need_adjust(worst_index) ? TR_IDLE : TR_AUTO;
@@ -388,6 +412,7 @@ void done() {
   if (!can_move_now()) return;
   z_accepted[worst_index] = true;
   if (next_need_adjust()) {
+    if (!auto_move) { state = TR_IDLE; refresh(); return; }   // AUTO tat -> cho nguoi dung bam goc
     busy = true;
     state = TR_POINT;                    // man hinh hien "Go to point"
     refresh();
@@ -429,7 +454,8 @@ void step() {
           refresh();
           break;
         }
-        state = TR_GOTO;
+        state = may_auto_move() ? TR_GOTO : TR_IDLE;
+        if (state == TR_IDLE && enter_idle_hook) enter_idle_hook();
         break;
       }
       busy = true;
@@ -440,6 +466,7 @@ void step() {
 
     case TR_AUTO:
       // Goc vua probe DA DAT -> tu di tiep. Moi lan goi 1 buoc (move/probe la blocking).
+      if (!may_auto_move()) { state = TR_IDLE; if (enter_idle_hook) enter_idle_hook(); break; }
       busy = true;
       if (next_need_adjust()) {
         state = TR_POINT;                // man hinh hien "Go to point"

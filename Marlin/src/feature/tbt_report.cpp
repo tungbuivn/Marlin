@@ -61,6 +61,7 @@ static void build_status(tbt_status_t &st) {
   st.idx      = tbt_run::worst_index;
   st.active   = tbt_run::active ? 1 : 0;
   st.all_dat  = tbt_run::all_dat ? 1 : 0;
+  st.auto_on  = tbt_run::auto_move ? 1 : 0;
   st.ref      = tbt_run::display_ref();
   LOOP_L_N(i, TBT_PROTO_POINTS) {
     st.d[i]        = tbt_run::delta(i);
@@ -118,6 +119,10 @@ bool tbt_report_cmd(const char cmd) {
     // 2026-10-17: bam nhan goc tren man hinh CYD -> di chuyen toi goc do
     case TBT_CMD_GOTO0: case TBT_CMD_GOTO1: case TBT_CMD_GOTO2: case TBT_CMD_GOTO3:
       if (can_act) tbt_run::goto_corner((uint8_t)(c - TBT_CMD_GOTO0));
+      break;
+
+    case TBT_CMD_AUTO:              // 2026-10-17: bat/tat tu dong di chuyen
+      if (can_act) tbt_run::toggle_auto();
       break;
 
     case TBT_CMD_DONE:

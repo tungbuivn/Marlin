@@ -29,6 +29,9 @@
 //    2 dong : chu thich
 // ===========================================================================
 static lv_obj_t *tr_head, *tr_corner[TBT_PROTO_POINTS], *tr_hint;
+// 2026-10-17: nut AUTO (bat/tat tu dong di chuyen). Hai nut CHONG NHAU + an/hien - da chung minh tren
+// board rang doi chu cua nut da ve thi khong an (xem comment o ui_page_status.cpp).
+static lv_obj_t *tr_auto_on, *tr_auto_off;
 
 // Ten 4 goc - PHAI theo dung thu tu TRAMMING_POINT_XY trong Marlin/Configuration_adv.h:
 //   0 = Back-Right (280,285)  1 = Back-Left (25,285)  2 = Front-Left (25,25)  3 = Front-Right (280,25)
@@ -82,6 +85,22 @@ void page_tbt_create(lv_obj_t *p) {
   // R = home + probe lai ca 4 goc. Marlin tu bat dau wizard neu chua chay (tbt_run::begin)
   // nen nut nay la diem KHOI DONG cua man Tramming tren MAN HINH CYD.
   lv_obj_t *r0 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
+  // 2026-10-17 (yeu cau nguoi dung): nut AUTO on/off o BEN TRAI nut HOME + PROBE.
+  //   AUTO ON  = wizard tu di chuyen toi goc can van
+  //   AUTO OFF = khong tu di chuyen; bam vao nhan BR/BL/FL/FR de di chuyen
+  {
+    lv_obj_t *kheap = lv_obj_create(r0);
+    lv_obj_set_size(kheap, 96, 38);
+    lv_obj_clear_flag(kheap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(kheap, LV_OBJ_FLAG_CLICKABLE);   // khay khong duoc an cu cham
+    lv_obj_set_style_bg_opa(kheap, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(kheap, 0, 0);
+    lv_obj_set_style_pad_all(kheap, 0, 0);
+    tr_auto_on  = mk_btn(kheap, "AUTO ON",  96, 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_AUTO);
+    tr_auto_off = mk_btn(kheap, "AUTO OFF", 96, 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_AUTO);
+    lv_obj_set_pos(tr_auto_on, 0, 0);
+    lv_obj_set_pos(tr_auto_off, 0, 0);
+  }
   mk_btn_grow(r0, T(UI_T_TBT_RESTART), 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_RESTART);
 
   lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
@@ -141,6 +160,17 @@ void page_tbt_update(void) {
     else if (h[0] == 'E') hcol = COL_ERR;                          // ERR
   }
   set_text(tr_hint, b);
+
+  // Nut AUTO: hien dung 1 trong 2 (chung toa do). Du lieu lay tu Marlin (tbt.st.auto_on).
+  if (tr_auto_on && tr_auto_off) {
+    if (tbt.st.auto_on) {
+      lv_obj_clear_flag(tr_auto_on,  LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(tr_auto_off, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(tr_auto_on, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_clear_flag(tr_auto_off, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
   lv_obj_set_style_text_color(tr_hint, hcol, 0);
 }
 
@@ -150,6 +180,7 @@ void page_tbt_update(void) {
 void page_tbt_destroy(void) {
   tr_head = NULL;
   tr_hint = NULL;
+  tr_auto_on = tr_auto_off = NULL;
   for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++) tr_corner[i] = NULL;
 }
 
