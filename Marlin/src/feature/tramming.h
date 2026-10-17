@@ -44,14 +44,14 @@ constexpr xy_pos_t tramming_points[] = TRAMMING_POINT_XY;
 extern bool tramming_worst_max;
 
 //
-// CHIEU VAN VIT - DO LAI TREN MAY NAY (2026-10-12; ban Voron, vit M4, dau vit o TREN):
-//     van CW  (chieu kim dong ho)   -> goc do NANG LEN  (delta Z tang)
-//     van CCW (nguoc kim dong ho)   -> goc do HA XUONG  (delta Z giam)
-// => goc co delta > 0 (cao hon MOC = Z-MIN) phai van CCW de ha xuong.
-//
-// (Truoc 2026-10-12 code ghi nguoc lai: gia dinh "CW = ha goc xuong" la SAI tren may nay -
-//  nguoi dung da van thu va doi chieu. Neu doi sang loai vit ren nguoc chieu thi khai bao
-//  ma S le (31 / 41 / 51) -> tu dong dao chieu, khong phai sua code.)
+// CHIEU VAN VIT - DO LAI TREN MAY NAY (ban Voron, vit M4, dau vit o TREN):
+//   2026-10-12: ghi "CW = NANG goc len"  (SAI)
+//   2026-10-17: nguoi dung do lai: "van CW thi z probe se CACH XA bed hon" tuc van CW lam goc do
+//               HA XUONG (bed tut xuong). NAY LAY KET QUA 2026-10-17 LAM CHUAN:
+//     van CW  (chieu kim dong ho)   -> goc do HA XUONG  (probe xa bed hon)
+//     van CCW (nguoc kim dong ho)   -> goc do NANG LEN
+// => goc THAP hon moc phai van CCW de nang len; goc CAO hon moc phai van CW de ha xuong.
+// Neu doi sang loai vit ren nguoc chieu thi khai bao ma S le (31 / 41 / 51) -> tu dong dao chieu.
 //
 inline float tramming_pitch(const uint8_t screw_thread) {
   constexpr float threads_factor[] = { 0.5f, 0.7f, 0.8f };   // M3, M4, M5 (mm/vong)
@@ -61,7 +61,7 @@ inline float tramming_pitch(const uint8_t screw_thread) {
 // true = van theo chieu KIM DONG HO (CW), false = nguoc kim dong ho (CCW)
 // delta > 0 = goc CAO hon mat phang TB -> phai HA xuong
 inline bool tramming_turn_cw(const float delta, const uint8_t screw_thread) {
-  const bool lower_cw = (screw_thread & 1);    // ren phai tren may nay: HA goc xuong = van CCW
+  const bool lower_cw = !(screw_thread & 1);   // ren phai tren may nay: HA goc xuong = van CW
   return (delta > 0) == lower_cw;
 }
 

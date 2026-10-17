@@ -41,7 +41,10 @@ static void build_hint(tbt_status_t &st) {
   const uint8_t i = tbt_run::worst_index;
   if (!tbt_run::ok(i))            { strcpy(st.hint, "PROBE"); return; }
 
-  const float delta = tbt_run::delta(i) - tbt_run::display_ref();
+  // 2026-10-17: PHAI tru `ref()` (moc theo che do: MAX->Z-MAX, MIN->Z-MIN), KHONG phai
+  // `display_ref()` (moc hien thi = z-home). Truoc day dung display_ref() nen khi display_ref()
+  // doi thanh z-home thi `delta` bien thanh r_i (khoang cach toi tam ban) -> so mm VA chieu van sai.
+  const float delta = tbt_run::delta(i) - tbt_run::ref();
   if (ABS(delta) <= TBT_DONE_MM)      { strcpy(st.hint, "DAT"); return; }
 
   char num[16];

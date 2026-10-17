@@ -167,7 +167,9 @@ static void tramming_draw() {
     case PR_RESULT: {
       // Chi lay z CUOI: delta so voi MOC = con phai van bao nhieu mm nua de goc do ve moc.
       // Van dung chieu -> so nay giam; van sai chieu -> so nay tang.
-      const float delta = tbt_run::delta(tbt_run::worst_index) - ref;
+      // 2026-10-17: `ref` o tren = display_ref() (z-home) chi de HIEN THI 4 goc; con so mm can van va
+      // CHIEU van phai so voi MOC cua che do -> dung tbt_run::ref().
+      const float delta = tbt_run::delta(tbt_run::worst_index) - tbt_run::ref();
       if (ABS(delta) <= TBT_DONE_MM)
         snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
       else {

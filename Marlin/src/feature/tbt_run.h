@@ -72,6 +72,8 @@ namespace tbt_run {
   bool    ref_set();                   // da chot moc chua
   float   ref_min();                   // MOC Z-MIN da chot
   float   ref_max();                   // MOC Z-MAX da chot
+  // MOC dung de QUYET DINH (MAX -> Z-MAX, MIN -> Z-MIN). KHAC `display_ref()` = Z-home (chi de hien thi).
+  float   ref();
   float   ref();                       // MOC dang dung (tramming_ref cu)
   float   display_ref();               // LUON = base_home_pos(Z_AXIS): so hien thi luon la r_i = z_i - Z-home
   bool    need_adjust(const uint8_t i);
