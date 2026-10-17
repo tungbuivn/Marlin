@@ -45,14 +45,11 @@
  *   - bat `LV_USE_LOG` + handler assert RIENG (cydlcd_assert.h) de loi IN RA COM7 va TU KHOI DONG
  *     LAI thay vi treo im lang;
  *   - (main.cpp) in muc dung pool LVGL ra log 1 Hz (`lvmem=used/total frag=x%`) de theo doi. */
-// 2026-10-17 (don DRAM): 48 KB -> 44 KB.
-// SO DO TRUOC KHI HA (do tren ban gia lap, mo LAN LUOT ca 14 trang roi doc `lvmem=`):
-//   used = 34.752 B khi mo du trang (2 trang cung ton tai: STATUS giu lai + trang dang mo).
-//   40 KB chi con 5,2 KB du (~15%) -> QUA SAT: het pool thi assertion cua LVGL goi handler trong
-//   cydlcd_assert.h = TU KHOI DONG LAI CYD -> Marlin mat nguon sector -> CHET MAY IN.
-//   44 KB con 9,3 KB du (~21%) -> chap nhan duoc.
+// 2026-10-17: GIU 48 KB (nguoi dung yeu cau phuc hoi). Da ha thu 44 KB va chay do: pool chi dung
+// 20.376 B / 45.056 B khi wizard chay -> KHONG phai nguyen nhan LCD restart. Tuy vay giu 48 KB de
+// KHONG con nhan toi hanh vi cua pool trong luc tim loi wizard.
 #undef  LV_MEM_SIZE
-#define LV_MEM_SIZE (44U * 1024U)
+#define LV_MEM_SIZE (48U * 1024U)
 
 /* Log LVGL: chi muc ERROR (assert in ra "Asserted at expression: ...") -> vua du chan doan,
  * khong lam ngap log 1 Hz. `LV_LOG_PRINTF 1` = dung printf (Serial cua ESP32). */

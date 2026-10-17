@@ -580,8 +580,6 @@ void show_page(uint8_t p) {
   // Roi trang WIFI -> don ban phim nhap mat khau + lop phu quet (con cua lv_scr_act, khong phai
   // con cua trang) va KHONG dung toi WiFi. Vao trang WIFI -> chi ghi log (khong tu quet mang).
   if (p != PG_WIFI) wifi_page_leave();
-  // Roi trang TRAM -> ket thuc Tramming Wizard (thay nut BACK da bo o hang 4 nut) - xem tbt_page_leave().
-  if (p != PG_TBT) tbt_page_leave();
   else if (prev != PG_WIFI) WIFILOG("[WIFI] vao trang WIFI (chi doc trang thai, khong quet)\n");
 
   // ---- 2) THU HOI TRANG CU (page recycling - xem page_release) ----
