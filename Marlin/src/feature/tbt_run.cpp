@@ -71,6 +71,8 @@ void (*enter_idle_hook)() = nullptr;
 // ---------------------------------------------------------------------------
 uint8_t state;                             // TR_*
 uint8_t probe_state;                       // PR_*
+// 2026-10-17: GOC MOC (goc khong can van) LUU THEO CHI SO. Xem giai thich o set_ref().
+uint8_t ref_index;
 uint8_t worst_index,                       // goc lech nhieu nhat (nozzle dang o day)
         step_index;                        // dang probe toi goc thu may
 bool    all_dat;                           // CA 4 GOC da dat -> chi con nut BACK
@@ -143,6 +145,20 @@ static void set_ref() {
     z_ref_min = extreme_probed(false);   // goc THAP nhat
     z_ref_max = extreme_probed(true);    // goc CAO nhat
     z_ref_set = true;
+    // 2026-10-17 (SUA LOI "bam PROBE khong van gi ma tu nhay sang goc khac"):
+    //   Goc MOC = goc THAP nhat khi chinh MAX, goc CAO nhat khi chinh MIN. Truoc day no duoc nhan dien
+    //   LUC CHAY bang cach so gia tri: `z_delta[i] <= z_ref_min + 0.0005`. Nhung z_ref_min da CHOT
+    //   (dong bang) sau lan do 4 goc, con PROBE lai mot goc thi z_delta cua goc do CO THE vuot qua
+    //   moc (sai so probe / ban nhun). Khi do chinh GOC VUA DO bi coi la moc -> need_adjust() tra
+    //   false -> wizard tu nhay sang goc ke tiep du chua van vit gi.
+    //   Do that 2026-10-17: BR +0.187 -> -0.247 sau mot lan bam PROBE (lech 0,434 mm), roi tu nhay
+    //   sang goc 3. Nay chot CHI SO ngay luc set_ref() -> mien nhiem voi viec gia tri troi.
+    uint8_t n2 = 0;
+    LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) ++n2;
+    if (n2) {
+      const float want = tramming_worst_max ? z_ref_min : z_ref_max;
+      LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i] && z_delta[i] == want) { ref_index = i; break; }
+    }
   }
   DEBUG_ECHOLNPGM("tramming: chot MOC Z-MIN=", z_ref_min, " Z-MAX=", z_ref_max, " (", n, " goc)");
 }
@@ -228,11 +244,8 @@ static void goto_index(const uint8_t i) {
 bool need_adjust(const uint8_t i) {
   if (z_accepted[i]) return false;                // nguoi dung da chap nhan goc nay
   if (!z_ok[i]) return true;                      // chua do duoc -> van phai toi kiem tra
-  if (z_ref_set) {
-    const bool is_ref = tramming_worst_max ? (z_delta[i] <= z_ref_min + 0.0005f)
-                                           : (z_delta[i] >= z_ref_max - 0.0005f);
-    if (is_ref) return false;
-  }
+  // Goc MOC: so theo CHI SO da chot trong set_ref(), KHONG so gia tri (xem giai thich o set_ref).
+  if (z_ref_set && i == ref_index) return false;
   return ABS(z_delta[i] - ref()) > TBT_DONE_MM;
 }
 
