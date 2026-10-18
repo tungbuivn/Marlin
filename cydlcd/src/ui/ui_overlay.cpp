@@ -69,6 +69,9 @@ bool ov_create_full(void) {
 
 // 2026-10-17: hien lop phu TIEN DO UPLOAD o 40% de chup anh kiem tra.
 void ov_test_show(void) {
+  // 2026-10-17 SUA: truoc day chi goi ov_progress() -> chi dat so lieu, KHONG dat s_vis -> lop phu
+  // KHONG BAO GIO hien (anh dlg-13 gan nhu trong). Phai goi ov_create_full() de bat s_vis truoc.
+  ov_create_full();
   ov_progress("DANG GUI FILE", 40, 100);
 }
 
