@@ -60,6 +60,10 @@ static void state_basic(void) {
   // vi tri (mm x1000) - co y = 285,98 de kiem tra "so co de len nhan X/Y/Z khong"
   cydlcd.pos.x = 285980; cydlcd.pos.y = 12340; cydlcd.pos.z = 5600; cydlcd.pos.e = 12345;
   cydlcd.pos.feed_pct = 100; cydlcd.pos.flow_pct = 95;
+  // 2026-10-17: trang FEED/FLOW doc qua cydlcd_setting() (lay tu s_src.settings[] - duong frame),
+  // KHONG phai tu cydlcd.settings[] cua ban gia lap. Phai ghi qua API nay thi hai trang moi khop.
+  cydlcd_setting_set(CYDLCD_SET_FEEDRATE_PCT, 10000);   // 100%
+  cydlcd_setting_set(CYDLCD_SET_FLOW_PCT,     9500);    // 95%
 
   cydlcd.prog.pct = 43; cydlcd.prog.elapsed_s = 3725; cydlcd.prog.remaining_s = 4210;
   strcpy(cydlcd.prog.file, "V300_CUBE.GCO");
@@ -91,7 +95,9 @@ static void state_basic(void) {
 
   // bang thong so (id -> gia tri THO, thang do theo tung dong - xem ui_page_settings.cpp SET_ROWS)
   struct { uint16_t id; int32_t v; } S[] = {
-    { CYDLCD_SET_Z_OFFSET, 750 },   { CYDLCD_SET_FEEDRATE_PCT, 100 }, { CYDLCD_SET_FLOW_PCT, 95 },
+    // 2026-10-17: truoc day dat 100 / 95 (don vi 1/100 %) -> trang FEED/FLOW doc ra 1% / 0% trong khi
+  // man STATUS doc pos.feed_pct=100 -> hai trang lech nhau. Nay dat dung don vi x100 cho khop.
+  { CYDLCD_SET_Z_OFFSET, 750 },   { CYDLCD_SET_FEEDRATE_PCT, 10000 }, { CYDLCD_SET_FLOW_PCT, 9500 },
     { CYDLCD_SET_STEPS_MM_X, 80 },  { CYDLCD_SET_STEPS_MM_Y, 80 },    { CYDLCD_SET_STEPS_MM_Z, 400 },
     { CYDLCD_SET_STEPS_MM_E, 420 }, { CYDLCD_SET_MAXFEED_X, 300 },    { CYDLCD_SET_MAXFEED_Y, 300 },
     { CYDLCD_SET_MAXFEED_Z, 10 },   { CYDLCD_SET_MAXFEED_E, 120 },    { CYDLCD_SET_MAXACCEL_X, 3000 },

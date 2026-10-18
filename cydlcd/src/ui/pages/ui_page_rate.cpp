@@ -27,6 +27,7 @@
 #define RT_BTN_W   40
 
 static lv_obj_t *rt_fr, *rt_fl;
+static lv_obj_t *rt_icon[2];            // 2026-10-17: icon FEED/FLOW de to mau theo gia tri (giong STATUS)
 
 // ---------------------------------------------------------------------------
 //  TU XIN LAI BANG THONG SO (FR/FL lay tu cydlcd_setting -> goi CYDLCD_F_SETTING cua Marlin).
@@ -74,7 +75,7 @@ static void cb_rate_reset(lv_event_t *e) {
 static void rate_row(lv_obj_t *p, const char *name, uint8_t which, const lv_img_dsc_t *icon,
                      lv_obj_t **val) {
   lv_obj_t *r = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, RT_ROW_H, 0, GAP);
-  mk_icon(r, 0, 0, icon, MR_RATE100);
+  rt_icon[which] = mk_icon(r, 0, 0, icon, MR_RATE100);
   mk_label_w(r, name, COL_TXT, RT_LBL_W);
   mk_btn(r, "-10", RT_BTN_W, RT_ROW_H - 2, cb_rate_adj, RATE_ADJ(which, -10));
   mk_btn(r, "-1",  RT_BTN_W, RT_ROW_H - 2, cb_rate_adj, RATE_ADJ(which, -1));
@@ -100,12 +101,19 @@ void page_rate_update(void) {
   char b[24];
   const int32_t fr = cydlcd_setting(CYDLCD_SET_FEEDRATE_PCT, 10000) / 100;
   const int32_t fl = cydlcd_setting(CYDLCD_SET_FLOW_PCT, 10000) / 100;
+  // 2026-10-17 (yeu cau nguoi dung: "mau icon feed, flow o page 02 chua giong voi page 00"):
+  // STATUS to icon theo GIA TRI (100% = xanh MR_RATE100, khac 100% = vang MR_RATEALT);
+  // trang nay truoc day chi to MAU CHU, con icon giu mau xanh co dinh -> nay to ca icon.
+  const lv_color_t cf = (fr == 100) ? MR_RATE100 : MR_RATEALT;
+  const lv_color_t cl = (fl == 100) ? MR_RATE100 : MR_RATEALT;
   snprintf(b, sizeof(b), "%ld%%", (long)fr);
   set_text(rt_fr, b);
-  set_text_color(rt_fr, (fr == 100) ? MR_RATE100 : MR_RATEALT);
+  set_text_color(rt_fr, cf);
+  if (rt_icon[0]) icon_color(rt_icon[0], cf);
   snprintf(b, sizeof(b), "%ld%%", (long)fl);
   set_text(rt_fl, b);
-  set_text_color(rt_fl, (fl == 100) ? MR_RATE100 : MR_RATEALT);
+  set_text_color(rt_fl, cl);
+  if (rt_icon[1]) icon_color(rt_icon[1], cl);
 }
 
 // Huy man FEED/FLOW (xem quy uoc o ui_lvgl_int.h): chi dat NULL 2 nhan FR/FL. Container trang do
@@ -114,6 +122,7 @@ void page_rate_update(void) {
 void page_rate_destroy(void) {
   rt_fr = NULL;
   rt_fl = NULL;
+  rt_icon[0] = NULL; rt_icon[1] = NULL;
 }
 
 #endif  // CYDLCD_USE_LVGL
