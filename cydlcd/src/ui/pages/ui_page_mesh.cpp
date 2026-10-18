@@ -396,6 +396,9 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_size(me_box, 240, 116);
   lv_obj_align(me_box, LV_ALIGN_TOP_MID, 0, 40);
   lv_obj_set_style_bg_color(me_box, COL_BG, 0);
+  // 2026-10-17 (nguoi dung: "man hinh dialog edit Mesh CELL thieu mau nen, dang nhin xuyen xuong day"):
+  // thieu bg_opa -> nen trong suot. Cac hop khac deu dat bg_opa COVER.
+  lv_obj_set_style_bg_opa(me_box, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(me_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(me_box, 2, 0);
   lv_obj_set_style_pad_all(me_box, 6, 0);

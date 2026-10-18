@@ -311,7 +311,11 @@ void preheat_add_open(void) {
     WIFILOG("[PRE] da du %u vat lieu - xoa bot truoc khi them\n", (unsigned)CYDLCD_PRE_MAX);
     return;
   }
-  s_kb_bd = lv_obj_create(lv_scr_act());
+  // 2026-10-17 (nguoi dung: "dlg-05-keyboard dang bi nam xuong phia sau cac nut tren man hinh"):
+  // TRUOC DAY tao tren `lv_scr_act()` -> moi lan trang PREHEAT duoc TAO LAI (page_rebuild) thi trang
+  // (con tao sau) ve DE LEN ban phim. Cac lop phu khac (hop sua preheat, lop phu SUA) deu dung
+  // `lv_layer_top()` -> nay ban phim cung vay.
+  s_kb_bd = lv_obj_create(lv_layer_top());
   lv_obj_set_pos(s_kb_bd, 0, 0);
   lv_obj_set_size(s_kb_bd, UI_LCD_HOR_RES, UI_LCD_VER_RES);
   lv_obj_set_style_bg_color(s_kb_bd, lv_color_hex(0x000000), 0);

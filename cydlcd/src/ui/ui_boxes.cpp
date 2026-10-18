@@ -164,7 +164,17 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
   lv_obj_set_style_text_color(box, COL_TXT, 0);
 
   lv_obj_t *t = lv_msgbox_get_title(box);
-  if (t) lv_obj_set_style_text_color(t, title_col, 0);
+  if (t) {
+    lv_obj_set_style_text_color(t, title_col, 0);
+    // 2026-10-17 (yeu cau nguoi dung): "them padding cho title, doi mau nen title".
+    // Tieu de thanh 1 dai nen dam (COL_BTN) chu mau ngu nghia (canh bao do/cam...) -> tuong phan tot.
+    lv_obj_set_style_bg_color(t, COL_BTN, 0);
+    lv_obj_set_style_bg_opa(t, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(t, 4, 0);
+    lv_obj_set_style_pad_all(t, 7, 0);
+    lv_obj_set_style_pad_left(t, 10, 0);
+    lv_obj_set_style_pad_right(t, 10, 0);
+  }
   lv_obj_t *x = lv_msgbox_get_text(box);
   if (x) lv_obj_set_style_text_color(x, COL_TXT, 0);
 
@@ -173,12 +183,20 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
     lv_obj_set_style_bg_color(bm, COL_BTN, LV_PART_ITEMS);
     lv_obj_set_style_bg_opa(bm, LV_OPA_COVER, LV_PART_ITEMS);
     lv_obj_set_style_text_color(bm, DLG_TXT, LV_PART_ITEMS);
-    lv_obj_set_style_border_color(bm, COL_ACCENT, LV_PART_ITEMS);
-    lv_obj_set_style_border_width(bm, 1, LV_PART_ITEMS);
+    // 2026-10-17 (yeu cau nguoi dung): "nut ok, cancel o phan xac nhan dang bi co mot duong bao
+    // xung quanh" -> BO vien 1px mau COL_ACCENT quanh tung nut.
+    lv_obj_set_style_border_width(bm, 0, LV_PART_ITEMS);
+    lv_obj_set_style_outline_width(bm, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(bm, 2, LV_PART_ITEMS);
     lv_obj_set_style_radius(bm, 4, LV_PART_ITEMS);
+    // Khi nut dang duoc chon (encoder), LVGL mac dinh ve vien focus -> bo luon cho sach.
+    lv_obj_set_style_outline_width(bm, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(bm, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
     // KHOANG TRANG giua cac nut (truoc day 2 nut dinh lien nhau) + hang nut can GIUA hop.
     lv_obj_set_style_pad_column(bm, DLG_BTN_GAP, 0);
+    // 2026-10-17 (yeu cau nguoi dung): "them padding tren va duoi cho hang nut ok,cancel".
+    lv_obj_set_style_pad_top(bm, DLG_BTN_GAP + 4, 0);
+    lv_obj_set_style_pad_bottom(bm, DLG_BTN_GAP + 4, 0);
     lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     // Mau xanh/do cho tung nut (xem cb_box_btn_draw).
     lv_obj_add_event_cb(bm, cb_box_btn_draw, LV_EVENT_DRAW_PART_BEGIN, NULL);
