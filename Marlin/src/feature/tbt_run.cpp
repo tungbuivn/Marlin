@@ -295,9 +295,13 @@ bool need_adjust(const uint8_t i) {
   return ABS(z_measured[i] - ref()) > TBT_DONE_MM;
 }
 
-// Co goc nao (trong CA 4) con phai chinh khong? false = tat ca da dat -> chi con nut BACK
-bool any_need_adjust() {
-  LOOP_L_N(i, G35_PROBE_COUNT) if (need_adjust(i)) return true;
+// Co goc nao (trong CA 4) con phai chinh khong? false = tat ca da dat -> chi con nut BACK.
+// `tol` = nguong: sau lan do 4 goc dau tien dung TBT_DONE_INIT_MM (0.05), con lai dung TBT_DONE_MM (0.02).
+bool any_need_adjust(const float tol) {
+  LOOP_L_N(i, G35_PROBE_COUNT) {
+    if (z_accepted[i] || !z_ok[i]) continue;
+    if (ABS(z_measured[i] - ref()) > tol) return true;
+  }
   return false;
 }
 
@@ -482,9 +486,9 @@ void step() {
     case TR_PROBE:
       if (step_index >= G35_PROBE_COUNT) {
         set_ref();                       // do xong CA 4 GOC -> CHOT MOC (dong bang tu day)
-        // CA 4 GOC da dat (|delta| <= 0.01mm) -> khong con gi de van: CHI HIEN NUT BACK
-        // (khong tu home+probe lai nua, tranh lap vo tan)
-        if (!any_need_adjust()) {
+        // 2026-10-17: ngay sau khi home + do 4 goc, goc lech nhat <= TBT_DONE_INIT_MM (0.05mm) thi
+        // coi nhu DAT luon (sai so nho hon sai so co khi cua vit). Khi DANG chinh thi van 0.02mm.
+        if (!any_need_adjust(TBT_DONE_INIT_MM)) {
           DEBUG_ECHOLNPGM("tramming: ca 4 goc da DAT -> chi con nut BACK");
           all_dat = true;
           probe_state = PR_NONE;
