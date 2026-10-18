@@ -163,15 +163,14 @@ float ref() { return 0; }
 float display_ref() { return 0; }
 
 // Chot moc tu cac goc vua do (lay CA Z-MIN lan Z-MAX). Chi nhan khi du >= 3 goc (nguong cua G35).
+// 2026-10-17 (yeu cau nguoi dung): z_ref_min = z_ref_max = 0.
+// Moi moc deu la Z-HOME. Khong con cuc tri (Z-MIN/Z-MAX) nao duoc chot, nen khong con hien tuong
+// "PROBE lai mot goc lam goc do thanh moc" hay so hien thi nhay theo cuc tri.
+// `ref()` va `display_ref()` cung da tra 0 -> toan bo he quy ve MOT moc duy nhat: Z-home.
 static void set_ref() {
-  uint8_t n = 0;
-  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) ++n;
-  if (n >= 3) {
-    z_ref_min = extreme_probed(false);   // goc THAP nhat
-    z_ref_max = extreme_probed(true);    // goc CAO nhat
-    z_ref_set = true;
-  }
-  DEBUG_ECHOLNPGM("tramming: chot MOC Z-MIN=", z_ref_min, " Z-MAX=", z_ref_max, " (", n, " goc)");
+  z_ref_min = 0;
+  z_ref_max = 0;
+  z_ref_set = true;
 }
 
 // Nang len do cao an toan, di toi (x, y), roi probe
