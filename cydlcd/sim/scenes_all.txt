@@ -128,3 +128,22 @@ settle 1200
 shot page-07b-MESH-TAP-AFTER
 state basic
 settle 700
+
+# ---------------------------------------------------------------------------
+# 2026-10-17 (yeu cau nguoi dung: "chua thay co dialog loi, tao anh de toi nhin"):
+# Hop THONG BAO tren LCD chi hien khi CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 -> thong bao di trang
+# /status), nen binh thuong khong bao gio thay. Lenh chan doan `UI MSGBOX <0..3>` mo hop THAT
+# (cung duong box_make) theo muc do: 0 INFO / 1 WARN / 2 ERROR / 3 FATAL.
+#   dlg-09-msgbox-error : muc ERROR  (vien + chu tieu de DO)
+#   dlg-10-msgbox-warn  : muc WARN   (vien + chu tieu de VANG)
+# ---------------------------------------------------------------------------
+ui MSGBOX 2
+settle 800
+shot dlg-09-msgbox-error
+ui TAP K
+settle 400
+ui MSGBOX 1
+settle 800
+shot dlg-10-msgbox-warn
+ui TAP K
+settle 400

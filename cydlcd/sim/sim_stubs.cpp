@@ -88,6 +88,7 @@ volatile uint32_t g_hb_link = 0, g_hb_ui = 0, g_hb_net = 0, g_hb_log = 0;
 // ===========================================================================
 //  `ui_console_dispatch` (ban that o main.cpp - o day chi can du cho kich ban)
 // ===========================================================================
+#include <stdlib.h>              // atoi() cho `UI MSGBOX <n>`
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
 
@@ -114,6 +115,9 @@ void ui_console_dispatch(const char *a3) {
   // KHONG LAM GI, khien thua vien anh (tools/make_gallery.py) co 3 canh bi TRUNG: menu-tree/confirm
   // va fatal-red deu la anh cua trang dang mo. Thieu: TESTBOX, CRIT, CFG, NOTIFY, SET, BACK/NEXT/PREV.
   else if (!strcasecmp(a3, "TESTBOX"))     ui_lvgl_test_dialog();
+  // 2026-10-17 (yeu cau nguoi dung: "chua thay co dialog loi, tao anh de toi nhin"):
+  // `UI MSGBOX <0..3>` = mo hop THONG BAO that theo muc do (0 INFO / 1 WARN / 2 ERROR / 3 FATAL).
+  else if (!strncasecmp(a3, "MSGBOX", 6))  ui_boxes_test_msg((uint8_t)atoi(a3 + 6));
   else if (!strncasecmp(a3, "CRIT", 4))    ui_lvgl_test_crit(a3 + 4);
   else if (!strncasecmp(a3, "CFG", 3))     submenu_dump(a3 + 3);
   else if (!strncasecmp(a3, "NOTIFY", 6))  ui_lvgl_test_notify(a3 + 6);

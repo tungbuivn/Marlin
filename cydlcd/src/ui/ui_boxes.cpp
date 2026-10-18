@@ -442,4 +442,24 @@ void boxes_update(void) {
   }
 }
 
+// 2026-10-17 (yeu cau nguoi dung: "chua thay co dialog loi, tao anh de toi nhin"):
+// Hop thong bao tren LCD chi hien khi CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 -> thong bao di trang
+// /status). Ham nay mo hop thong bao THAT (cung duong box_make) de chup anh / kiem tra mau theo muc do.
+void ui_boxes_test_msg(uint8_t sev) {
+  static const char *const txts[4] = {
+    "INFO: day la hop thong bao muc INFO",
+    "CANH BAO: day la hop thong bao muc WARN",
+    "LOI: day la hop thong bao muc ERROR",
+    "LOI NANG: day la hop thong bao muc FATAL"
+  };
+  if (sev > 3) sev = 2;
+  Serial.printf("[UI] MSGBOX sev=%u\n", (unsigned)sev);   // chan doan
+  box_close(&s_msg_box);
+  static const char *const btns[] = {"OK", ""};
+  s_msg_box = box_make(sev_name(sev), txts[sev], sev_color(sev), btns);
+  lv_obj_add_event_cb(s_msg_box, cb_msg_value, LV_EVENT_VALUE_CHANGED, NULL);
+  s_msg_shown_ms = lv_tick_get();
+}
+
+
 #endif  // CYDLCD_USE_LVGL

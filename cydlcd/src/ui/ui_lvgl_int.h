@@ -761,6 +761,8 @@ void ui_lang_apply_ui(void);
 // ---------------------------------------------------------------------------
 /** Hop XAC NHAN dung chung: OK moi chay lenh; steps = 2 -> phai bam OK 2 lan. */
 void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);
+// 2026-10-17: mo hop THONG BAO that voi muc do 0..3 (INFO/WARN/ERROR/FATAL) - de chup anh kiem tra.
+void ui_boxes_test_msg(uint8_t sev);
 /** Tu dong dong hop XAC NHAN sau `ms` mili giay (0 = tat) - dung cho hop TEST tu console. */
 void ui_confirm_autoclose(const uint32_t ms);
 /**

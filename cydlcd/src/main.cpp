@@ -22,6 +22,7 @@
   #include "cydlcd_port.h"        // cydlcd_millis() (log 1 Hz: tuoi cua dong TBT cuoi cung)
   #include "tbt_link.h"          // chan doan: dem dong/byte TBT nhan duoc
   #include "ui_lvgl.h"
+  #include "ui_lvgl_int.h"       // ui_boxes_test_msg() (lenh `UI MSGBOX`)
   #include "net_wifi.h"           // quan ly WiFi DOC LAP voi BT (trang WiFi settings + net_wifi_state)
   #include "net_upload_http.h"    // web server tren cydlcd: PC/dien thoai gui file qua WiFi
   #include "cyd_sd.h"             // chan doan: cyd_sd_write_test() (lenh `UI WTEST`)
@@ -208,6 +209,8 @@ static void net_task_fn(void *) {
 void ui_console_dispatch(const char *a3) {
 if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strcasecmp(a3, "TESTBOX") == 0) ui_lvgl_test_dialog();
+            // `UI MSGBOX <0..3>` = mo hop THONG BAO that theo muc do (0 INFO / 1 WARN / 2 ERROR / 3 FATAL)
+            else if (strncasecmp(a3, "MSGBOX", 6) == 0) ui_boxes_test_msg((uint8_t)atoi(a3 + 6));
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
             else if (strncasecmp(a3, "PRE", 3) == 0) preheat_test_cmd(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
