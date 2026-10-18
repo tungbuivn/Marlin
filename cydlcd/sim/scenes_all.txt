@@ -122,10 +122,10 @@ state basic
 grid 10
 page 7
 settle 1500
-shot page-07a-MESH-TAP-BEFORE
+shot grid-01-mesh-before-tap
 tap 290 110
 settle 1200
-shot page-07b-MESH-TAP-AFTER
+shot grid-02-mesh-after-tap
 state basic
 settle 700
 
