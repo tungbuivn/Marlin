@@ -194,7 +194,8 @@
 // (Configuration > Advanced Settings > Language) hoac lenh `UI LANG 0|1` tren COM8 la ghi NVS luon.
 // Bang chuoi nam o src/ui_lang_vi.h + src/ui_lang_en.h (const -> FLASH, khong ton DRAM).
 // ===========================================================================
-#define CYDLCD_LANG_DEFAULT  0       // 0 = tieng Viet, 1 = English
+// 2026-10-17 (yeu cau nguoi dung): "hay set mac dinh la ngon ngu tieng anh".
+#define CYDLCD_LANG_DEFAULT  1       // 0 = tieng Viet, 1 = English (mac dinh)
 
 // ===========================================================================
 // QUAN LY WiFi (net_wifi.cpp) -- xem README 9.20
