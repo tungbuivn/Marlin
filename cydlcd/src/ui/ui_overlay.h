@@ -26,6 +26,7 @@ void ov_set(const char *state, const char *info, bool ok_col);
 void ov_note(const char *state, bool ok);
 // Tien do: tu tinh `%  KB  KB/s` (toi da 5 lan/s) roi goi ov_set(). Khong cham LVGL.
 void ov_progress(const char *state, uint32_t done, uint32_t total);
+void ov_test_show(void);      // 2026-10-17: hien lop phu upload 40% (de chup anh)
 // Tick tinh toc do (goi tu duong ghi the).
 void rate_tick(uint32_t done);
 

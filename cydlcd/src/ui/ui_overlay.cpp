@@ -67,6 +67,11 @@ bool ov_create_full(void) {
   return true;
 }
 
+// 2026-10-17: hien lop phu TIEN DO UPLOAD o 40% de chup anh kiem tra.
+void ov_test_show(void) {
+  ov_progress("DANG GUI FILE", 40, 100);
+}
+
 void ov_destroy(void) {
   OV_LOCK();
   s_vis = false;

@@ -445,6 +445,20 @@ void boxes_update(void) {
 // 2026-10-17 (yeu cau nguoi dung: "chua thay co dialog loi, tao anh de toi nhin"):
 // Hop thong bao tren LCD chi hien khi CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 -> thong bao di trang
 // /status). Ham nay mo hop thong bao THAT (cung duong box_make) de chup anh / kiem tra mau theo muc do.
+// 2026-10-17: hop PROMPT cua Marlin (tieu de "MARLIN", 2 nut OK/CANCEL) - de chup anh kiem tra.
+void ui_boxes_test_prompt(void) {
+  cydlcd.prompt_active = true;
+  snprintf(cydlcd.prompt_text, sizeof(cydlcd.prompt_text), "Marlin dang cho tra loi: tiep tuc in?");
+  boxes_update();
+}
+
+// 2026-10-17: hop "tune xong" (CYDLCD_EV_PID_DONE) - de chup anh kiem tra.
+void ui_boxes_test_pid(void) {
+  cydlcd.pid_done_ms = lv_tick_get() + 1;      // doi moc -> boxes_update() tao hop
+  if (!cydlcd.pid_done_ms) cydlcd.pid_done_ms = 1;
+  boxes_update();
+}
+
 void ui_boxes_test_msg(uint8_t sev) {
   static const char *const txts[4] = {
     "INFO: day la hop thong bao muc INFO",
