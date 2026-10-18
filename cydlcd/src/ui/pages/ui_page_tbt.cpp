@@ -50,6 +50,13 @@ static void cb_tbt_cmd(lv_event_t *e) {
   // 4 nut. Nut do da bo theo yeu cau nguoi dung.
 }
 
+// 2026-10-17 (yeu cau nguoi dung): bam MAX/MIN -> hien hop XAC NHAN, OK moi doi che do.
+// Doi che do se chay lai home + probe 4 goc (mat ~1 phut), nen phai xac nhan truoc.
+static void cb_tbt_maxmin(lv_event_t *e) {
+  (void)e;
+  ui_confirm("MAX/MIN", T(UI_T_TBT_MAXMIN_Q), A_TBT_MINMAX, 1);
+}
+
 // " BR  -0.012" / "*FL    ---" : 1 goc, mm so voi moc (Marlin gui san gia tri da tinh)
 static void tbt_fmt_corner(char *b, size_t n, const uint8_t i) {
   char num[12];
@@ -140,7 +147,7 @@ void page_tbt_create(lv_obj_t *p) {
 
   lv_obj_t *rb = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 38, 0, GAP);
   mk_btn_grow(rb, "PROBE",   38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_PROBE);
-  mk_btn_grow(rb, "MAX/MIN", 38, cb_tbt_cmd, (void *)(intptr_t)TBT_CMD_MINMAX);
+  mk_btn_grow(rb, "MAX/MIN", 38, cb_tbt_maxmin, NULL);   // 2026-10-17: mo hop XAC NHAN
   // 2026-10-17: BO nut "BACK" o day (yeu cau nguoi dung - tren header da co nut BACK).
   // KHONG thay bang hook "roi trang": probe da duoc deploy/thu trong TUNG lan probe, va moi lenh in
   // deu co G28 -> khong can ket thuc wizard khi roi trang (y kien nguoi dung 2026-10-17).

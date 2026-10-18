@@ -347,6 +347,7 @@ typedef enum {
   UI_T_INFO_WIFI_CONN,
   UI_T_INFO_WIFI_OK,
   UI_T_TBT_RESTART,
+  UI_T_TBT_MAXMIN_Q,          // hoi xac nhan doi MAX/MIN + do lai 4 goc
   UI_T_WIFI_SCANNING,
 
   UI_T_LANG_VI,                   // "Tiếng Việt"

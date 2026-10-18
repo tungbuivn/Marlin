@@ -125,6 +125,10 @@ bool tbt_report_cmd(const char cmd) {
       if (can_act) tbt_run::toggle_auto();
       break;
 
+    case TBT_CMD_MODE_RESTART:      // 2026-10-17: doi MAX/MIN + home + probe lai 4 goc
+      if (can_act) tbt_run::toggle_mode_restart();
+      break;
+
     case TBT_CMD_DONE:
       if (can_act) tbt_run::done();
       break;

@@ -154,6 +154,7 @@ const ui_lang_ovr_t UI_OVR_EN[] = {
   { UI_T_INFO_WIFI_CONN,        "CONNECTING" },
   { UI_T_INFO_WIFI_OK,          "CONNECTED" },
   { UI_T_TBT_RESTART,           "HOME + PROBE 4 CORNERS" },
+  { UI_T_TBT_MAXMIN_Q,          "SWITCH MODE AND RE-PROBE 4 CORNERS?" },
   { UI_T_WIFI_SCANNING,         "SCANNING NETWORKS..." },
 
   // ---- endonym (ten ngon ngu viet bang chinh ngon ngu do - KHONG dich) ----

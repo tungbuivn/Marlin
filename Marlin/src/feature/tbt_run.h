@@ -92,6 +92,7 @@ namespace tbt_run {
   void probe_here();                   // PROBE: probe lai goc dang dung
   void goto_corner(const uint8_t i);   // bam nhan goc tren man hinh CYD -> di chuyen toi goc do
   void toggle_auto();                  // bat/tat che do TU DI CHUYEN (nut AUTO)
+  void toggle_mode_restart();          // doi MAX/MIN roi home + probe lai 4 goc (khong di chuyen)
   extern bool auto_move;               // true = tu di chuyen toi goc can van
   void done();                         // DONE: goc nay xong -> goc ke tiep / home+probe lai
   void toggle_minmax();                // doi chien luoc MAX <-> MIN (chi trong phien) roi di goc lech nhat

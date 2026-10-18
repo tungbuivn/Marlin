@@ -406,6 +406,10 @@ void do_confirmed(const uint8_t act) {
       break;
     case A_PRE_DELETE:        preheat_delete_pending();   // xoa vat lieu preheat dang chon (nut "Xoa" - ui_page_preheat.cpp)
       break;
+    case A_TBT_MINMAX:
+      // 2026-10-17: nguoi dung xac nhan doi che do -> Marlin doi MAX/MIN roi home + probe lai 4 goc
+      tbt_link_send(TBT_CMD_MODE_RESTART);
+      break;
     case A_WIFI_FORGET:
       if (net_wifi_disconnect) net_wifi_disconnect(true);   // xoa cau hinh WiFi (quen NVS)
       break;

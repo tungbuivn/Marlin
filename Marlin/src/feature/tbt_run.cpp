@@ -430,6 +430,15 @@ void goto_corner(const uint8_t i) {
   refresh();
 }
 
+// 2026-10-17 (yeu cau nguoi dung): doi che do MAX/MIN roi CHAY LAI home + do 4 goc.
+// Khac `toggle_minmax()`: KHONG di chuyen toi goc nao ca, chi doi mode roi restart (home + probe 4 goc).
+void toggle_mode_restart() {
+  if (!can_move_now()) return;
+  worst_toggle();
+  DEBUG_ECHOLNPGM("tramming: doi che do -> ", tramming_worst_max ? "MAX" : "MIN", " + restart");
+  restart();
+}
+
 // MAX<->MIN: doi chien luoc (moc Z-MIN <-> Z-MAX) - CHI TRONG PHIEN, khong luu EEPROM - roi
 // DI NGAY toi goc lech nhat cua che do moi VA PROBE luon goc do.
 void toggle_minmax() {

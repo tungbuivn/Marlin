@@ -302,6 +302,7 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   [UI_T_INFO_WIFI_CONN]         = "DANG KET NOI",
   [UI_T_INFO_WIFI_OK]           = "DA KET NOI",
   [UI_T_TBT_RESTART]            = "HOME + PROBE 4 GOC",
+  [UI_T_TBT_MAXMIN_Q]           = "DOI CHE DO VA DO LAI 4 GOC?",
   [UI_T_WIFI_SCANNING]          = "DANG QUET MANG...",
 
   // ---- ten ngon ngu (endonym) ----

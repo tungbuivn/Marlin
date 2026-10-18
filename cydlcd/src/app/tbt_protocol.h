@@ -80,6 +80,9 @@
 #define TBT_CMD_GOTO3    '3'
 // 2026-10-17: bat/tat che do TU DI CHUYEN (nut AUTO tren man CYD).
 #define TBT_CMD_AUTO     'A'
+// 2026-10-17: doi che do MAX/MIN VA chay lai home + do 4 goc (sau khi nguoi dung xac nhan tren man
+// hinh). Tach rieng de Marlin khong phai di chuyen toi goc nao truoc khi restart.
+#define TBT_CMD_MODE_RESTART 'N'
 
 // ---------------------------------------------------------------------------
 // phase (khop TR_IDLE..TR_AUTO cua tbt_run.h phia Marlin)
@@ -356,6 +359,7 @@ static inline char tbt_cmd_parse(const char *line) {
     case TBT_CMD_GOTO2:
     case TBT_CMD_GOTO3:
     case TBT_CMD_AUTO:
+    case TBT_CMD_MODE_RESTART:
       return c;
     default:
       return 0;
@@ -385,6 +389,7 @@ static inline char tbt_cmd_parse_exact(const char *line) {
     case TBT_CMD_GOTO2:
     case TBT_CMD_GOTO3:
     case TBT_CMD_AUTO:
+    case TBT_CMD_MODE_RESTART:
       break;            // ⚠️ BAT BUOC: thieu break thi cac case tren ROI XUONG default -> return 0
     default:
       return 0;
