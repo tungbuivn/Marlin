@@ -200,7 +200,7 @@ settle 600
 ui MSGPROMPT
 settle 800
 shot dlg-11-msgbox-prompt
-ui TAP K
+ui MSGHIDE
 settle 400
 state basic
 page 0
@@ -208,7 +208,7 @@ settle 600
 ui MSGPID
 settle 800
 shot dlg-12-msgbox-pid
-ui TAP K
+ui MSGHIDE
 settle 400
 state basic
 page 0
