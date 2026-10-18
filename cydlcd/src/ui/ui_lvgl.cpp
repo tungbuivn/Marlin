@@ -359,7 +359,12 @@ void do_action(const int a) {
     case A_G29_FT:   cydlcd_link_send_gcode("G29 P4RT"); break;   // sua tung diem (fine tune)
     case A_G29_ON:   cydlcd_link_send_gcode("G29 A");    break;   // bat UBL
     case A_G29_OFF:  cydlcd_link_send_gcode("G29 D");    break;   // tat UBL
-    case A_G29_SAVE: cydlcd_link_send_gcode("G29 S0");   break;   // luu mesh vao slot 0
+    case A_G29_SAVE:
+      // 2026-10-17 (yeu cau nguoi dung): SAVE TU GOI LAI G29 P3 de tinh lai cac diem trong/bien
+      // (noi suy tu cac diem da do) roi moi luu vao slot 0. Nho vay khong can nut "G29 P3T0" rieng.
+      cydlcd_link_send_gcode("G29 P3");
+      cydlcd_link_send_gcode("G29 S0");
+      break;
 
     // ---- P2/P8 ----
     case A_EDIT_PROBE_Z: ov_open_id(CYDLCD_SET_PROBE_OFFSET_Z); break;   // mo lop phu sua M851 Z

@@ -277,11 +277,12 @@ void page_mesh_create(lv_obj_t *p) {
   // Da bo: nut REFRESH + 3 dong chu thich mau (cot phai) va dong chu thich duoi luoi.
 
   // P1 - UBL: 2 hang x 3 nut (G29 P1 / P3T0 / P4RT roi bat-tat UBL + luu slot 0)
+  // 2026-10-17 (yeu cau nguoi dung): BO nut "G29 P3T0" - viec dien cac diem trong/bien gio do nut
+  // SAVE tu lam (SAVE -> G29 P3 roi G29 S0). Hang 1 con: G29 P1 | EDIT | PROBE.
   lv_obj_t *ru1 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
   mk_btn_grow(ru1, "G29 P1",   28, cb_action, (void *)(intptr_t)A_G29_P1);
-  mk_btn_grow(ru1, "G29 P3T0", 28, cb_action, (void *)(intptr_t)A_G29_FILL);
-  // 2026-10-17 (yeu cau nguoi dung): doi ten "G29 P4RT" -> "EDIT" (van la UBL manual mesh edit).
   mk_btn_grow(ru1, "EDIT",     28, cb_action, (void *)(intptr_t)A_G29_FT);
+  mk_btn_grow(ru1, "PROBE",    28, cb_action, (void *)(intptr_t)A_MESH_PROBE);
 
   lv_obj_t *ru2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
   // 2026-10-17 (yeu cau nguoi dung): UBL ON/OFF GOP THANH MOT NUT, giong nut AUTO cua man TRAMMING:
@@ -304,9 +305,8 @@ void page_mesh_create(lv_obj_t *p) {
     lv_obj_add_flag(me_btn_on,  LV_OBJ_FLAG_USER_1);
     lv_obj_add_flag(me_btn_off, LV_OBJ_FLAG_USER_1);
   }
-  // 2026-10-17: them nut PROBE - tat mesh bu Z (giong G35) roi probe lai diem dang chon 2 lan.
-  mk_btn_grow(ru2, "PROBE",    28, cb_action, (void *)(intptr_t)A_MESH_PROBE);
-  mk_btn_grow(ru2, "SAVE S0",  28, cb_action, (void *)(intptr_t)A_G29_SAVE);
+  // 2026-10-17: SAVE gio TU GOI G29 P3 (dien cac diem trong/bien) roi G29 S0 (luu slot 0) - xem do_action.
+  mk_btn_grow(ru2, "SAVE",     28, cb_action, (void *)(intptr_t)A_G29_SAVE);
 
   // ---------------------------------------------------------------------------
   // LOP PHU DINH VI TUYET DOI TREN BANG: nut EDIT (toggle) + 4 nut dieu huong + hop sua 1 o.
