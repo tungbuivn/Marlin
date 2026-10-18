@@ -101,19 +101,11 @@ shot dlg-07-tbt-maxmin-confirm
 ui TAP K
 settle 500
 
-page 7
-settle 600
-ui MCELL 2 2
-settle 700
-shot dlg-08-mesh-modify
-page 8
-settle 400
-
 page 3
 settle 500
 ui PRE OPEN 0
 settle 700
-shot dlg-09-preheat-edit
+shot dlg-08-preheat-edit
 page 8
 settle 400
 
