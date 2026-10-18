@@ -175,12 +175,9 @@ static void set_ref() {
 static bool probe_xy(const float x, const float y, float &out_z) {
   if (!can_move_now()) { out_z = NAN; return false; }
   do_blocking_move_to_z(TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, Z_CLEARANCE_BETWEEN_PROBES));
-  // 2026-10-17 CHAN DOAN (nguoi dung bao: BR do lan dau 0.253, probe lai thanh -0.169, lech 0,422mm):
-  // in Z NGAY TRUOC khi probe va KET QUA probe -> biet chenh lech nam o (a) truc Z truot trong luc di
-  // chuyen, hay (b) ban than lan probe tra ve so khac.
-  SERIAL_ECHOLNPGM("TBT-PROBE xy(", x, ",", y, ") z_truoc=", current_position.z);
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
-  SERIAL_ECHOLNPGM("TBT-PROBE z_ket_qua=", out_z);
+  // 2026-10-17 (yeu cau nguoi dung): CHI giu MOT con so DO DUOC, bo z_truoc / z_ket_qua / z_delta.
+  SERIAL_ECHOLNPGM("z_measured=", out_z);
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
   return !isnan(out_z);
 }
@@ -240,7 +237,6 @@ static void probe_here_raw() {
   // Cac goc CHUA do lai trong vong nay van dung so CU (khong xoa) cho toi khi bam DONE (het goc)
   z_delta[i] = z;
   z_ok[i] = true;
-  SERIAL_ECHOLNPGM("TBT-PROBE goc ", i, " -> z_delta=", z_delta[i]);
   probe_state = PR_RESULT;
 }
 
