@@ -69,7 +69,11 @@ static void state_basic(void) {
   cydlcd.mesh_valid = true; cydlcd.mesh_on = true;
   for (uint8_t r = 0; r < 7; r++)
     for (uint8_t c = 0; c < 7; c++)
-      cydlcd.mesh[r][c] = (int16_t)(((int)r - 3) * 12 + ((int)c - 3) * 7);
+      // 2026-10-17: SUA thu tu chi so cho dung [cot][hang] (truoc ghi [hang][cot] -> luoi bi treo).
+      cydlcd.mesh[c][r] = (int16_t)(((int)r - 3) * 12 + ((int)c - 3) * 7);
+  // (du lieu gia lap) 2 diem "gai" lech ~0.6mm so voi hang xom -> PHAI hien mau CAM (diem nghi ngo)
+  cydlcd.mesh[2][2] += 600;
+  cydlcd.mesh[5][4] -= 600;
 
   // danh sach file SD
   cydlcd.n_files = 5;

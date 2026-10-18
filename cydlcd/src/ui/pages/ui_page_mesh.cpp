@@ -211,9 +211,34 @@ static void cb_mesh_cancel(lv_event_t *e) { (void)e; me_box_hide(); }
 // Nguong to mau: |z| > 0.05mm thi to xanh (cao) / do (thap)
 #define MESH_HI_UM  50
 #define MESH_LO_UM (-50)
+// 2026-10-17 (yeu cau nguoi dung: "to mau cam cac diem nghi ngo"):
+// Mat ban that Lien tuc, khong co "gai". Mot diem lech qua xa so voi trung binh cac diem ke
+// gan nhu chac chan la do sai (probe nhieu / bui ban / diem mesh cu).
+#define MESH_SUSPECT_UM 100      // 0.10 mm
 
 // LVGL 8.3: LV_EVENT_DRAW_PART_BEGIN cho o cua bang -> dsc->id = chi so o
 // (id = row * so_cot + col). Vat lieu to mau rieng tung o.
+// 2026-10-17: diem nay co "nghi ngo" khong? So voi TRUNG BINH 8 diem ke (bo qua diem ngoai luoi).
+// Bien chi co it diem ke -> can >= 3 diem moi ket luan (tranh bao nham o goc luoi).
+static bool mesh_cell_suspect(const uint8_t c, const uint8_t r) {
+  if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return false;
+  int32_t sum = 0;
+  uint8_t n = 0;
+  for (int8_t dc = -1; dc <= 1; dc++)
+    for (int8_t dr = -1; dr <= 1; dr++) {
+      if (!dc && !dr) continue;
+      const int16_t cc = (int16_t)c + dc, rr = (int16_t)r + dr;
+      if (cc < 0 || rr < 0 || cc >= (int16_t)cydlcd.mesh_nx || rr >= (int16_t)cydlcd.mesh_ny) continue;
+      sum += cydlcd.mesh[cc][rr];
+      n++;
+    }
+  if (n < 3) return false;
+  const int32_t avg = sum / (int32_t)n;
+  int32_t d = (int32_t)cydlcd.mesh[c][r] - avg;
+  if (d < 0) d = -d;
+  return d > MESH_SUSPECT_UM;
+}
+
 static void mesh_draw_cb(lv_event_t *e) {
   lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
   if (!dsc || dsc->part != LV_PART_ITEMS || !dsc->rect_dsc) return;
@@ -228,7 +253,9 @@ static void mesh_draw_cb(lv_event_t *e) {
 
   const int32_t z = cydlcd.mesh[col][row];          // cydlcd_link.cpp: mesh[cot][hang]
   lv_color_t bg = COL_BTN;
-  if (z > MESH_HI_UM)      bg = lv_color_hex(0x1E6B3A);   // xanh: diem cao
+  // 2026-10-17: DIEM NGHI NGO -> to CAM, uu tien hon mau cao/thap (canh bao quan trong hon).
+  if (mesh_cell_suspect((uint8_t)col, (uint8_t)row)) bg = lv_color_hex(0xF9A825);
+  else if (z > MESH_HI_UM)      bg = lv_color_hex(0x1E6B3A);   // xanh: diem cao
   else if (z < MESH_LO_UM) bg = lv_color_hex(0x7A2626);   // do  : diem thap
   dsc->rect_dsc->bg_color = bg;
   dsc->rect_dsc->bg_opa   = LV_OPA_COVER;
