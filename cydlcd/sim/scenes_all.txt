@@ -147,3 +147,45 @@ settle 800
 shot dlg-10-msgbox-warn
 ui TAP K
 settle 400
+
+# ---------------------------------------------------------------------------
+# 2026-10-17 (yeu cau nguoi dung): them 4 canh chon o SAT BIEN de kiem tra quy tac
+# "uu tien bam le khi khong the dua o ra giua" (luoi 10x10 de cuon duoc ca 2 chieu).
+#   grid-03-tap-right  : cham o sat bien PHAI
+#   grid-04-tap-bottom : cham o sat bien DUOI
+#   grid-05-tap-top    : cham o sat bien TREN
+#   grid-06-tap-left   : cham o sat bien TRAI
+# ---------------------------------------------------------------------------
+state basic
+grid 10
+page 7
+settle 1500
+tap 300 110
+settle 1000
+shot grid-03-tap-right
+page 7
+settle 400
+grid 10
+page 7
+settle 900
+tap 150 165
+settle 1000
+shot grid-04-tap-bottom
+page 7
+settle 400
+grid 10
+page 7
+settle 900
+tap 150 55
+settle 1000
+shot grid-05-tap-top
+page 7
+settle 400
+grid 10
+page 7
+settle 900
+tap 8 110
+settle 1000
+shot grid-06-tap-left
+state basic
+settle 700
