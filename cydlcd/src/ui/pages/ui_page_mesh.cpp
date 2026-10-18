@@ -119,6 +119,7 @@ static void cb_mesh_suspect_cycle(lv_event_t *e) {
   s_suspect_um = SUSPECT_STEPS[(k + 1) % SUSPECT_STEP_N];
   WIFILOG("[UI] MESH: nguong diem nghi ngo = %ld um\n", (long)s_suspect_um);
   if (me_table) lv_obj_invalidate(me_table);   // ve lai luoi voi nguong moi
+  page_mesh_update();                          // cap nhat ngay dong info (NP:...)
 }
 
 // 2026-10-17 (yeu cau nguoi dung): nut MODIFY - sua do cao bang tay cho O DANG CHON.
@@ -442,9 +443,12 @@ void page_mesh_update(void) {
   // hien thi duoc tinh trang mesh on hay off, bam xong ma khong biet da duoc hay chua"). `cydlcd.mesh_on` =
   // planner.leveling_active cua Marlin (byte thu 4 cua CYDLCD_F_STATUS, day ~1 Hz) nen sau khi bam UBL ON/OFF
   // khoang 1 s dong nay tu doi; dong thoi TO MAU dong nay + 2 nut theo trang thai (xem duoi).
-  snprintf(b, sizeof(b), "%ux%u rows %u %s..%s%s  UBL:%s", (unsigned)cydlcd.mesh_nx,
+  // 2026-10-17 (yeu cau nguoi dung): hien them NP:<nguong nghiem trong> de biet dang dat bao nhieu.
+  // VD "7x7 rows 7 -0.12..0.15 valid  UBL:ON  NP:0.10"
+  snprintf(b, sizeof(b), "%ux%u rows %u %s..%s%s  UBL:%s  NP:%ld.%02ld", (unsigned)cydlcd.mesh_nx,
            (unsigned)cydlcd.mesh_ny, (unsigned)cydlcd.mesh_rows, b1, b2,
-           cydlcd.mesh_valid ? " valid" : " -", cydlcd.mesh_on ? "ON" : "OFF");
+           cydlcd.mesh_valid ? " valid" : " -", cydlcd.mesh_on ? "ON" : "OFF",
+           (long)(s_suspect_um / 100), (long)(s_suspect_um % 100));
   set_text(me_info, b);
 
   // ---- TRANG THAI UBL/BED LEVELING: chi cap nhat khi gia tri DOI (khong set style moi vong) ----
