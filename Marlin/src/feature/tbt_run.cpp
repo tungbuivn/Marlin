@@ -207,7 +207,8 @@ void goto_worst() {
 
   DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " (", tramming_worst_max ? "MAX" : "MIN", ") delta=", z_measured[worst_index]);
 
-  do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
+  // 2026-10-17 (yeu cau nguoi dung): BO not buoc nang Z o day (giong goto_index).
+  // Nozzle dang o do cao an toan sau lan probe truoc -> chi di XY.
   do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
 }
 
