@@ -370,6 +370,7 @@ enum {
   A_GOTO_MESH, A_GOTO_TBT,
   A_PROBE_DEPLOY, A_PROBE_STOW,
   A_TBT_MINMAX,         // 2026-10-17: doi MAX/MIN + home + probe lai 4 goc (sau hop xac nhan)
+  A_MESH_PROBE,         // 2026-10-17: tat mesh bu Z (nhu G35) + probe lai diem dang chon 2 lan
   A_G29_LEVEL, A_G29_INFO, A_G29_UBL_MANUAL,
   A_UBL_T0, A_UBL_T1, A_UBL_S1,
   A_M48,

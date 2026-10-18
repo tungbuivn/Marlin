@@ -406,6 +406,14 @@ void do_confirmed(const uint8_t act) {
       break;
     case A_PRE_DELETE:        preheat_delete_pending();   // xoa vat lieu preheat dang chon (nut "Xoa" - ui_page_preheat.cpp)
       break;
+    case A_MESH_PROBE:
+      // 2026-10-17 (yeu cau nguoi dung): "tat mesh bu Z giong G35 roi probe lai diem dang chon 2 lan".
+      // M420 S0 = tat bu mesh, G30 = probe 1 diem, lam 2 lan, roi M420 S1 = bat lai.
+      cydlcd_link_send_gcode("M420 S0");
+      cydlcd_link_send_gcode("G30");
+      cydlcd_link_send_gcode("G30");
+      cydlcd_link_send_gcode("M420 S1");
+      break;
     case A_TBT_MINMAX:
       // 2026-10-17: nguoi dung xac nhan doi che do -> Marlin doi MAX/MIN roi home + probe lai 4 goc
       tbt_link_send(TBT_CMD_MODE_RESTART);
