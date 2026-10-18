@@ -201,17 +201,22 @@ static void po_create(void) {
   lv_obj_set_style_border_color(s_po_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(s_po_box, 1, 0);
   lv_obj_set_style_radius(s_po_box, 3, 0);
-  lv_obj_set_style_pad_all(s_po_box, 4, 0);
+  // 2026-10-17: tieu de phai TRAN het be ngang (truoc day pad_all 4 lam thut vao)
+  lv_obj_set_style_pad_left(s_po_box, 0, 0);
+  lv_obj_set_style_pad_right(s_po_box, 0, 0);
+  lv_obj_set_style_pad_top(s_po_box, 0, 0);
+  lv_obj_set_style_pad_bottom(s_po_box, 4, 0);
   lv_obj_set_style_pad_row(s_po_box, GAP, 0);
   lv_obj_clear_flag(s_po_box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(s_po_box, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(s_po_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  lv_obj_set_flex_align(s_po_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   // KHONG dat HIDDEN o day: con tao trong luc cha dang an thi LVGL khong tinh layout/flex.
 
   const lv_coord_t iw = PO_W - 2 * 4;                  // be rong trong hop
 
   // Dong 1: ten vat lieu
   s_po_title = mk_label_w(s_po_box, "-", MR_MENU, iw);
+  lv_obj_set_width(s_po_title, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(s_po_title);        // 2026-10-17: tieu de co NEN
 
   // Dong 2: 3 O (nozzle | bed | fan) - CA 3 TRONG 1 HANG, cham o nao thi -/+ chinh o do. Nut be rong

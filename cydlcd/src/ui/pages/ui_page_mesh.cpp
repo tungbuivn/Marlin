@@ -401,13 +401,23 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_bg_opa(me_box, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(me_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(me_box, 2, 0);
-  lv_obj_set_style_pad_all(me_box, 6, 0);
+  // 2026-10-17 (nguoi dung: "cac dialog ban vua sua, thay title cung bi padding"):
+  // Truoc day hop dat pad_all 6 -> thanh tieu de bi thut vao 6px, khong cham vien. Nay:
+  //   pad trai/phai/tren = 0  -> tieu de TRAN het be ngang, cham vien tren
+  //   pad duoi = 8            -> chua khoang cho hang nut cuoi
+  //   flex align CROSS = CENTER -> cac hang con (rong 220 trong hop 240) tu can giua
+  lv_obj_set_style_pad_left(me_box, 0, 0);
+  lv_obj_set_style_pad_right(me_box, 0, 0);
+  lv_obj_set_style_pad_top(me_box, 0, 0);
+  lv_obj_set_style_pad_bottom(me_box, 8, 0);
   lv_obj_set_flex_flow(me_box, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(me_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(me_box, 4, 0);
   lv_obj_clear_flag(me_box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(me_box, LV_OBJ_FLAG_HIDDEN);
 
   me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
+  lv_obj_set_width(me_box_title, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(me_box_title);      // 2026-10-17: tieu de co NEN (truoc day chi co chu)
   me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
   lv_obj_t *rs = mk_dlg_row(me_box, 220, 24);

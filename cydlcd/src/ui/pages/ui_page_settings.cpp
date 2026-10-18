@@ -497,16 +497,21 @@ static void ov_create(void) {
   lv_obj_set_style_border_color(ov_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(ov_box, 1, 0);
   lv_obj_set_style_radius(ov_box, 3, 0);
-  lv_obj_set_style_pad_all(ov_box, OV_PAD, 0);
+  // 2026-10-17: tieu de (ten thong so) phai TRAN het be ngang
+  lv_obj_set_style_pad_left(ov_box, 0, 0);
+  lv_obj_set_style_pad_right(ov_box, 0, 0);
+  lv_obj_set_style_pad_top(ov_box, 0, 0);
+  lv_obj_set_style_pad_bottom(ov_box, OV_PAD, 0);
   lv_obj_set_style_pad_row(ov_box, GAP, 0);
   lv_obj_clear_flag(ov_box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(ov_box, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(ov_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  lv_obj_set_flex_align(ov_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   // KHONG dat HIDDEN o day: neu tao con trong luc cha dang an thi LVGL khong tinh layout
   // (align/flex) cho nhanh do -> nut rong 0 px = "khong co text". ov_open_row() se hien sau.
 
   // Dong 1: ten thong so (ten tieng Anh lay tu SET_ROWS, khong co dau)
   ov_name = mk_label_w(ov_box, "-", MR_MENU, OV_W - 2 * OV_PAD);
+  lv_obj_set_width(ov_name, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(ov_name);           // 2026-10-17: ten thong so = thanh tieu de co NEN
 
   // Dong 2: "Gia tri: <so>" (xanh la) + "Buoc <buoc>" (xam) - xem ov_refresh()
