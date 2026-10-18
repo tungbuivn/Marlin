@@ -86,7 +86,7 @@ bool    busy;                              // chan tai nhap: blocking move goi i
 bool    active;                            // wizard da bat (tu begin/restart toi exit)
 bool    ui_attached;                       // man 12864 dang mo wizard -> menu la driver
 
-static float   z_delta[G35_PROBE_COUNT];   // (mm) gia tri probe GAN NHAT (moc vat ly = Z-home)
+static float   z_measured[G35_PROBE_COUNT];   // (mm) gia tri probe GAN NHAT (moc vat ly = Z-home)
 static bool    z_ok[G35_PROBE_COUNT];      // diem nay probe duoc chua
 static bool    z_accepted[G35_PROBE_COUNT];// nguoi dung da bam DONE o goc nay = COI NHU XONG
                                            // (du |delta| chua vao nguong) -> khong quay lai goc do nua
@@ -96,7 +96,7 @@ static bool    z_ref_set;                  // da chot moc chua (false = dang tro
 // ---------------------------------------------------------------------------
 // Truy cap trang thai (UI / link serial)
 // ---------------------------------------------------------------------------
-float delta(const uint8_t i) { return z_delta[i]; }
+float measured(const uint8_t i) { return z_measured[i]; }
 bool  ok(const uint8_t i) { return z_ok[i]; }
 bool  accepted(const uint8_t i) { return z_accepted[i]; }
 bool  ref_set() { return z_ref_set; }
@@ -127,7 +127,7 @@ static float extreme_probed(const bool want_max) {
   float v = 0;
   bool found = false;
   LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
-    if (!found || (want_max ? z_delta[i] > v : z_delta[i] < v)) { v = z_delta[i]; found = true; }
+    if (!found || (want_max ? z_measured[i] > v : z_measured[i] < v)) { v = z_measured[i]; found = true; }
   }
   return v;
 }
@@ -155,7 +155,7 @@ float ref() {
 // con viec QUYET DINH "goc nay da dat chua" thi so voi Z-MIN/Z-MAX trong need_adjust().
 // 2026-10-17 (yeu cau nguoi dung): "bo phan tru z moc khi hien thi tai cac diem z1..z4, chi hien thi
 // gia tri do duoc; chi gia tri CW/CCW thay doi khi chon goc do".
-// => Man hinh hien DUNG z_delta[i] (gia tri probe do duoc), KHONG tru them moc nao. Bon so nay la
+// => Man hinh hien DUNG z_measured[i] (gia tri probe do duoc), KHONG tru them moc nao. Bon so nay la
 //    SO DO, chi doi khi probe lai chinh goc do; con dong goi y CW/CCW + so mm thi doi theo goc dang dung.
 float display_ref() { return 0; }
 
@@ -176,15 +176,15 @@ static bool probe_xy(const float x, const float y, float &out_z) {
   if (!can_move_now()) { out_z = NAN; return false; }
   do_blocking_move_to_z(TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, Z_CLEARANCE_BETWEEN_PROBES));
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
-  // 2026-10-17 (yeu cau nguoi dung): CHI giu MOT con so DO DUOC, bo z_truoc / z_ket_qua / z_delta.
+  // 2026-10-17 (yeu cau nguoi dung): CHI giu MOT con so DO DUOC, bo z_truoc / z_ket_qua / z_measured.
   SERIAL_ECHOLNPGM("z_measured=", out_z);
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
   return !isnan(out_z);
 }
 
 // Tim goc "lech nhat" theo che do dang chon:
-//   tramming_worst_max = true  -> goc CAO NHAT (z_delta lon nhat)
-//   tramming_worst_max = false -> goc THAP NHAT (z_delta nho nhat)
+//   tramming_worst_max = true  -> goc CAO NHAT (z_measured lon nhat)
+//   tramming_worst_max = false -> goc THAP NHAT (z_measured nho nhat)
 // roi di nozzle toi do (de nguoi dung van vit goc do).
 void goto_worst() {
   if (!can_move_now()) return;
@@ -195,12 +195,12 @@ void goto_worst() {
   float best = 0;
   bool found = false;
   LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) {
-    const float d = ABS(z_delta[i] - R);
+    const float d = ABS(z_measured[i] - R);
     if (!found || d > best) { best = d; worst_index = i; found = true; }
   }
   if (!found) { DEBUG_ECHOLNPGM("tramming: khong probe duoc diem nao"); return; }
 
-  DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " (", tramming_worst_max ? "MAX" : "MIN", ") delta=", z_delta[worst_index]);
+  DEBUG_ECHOLNPGM("tramming: goc lech nhat = ", worst_index, " (", tramming_worst_max ? "MAX" : "MIN", ") delta=", z_measured[worst_index]);
 
   do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
   do_blocking_move_to_xy(tramming_points[worst_index].x, tramming_points[worst_index].y, XY_PROBE_FEEDRATE_MM_S);
@@ -232,10 +232,9 @@ static void probe_here_raw() {
 
   if (!ok_) { probe_state = PR_FAILED; return; }
 
-  // Chi lay z CUOI. Khung Z khong doi giua cac lan probe (khong home lai) nen gia tri nay
-  // dung de so ngay: van dung chieu -> target (delta so voi mat phang TB) GIAM, van sai -> TANG.
-  // Cac goc CHUA do lai trong vong nay van dung so CU (khong xoa) cho toi khi bam DONE (het goc)
-  z_delta[i] = z;
+  // 2026-10-17: CHI con MOT ten duy nhat `z_measured` (bo han z_delta). Day la so probe DO DUOC,
+  // dung nguyen, khong tru moc nao. Goc chua do lai trong vong nay van giu so CU cho toi khi bam DONE.
+  z_measured[i] = z;
   z_ok[i] = true;
   probe_state = PR_RESULT;
 }
@@ -261,11 +260,11 @@ static void goto_index(const uint8_t i) {
 bool need_adjust(const uint8_t i) {
   if (z_accepted[i]) return false;                // nguoi dung da chap nhan goc nay
   if (!z_ok[i]) return true;                      // chua do duoc -> van phai toi kiem tra
-  // DAT khi |r_i - R| <= TBT_DONE_MM, voi r = z_delta - Z-home (so dang hien thi) va R = moc o ref().
+  // DAT khi |r_i - R| <= TBT_DONE_MM, voi r = z_measured - Z-home (so dang hien thi) va R = moc o ref().
   // Goc MOC tu no ra 0 -> tu dong DAT, KHONG can nhan dien rieng (truoc day co phep "z_i <= z_ref_min
   // thi coi la moc" -> khi probe lai lam z tut qua moc thi chinh goc do bi coi la moc va bi danh
   // "xong" du chua van vit gi - dung loi nguoi dung bao 2026-10-17).
-  return ABS(z_delta[i] - ref()) > TBT_DONE_MM;
+  return ABS(z_measured[i] - ref()) > TBT_DONE_MM;
 }
 
 // Co goc nao (trong CA 4) con phai chinh khong? false = tat ca da dat -> chi con nut BACK
@@ -471,7 +470,7 @@ void step() {
         break;
       }
       busy = true;
-      z_ok[step_index] = probe_xy(tramming_points[step_index].x, tramming_points[step_index].y, z_delta[step_index]);
+      z_ok[step_index] = probe_xy(tramming_points[step_index].x, tramming_points[step_index].y, z_measured[step_index]);
       busy = false;
       ++step_index;
       break;

@@ -44,7 +44,7 @@ static void build_hint(tbt_status_t &st) {
   // 2026-10-17: PHAI tru `ref()` (moc theo che do: MAX->Z-MAX, MIN->Z-MIN), KHONG phai
   // `display_ref()` (moc hien thi = z-home). Truoc day dung display_ref() nen khi display_ref()
   // doi thanh z-home thi `delta` bien thanh r_i (khoang cach toi tam ban) -> so mm VA chieu van sai.
-  const float delta = tbt_run::delta(i) - tbt_run::ref();
+  const float delta = tbt_run::measured(i) - tbt_run::ref();
   if (ABS(delta) <= TBT_DONE_MM)      { strcpy(st.hint, "DAT"); return; }
 
   char num[16];
@@ -64,7 +64,7 @@ static void build_status(tbt_status_t &st) {
   st.auto_on  = tbt_run::auto_move ? 1 : 0;
   st.ref      = tbt_run::display_ref();
   LOOP_L_N(i, TBT_PROTO_POINTS) {
-    st.d[i]        = tbt_run::delta(i);
+    st.d[i]        = tbt_run::measured(i);
     st.ok[i]       = tbt_run::ok(i) ? 1 : 0;
     st.accepted[i] = tbt_run::accepted(i) ? 1 : 0;
   }

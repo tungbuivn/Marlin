@@ -98,7 +98,7 @@ static void tbt_tag(const uint8_t i, char * const out) {
 // la du va con giu duoc dong hien thi rong 21 ky tu (buffer 12 byte luon du).
 static void tbt_fmt_delta(const uint8_t i, const float mean, char * const out) {
   if (!tbt_run::ok(i)) { strcpy(out, "  ---"); return; }
-  const float d = constrain(tbt_run::delta(i) - mean, -9999.0f, 9999.0f);  // chot an toan cho buffer
+  const float d = constrain(tbt_run::measured(i) - mean, -9999.0f, 9999.0f);  // chot an toan cho buffer
   dtostrf(d, 1, ABS(d) >= 1 ? 2 : 3, out);
 }
 
@@ -169,7 +169,7 @@ static void tramming_draw() {
       // Van dung chieu -> so nay giam; van sai chieu -> so nay tang.
       // 2026-10-17: `ref` o tren = display_ref() (z-home) chi de HIEN THI 4 goc; con so mm can van va
       // CHIEU van phai so voi MOC cua che do -> dung tbt_run::ref().
-      const float delta = tbt_run::delta(tbt_run::worst_index) - tbt_run::ref();
+      const float delta = tbt_run::measured(tbt_run::worst_index) - tbt_run::ref();
       if (ABS(delta) <= TBT_DONE_MM)
         snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
       else {
@@ -190,7 +190,7 @@ static void tramming_draw() {
       if (!tbt_run::ok(i))
         snprintf_P(line, sizeof(line), PSTR("%cPROBE goc nay"), btn_sel == BTN_PROBE ? '>' : ' ');
       else {
-        const float delta = tbt_run::delta(i) - ref;    // ref = MOC da tinh o tren
+        const float delta = tbt_run::measured(i) - ref;    // ref = MOC da tinh o tren
         if (ABS(delta) <= TBT_DONE_MM)
           snprintf_P(line, sizeof(line), PSTR("%cPROBE DAT"), btn_sel == BTN_PROBE ? '>' : ' ');
         else if (ABS(delta) < 0.02f)             // duoi 2/100 mm -> chi can van nhe

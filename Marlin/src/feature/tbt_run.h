@@ -66,7 +66,7 @@ namespace tbt_run {
 
   inline uint8_t count() { return G35_PROBE_COUNT; }
 
-  float   delta(const uint8_t i);      // z_delta[i] (mm, moc vat ly = Z-home)
+  float measured(const uint8_t i);      // z_measured[i] = so probe do duoc (mm), khong tru moc
   bool    ok(const uint8_t i);         // da probe duoc chua
   bool    accepted(const uint8_t i);   // nguoi dung da bam DONE o goc nay
   bool    ref_set();                   // da chot moc chua
