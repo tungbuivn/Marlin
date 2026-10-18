@@ -623,7 +623,7 @@ void build_chrome(void) {
   //   - rong 48 -> 58, cao 20 -> BAR_H (phu kin chieu cao thanh tieu de)
   //   - BO VIEN (mk_btn mac dinh co vien 1px)
   //   - nen COL_BTN (dang khoi mau dam, khac han nen thanh tieu de COL_TITLEBAR) -> nhin ra ngay la nut
-  s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 50, BAR_H, cb_action, (void *)(intptr_t)A_BACK);
+  s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 50, (lv_coord_t)(BAR_H - 2), cb_action, (void *)(intptr_t)A_BACK);   // -2 px: cham mep duoi (y=24), KHONG de len duong ke day header (y=25)
   // 2026-10-17: BO VIEN cua nut BACK.
   // LUU Y THU TU: mk_btn_set_bg() GOI outline_apply() ben trong -> neu dat bg TRUOC roi moi xoa co
   // thi vien khong bi ve lai. Va phai BO ca USER_2 (co "nut co vien outlined") vi focus_mark()/
