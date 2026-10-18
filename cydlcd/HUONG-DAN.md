@@ -1,6 +1,6 @@
 # Hướng dẫn màn hình CYD cho Marlin trên MKS Monster8 V2
 
-Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `65abb88`.
+Tài liệu này dành cho người mới, bám theo nhánh `mks-monster8-Voron-2.1.x` tại commit `4923ad35`.
 
 Tên project màn hình hiện nay là **`cydlcd/`**. Tên cũ `lcd_panel/`, các macro `PANEL_*` và các công cụ `panel_*` đã được đổi sang `cydlcd/`, `CYDLCD_*` và `cydlcd_*`.
 
@@ -306,7 +306,7 @@ Chi tiết hiển thị hiện tại:
 - `Tramming wizard` hiển thị trạng thái phiên;
 - `WiFi` hiển thị tắt, đang nối hoặc đã nối.
 
-Giao diện hỗ trợ **hai ngôn ngữ: tiếng Việt và English**. Đổi ở `Configuration` → `Advanced Settings` → `Language` (chọn là lưu ngay vào NVS và vẽ lại màn hình). Mặc định là tiếng Việt; các thuật ngữ kỹ thuật trong menu Configuration giữ nguyên tiếng Anh ở cả hai ngôn ngữ.
+Giao diện hỗ trợ **hai ngôn ngữ: tiếng Việt và English**. Đổi ở `Configuration` → `Advanced Settings` → `Language` (chọn là lưu ngay vào NVS và vẽ lại màn hình). Mặc định là English; các thuật ngữ kỹ thuật trong menu Configuration giữ nguyên tiếng Anh ở cả hai ngôn ngữ.
 
 ### 7.3 TEMPERATURE
 
