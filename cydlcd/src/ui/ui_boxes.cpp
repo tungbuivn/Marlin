@@ -195,6 +195,15 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
     lv_obj_set_style_outline_width(bm, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(bm, 2, LV_PART_ITEMS);
     lv_obj_set_style_radius(bm, 4, LV_PART_ITEMS);
+    // 2026-10-17 (nguoi dung: "ca group nut ok, cancel dang bi bao boi 1 box mau cyan, bo duong vien do"):
+    // Do la vien FOCUS cua THEME LVGL ve quanh CHINH btnmatrix (LV_PART_MAIN, mau #00E7FF), khong
+    // phai vien tung nut. Phai tat o PART_MAIN ca trang thai thuong lan FOCUSED.
+    lv_obj_set_style_bg_opa(bm, LV_OPA_TRANSP, 0);          // nen nhom trong suot
+    lv_obj_set_style_border_width(bm, 0, 0);
+    lv_obj_set_style_outline_width(bm, 0, 0);
+    lv_obj_set_style_shadow_width(bm, 0, 0);
+    lv_obj_set_style_outline_width(bm, 0, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(bm, 0, LV_STATE_FOCUSED);
     // Khi nut dang duoc chon (encoder), LVGL mac dinh ve vien focus -> bo luon cho sach.
     lv_obj_set_style_outline_width(bm, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
     lv_obj_set_style_border_width(bm, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
