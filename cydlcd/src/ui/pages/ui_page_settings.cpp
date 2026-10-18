@@ -507,6 +507,7 @@ static void ov_create(void) {
 
   // Dong 1: ten thong so (ten tieng Anh lay tu SET_ROWS, khong co dau)
   ov_name = mk_label_w(ov_box, "-", MR_MENU, OV_W - 2 * OV_PAD);
+  dlg_title_bar(ov_name);           // 2026-10-17: ten thong so = thanh tieu de co NEN
 
   // Dong 2: "Gia tri: <so>" (xanh la) + "Buoc <buoc>" (xam) - xem ov_refresh()
   lv_obj_t *rv = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_LINE_H, 0, GAP);

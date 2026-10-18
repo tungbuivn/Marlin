@@ -151,6 +151,20 @@ lv_obj_t *mk_label_w(lv_obj_t *parent, const char *txt, lv_color_t col, lv_coord
   return l;
 }
 
+// 2026-10-17 (yeu cau nguoi dung: "dialog ... mesh height edit van chua co mau nen title"):
+// Cac hop thoai TU DUNG (mesh / preheat / settings) dung `mk_label_w` lam tieu de -> chi co chu,
+// khong co nen. Ham nay bien label do thanh 1 THANH TIEU DE: nen COL_BTN dac + bo goc + padding
+// (cung kieu voi tieu de cua lv_msgbox trong box_make()).
+void dlg_title_bar(lv_obj_t *label) {
+  if (!label) return;
+  lv_obj_set_style_bg_color(label, COL_BTN, 0);
+  lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(label, 4, 0);
+  lv_obj_set_style_pad_all(label, 6, 0);
+  lv_obj_set_style_pad_left(label, 10, 0);
+  lv_obj_set_style_pad_right(label, 10, 0);
+}
+
 // Container trong suot de xep con bang FLEX.
 //   flow = LV_FLEX_FLOW_COLUMN (xep doc) hoac LV_FLEX_FLOW_ROW (xep ngang)
 //   pad  = padding trong; gap = khoang cach giua cac con (ca 2 chieu)

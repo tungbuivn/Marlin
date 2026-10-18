@@ -408,6 +408,7 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_add_flag(me_box, LV_OBJ_FLAG_HIDDEN);
 
   me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
+  dlg_title_bar(me_box_title);      // 2026-10-17: tieu de co NEN (truoc day chi co chu)
   me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
   lv_obj_t *rs = mk_dlg_row(me_box, 220, 24);
   for (uint8_t k = 0; k < ME_STEP_N; k++)

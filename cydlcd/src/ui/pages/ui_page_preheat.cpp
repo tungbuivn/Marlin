@@ -212,6 +212,7 @@ static void po_create(void) {
 
   // Dong 1: ten vat lieu
   s_po_title = mk_label_w(s_po_box, "-", MR_MENU, iw);
+  dlg_title_bar(s_po_title);        // 2026-10-17: tieu de co NEN
 
   // Dong 2: 3 O (nozzle | bed | fan) - CA 3 TRONG 1 HANG, cham o nao thi -/+ chinh o do. Nut be rong
   // CO DINH + can GIUA + cach nhau DLG_BTN_GAP (yeu cau nguoi dung 2026-10-15).

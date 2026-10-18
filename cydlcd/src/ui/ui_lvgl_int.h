@@ -598,6 +598,7 @@ void style_flat(lv_obj_t *o, lv_color_t bg);
 lv_obj_t *mk_label(lv_obj_t *parent, const char *txt, lv_color_t col);
 /** Nhan 1 dong, be rong CO DINH: chu dai hon thi tu cuon vong (khong bi cat cut). */
 lv_obj_t *mk_label_w(lv_obj_t *parent, const char *txt, lv_color_t col, lv_coord_t w);
+void dlg_title_bar(lv_obj_t *label);      // 2026-10-17: nen "thanh tieu de" cho hop thoai tu dung
 /** Container trong suot de xep con bang FLEX (flow COLUMN/ROW, pad trong, gap giua cac con). */
 lv_obj_t *mk_flex(lv_obj_t *parent, lv_flex_flow_t flow, lv_coord_t w, lv_coord_t h,
                   lv_coord_t pad, lv_coord_t gap);
