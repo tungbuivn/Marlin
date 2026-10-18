@@ -407,29 +407,38 @@ lv_obj_t *mk_dlg_btn(lv_obj_t *row, const char *txt, lv_coord_t w, lv_coord_t h,
 #if LV_USE_KEYBOARD
 #define KB_BTN(w)  (LV_BTNMATRIX_CTRL_POPOVER | (w))          // = LV_KB_BTN() (macro noi bo cua LVGL)
 
+// 2026-10-17 (nguoi dung: "truoc day ban phim co nut an ban phim, bo roi a?"):
+// LVGL danh dau phim AN ban phim bang `LV_SYMBOL_KEYBOARD` (U+F11C) - xem lv_keyboard.c:303.
+// Nhung font cua project KHONG co glyph U+F11C (chi ASCII + vn1..vn4), nen khi thay 6 nhan
+// LV_SYMBOL_* bang chu ASCII (2026-10-16) phim nay bi thay bang "123" -> mot phim KHONG LAM GI
+// (vi "123" khong phai chuoi chuyen che do ma LVGL hieu: chi "abc"/"ABC"/"1#").
+// Nay dung nhan "ESC" va tu xu ly: LVGL se chen "ESC" vao o nhap truoc, ta xoa dung 3 ky tu do
+// roi gui LV_EVENT_CANCEL (chinh la viec phim goc lam).
+#define KB_HIDE_TXT "ESC"
+
 static const char *const kb_map_lc[] = {
   "1#", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "DEL", "\n",
   "ABC", "a", "s", "d", "f", "g", "h", "j", "k", "l", "ENT", "\n",
   "_", "-", "z", "x", "c", "v", "b", "n", "m", ".", ",", ":", "\n",
-  "123", "<", " ", ">", "OK", ""
+  KB_HIDE_TXT, "<", " ", ">", "OK", ""
 };
 static const char *const kb_map_uc[] = {
   "1#", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "DEL", "\n",
   "abc", "A", "S", "D", "F", "G", "H", "J", "K", "L", "ENT", "\n",
   "_", "-", "Z", "X", "C", "V", "B", "N", "M", ".", ",", ":", "\n",
-  "123", "<", " ", ">", "OK", ""
+  KB_HIDE_TXT, "<", " ", ">", "OK", ""
 };
 static const char *const kb_map_spec[] = {
   "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "DEL", "\n",
   "abc", "+", "&", "/", "*", "=", "%", "!", "?", "#", "<", ">", "\n",
   "\\", "@", "$", "(", ")", "{", "}", "[", "]", ";", "\"", "'", "\n",
-  "123", "<", " ", ">", "OK", ""
+  KB_HIDE_TXT, "<", " ", ">", "OK", ""
 };
 static const char *const kb_map_num[] = {
   "1", "2", "3", "abc", "\n",
   "4", "5", "6", "OK", "\n",
   "7", "8", "9", "DEL", "\n",
-  "+/-", "0", ".", "<", ">", ""
+  KB_HIDE_TXT, "0", ".", "<", ">", ""
 };
 static const lv_btnmatrix_ctrl_t kb_ctrl_lc[] = {
   LV_KEYBOARD_CTRL_BTN_FLAGS | 5, KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4), KB_BTN(4),
@@ -480,10 +489,32 @@ static void kb_apply_maps(lv_obj_t *kb) {
 }
 #endif  // LV_USE_KEYBOARD
 
+#if LV_USE_KEYBOARD
+// Phim AN BAN PHIM (nhan "ESC"): LVGL da chen "ESC" vao o nhap -> xoa di roi gui CANCEL.
+static void kb_hide_key_cb(lv_event_t *e) {
+  lv_obj_t *kb = lv_event_get_target(e);
+  if (!kb) return;
+  const char *txt = lv_btnmatrix_get_btn_text(kb, lv_btnmatrix_get_selected_btn(kb));
+  if (!txt || strcmp(txt, KB_HIDE_TXT) != 0) return;
+  lv_obj_t *ta = lv_keyboard_get_textarea(kb);
+  if (ta) {
+    // LVGL da chen "ESC" ngay TRUOC con tro. Chi xoa khi 3 ky tu ngay truoc con tro DUNG LA "ESC"
+    // -> khong bao gio xoa nham chu that (truong hop o nhap da day, LVGL khong chen duoc gi).
+    const size_t n = strlen(KB_HIDE_TXT);
+    const uint32_t pos = lv_textarea_get_cursor_pos(ta);
+    const char *cur = lv_textarea_get_text(ta);
+    if (cur && pos >= n && strncmp(cur + pos - n, KB_HIDE_TXT, n) == 0)
+      for (size_t i = 0; i < n; i++) lv_textarea_del_char(ta);
+  }
+  lv_event_send(kb, LV_EVENT_CANCEL, NULL);      // -> cb_pre_kb / cb_wifi_kb -> ham hide
+}
+#endif
+
 void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
   if (kb) {
 #if LV_USE_KEYBOARD
     kb_apply_maps(kb);        // nhan ASCII cho 6 phim dac biet (xem khoi bang phim o tren)
+    lv_obj_add_event_cb(kb, kb_hide_key_cb, LV_EVENT_VALUE_CHANGED, NULL);   // phim ESC
 #endif
     // 2026-10-16 (yeu cau nguoi dung "thong nhat chi dung 1 loai font hien thi chu"): ban phim va o
     // nhap la widget LVGL tao truc tiep (khong qua mk_label/mk_btn) nen truoc day dung font MAC DINH
