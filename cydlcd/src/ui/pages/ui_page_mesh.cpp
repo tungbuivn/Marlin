@@ -377,8 +377,47 @@ void page_mesh_create(lv_obj_t *p) {
   // ---------------------------------------------------------------------------
   // 2026-10-17 (yeu cau nguoi dung): BO lop phu EDIT toggle + 4 mui ten dieu huong.
   // Di chuyen tren luoi = cham vao o (xem cb_mesh_cell). Nut EDIT o hang tren la UBL manual edit.
+  // ---------------------------------------------------------------------------
+  // 2026-10-17: HOP SUA 1 O (nut MODIFY / lenh `UI MCELL`) - KHOI PHUC.
+  // Truoc day khoi nay nam chung voi lop phu EDIT toggle + 4 mui ten; khi bo lop phu do, toi da xoa
+  // lan ca phan tao hop -> nut MODIFY khong lam gi (`if (!me_box) return;`). Nay tao lai rieng.
+  // ---------------------------------------------------------------------------
+  me_mask = lv_obj_create(p);
+  lv_obj_add_flag(me_mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_pos(me_mask, 0, 0);
+  lv_obj_set_size(me_mask, UI_LCD_HOR_RES, CONT_H);
+  lv_obj_set_style_bg_color(me_mask, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(me_mask, LV_OPA_50, 0);
+  lv_obj_set_style_border_width(me_mask, 0, 0);
+  lv_obj_add_flag(me_mask, LV_OBJ_FLAG_HIDDEN);
 
+  me_box = lv_obj_create(p);
+  lv_obj_add_flag(me_box, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_size(me_box, 240, 116);
+  lv_obj_align(me_box, LV_ALIGN_TOP_MID, 0, 40);
+  lv_obj_set_style_bg_color(me_box, COL_BG, 0);
+  lv_obj_set_style_border_color(me_box, COL_ACCENT, 0);
+  lv_obj_set_style_border_width(me_box, 2, 0);
+  lv_obj_set_style_pad_all(me_box, 6, 0);
+  lv_obj_set_flex_flow(me_box, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(me_box, 4, 0);
+  lv_obj_clear_flag(me_box, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(me_box, LV_OBJ_FLAG_HIDDEN);
+
+  me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
+  me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
+  lv_obj_t *rs = mk_dlg_row(me_box, 220, 24);
+  for (uint8_t k = 0; k < ME_STEP_N; k++)
+    me_step_btn[k] = mk_dlg_btn(rs, ME_STEP_TXT[k], 56, 24, DLG_NEUTRAL_BG,
+                                cb_mesh_step, (void *)(intptr_t)k);
+  lv_obj_t *ra = mk_dlg_row(me_box, 220, 26);
+  mk_dlg_btn(ra, "-",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)-1);
+  mk_dlg_btn(ra, "+",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)+1);
+  mk_dlg_btn(ra, "OK", 52, 26, DLG_OK_BG,      cb_mesh_ok, NULL);
+  mk_dlg_btn(ra, T(UI_T_DLG_CANCEL), 52, 26, DLG_CANCEL_BG, cb_mesh_cancel, NULL);
+  me_step_marks();
 }
+
 
 // CHAN DOAN (lenh `UI MCELL <cot> <hang>` tren COM8): mo hop sua cho 1 o Y NHU VUA CHAM VAO O DO.
 // VI SAO CAN: khong the "cham" bang tay tu PC; lenh nay di dung duong mo hop (khong tu gui M421) nen kiem tra
@@ -402,6 +441,7 @@ void page_mesh_probe_selected(void) {
   cydlcd_link_send_gcode("M420 S1");
   WIFILOG("[UI] MESH PROBE: o %u,%u -> %s\n", (unsigned)me_c, (unsigned)me_r, g);
 }
+
 
 void page_mesh_update(void) {
   if (!me_table) return;

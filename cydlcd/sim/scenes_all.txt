@@ -80,3 +80,39 @@ shot dlg-06-fatal-red
 ui CRIT OFF
 settle 400
 ui PRE DEL 1
+
+# ---------------------------------------------------------------------------
+# 2026-10-17 (yeu cau nguoi dung: "co lam sao de chup duoc man hinh co ca cac
+# dialog dang hien thi khong?"): chup them cac HOP THOAI cua cac man moi.
+# Cach lam: mo dialog bang lenh console cua chinh firmware (xem src/main.cpp
+# ui_console_dispatch) roi `shot`. Cac lenh mo dialog:
+#   ui TESTBOX          hop xac nhan mau (action 0xFF, khong lam gi)
+#   ui EDIT <id>        lop phu SUA cua trang THONG SO
+#   ui MCELL <cot> <hang>  hop sua 1 o mesh
+#   ui PRE OPEN <i>     hop sua preset preheat
+#   ui HIT <k>          bam vat bam duoc thu k cua trang dang mo (mo dialog THAT)
+#   tap <x> <y>         cham toa do tuy y
+# ---------------------------------------------------------------------------
+page 9
+settle 500
+ui HIT 3
+settle 700
+shot dlg-07-tbt-maxmin-confirm
+ui TAP K
+settle 500
+
+page 7
+settle 600
+ui MCELL 2 2
+settle 700
+shot dlg-08-mesh-modify
+page 8
+settle 400
+
+page 3
+settle 500
+ui PRE OPEN 0
+settle 700
+shot dlg-09-preheat-edit
+page 8
+settle 400
