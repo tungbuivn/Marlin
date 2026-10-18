@@ -251,6 +251,7 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strncasecmp(a3, "EDIT", 4) == 0) settings_test_edit(a3 + 4);
             // `UI MCELL <cot> <hang>` = mo hop sua 1 o mesh Y NHU VUA CHAM (kiem tra che do EDIT tu PC).
             else if (strncasecmp(a3, "MCELL", 5) == 0) mesh_test_cell(a3 + 5);
+            else if (strncasecmp(a3, "MSEL", 4) == 0) mesh_test_select(a3 + 4);   // chon 1 o (test bien)
             // `UI NOTIFY [ms] <text>` = day 1 THONG BAO vao trang /status (KHONG hien hop tren LCD nua) de
             // kiem tra tu PC; khong tham so -> in dang luu; chi co so -> xoa. Xem ui_lvgl_test_notify().
             // (2026-10-16) SUA LOI: truoc day dung `strcasecmp(a3, "NOTIFY")` -> a3 gom CA tham so

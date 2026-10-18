@@ -156,6 +156,7 @@ void ui_lvgl_dump_busy(void);
 // CHAN DOAN trang BED MESH (lenh `UI MCELL <cot> <hang>` tren COM8): mo hop sua o do Y NHU VUA CHAM vao o
 // (khong tu gui M421) - de kiem tra hop sua / nut OK-HUY tu PC khi khong cham duoc man hinh.
 void mesh_test_cell(const char *arg);
+void mesh_test_select(const char *arg);   // 2026-10-17: UI MSEL <cot> <hang> - chon 1 o de chup anh
 
 // CHAN DOAN bang SETTINGS (lenh `UI EDIT <id>` tren COM8): mo lop phu SUA cho dong co id do Y NHU VUA CHAM
 // va in ra "Gia tri:" / "Buoc" dang hien (kiem tra dinh dang so tu PC). Xem id bang lenh `UI SET`.

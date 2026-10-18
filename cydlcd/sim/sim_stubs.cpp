@@ -111,6 +111,7 @@ void ui_console_dispatch(const char *a3) {
   else if (!strncasecmp(a3, "TAP", 3))   ui_lvgl_test_tap(a3 + 3);
   else if (!strncasecmp(a3, "EDIT", 4))  settings_test_edit(a3 + 4);
   else if (!strncasecmp(a3, "MCELL", 5)) mesh_test_cell(a3 + 5);
+  else if (!strncasecmp(a3, "MSEL", 4))  mesh_test_select(a3 + 4);
   // 2026-10-17: BO SUNG cac lenh TRUOC DAY BI THIEU -> chung roi vao nhanh cuoi ("ten trang") nen
   // KHONG LAM GI, khien thua vien anh (tools/make_gallery.py) co 3 canh bi TRUNG: menu-tree/confirm
   // va fatal-red deu la anh cua trang dang mo. Thieu: TESTBOX, CRIT, CFG, NOTIFY, SET, BACK/NEXT/PREV.

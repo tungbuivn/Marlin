@@ -138,23 +138,8 @@ static void cb_mesh_modify(lv_event_t *e) {
   me_box_show();
 }
 
-static void cb_mesh_cell(lv_event_t *e) {
-  (void)e;
-  // 2026-10-17 SUA LOI: truoc day dieu kien la `!me_edit || !me_table` nhung `me_edit` da bi bo
-  // (khong con nut EDIT toggle) -> luon false -> CHAM VAO O KHONG LAM GI. Nay chi can co bang.
-  if (!me_table) return;
-  uint16_t r = 0, c = 0;
-  lv_table_get_selected_cell(me_table, &r, &c);
-  // LOG MOI lan cham 1 o (ke ca khi EDIT dang TAT) - de chan doan "cham o khong thay gi" tu COM8:
-  // neu KHONG thay dong nay thi cu cham KHONG toi duoc bang (bi vat khac an), con co dong nay ma hop khong
-  // mo thi loi o phia hop/lop phu.
-  WIFILOG("[UI] MESH: cham o %u,%u (EDIT=%d)\n", (unsigned)c, (unsigned)r, (int)me_edit);
-  if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return;
-  me_c = (uint8_t)c;
-  me_r = (uint8_t)r;
-  me_sel_c = (uint8_t)c;
-  me_sel_r = (uint8_t)r;
-  me_raw = cydlcd.mesh[c][r];
+// 2026-10-17: cuon de dua o (c,r) ra GIUA khung (hoac BAM LE neu o sat bien).
+static void mesh_scroll_to_cell(const uint8_t c, const uint8_t r) {
   // 2026-10-17 (yeu cau nguoi dung): BO hop sua o. Cham vao o nao thi CUON O DO VE TAM bang
   // (lo ra cac o xung quanh). Neu o o MEP thi UU TIEN BAM LE de luoi van fill khung.
   // LUU Y: dsc->draw_area la toa do TUYET DOI tren man hinh (khong phai toa do noi dung), nen
@@ -184,7 +169,46 @@ static void cb_mesh_cell(lv_event_t *e) {
               (unsigned)c, (unsigned)r, (int)sx, (int)sy, (int)maxx, (int)maxy);
     }
   }
-  WIFILOG("[UI] MESH: cham o %u,%u -> cuon ve tam\n", (unsigned)c, (unsigned)r);
+}
+
+// 2026-10-17: lenh chan doan `UI MSEL <cot> <hang>` - chon 1 o Y NHU VUA CHAM (de chup anh test
+// cac truong hop o sat bien mot cach XAC DINH, khong phai bam nhieu lan).
+void mesh_test_select(const char *arg) {
+  int c = 0, r = 0;
+  if (!arg || sscanf(arg, "%d %d", &c, &r) != 2) {
+    Serial.printf("[UI] dung: UI MSEL <cot> <hang>  (luoi %ux%u)\n",
+                  (unsigned)cydlcd.mesh_nx, (unsigned)cydlcd.mesh_ny);
+    return;
+  }
+  if (c < 0 || r < 0 || c >= (int)cydlcd.mesh_nx || r >= (int)cydlcd.mesh_ny) {
+    Serial.printf("[UI] MSEL: ngoai luoi %dx%d\n", (int)cydlcd.mesh_nx, (int)cydlcd.mesh_ny);
+    return;
+  }
+  me_c = me_sel_c = (uint8_t)c;
+  me_r = me_sel_r = (uint8_t)r;
+  me_raw = cydlcd.mesh[c][r];
+  mesh_scroll_to_cell((uint8_t)c, (uint8_t)r);
+  Serial.printf("[UI] MSEL: chon o %d,%d\n", c, r);
+}
+
+static void cb_mesh_cell(lv_event_t *e) {
+  (void)e;
+  // 2026-10-17 SUA LOI: truoc day dieu kien la `!me_edit || !me_table` nhung `me_edit` da bi bo
+  // (khong con nut EDIT toggle) -> luon false -> CHAM VAO O KHONG LAM GI. Nay chi can co bang.
+  if (!me_table) return;
+  uint16_t r = 0, c = 0;
+  lv_table_get_selected_cell(me_table, &r, &c);
+  // LOG MOI lan cham 1 o (ke ca khi EDIT dang TAT) - de chan doan "cham o khong thay gi" tu COM8:
+  // neu KHONG thay dong nay thi cu cham KHONG toi duoc bang (bi vat khac an), con co dong nay ma hop khong
+  // mo thi loi o phia hop/lop phu.
+  WIFILOG("[UI] MESH: cham o %u,%u (EDIT=%d)\n", (unsigned)c, (unsigned)r, (int)me_edit);
+  if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return;
+  me_c = (uint8_t)c;
+  me_r = (uint8_t)r;
+  me_sel_c = (uint8_t)c;
+  me_sel_r = (uint8_t)r;
+  me_raw = cydlcd.mesh[c][r];
+  mesh_scroll_to_cell((uint8_t)c, (uint8_t)r);
 }
 
 // Ap trang thai `me_edit` len giao dien: nut EDIT (fill mau), 4 nut dieu huong (hien/an), cuon cua bang.

@@ -149,43 +149,38 @@ ui TAP K
 settle 400
 
 # ---------------------------------------------------------------------------
-# 2026-10-17 (yeu cau nguoi dung): them 4 canh chon o SAT BIEN de kiem tra quy tac
-# "uu tien bam le khi khong the dua o ra giua" (luoi 10x10 de cuon duoc ca 2 chieu).
-#   grid-03-tap-right  : cham o sat bien PHAI
-#   grid-04-tap-bottom : cham o sat bien DUOI
-#   grid-05-tap-top    : cham o sat bien TREN
-#   grid-06-tap-left   : cham o sat bien TRAI
+# 2026-10-17 (yeu cau nguoi dung): 4 canh chon o o BIEN CUA LUOI (khong phai bien man hinh).
+# VD luoi 7x7 -> chon 1 o o COT 7 (cot cuoi). Muon cham duoc o cot cuoi thi phai CUON toi cuoi truoc,
+# nen moi canh bam LAP LAI vai lan: moi lan cham lai keo o do ve tam -> con tro "di" dan ra bien.
+# Dung luoi THAT 7x7 (state basic) de dung y nguoi dung.
+#   grid-03-tap-right  : cham lien tuc sat mep PHAI -> toi khi cuon het -> chon o COT 7
+#   grid-04-tap-bottom : cham lien tuc sat mep DUOI -> chon o HANG 7
+#   grid-05-tap-top    : cham lien tuc sat mep TREN -> chon o HANG 1
+#   grid-06-tap-left   : cham lien tuc sat mep TRAI -> chon o COT 1
 # ---------------------------------------------------------------------------
 state basic
-grid 10
 page 7
-settle 1500
-tap 300 110
-settle 1000
+settle 1200
+ui MSEL 6 3
+settle 800
 shot grid-03-tap-right
+state basic
 page 7
-settle 400
-grid 10
-page 7
-settle 900
-tap 150 165
 settle 1000
+ui MSEL 3 6
+settle 800
 shot grid-04-tap-bottom
+state basic
 page 7
-settle 400
-grid 10
-page 7
-settle 900
-tap 150 55
 settle 1000
+ui MSEL 3 0
+settle 800
 shot grid-05-tap-top
+state basic
 page 7
-settle 400
-grid 10
-page 7
-settle 900
-tap 8 110
 settle 1000
+ui MSEL 0 3
+settle 800
 shot grid-06-tap-left
 state basic
 settle 700
