@@ -169,8 +169,13 @@ static void cb_mesh_cell(lv_event_t *e) {
       //   - khong bao gio cuon am (le tren/trai luon dinh vao khung)
       //   - khong cuon qua cuoi (le duoi/phai luon dinh vao khung)
       // => o o giua thi ve TAM, o o mep thi BAM LE, luoi luon phu kin khung.
-      const lv_area_t &last = s_cell_area[cydlcd.mesh_nx - 1][cydlcd.mesh_ny - 1];
-      lv_coord_t maxx = (last.x2 + 1) - tw, maxy = (last.y2 + 1) - th;
+      // SUA LOI 2026-10-17: truoc day lay rect cua o CUOI CUNG, nhung o do co the CHUA DUOC VE
+      // (ngoai vung nhin) -> rect = 0 -> maxx am -> kep ve 0 -> KHONG CUON DUOC sang phai.
+      // Nay tinh tu chinh o dang cham: cac o cung kich thuoc nen noi dung =
+      //     x1 + (so cot con lai) * be rong o
+      const lv_coord_t content_w = a.x1 + (lv_coord_t)(cydlcd.mesh_nx - c) * cw;
+      const lv_coord_t content_h = a.y1 + (lv_coord_t)(cydlcd.mesh_ny - r) * ch;
+      lv_coord_t maxx = content_w - tw, maxy = content_h - th;
       if (maxx < 0) maxx = 0;
       if (maxy < 0) maxy = 0;
       if (sx < 0) sx = 0;
@@ -347,6 +352,11 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_bg_color(me_table, COL_BG, 0);
   lv_obj_set_style_bg_opa(me_table, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(me_table, COL_DIM, 0);
+  // 2026-10-17 (yeu cau nguoi dung: "bo duong vien focus grid"): theme LVGL ve OUTLINE mau cyan
+  // (COL_ACCENT) quanh bang khi bang dang giu focus -> tat o ca trang thai thuong lan FOCUSED.
+  lv_obj_set_style_outline_width(me_table, 0, 0);
+  lv_obj_set_style_outline_width(me_table, 0, LV_STATE_FOCUSED);
+  lv_obj_set_style_border_width(me_table, 0, LV_STATE_FOCUSED);
   lv_obj_set_style_border_width(me_table, 1, 0);
   lv_obj_set_style_pad_all(me_table, 0, 0);
   lv_obj_set_style_text_color(me_table, COL_TXT, LV_PART_ITEMS);
