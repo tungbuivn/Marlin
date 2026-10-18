@@ -176,12 +176,7 @@ static void set_ref() {
 // Nang len do cao an toan, di toi (x, y), roi probe
 static bool probe_xy(const float x, const float y, float &out_z) {
   if (!can_move_now()) { out_z = NAN; return false; }
-  // 2026-10-17 SUA: TRUOC DAY dung `TERN(BLTOUCH, Z_CLEARANCE_DEPLOY_PROBE, ...)` va
-  // Z_CLEARANCE_DEPLOY_PROBE = 0 (Configuration.h:1660) -> voi BLTouch, TRUOC MOI LAN PROBE noi dung
-  // ha nozzle xuong Z=0 (ngay mat ban) roi moi probe. Do la khac biet so voi G35() goc cua Marlin,
-  // va la ly do lan probe DAU TIEN sau G28 cho so khac ~0.38mm so voi cac lan sau.
-  // Nay dung DUNG chuoi cua G35():
-  //     do_blocking_move_to_z(SUM_TERN(BLTOUCH, Z_CLEARANCE_BETWEEN_PROBES, bltouch.z_extra_clearance()));
+  do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
   // tuc 5mm + z_extra_clearance.
   do_blocking_move_to_z(SUM_TERN(BLTOUCH, Z_CLEARANCE_BETWEEN_PROBES, bltouch.z_extra_clearance()));
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
