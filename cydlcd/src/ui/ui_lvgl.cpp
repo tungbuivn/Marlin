@@ -1366,6 +1366,9 @@ void ui_lvgl_test_dialog(void) {
 //   TRAM : 4 token nhiet do o CUOI dong "TBT ..." (che do TRAM, gui ~5 Hz).
 // VI SAO CAN: `temp_lookup()` (ui_widgets.cpp) UU TIEN nguon TRAM khi `tbt.ever` = true, nen neu dong
 // TBT mang gia tri cu/0 thi man hinh se hien SAI (vd target ban in luon 0) du frame PUSH dung.
+// 2026-10-17: chuyen tiep sang page_tbt_dump() (man TRAMMING nam o file rieng).
+void ui_lvgl_dump_tbt(void) { page_tbt_dump(); }
+
 void ui_lvgl_dump_temps(void) {
   Serial.printf("[UI] PUSH: %u muc", (unsigned)cydlcd.n_temps);
   for (uint8_t i = 0; i < cydlcd.n_temps; i++)

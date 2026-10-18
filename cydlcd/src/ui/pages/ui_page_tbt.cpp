@@ -61,6 +61,30 @@ static void tbt_fmt_corner(char *b, size_t n, const uint8_t i) {
   snprintf(b, n, "%c%s %s", (tbt.st.active && tbt.st.idx == i) ? '*' : ' ', TBT_NAME[i], num);
 }
 
+// 2026-10-17 (yeu cau nguoi dung: "dung lenh gi de hien thi BR, BL, FR, FL ?"):
+// `UI TBT` tren console CYD -> in MOT dong gon: phase + 4 gia tri + goi y van vit.
+// Du lieu lay tu tbt.st (Marlin gui qua giao thuc TBT), cung nguon voi man hinh.
+void page_tbt_dump(void) {
+  if (!tbt.st.active && !tbt.st.ok[0] && !tbt.st.ok[1] && !tbt.st.ok[2] && !tbt.st.ok[3]) {
+    WIFILOG("[TBT] chua co du lieu (chua chay wizard hoac chua nhan duoc frame TBT)\n");
+    return;
+  }
+  char buf[160];
+  int n = snprintf(buf, sizeof(buf), "[TBT] %s %s goc %u |",
+                   tbt.st.mode_max ? "MAX" : "MIN",
+                   tbt_phase_name(tbt.st.phase), (unsigned)(tbt.st.idx + 1));
+  for (uint8_t i = 0; i < TBT_PROTO_POINTS; i++) {
+    if (tbt.st.ok[i]) {
+      const float d = tbt.st.d[i];
+      n += snprintf(buf + n, sizeof(buf) - n, " %c%s %s%.3f",
+                    (tbt.st.active && tbt.st.idx == i) ? '*' : ' ', TBT_NAME[i], d < 0 ? "" : "+", (double)d);
+    }
+    else n += snprintf(buf + n, sizeof(buf) - n, "  %s ---", TBT_NAME[i]);
+  }
+  snprintf(buf + n, sizeof(buf) - n, " | %s", tbt.st.hint[0] ? tbt.st.hint : "-");
+  WIFILOG("%s\n", buf);
+}
+
 void page_tbt_create(lv_obj_t *p) {
   // KHONG con nhan "LINK OK / NO LINK" o day nua: chi bao link nam o THANH TREN (xem link_ok()).
   lv_obj_t *rh = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 20, 0, GAP);

@@ -211,6 +211,9 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
             else if (strncasecmp(a3, "PRE", 3) == 0) preheat_test_cmd(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();
+            // `UI TBT` = in 1 dong gon: phase + 4 goc (BR/ BL/ FL/ FR) + goi y van vit.
+            // (yeu cau nguoi dung 2026-10-17: "dung lenh gi de hien thi BR, BL, FR, FL ?")
+            else if (strcasecmp(a3, "TBT") == 0)     ui_lvgl_dump_tbt();
             // `UI GRAD` = in bang MAU cua dai nhiet do (hotend 10-250, bed 0-60) de kiem tra "mau chuyen dan
             // sang do" tu PC ma KHONG phai dot nong may. Xem ui_lvgl_test_grad().
             else if (strcasecmp(a3, "GRAD") == 0)    ui_lvgl_test_grad();

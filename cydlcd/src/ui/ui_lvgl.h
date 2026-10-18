@@ -69,6 +69,8 @@ void ui_lvgl_test_preheat(const char *arg);
 // (PUSH = frame CYDLCD_F_TEMPS tu Marlin; TRAM = 4 token nhiet do cuoi dong "TBT ..."), kem gia tri
 // ma `temp_lookup()` dang dung de HIEN THI. Dung khi "nhiet hien thi khong dung".
 void ui_lvgl_dump_temps(void);
+// 2026-10-17: `UI TBT` -> in 1 dong 4 goc BR/BL/FL/FR + goi y van vit (xem page_tbt_dump).
+void ui_lvgl_dump_tbt(void);
 
 // CHAN DOAN dai mau nhiet do: in bang mau ma icon + so cua man STATUS se dung tai tung nhiet do
 // (lenh `UI GRAD` tren COM7) - hotend 10..250 va bed 0..60, kem chi so % vi tri trong dai. Tra loi
