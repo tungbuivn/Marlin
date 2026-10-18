@@ -134,7 +134,9 @@ static void cb_mesh_modify(lv_event_t *e) {
 
 static void cb_mesh_cell(lv_event_t *e) {
   (void)e;
-  if (!me_edit || !me_table) return;
+  // 2026-10-17 SUA LOI: truoc day dieu kien la `!me_edit || !me_table` nhung `me_edit` da bi bo
+  // (khong con nut EDIT toggle) -> luon false -> CHAM VAO O KHONG LAM GI. Nay chi can co bang.
+  if (!me_table) return;
   uint16_t r = 0, c = 0;
   lv_table_get_selected_cell(me_table, &r, &c);
   // LOG MOI lan cham 1 o (ke ca khi EDIT dang TAT) - de chan doan "cham o khong thay gi" tu COM8:
@@ -326,6 +328,9 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_border_width(me_table, 1, LV_PART_ITEMS);
   lv_obj_set_style_pad_all(me_table, 2, LV_PART_ITEMS);
   lv_obj_add_event_cb(me_table, mesh_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+  // 2026-10-17 SUA LOI: dang ky cham o da bi xoa cung luc xoa lop phu EDIT -> cham vao o khong lam gi.
+  lv_obj_add_event_cb(me_table, cb_mesh_cell, LV_EVENT_VALUE_CHANGED, NULL);   // cham 1 o -> cuon ve tam
+  lv_obj_add_flag(me_table, LV_OBJ_FLAG_CLICKABLE);
   if (s_group) lv_group_add_obj(s_group, me_table);       // de encoder co the focus/cuon
 
   // Da bo: nut REFRESH + 3 dong chu thich mau (cot phai) va dong chu thich duoi luoi.
@@ -469,6 +474,9 @@ void page_mesh_update(void) {
     s_mesh_ny = cydlcd.mesh_ny;
     lv_table_set_col_cnt(me_table, s_mesh_nx);
     lv_table_set_row_cnt(me_table, s_mesh_ny);
+    // 2026-10-17: doi kich thuoc luoi -> VE LAI NGAY. Neu khong, luot ve dau tien sau khi doi kich
+    // thuoc khong ap mau (xanh/do/cam) -> luoi trong tron cho toi khi co thao tac (cham/!cuon).
+    lv_obj_invalidate(me_table);
     // O rong = chia deu be rong bang; luoi nhieu cot thi giu toi thieu MESH_CELL_W
     // (bang tu cuon ngang: lv_table bao kich thuoc noi dung = tong be rong cac cot)
     const lv_coord_t tw  = lv_obj_get_width(me_table);

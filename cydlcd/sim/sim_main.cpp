@@ -258,6 +258,22 @@ static void run_line(char *line) {
   else if (!strcmp(cmd, "page"))  { ui_lvgl_show_page_name(a1); }
   else if (!strcmp(cmd, "hit"))   { const int k = atoi(a1); printf("[SIM] hit %d\n", k); ui_lvgl_test_hit(a1); }
   else if (!strcmp(cmd, "tap"))   { sim_tap(atoi(a1), atoi(a2)); printf("[SIM] tap %d,%d\n", atoi(a1), atoi(a2)); }
+  // 2026-10-17 (yeu cau nguoi dung: "chua co man hinh test bam vao 1 node tren mesh roi vi tri nut do
+  // duoc keo ve tam"): `grid <n>` doi luoi gia lap thanh n x n (4..CYDLCD_MESH_MAX).
+  // Luoi 7x7 KHONG cuon duoc (vua khit 312x124), nen phai dung luoi LON HON de thay tac dung cuon-ve-tam.
+  else if (!strcmp(cmd, "grid")) {
+    const int n = atoi(a1);
+    if (n < 4 || n > CYDLCD_MESH_MAX) { printf("[SIM] grid: chi nhan 4..%d\n", CYDLCD_MESH_MAX); }
+    else {
+      cydlcd.mesh_nx = cydlcd.mesh_ny = (uint8_t)n; cydlcd.mesh_rows = (uint8_t)n;
+      cydlcd.mesh_valid = true; cydlcd.mesh_on = true;
+      for (int r = 0; r < n; r++)
+        for (int c = 0; c < n; c++)
+          cydlcd.mesh[c][r] = (int16_t)(((r - n / 2) * 9) + ((c - n / 2) * 6));
+      if (n > 3) { cydlcd.mesh[n / 3][n / 3] += 600; cydlcd.mesh[n - 2][n - 2] -= 600; }
+      printf("[SIM] grid = %dx%d\n", n, n);
+    }
+  }
   else if (!strcmp(cmd, "settle")){ sim_settle((uint32_t)atoi(a1)); }
   else if (!strcmp(cmd, "shot"))  { do_shot(a1); }
   // `fan <pct>`: dat % QUAT gia (cydlcd.fans[0].pct = pct * 100). Dung de kiem tra VONG QUAY cua icon

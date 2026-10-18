@@ -116,3 +116,23 @@ settle 700
 shot dlg-09-preheat-edit
 page 8
 settle 400
+
+# ---------------------------------------------------------------------------
+# 2026-10-17 (yeu cau nguoi dung: "chua co man hinh test bam vao 1 node tren mesh
+# roi vi tri nut do duoc keo ve tam de lo cac nut xung quanh"):
+# Luoi UBL that cua may la 7x7 = vua khit 312x124 nen KHONG cuon duoc. De thay tac dung
+# cuon-ve-tam phai dung luoi LON hon -> lenh gia lap `grid 10` (chi doi du lieu gia, khong
+# phai tinh nang firmware).
+#   page-07a-MESH-TAP-BEFORE : luoi 10x10 truoc khi cham
+#   page-07b-MESH-TAP-AFTER  : sau khi cham 1 o o mep PHAI -> o do duoc keo ve giua
+# ---------------------------------------------------------------------------
+state basic
+grid 10
+page 7
+settle 1500
+shot page-07a-MESH-TAP-BEFORE
+tap 290 110
+settle 1200
+shot page-07b-MESH-TAP-AFTER
+state basic
+settle 700
