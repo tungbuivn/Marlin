@@ -600,6 +600,7 @@ lv_obj_t *mk_label(lv_obj_t *parent, const char *txt, lv_color_t col);
 lv_obj_t *mk_label_w(lv_obj_t *parent, const char *txt, lv_color_t col, lv_coord_t w);
 void dlg_title_bar(lv_obj_t *label);      // 2026-10-17: nen "thanh tieu de" cho hop thoai tu dung
 void dlg_frame(lv_obj_t *box);            // 2026-10-17: vien hop thong nhat (2px vang, bo goc 6)
+void dlg_backdrop(lv_obj_t *bd);          // 2026-10-17: nen mo thong nhat (den 50%, vung noi dung)
 lv_obj_t *dlg_body(lv_obj_t *box, lv_coord_t pad, lv_coord_t gap);   // than hop: pad 3 phia (trai/phai/duoi)
 /** Container trong suot de xep con bang FLEX (flow COLUMN/ROW, pad trong, gap giua cac con). */
 lv_obj_t *mk_flex(lv_obj_t *parent, lv_flex_flow_t flow, lv_coord_t w, lv_coord_t h,

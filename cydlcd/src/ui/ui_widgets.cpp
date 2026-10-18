@@ -178,6 +178,18 @@ lv_obj_t *dlg_body(lv_obj_t *box, lv_coord_t pad, lv_coord_t gap) {
 
 // 2026-10-17 (nguoi dung: "neu ban muon tat ca cung mot kieu vien thi noi"): khung hop thoai
 // THONG NHAT cho moi hop: vien 2px mau VANG (MR_MENU) + bo goc 6 - giong hop xac nhan cua msgbox.
+// 2026-10-17 (yeu cau nguoi dung: "trang setting, tramming, preheat co do phu nen dialog khong giong
+// nhau, hay dam bao tat ca cac dialog deu duoc phu nen giong dlg-04-mesh-cell"):
+// Nen mo (backdrop) THONG NHAT: den, do duc 50%, phu kin VUNG NOI DUNG (khong phu thanh tieu de).
+void dlg_backdrop(lv_obj_t *bd) {
+  if (!bd) return;
+  lv_obj_set_style_bg_color(bd, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(bd, LV_OPA_50, 0);
+  lv_obj_set_style_border_width(bd, 0, 0);
+  lv_obj_set_style_radius(bd, 0, 0);
+  lv_obj_set_style_pad_all(bd, 0, 0);
+}
+
 void dlg_frame(lv_obj_t *box) {
   if (!box) return;
   lv_obj_set_style_border_color(box, MR_MENU, 0);

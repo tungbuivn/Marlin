@@ -186,7 +186,7 @@ static void po_create(void) {
   lv_obj_set_pos(s_po_bd, 0, CONT_Y);
   lv_obj_set_size(s_po_bd, UI_LCD_HOR_RES, CONT_H);
   lv_obj_set_style_bg_color(s_po_bd, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(s_po_bd, LV_OPA_70, 0);
+  dlg_backdrop(s_po_bd);      // 2026-10-17: nen mo thong nhat
   lv_obj_set_style_border_width(s_po_bd, 0, 0);
   lv_obj_set_style_radius(s_po_bd, 0, 0);
   lv_obj_set_style_pad_all(s_po_bd, 0, 0);
@@ -328,7 +328,7 @@ void preheat_add_open(void) {
   lv_obj_set_pos(s_kb_bd, 0, 0);
   lv_obj_set_size(s_kb_bd, UI_LCD_HOR_RES, UI_LCD_VER_RES);
   lv_obj_set_style_bg_color(s_kb_bd, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(s_kb_bd, LV_OPA_70, 0);
+  dlg_backdrop(s_kb_bd);      // 2026-10-17: nen mo thong nhat
   lv_obj_set_style_border_width(s_kb_bd, 0, 0);
   lv_obj_set_style_radius(s_kb_bd, 0, 0);
   lv_obj_set_style_pad_all(s_kb_bd, 0, 0);

@@ -482,7 +482,7 @@ static void ov_create(void) {
   lv_obj_set_pos(ov_bd, 0, CONT_Y);
   lv_obj_set_size(ov_bd, UI_LCD_HOR_RES, CONT_H);
   lv_obj_set_style_bg_color(ov_bd, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_bg_opa(ov_bd, LV_OPA_70, 0);
+  dlg_backdrop(ov_bd);        // 2026-10-17: nen mo thong nhat (den 50%, vung noi dung)
   lv_obj_set_style_border_width(ov_bd, 0, 0);
   lv_obj_set_style_radius(ov_bd, 0, 0);
   lv_obj_set_style_pad_all(ov_bd, 0, 0);

@@ -154,6 +154,16 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
   // backdrop do KHONG co layout canh giua (lv_msgbox.c: lv_msgbox_backdrop_class chi dat
   // width/height_def = 100%) -> mac dinh hop nam o (0,0) = goc TREN-TRAI. Phai tu canh giua.
   // max_width: thong bao dai (vd loi cua Marlin) khong tran ra ngoai man hinh.
+  // 2026-10-17: nen mo cua msgbox (LVGL tao 1 backdrop la CHA cua hop) -> thong nhat den 50% +
+  // phu kin VUNG NOI DUNG (giong me_mask cua hop sua o mesh).
+  {
+    lv_obj_t *bd = lv_obj_get_parent(box);
+    if (bd && bd != lv_scr_act() && bd != lv_layer_top()) {
+      dlg_backdrop(bd);
+      lv_obj_set_pos(bd, 0, CONT_Y);
+      lv_obj_set_size(bd, UI_LCD_HOR_RES, CONT_H);
+    }
+  }
   lv_obj_set_style_max_width(box, UI_LCD_HOR_RES - 12, 0);
   lv_obj_align(box, LV_ALIGN_CENTER, 0, 0);
 
