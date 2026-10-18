@@ -251,7 +251,11 @@ static void goto_index(const uint8_t i) {
   if (!can_move_now()) return;
   worst_index = i;
   DEBUG_ECHOLNPGM("tramming: di toi goc ", i);
-  do_blocking_move_to_z(_MAX((float)Z_AFTER_PROBING, (float)Z_CLEARANCE_BETWEEN_PROBES));
+  // 2026-10-17 (yeu cau nguoi dung): BO buoc nang Z len Z_AFTER_PROBING o day.
+  // Man hinh dang o do cao an toan sau lan probe truoc (probe_at_point da raise len
+  // Z_AFTER_PROBING/ Z_CLEARANCE_BETWEEN_PROBES), nen chi can di XY roi probe luon.
+  // Nho vay duong "bam nhan goc" co CUNG chuoi di chuyen Z voi luot do 4 goc: chi con mot buoc
+  // ve Z_CLEARANCE_BETWEEN_PROBES (5mm) trong probe_xy() -> khong con chang 10->5 lam lech so do.
   do_blocking_move_to_xy(tramming_points[i].x, tramming_points[i].y, XY_PROBE_FEEDRATE_MM_S);
   probe_here_raw();               // probe luon -> man hinh co so MOI cua goc nay
 }
