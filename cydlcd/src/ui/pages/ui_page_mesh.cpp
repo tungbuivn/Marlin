@@ -156,33 +156,32 @@ static void cb_mesh_cell(lv_event_t *e) {
   me_sel_r = (uint8_t)r;
   me_raw = cydlcd.mesh[c][r];
   // 2026-10-17 (yeu cau nguoi dung): BO hop sua o. Cham vao o nao thi CUON O DO VE TAM bang
-  // (lo ra cac o xung quanh). LVGL tu KEP mep: o o canh van bam canh, khong bi keo vao tam.
+  // (lo ra cac o xung quanh). Neu o o MEP thi UU TIEN BAM LE de luoi van fill khung.
+  // LUU Y: dsc->draw_area la toa do TUYET DOI tren man hinh (khong phai toa do noi dung), nen
+  // phai doi ve toa do noi dung:  content = (abs - goc_bang) + scroll_hien_tai.
   {
     const lv_area_t &a = s_cell_area[c][r];
     const lv_coord_t cw = a.x2 - a.x1 + 1, ch = a.y2 - a.y1 + 1;
     if (cw > 0 && ch > 0) {
+      lv_area_t tco;
+      lv_obj_get_coords(me_table, &tco);
       const lv_coord_t tw = lv_obj_get_width(me_table), th = lv_obj_get_height(me_table);
-      lv_coord_t sx = a.x1 + cw / 2 - tw / 2;
-      lv_coord_t sy = a.y1 + ch / 2 - th / 2;
-      // 2026-10-17 (yeu cau nguoi dung): "neu item ngoai cung khong con bam vao le thi UU TIEN BAM LE
-      // chu khong bam tam, de grid van fill man hinh". Kep scroll vao [0, content - khung]:
-      //   - khong bao gio cuon am (le tren/trai luon dinh vao khung)
-      //   - khong cuon qua cuoi (le duoi/phai luon dinh vao khung)
-      // => o o giua thi ve TAM, o o mep thi BAM LE, luoi luon phu kin khung.
-      // SUA LOI 2026-10-17: truoc day lay rect cua o CUOI CUNG, nhung o do co the CHUA DUOC VE
-      // (ngoai vung nhin) -> rect = 0 -> maxx am -> kep ve 0 -> KHONG CUON DUOC sang phai.
-      // Nay tinh tu chinh o dang cham: cac o cung kich thuoc nen noi dung =
-      //     x1 + (so cot con lai) * be rong o
-      const lv_coord_t content_w = a.x1 + (lv_coord_t)(cydlcd.mesh_nx - c) * cw;
-      const lv_coord_t content_h = a.y1 + (lv_coord_t)(cydlcd.mesh_ny - r) * ch;
-      lv_coord_t maxx = content_w - tw, maxy = content_h - th;
-      if (maxx < 0) maxx = 0;
-      if (maxy < 0) maxy = 0;
+      const lv_coord_t curx = lv_obj_get_scroll_x(me_table), cury = lv_obj_get_scroll_y(me_table);
+      const lv_coord_t cx = (a.x1 - tco.x1) + curx;      // toa do NOI DUNG cua o
+      const lv_coord_t cy = (a.y1 - tco.y1) + cury;
+      // Vi tri de o ra GIUA khung
+      lv_coord_t sx = cx + cw / 2 - tw / 2;
+      lv_coord_t sy = cy + ch / 2 - th / 2;
+      // Bien cuon THAT SU cua bang (khong tu doan): hien tai + con cuon duoc bao nhieu
+      const lv_coord_t maxx = curx + lv_obj_get_scroll_right(me_table);
+      const lv_coord_t maxy = cury + lv_obj_get_scroll_bottom(me_table);
       if (sx < 0) sx = 0;
       if (sy < 0) sy = 0;
       if (sx > maxx) sx = maxx;
       if (sy > maxy) sy = maxy;
       lv_obj_scroll_to(me_table, sx, sy, LV_ANIM_ON);
+      WIFILOG("[UI] MESH: o %u,%u -> scroll (%d,%d) / max (%d,%d)\n",
+              (unsigned)c, (unsigned)r, (int)sx, (int)sy, (int)maxx, (int)maxy);
     }
   }
   WIFILOG("[UI] MESH: cham o %u,%u -> cuon ve tam\n", (unsigned)c, (unsigned)r);
