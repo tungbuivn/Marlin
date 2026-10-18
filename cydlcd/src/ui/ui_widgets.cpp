@@ -178,6 +178,10 @@ lv_obj_t *dlg_body(lv_obj_t *box, lv_coord_t pad, lv_coord_t gap) {
 
 void dlg_title_bar(lv_obj_t *label) {
   if (!label) return;
+  // 2026-10-17 (nguoi dung: "dialog edit mesh node dang dung mau chu title khac voi cac dialog khac
+  // (mau vang)"): truoc day moi hop truyen mau rieng (mesh/settings = COL_ACCENT cyan, preheat =
+  // MR_MENU vang, msgbox = title_col). Nay THONG NHAT: chu tieu de luon MAU VANG MR_MENU.
+  lv_obj_set_style_text_color(label, MR_MENU, 0);
   lv_obj_set_style_bg_color(label, COL_BTN, 0);
   lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(label, 4, 0);
