@@ -153,7 +153,11 @@ float ref() {
 // (Z-MIN/Z-MAX), khi ca 4 goc dat thi doi sang `base_home_pos` (tam ban) -> so hien tren man hinh
 // NHẢY MOC, khong biet dang doc theo chuan nao. Nay LUON so voi Z-HOME (tam ban) cho moi truong hop;
 // con viec QUYET DINH "goc nay da dat chua" thi so voi Z-MIN/Z-MAX trong need_adjust().
-float display_ref() { return base_home_pos(Z_AXIS); }
+// 2026-10-17 (yeu cau nguoi dung): "bo phan tru z moc khi hien thi tai cac diem z1..z4, chi hien thi
+// gia tri do duoc; chi gia tri CW/CCW thay doi khi chon goc do".
+// => Man hinh hien DUNG z_delta[i] (gia tri probe do duoc), KHONG tru them moc nao. Bon so nay la
+//    SO DO, chi doi khi probe lai chinh goc do; con dong goi y CW/CCW + so mm thi doi theo goc dang dung.
+float display_ref() { return 0; }
 
 // Chot moc tu cac goc vua do (lay CA Z-MIN lan Z-MAX). Chi nhan khi du >= 3 goc (nguong cua G35).
 static void set_ref() {
