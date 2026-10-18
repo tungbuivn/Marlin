@@ -496,6 +496,7 @@ static void ov_create(void) {
   lv_obj_set_style_bg_opa(ov_box, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(ov_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(ov_box, 1, 0);
+  dlg_frame(ov_box);                // 2026-10-17: vien thong nhat
   lv_obj_set_style_radius(ov_box, 3, 0);
   // 2026-10-17: tieu de (ten thong so) phai TRAN het be ngang
   lv_obj_set_style_pad_left(ov_box, 0, 0);

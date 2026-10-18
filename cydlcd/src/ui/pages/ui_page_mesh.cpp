@@ -406,6 +406,7 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_bg_opa(me_box, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(me_box, COL_ACCENT, 0);
   lv_obj_set_style_border_width(me_box, 2, 0);
+  dlg_frame(me_box);                // 2026-10-17: vien thong nhat (2px vang, bo goc 6)
   // 2026-10-17 (nguoi dung: "cac dialog ban vua sua, thay title cung bi padding"):
   // Truoc day hop dat pad_all 6 -> thanh tieu de bi thut vao 6px, khong cham vien. Nay:
   //   pad trai/phai/tren = 0  -> tieu de TRAN het be ngang, cham vien tren

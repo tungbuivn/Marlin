@@ -176,6 +176,15 @@ lv_obj_t *dlg_body(lv_obj_t *box, lv_coord_t pad, lv_coord_t gap) {
   return b;
 }
 
+// 2026-10-17 (nguoi dung: "neu ban muon tat ca cung mot kieu vien thi noi"): khung hop thoai
+// THONG NHAT cho moi hop: vien 2px mau VANG (MR_MENU) + bo goc 6 - giong hop xac nhan cua msgbox.
+void dlg_frame(lv_obj_t *box) {
+  if (!box) return;
+  lv_obj_set_style_border_color(box, MR_MENU, 0);
+  lv_obj_set_style_border_width(box, 2, 0);
+  lv_obj_set_style_radius(box, 6, 0);
+}
+
 void dlg_title_bar(lv_obj_t *label) {
   if (!label) return;
   // 2026-10-17 (nguoi dung: "dialog edit mesh node dang dung mau chu title khac voi cac dialog khac
