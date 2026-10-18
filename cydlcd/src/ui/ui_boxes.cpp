@@ -159,8 +159,14 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
 
   lv_obj_set_style_bg_color(box, COL_BAR, 0);
   lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(box, 1, 0);
+  // 2026-10-17 (yeu cau nguoi dung): "padding de cach phan noi dung, va duong bao cua dialog".
+  // - duong bao hop: 2px mau tieu de + bo goc 6 (ro rang hon 1px truoc day)
+  // - khoang cach giua title / noi dung / hang nut: pad_row cua HOP (flex column), KHONG dung
+  //   padding cua btnmatrix (se lam mat mau nut).
+  lv_obj_set_style_border_width(box, 2, 0);
   lv_obj_set_style_border_color(box, title_col, 0);
+  lv_obj_set_style_radius(box, 6, 0);
+  lv_obj_set_style_pad_row(box, 6, 0);
   lv_obj_set_style_text_color(box, COL_TXT, 0);
 
   lv_obj_t *t = lv_msgbox_get_title(box);
@@ -194,9 +200,9 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
     lv_obj_set_style_border_width(bm, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
     // KHOANG TRANG giua cac nut (truoc day 2 nut dinh lien nhau) + hang nut can GIUA hop.
     lv_obj_set_style_pad_column(bm, DLG_BTN_GAP, 0);
-    // 2026-10-17 (yeu cau nguoi dung): "them padding tren va duoi cho hang nut ok,cancel".
-    lv_obj_set_style_pad_top(bm, DLG_BTN_GAP + 4, 0);
-    lv_obj_set_style_pad_bottom(bm, DLG_BTN_GAP + 4, 0);
+    // 2026-10-17: KHONG dat pad_top/pad_bottom tren btnmatrix nua - no lam btnmatrix doi kich thuoc
+    // va mau xanh/do do cb_box_btn_draw() to bi mat (do duoc: xanh OK 1046 -> 0 px, do CANCEL
+    // 2045 -> 1176 px). Khoang cach voi phan noi dung lam bang `pad_row` cua HOP (xem duoi).
     lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     // Mau xanh/do cho tung nut (xem cb_box_btn_draw).
     lv_obj_add_event_cb(bm, cb_box_btn_draw, LV_EVENT_DRAW_PART_BEGIN, NULL);
