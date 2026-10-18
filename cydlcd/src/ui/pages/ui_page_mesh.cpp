@@ -29,7 +29,11 @@
 // ===========================================================================
 #define MESH_TABLE_H 124
 #define MESH_TABLE_W PAGE_INN_W                         // 312: luoi dung het be rong
-#define MESH_CELL_W  38                                 // be rong toi thieu 1 o: du "-0.20" (33 px) + 2*2 pad
+// 2026-10-17 (yeu cau nguoi dung: "khong cuon duoc vi ban dang hien 1 so tren 2 dong, hien tren 1 dong thoi"):
+// O phai DU RONG de so "-0.12" nam tren MOT dong. 38 px (truoc day) lam so bi xuong 2 dong; dong cao
+// gap doi -> kho cuon. Nay 60 px: du cho "-0.12" + padding, va tong be ngang 7x60 = 420 > 312
+// => luoi 7x7 CO CUON duoc (cham o nao thi o do ra tam / bam le).
+#define MESH_CELL_W  60                                 // be rong 1 o: du "-0.20" tren MOT dong
 
 static lv_obj_t *me_table, *me_info, *me_note, *me_btn_on, *me_btn_off;
 // 2026-10-17: rect cua tung o (lay trong mesh_draw_cb) de cuon o vua cham ve TAM bang.
