@@ -144,13 +144,16 @@ static float extreme_probed(const bool want_max) {
 //   4/ moc R = r LON NHAT (che do MAX; gia su r3) - goc nay KHONG can van
 //   5/ van vit o goc lech nhat, probe lai -> r_moi
 //   6/ DAT khi |r_moi - R| <= TBT_DONE_MM (0,02 mm)
-// 2026-10-17 (yeu cau nguoi dung): ref() LUON tra ve 0.
-// Y nghia: moi phep so sanh deu la SO VOI Z-HOME (khong con moc Z-MIN/Z-MAX).
-//   - Goi y (hint)          : delta = z_measured[i] - 0 = dung so do duoc, van CW/CCW theo dau
-//   - need_adjust(i)        : DAT khi |z_measured[i]| <= TBT_DONE_MM (0.02mm)
-//   - goto_worst()          : goc can van = goc co |z_measured| LON NHAT
-// => Muc tieu: dua ca 4 goc ve sat Z-home (0.000), khong con "chieu mot phia" theo cuc tri.
-float ref() { return 0; }
+// 2026-10-17: MOC de tinh KHOANG CACH va CHIEU VAN = Z-MAX (che do MAX) / Z-MIN (che do MIN),
+// chot mot lan sau khi do 4 goc (set_ref). Day KHONG phai moc hien thi - 4 con so tren man hinh van
+// la z_measured tho (display_ref() = 0).
+// Muc tieu: dua cac goc ve mat phang cua goc cuc tri da chon.
+//   MAX: goc can van la goc THAP hon moc -> delta < 0 -> CW   (theo test case cua nguoi dung)
+//   MIN: goc can van la goc CAO hon moc  -> delta > 0 -> CCW
+float ref() {
+  if (!z_ref_set) return extreme_probed(tramming_worst_max);
+  return tramming_worst_max ? z_ref_max : z_ref_min;
+}
 
 // MOC dung de HIEN THI: khi CA 4 GOC DA DAT thi doi sang so voi TAM BAN (= diem home Z,
 // base_home_pos) de biet moi goc CAO HON hay THAP HON tam (so DUONG = goc cao hon tam).
@@ -165,15 +168,17 @@ float ref() { return 0; }
 //    SO DO, chi doi khi probe lai chinh goc do; con dong goi y CW/CCW + so mm thi doi theo goc dang dung.
 float display_ref() { return 0; }
 
-// Chot moc tu cac goc vua do (lay CA Z-MIN lan Z-MAX). Chi nhan khi du >= 3 goc (nguong cua G35).
-// 2026-10-17 (yeu cau nguoi dung): z_ref_min = z_ref_max = 0.
-// Moi moc deu la Z-HOME. Khong con cuc tri (Z-MIN/Z-MAX) nao duoc chot, nen khong con hien tuong
-// "PROBE lai mot goc lam goc do thanh moc" hay so hien thi nhay theo cuc tri.
-// `ref()` va `display_ref()` cung da tra 0 -> toan bo he quy ve MOT moc duy nhat: Z-home.
+// 2026-10-17: chot moc CUC TRI tu cac goc vua do (Z-MIN va Z-MAX). Chi nhan khi du >= 3 goc.
+// Dung cho viec tinh khoang cach can van va chieu CW/CCW (ref()); KHONG dung cho hien thi.
 static void set_ref() {
-  z_ref_min = 0;
-  z_ref_max = 0;
-  z_ref_set = true;
+  uint8_t n = 0;
+  LOOP_L_N(i, G35_PROBE_COUNT) if (z_ok[i]) ++n;
+  if (n >= 3) {
+    z_ref_min = extreme_probed(false);   // goc THAP nhat
+    z_ref_max = extreme_probed(true);    // goc CAO nhat
+    z_ref_set = true;
+  }
+  DEBUG_ECHOLNPGM("tramming: chot MOC Z-MIN=", z_ref_min, " Z-MAX=", z_ref_max, " (", n, " goc)");
 }
 
 // Nang len do cao an toan, di toi (x, y), roi probe
