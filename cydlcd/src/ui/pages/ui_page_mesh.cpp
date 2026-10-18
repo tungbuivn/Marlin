@@ -70,6 +70,8 @@ static lv_obj_t *me_mask, *me_box;          // lop phu + hop sua 1 o
 static lv_obj_t *me_box_title, *me_box_val;
 static lv_obj_t *me_step_btn[ME_STEP_N];
 static uint8_t   me_c = 0, me_r = 0;        // o dang sua
+// 2026-10-17 (yeu cau nguoi dung: "chua hien to mau dac biet cho cell duoc selected"):
+static uint8_t   me_sel_c = 0xFF, me_sel_r = 0xFF;   // o VUA CHAM -> ve vien CYAN
 
 // 2026-10-17 (yeu cau nguoi dung): nut "co le" (CFG) de DOI NGUONG nay ngay tren man hinh.
 static int32_t s_suspect_um = 100;   // 0.10mm, bam CFG de doi 0.05 -> 0.10 -> 0.15 -> 0.20
@@ -150,6 +152,8 @@ static void cb_mesh_cell(lv_event_t *e) {
   if (c >= cydlcd.mesh_nx || r >= cydlcd.mesh_ny) return;
   me_c = (uint8_t)c;
   me_r = (uint8_t)r;
+  me_sel_c = (uint8_t)c;
+  me_sel_r = (uint8_t)r;
   me_raw = cydlcd.mesh[c][r];
   // 2026-10-17 (yeu cau nguoi dung): BO hop sua o. Cham vao o nao thi CUON O DO VE TAM bang
   // (lo ra cac o xung quanh). LVGL tu KEP mep: o o canh van bam canh, khong bi keo vao tam.
@@ -307,6 +311,11 @@ static void mesh_draw_cb(lv_event_t *e) {
   else if (z < MESH_LO_UM) bg = lv_color_hex(0x7A2626);   // do  : diem thap
   dsc->rect_dsc->bg_color = bg;
   dsc->rect_dsc->bg_opa   = LV_OPA_COVER;
+  // 2026-10-17: o DANG CHON -> vien CYAN 3px (giu mau nen de van doc duoc do cao / canh bao)
+  if ((uint8_t)col == me_sel_c && (uint8_t)row == me_sel_r) {
+    dsc->rect_dsc->border_color = COL_ACCENT;
+    dsc->rect_dsc->border_width = 3;
+  }
 
   // 2026-10-17 (yeu cau nguoi dung): luu RECT cua tung o de khi cham vao o nao thi CUON o do ve TAM.
   if (dsc->draw_area) s_cell_area[col][row] = *dsc->draw_area;
