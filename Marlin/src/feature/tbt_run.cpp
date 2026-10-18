@@ -176,9 +176,10 @@ static void set_ref() {
 // Nang len do cao an toan, di toi (x, y), roi probe
 static bool probe_xy(const float x, const float y, float &out_z) {
   if (!can_move_now()) { out_z = NAN; return false; }
+  // 2026-10-17: CHI MOT lan di chuyen Z, ve dung Z_CLEARANCE_BETWEEN_PROBES (5mm).
+  // (Lan revert truoc toi de sot them dong SUM_TERN(BLTOUCH,...) - voi BLTOUCH TAT no tra ve
+  //  bltouch.z_extra_clearance() = 0 -> nozzle bi ha xuong Z=0 ngay truoc khi probe.)
   do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
-  // tuc 5mm + z_extra_clearance.
-  do_blocking_move_to_z(SUM_TERN(BLTOUCH, Z_CLEARANCE_BETWEEN_PROBES, bltouch.z_extra_clearance()));
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
   // 2026-10-17 (yeu cau nguoi dung): CHI giu MOT con so DO DUOC, bo z_truoc / z_ket_qua / z_measured.
   SERIAL_ECHOLNPGM("z_measured=", out_z);
