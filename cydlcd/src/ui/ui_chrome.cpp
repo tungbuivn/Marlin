@@ -618,7 +618,25 @@ void build_chrome(void) {
   // Icon trang thai WiFi: ngay SAU icon ket noi, TRUOC nut BACK. La CON CUA s_bar nen tu an/hien
   // cung dong tieu de (man STATUS an s_bar -> icon an theo, khong can lam gi).
   s_wifi = mk_wifi_icon(s_bar, title_icon_font());
-  s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 48, 20, cb_action, (void *)(intptr_t)A_BACK);
+  // 2026-10-17 (yeu cau nguoi dung: "nut BACK tren header kha kho bam vi no nho, hay bo vien border va
+  // fill height, doi mau nen khac"):
+  //   - rong 48 -> 58, cao 20 -> BAR_H (phu kin chieu cao thanh tieu de)
+  //   - BO VIEN (mk_btn mac dinh co vien 1px)
+  //   - nen COL_BTN (dang khoi mau dam, khac han nen thanh tieu de COL_TITLEBAR) -> nhin ra ngay la nut
+  s_btn_back = mk_btn(s_bar, T(UI_T_CHROME_BACK), 50, BAR_H, cb_action, (void *)(intptr_t)A_BACK);
+  // 2026-10-17: BO VIEN cua nut BACK.
+  // LUU Y THU TU: mk_btn_set_bg() GOI outline_apply() ben trong -> neu dat bg TRUOC roi moi xoa co
+  // thi vien khong bi ve lai. Va phai BO ca USER_2 (co "nut co vien outlined") vi focus_mark()/
+  // outline_apply() dua vao co do de ve lai vien 1px.
+  mk_btn_set_bg(s_btn_back, COL_BTN);
+  lv_obj_clear_flag(s_btn_back, LV_OBJ_FLAG_USER_2);
+  lv_obj_add_flag(s_btn_back, LV_OBJ_FLAG_USER_4);
+  lv_obj_set_style_border_width(s_btn_back, 0, 0);
+  // Theme LVGL con ve OUTLINE khi nut dang FOCUS -> tat luon (neu khong se thay vien tim #8C7DD6)
+  lv_obj_set_style_outline_width(s_btn_back, 0, 0);
+  lv_obj_set_style_outline_width(s_btn_back, 0, LV_STATE_FOCUSED);
+  lv_obj_set_style_shadow_width(s_btn_back, 0, 0);
+  lv_obj_set_style_shadow_width(s_btn_back, 0, LV_STATE_FOCUSED);
 
   // --- Thanh day (sticky nhu dong tieu de): [PREV] [TRANG x/y] [NEXT] ---
   // CHI hien khi noi dung man dang mo BI TRAN theo chieu doc (xem bot_sync()).
