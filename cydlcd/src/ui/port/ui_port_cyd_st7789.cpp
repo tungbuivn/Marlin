@@ -459,7 +459,7 @@ uint32_t ui_port_millis(void) { return millis(); }
 void ui_port_colortest_raw(void) {
   Serial.printf("[COLORTEST] BAT DAU: %u mau toan man hinh, moi mau 700 ms\n", (unsigned)UI_COLORTEST_N);
   Serial.println("[COLORTEST] Doi chieu: DO->xanh duong = sai thu tu kenh (TFT_RGB_ORDER TFT_BGR); "
-                 "trang<->den nguoc = panel bi dao mau (bat -DCYDLCD_CYD_INVERT_OFF=1)");
+                 "trang<->den nguoc = panel bi dao mau (bat -DCYDLCD_CYD_INVERT_OFF=1)");   // i18n-ok (log console, khong phai chu hien thi)
   for (uint8_t i = 0; i < UI_COLORTEST_N; i++) {
     const uint16_t c = ui_colortest_rgb565(ui_colortest_bars[i].rgb888);
     s_lcd.fillScreen(c);

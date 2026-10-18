@@ -410,10 +410,10 @@ static void ov_refresh(void) {
   // thi giu nguyen so do (khong lam mat do chinh xac khi sua R/A/F/H).
   const uint8_t dec_v = (SET_ROWS[ov_i].dec > 2) ? SET_ROWS[ov_i].dec : 2;
   fmt_scaled(a, sizeof(a), ov_raw, SET_ROWS[ov_i].scale, dec_v);
-  snprintf(b, sizeof(b), "Gi\xC3\xA1 tr\xE1\xBB\x8B: %s", a);     // "Gia tri: <v>" (co dau)
+  snprintf(b, sizeof(b), "%s%s", T(UI_T_SET_VALUE), a);   // "Gia tri: <v>" / "Value: <v>"
   set_text(ov_val, b);
   fmt_scaled(a, sizeof(a), ov_step(ov_i), SET_ROWS[ov_i].scale, dec_v);
-  snprintf(b, sizeof(b), "B\xC6\xB0\xE1\xBB\x9B\x63 %s", a);      // "Buoc <buoc>" (co dau)
+  snprintf(b, sizeof(b), "%s%s", T(UI_T_SET_STEP), a);    // "Buoc <buoc>" / "Step <buoc>"
   set_text(ov_hint, b);
 }
 
@@ -532,7 +532,7 @@ static void ov_create(void) {
   ov_minus = mk_dlg_btn(rb, "-", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(-1));
   lv_obj_t *plus = mk_dlg_btn(rb, "+", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(+1));
   mk_dlg_btn(rb, "OK",  58, OV_BTN_H, DLG_OK_BG,     cb_se_ov_ok, NULL);
-  lv_obj_t *huy = mk_dlg_btn(rb, "H\xE1\xBB\xA7y", 58, OV_BTN_H, DLG_CANCEL_BG, cb_se_ov_cancel, NULL);  // "Huy"
+  lv_obj_t *huy = mk_dlg_btn(rb, T(UI_T_DLG_CANCEL), 58, OV_BTN_H, DLG_CANCEL_BG, cb_se_ov_cancel, NULL);
   vn_font_btn(huy);             // chu co dau: chi doi font cho nhan BEN TRONG nut
 
   // Giu nut de tang nhanh: nhan them PRESSED + LONG_PRESSED_REPEAT cho 2 nut -/+

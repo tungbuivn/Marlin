@@ -350,6 +350,13 @@ typedef enum {
   UI_T_TBT_MAXMIN_Q,          // hoi xac nhan doi MAX/MIN + do lai 4 goc
   UI_T_WIFI_SCANNING,
 
+  // 2026-10-17 (nguoi dung: "cap nhat phan ngon ngu tieng anh, hinh nhu bi lan tieng viet"):
+  // 4 chuoi nay truoc day HARD-CODE tieng Viet trong ui_page_preheat.cpp / ui_page_settings.cpp
+  // -> o che do EN van hien "Huy" / "Xoa" / "Gia tri:" / "Buoc". Nay dua vao bang ngon ngu.
+  UI_T_DLG_CANCEL,                // nut huy trong hop thoai
+  UI_T_DLG_DELETE,                // nut xoa trong hop thoai
+  UI_T_SET_VALUE,                 // tien to "Gia tri: " cua lop phu SUA (settings)
+  UI_T_SET_STEP,                  // tien to "Buoc " cua lop phu SUA (settings)
   UI_T_LANG_VI,                   // "Tiếng Việt"
   UI_T_LANG_EN,                   // "English"
   // 2026-10-16: dong cuoi cua MAN HINH LOI NANG (chi muc FATAL - xem crit_screen_make() o ui_boxes.cpp).

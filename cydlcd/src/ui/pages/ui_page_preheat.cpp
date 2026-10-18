@@ -235,8 +235,8 @@ static void po_create(void) {
   s_po_minus = mk_dlg_btn(ra, "-", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)-1);
   s_po_plus  = mk_dlg_btn(ra, "+", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)+1);
   mk_dlg_btn(ra, "OK", 56, PO_ACT_H, DLG_OK_BG, cb_po_ok, NULL);
-  lv_obj_t *huy = mk_dlg_btn(ra, "H\xE1\xBB\xA7y", 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_cancel, NULL);  // "Huy"
-  lv_obj_t *xoa = mk_dlg_btn(ra, "X\xC3\xB3a", 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_del, NULL);          // "Xoa"
+  lv_obj_t *huy = mk_dlg_btn(ra, T(UI_T_DLG_CANCEL), 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_cancel, NULL);
+  lv_obj_t *xoa = mk_dlg_btn(ra, T(UI_T_DLG_DELETE), 56, PO_ACT_H, DLG_CANCEL_BG, cb_po_del, NULL);
   vn_font_btn(huy);
   vn_font_btn(xoa);
   // Giu nut -/+ de nhay nhanh (nhu lop phu SUA cua trang THONG SO).
