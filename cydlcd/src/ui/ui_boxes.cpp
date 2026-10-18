@@ -7,6 +7,7 @@
  */
 #include "ui_lvgl.h"
 #include "ui_lvgl_int.h"
+#include "ui_overlay.h"     // ov_destroy() cho lenh UI MSGHIDE
 #include "ui_lang.h"                // T() - da ngon ngu
 #include "net_upload_http.h"        // net_notify_set(): thong bao di TRANG /status thay vi hien hop tren LCD
 
@@ -456,6 +457,17 @@ void boxes_update(void) {
 // Hop thong bao tren LCD chi hien khi CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 -> thong bao di trang
 // /status). Ham nay mo hop thong bao THAT (cung duong box_make) de chup anh / kiem tra mau theo muc do.
 // 2026-10-17: hop PROMPT cua Marlin (tieu de "MARLIN", 2 nut OK/CANCEL) - de chup anh kiem tra.
+// 2026-10-17: dong MOI hop thoai + tat lop phu upload (don dep giua cac canh chup anh).
+void ui_boxes_test_hide(void) {
+  box_close(&s_msg_box);
+  box_close(&s_pid_box);
+  box_close(&s_prompt_box);
+  box_close(&s_cf_box);
+  cydlcd.prompt_active = false;
+  ov_destroy();                 // lop phu upload: pha huy hoan toan
+  refocus_page();
+}
+
 void ui_boxes_test_prompt(void) {
   cydlcd.prompt_active = true;
   snprintf(cydlcd.prompt_text, sizeof(cydlcd.prompt_text), "Marlin dang cho tra loi: tiep tuc in?");

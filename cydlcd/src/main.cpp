@@ -215,6 +215,7 @@ if (strcasecmp(a3, "BOX") == 0)          ui_lvgl_dump_layout();
             else if (strcasecmp(a3, "MSGPROMPT") == 0) ui_boxes_test_prompt();
             else if (strcasecmp(a3, "MSGPID") == 0)    ui_boxes_test_pid();
             else if (strcasecmp(a3, "UPLOAD") == 0)    ov_test_show();
+            else if (strcasecmp(a3, "MSGHIDE") == 0)   ui_boxes_test_hide();
             else if (strncasecmp(a3, "TAP", 3) == 0) ui_lvgl_test_tap(a3 + 3);
             else if (strncasecmp(a3, "PRE", 3) == 0) preheat_test_cmd(a3 + 3);
             else if (strcasecmp(a3, "TEMPS") == 0)   ui_lvgl_dump_temps();

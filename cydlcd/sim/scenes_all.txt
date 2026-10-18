@@ -187,10 +187,12 @@ settle 700
 
 # ---------------------------------------------------------------------------
 # 2026-10-17 (nguoi dung hoi: "con cho nao co dialog ma chua co anh khong?"):
-# 3 hop thoai con thieu anh - de CUOI file de khong anh huong cac canh khac:
+# 4 hop thoai con thieu anh. THU TU QUAN TRONG: lop phu UPLOAD khong tu tat -> phai chup CUOI CUNG,
+# neu khong no se chong len hop tiep theo (loi that: dlg-14 tung hien 2 dialog).
 #   dlg-11-msgbox-prompt  : hop PROMPT cua Marlin (tieu de "MARLIN", OK/CANCEL)
 #   dlg-12-msgbox-pid     : hop "tune xong" (CYDLCD_EV_PID_DONE)
-#   dlg-13-upload-overlay : lop phu TIEN DO UPLOAD 40%
+#   dlg-14-msgbox-info    : thong bao muc INFO (vien cyan)
+#   dlg-13-upload-overlay : lop phu TIEN DO UPLOAD 40%  <-- CUOI CUNG
 # ---------------------------------------------------------------------------
 state basic
 page 0
@@ -211,14 +213,14 @@ settle 400
 state basic
 page 0
 settle 600
-ui UPLOAD
-settle 800
-shot dlg-13-upload-overlay
-state basic
-page 0
-settle 500
 ui MSGBOX 0
 settle 800
 shot dlg-14-msgbox-info
-ui TAP K
+ui MSGHIDE
 settle 400
+state basic
+page 0
+settle 600
+ui UPLOAD
+settle 800
+shot dlg-13-upload-overlay

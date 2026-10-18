@@ -123,6 +123,7 @@ void ui_console_dispatch(const char *a3) {
   else if (!strcasecmp(a3, "MSGPROMPT"))    ui_boxes_test_prompt();
   else if (!strcasecmp(a3, "MSGPID"))       ui_boxes_test_pid();
   else if (!strcasecmp(a3, "UPLOAD"))       ov_test_show();
+  else if (!strcasecmp(a3, "MSGHIDE"))      ui_boxes_test_hide();
   else if (!strncasecmp(a3, "CRIT", 4))    ui_lvgl_test_crit(a3 + 4);
   else if (!strncasecmp(a3, "CFG", 3))     submenu_dump(a3 + 3);
   else if (!strncasecmp(a3, "NOTIFY", 6))  ui_lvgl_test_notify(a3 + 6);

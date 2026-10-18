@@ -766,6 +766,7 @@ void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t step
 void ui_boxes_test_msg(uint8_t sev);
 void ui_boxes_test_prompt(void);   // 2026-10-17: hop PROMPT cua Marlin (de chup anh)
 void ui_boxes_test_pid(void);      // 2026-10-17: hop "tune xong" (de chup anh)
+void ui_boxes_test_hide(void);     // 2026-10-17: dong moi hop + tat lop phu upload (don dep)
 /** Tu dong dong hop XAC NHAN sau `ms` mili giay (0 = tat) - dung cho hop TEST tu console. */
 void ui_confirm_autoclose(const uint32_t ms);
 /**
