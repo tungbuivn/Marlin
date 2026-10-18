@@ -470,7 +470,7 @@ void ui_boxes_test_hide(void) {
 
 void ui_boxes_test_prompt(void) {
   cydlcd.prompt_active = true;
-  snprintf(cydlcd.prompt_text, sizeof(cydlcd.prompt_text), "Marlin dang cho tra loi: tiep tuc in?");
+  snprintf(cydlcd.prompt_text, sizeof(cydlcd.prompt_text), "Marlin is waiting for an answer: continue printing?");
   boxes_update();
 }
 
@@ -482,11 +482,14 @@ void ui_boxes_test_pid(void) {
 }
 
 void ui_boxes_test_msg(uint8_t sev) {
+  // 2026-10-17 (yeu cau nguoi dung: "hop error, warning, marlin, info dang dung tieng viet, hay dung
+  // tieng anh"): day la chuoi CHAN DOAN (chi mo bang lenh `UI MSGBOX`) -> viet tieng Anh cho dong bo
+  // voi che do EN mac dinh. i18n-ok (khong phai chuoi hien thi thong thuong cua san pham).
   static const char *const txts[4] = {
-    "INFO: day la hop thong bao muc INFO",
-    "CANH BAO: day la hop thong bao muc WARN",
-    "LOI: day la hop thong bao muc ERROR",
-    "LOI NANG: day la hop thong bao muc FATAL"
+    "INFO: this is an INFO message box",
+    "WARNING: this is a WARNING message box",
+    "ERROR: this is an ERROR message box",
+    "CRITICAL: this is a CRITICAL message box"
   };
   if (sev > 3) sev = 2;
   Serial.printf("[UI] MSGBOX sev=%u\n", (unsigned)sev);   // chan doan
