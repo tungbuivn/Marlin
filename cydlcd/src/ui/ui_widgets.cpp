@@ -155,6 +155,27 @@ lv_obj_t *mk_label_w(lv_obj_t *parent, const char *txt, lv_color_t col, lv_coord
 // Cac hop thoai TU DUNG (mesh / preheat / settings) dung `mk_label_w` lam tieu de -> chi co chu,
 // khong co nen. Ham nay bien label do thanh 1 THANH TIEU DE: nen COL_BTN dac + bo goc + padding
 // (cung kieu voi tieu de cua lv_msgbox trong box_make()).
+// 2026-10-17 (yeu cau nguoi dung: "title khong padding the la content lai dinh vao duong bien roi,
+// them container padding 3 phia di"): tach THAN hop thoai ra 1 container rieng, chua padding
+// trai/phai/duoi; thanh tieu de van la con truc tiep cua hop nen TRAN het be ngang, cham vien.
+lv_obj_t *dlg_body(lv_obj_t *box, lv_coord_t pad, lv_coord_t gap) {
+  if (!box) return NULL;
+  lv_obj_t *b = lv_obj_create(box);
+  lv_obj_set_width(b, LV_PCT(100));
+  lv_obj_set_height(b, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(b, 0, 0);
+  lv_obj_set_style_pad_left(b, pad, 0);
+  lv_obj_set_style_pad_right(b, pad, 0);
+  lv_obj_set_style_pad_bottom(b, pad, 0);
+  lv_obj_set_style_pad_top(b, 4, 0);
+  lv_obj_set_style_pad_row(b, gap, 0);
+  lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  return b;
+}
+
 void dlg_title_bar(lv_obj_t *label) {
   if (!label) return;
   lv_obj_set_style_bg_color(label, COL_BTN, 0);

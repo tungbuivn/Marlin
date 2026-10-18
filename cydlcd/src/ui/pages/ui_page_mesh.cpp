@@ -409,7 +409,8 @@ void page_mesh_create(lv_obj_t *p) {
   lv_obj_set_style_pad_left(me_box, 0, 0);
   lv_obj_set_style_pad_right(me_box, 0, 0);
   lv_obj_set_style_pad_top(me_box, 0, 0);
-  lv_obj_set_style_pad_bottom(me_box, 8, 0);
+  lv_obj_set_style_pad_bottom(me_box, 0, 0);
+  lv_obj_set_height(me_box, LV_SIZE_CONTENT);   // cao theo noi dung (than hop co padding rieng)
   lv_obj_set_flex_flow(me_box, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(me_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(me_box, 4, 0);
@@ -419,12 +420,14 @@ void page_mesh_create(lv_obj_t *p) {
   me_box_title = mk_label_w(me_box, "MESH o -", COL_ACCENT, 220);
   lv_obj_set_width(me_box_title, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(me_box_title);      // 2026-10-17: tieu de co NEN (truoc day chi co chu)
-  me_box_val   = mk_label_w(me_box, "Z = - mm", COL_TXT, 220);
-  lv_obj_t *rs = mk_dlg_row(me_box, 220, 24);
+  lv_obj_t *mb = dlg_body(me_box, 8, 4);         // than hop: pad trai/phai/duoi 8px
+  me_box_val   = mk_label_w(mb, "Z = - mm", COL_TXT, 220);
+  lv_obj_set_width(me_box_val, LV_PCT(100));
+  lv_obj_t *rs = mk_dlg_row(mb, LV_PCT(100), 24);
   for (uint8_t k = 0; k < ME_STEP_N; k++)
     me_step_btn[k] = mk_dlg_btn(rs, ME_STEP_TXT[k], 56, 24, DLG_NEUTRAL_BG,
                                 cb_mesh_step, (void *)(intptr_t)k);
-  lv_obj_t *ra = mk_dlg_row(me_box, 220, 26);
+  lv_obj_t *ra = mk_dlg_row(mb, LV_PCT(100), 26);
   mk_dlg_btn(ra, "-",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)-1);
   mk_dlg_btn(ra, "+",  44, 26, DLG_NEUTRAL_BG, cb_mesh_adj, (void *)(intptr_t)(int8_t)+1);
   mk_dlg_btn(ra, "OK", 52, 26, DLG_OK_BG,      cb_mesh_ok, NULL);

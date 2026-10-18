@@ -501,7 +501,8 @@ static void ov_create(void) {
   lv_obj_set_style_pad_left(ov_box, 0, 0);
   lv_obj_set_style_pad_right(ov_box, 0, 0);
   lv_obj_set_style_pad_top(ov_box, 0, 0);
-  lv_obj_set_style_pad_bottom(ov_box, OV_PAD, 0);
+  lv_obj_set_style_pad_bottom(ov_box, 0, 0);
+  lv_obj_set_height(ov_box, LV_SIZE_CONTENT);
   lv_obj_set_style_pad_row(ov_box, GAP, 0);
   lv_obj_clear_flag(ov_box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(ov_box, LV_FLEX_FLOW_COLUMN);
@@ -513,9 +514,10 @@ static void ov_create(void) {
   ov_name = mk_label_w(ov_box, "-", MR_MENU, OV_W - 2 * OV_PAD);
   lv_obj_set_width(ov_name, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(ov_name);           // 2026-10-17: ten thong so = thanh tieu de co NEN
+  lv_obj_t *vb = dlg_body(ov_box, OV_PAD, GAP);  // than hop: pad trai/phai/duoi
 
   // Dong 2: "Gia tri: <so>" (xanh la) + "Buoc <buoc>" (xam) - xem ov_refresh()
-  lv_obj_t *rv = mk_flex(ov_box, LV_FLEX_FLOW_ROW, OV_W - 2 * OV_PAD, OV_LINE_H, 0, GAP);
+  lv_obj_t *rv = mk_flex(vb, LV_FLEX_FLOW_ROW, LV_PCT(100), OV_LINE_H, 0, GAP);
   ov_val  = mk_label_w(rv, "-", COL_OK, OV_VCAP);
   ov_hint = mk_label_w(rv, "", COL_DIM, OV_W - 2 * OV_PAD - OV_VCAP - GAP);
   vn_font(ov_val);              // 2 nhan nay co dau tieng Viet -> dung font Segoe
@@ -523,7 +525,7 @@ static void ov_create(void) {
 
   // Dong 3: 4 NUT BUOC co dinh - CAN GIUA hop + cach nhau DLG_BTN_GAP (truoc day dan het be rong,
   // cac nut dinh nhau). Nut dang chon duoc to COL_ACCENT (nhu jg_axis[]).
-  lv_obj_t *rs = mk_dlg_row(ov_box, OV_W - 2 * OV_PAD, OV_BTN_H);
+  lv_obj_t *rs = mk_dlg_row(vb, LV_PCT(100), OV_BTN_H);
   for (uint8_t k = 0; k < 4; k++)
     ov_step_btn[k] = mk_dlg_btn(rs, OV_STEP_TXT[k], 52, OV_BTN_H, DLG_NEUTRAL_BG,
                                 cb_se_ov_step, OV_STEP(k));
@@ -534,7 +536,7 @@ static void ov_create(void) {
   for (uint8_t k = 0; k < 4; k++) lv_obj_add_flag(ov_step_btn[k], LV_OBJ_FLAG_USER_1);
 
   // Dong 4: - | + | OK (XANH) | Huy (DO) - can giua, co khoang trang (yeu cau nguoi dung 2026-10-15)
-  lv_obj_t *rb = mk_dlg_row(ov_box, OV_W - 2 * OV_PAD, OV_BTN_H);
+  lv_obj_t *rb = mk_dlg_row(vb, LV_PCT(100), OV_BTN_H);
   ov_minus = mk_dlg_btn(rb, "-", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(-1));
   lv_obj_t *plus = mk_dlg_btn(rb, "+", 44, OV_BTN_H, DLG_NEUTRAL_BG, cb_se_ov_adj, OV_ADJ(+1));
   mk_dlg_btn(rb, "OK",  58, OV_BTN_H, DLG_OK_BG,     cb_se_ov_ok, NULL);

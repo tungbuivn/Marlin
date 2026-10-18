@@ -205,7 +205,8 @@ static void po_create(void) {
   lv_obj_set_style_pad_left(s_po_box, 0, 0);
   lv_obj_set_style_pad_right(s_po_box, 0, 0);
   lv_obj_set_style_pad_top(s_po_box, 0, 0);
-  lv_obj_set_style_pad_bottom(s_po_box, 4, 0);
+  lv_obj_set_style_pad_bottom(s_po_box, 0, 0);
+  lv_obj_set_height(s_po_box, LV_SIZE_CONTENT);
   lv_obj_set_style_pad_row(s_po_box, GAP, 0);
   lv_obj_clear_flag(s_po_box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(s_po_box, LV_FLEX_FLOW_COLUMN);
@@ -218,10 +219,11 @@ static void po_create(void) {
   s_po_title = mk_label_w(s_po_box, "-", MR_MENU, iw);
   lv_obj_set_width(s_po_title, LV_PCT(100));   // tran het be ngang hop
   dlg_title_bar(s_po_title);        // 2026-10-17: tieu de co NEN
+  lv_obj_t *pb = dlg_body(s_po_box, 6, GAP);     // than hop: pad trai/phai/duoi 6px
 
   // Dong 2: 3 O (nozzle | bed | fan) - CA 3 TRONG 1 HANG, cham o nao thi -/+ chinh o do. Nut be rong
   // CO DINH + can GIUA + cach nhau DLG_BTN_GAP (yeu cau nguoi dung 2026-10-15).
-  lv_obj_t *rf = mk_dlg_row(s_po_box, iw, PO_FIELD_H);
+  lv_obj_t *rf = mk_dlg_row(pb, LV_PCT(100), PO_FIELD_H);
   for (uint8_t f = 0; f < PO_FIELDS; f++) {
     s_po_fld[f] = mk_dlg_btn(rf, PO_FNAME[f], 84, PO_FIELD_H, DLG_NEUTRAL_BG,
                              cb_po_field, (void *)(intptr_t)f);
@@ -229,7 +231,7 @@ static void po_create(void) {
   }
 
   // Dong 3: 3 muc buoc (nghia doi theo o dang chon)
-  lv_obj_t *rs = mk_dlg_row(s_po_box, iw, PO_STEP_H);
+  lv_obj_t *rs = mk_dlg_row(pb, LV_PCT(100), PO_STEP_H);
   for (uint8_t k = 0; k < 3; k++) {
     s_po_stp[k] = mk_dlg_btn(rs, PO_STEP_TXT[0][k], 60, PO_STEP_H, DLG_NEUTRAL_BG,
                              cb_po_step, (void *)(intptr_t)k);
@@ -237,7 +239,7 @@ static void po_create(void) {
   }
 
   // Dong 4: - | + | OK (XANH) | Huy (DO) | Xoa (DO) - can giua, co khoang trang
-  lv_obj_t *ra = mk_dlg_row(s_po_box, iw, PO_ACT_H);
+  lv_obj_t *ra = mk_dlg_row(pb, LV_PCT(100), PO_ACT_H);
   s_po_minus = mk_dlg_btn(ra, "-", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)-1);
   s_po_plus  = mk_dlg_btn(ra, "+", 42, PO_ACT_H, DLG_NEUTRAL_BG, cb_po_adj, (void *)(intptr_t)(int8_t)+1);
   mk_dlg_btn(ra, "OK", 56, PO_ACT_H, DLG_OK_BG, cb_po_ok, NULL);
