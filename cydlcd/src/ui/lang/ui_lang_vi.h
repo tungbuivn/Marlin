@@ -308,6 +308,11 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   // ---- ten ngon ngu (endonym) ----
   // "Tiếng Việt" viet bang MA UTF-8 (\x..) de file nguon giu duoc ASCII thuan - dung quy uoc cua
   // project (xem ghi chu o ui_lvgl.cpp). Font Segoe UI 16 co du dau tieng Viet (dai vn1..vn4).
+  [UI_T_TBT_NO_DATA]        = "chua co du lieu (CYDLCD_TBT_LINK?)",
+  [UI_T_TBT_READY_HINT]     = "READY (bam HOME + PROBE)",
+  [UI_T_TBT_CORNER]         = "goc",
+  [UI_T_TBT_DONE]           = "DAT",
+  [UI_T_SET_RESET_DEFAULT]  = "M502 RESET (ve mac dinh)",
   [UI_T_DLG_CANCEL]         = "H\xE1\xBB\xA7y",
   [UI_T_DLG_DELETE]         = "X\xC3\xB3a",
   [UI_T_SET_VALUE]          = "Gi\xC3\xA1 tr\xE1\xBB\x8B: ",

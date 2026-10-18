@@ -353,6 +353,12 @@ typedef enum {
   // 2026-10-17 (nguoi dung: "cap nhat phan ngon ngu tieng anh, hinh nhu bi lan tieng viet"):
   // 4 chuoi nay truoc day HARD-CODE tieng Viet trong ui_page_preheat.cpp / ui_page_settings.cpp
   // -> o che do EN van hien "Huy" / "Xoa" / "Gia tri:" / "Buoc". Nay dua vao bang ngon ngu.
+  // 2026-10-17 (nguoi dung: con 2 chuoi tieng Viet hard-code o trang TRAMMING va SETTINGS):
+  UI_T_TBT_NO_DATA,               // "chua co du lieu (CYDLCD_TBT_LINK?)"
+  UI_T_TBT_READY_HINT,            // "READY (bam HOME + PROBE)" / "READY (press HOME + PROBE)"
+  UI_T_TBT_CORNER,                // "goc" / "corner"
+  UI_T_TBT_DONE,                  // "DAT" / "OK" (token DAT Marlin gui len)
+  UI_T_SET_RESET_DEFAULT,         // nut "M502 RESET (ve mac dinh)"
   UI_T_DLG_CANCEL,                // nut huy trong hop thoai
   UI_T_DLG_DELETE,                // nut xoa trong hop thoai
   UI_T_SET_VALUE,                 // tien to "Gia tri: " cua lop phu SUA (settings)

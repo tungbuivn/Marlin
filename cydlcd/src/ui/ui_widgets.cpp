@@ -576,6 +576,14 @@ void style_keyboard(lv_obj_t *kb, lv_obj_t *ta) {
     lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS);
     lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_PRESSED));
     lv_obj_set_style_bg_color(kb, COL_ACCENT, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
+    // 2026-10-17 (yeu cau nguoi dung: "ban phim bo duong vien focus"): theme LVGL ve vien focus quanh
+    // phim dang chon -> tat o CA part chinh lan tung phim, ca trang thai thuong lan FOCUSED.
+    lv_obj_set_style_outline_width(kb, 0, 0);
+    lv_obj_set_style_outline_width(kb, 0, LV_STATE_FOCUSED);
+    lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS);
+    lv_obj_set_style_outline_width(kb, 0, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
+    lv_obj_set_style_border_width(kb, 0, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(kb, 0, (lv_style_selector_t)(LV_PART_ITEMS | LV_STATE_FOCUSED));
   }
   if (ta) {
     mono_obj(ta);                                               // font chung (xem ghi chu o tren)

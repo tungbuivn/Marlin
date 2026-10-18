@@ -674,7 +674,7 @@ void page_settings_create(lv_obj_t *p) {
   // Da BO nut "M501 LOAD" (2026-10-13, theo yeu cau): M501 chi doc lai thong so tu EEPROM vao RAM
   // (hoan tac thay doi chua luu) chu khong "load" tu file nao -> nhan "LOAD" gay hieu nham.
   lv_obj_t *r2 = mk_flex(p, LV_FLEX_FLOW_ROW, PAGE_INN_W, 28, 0, GAP);
-  mk_btn_grow(r2, "M502 RESET (ve mac dinh)", 28, cb_action, (void *)(intptr_t)A_EEPROM_RESET);
+  mk_btn_grow(r2, T(UI_T_SET_RESET_DEFAULT), 28, cb_action, (void *)(intptr_t)A_EEPROM_RESET);
 }
 
 void page_settings_update(void) {

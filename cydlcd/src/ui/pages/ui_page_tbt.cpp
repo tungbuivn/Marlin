@@ -162,10 +162,10 @@ void page_tbt_update(void) {
 
   // ---- dong 1: MODE + phase + goc dang dung | LINK ----
   if (!tbt.st.active)
-    snprintf(b, sizeof(b), "%s  READY (bam HOME + PROBE)", tbt.st.mode_max ? "MAX" : "MIN");
+    snprintf(b, sizeof(b), "%s  %s", tbt.st.mode_max ? "MAX" : "MIN", T(UI_T_TBT_READY_HINT));
   else
-    snprintf(b, sizeof(b), "%s  %s  goc %u", tbt.st.mode_max ? "MAX" : "MIN",
-             tbt_phase_name(tbt.st.phase), (unsigned)(tbt.st.idx + 1));
+    snprintf(b, sizeof(b), "%s  %s  %s %u", tbt.st.mode_max ? "MAX" : "MIN",
+             tbt_phase_name(tbt.st.phase), T(UI_T_TBT_CORNER), (unsigned)(tbt.st.idx + 1));
   set_text(tr_head, b);
 
   // 4 goc: gia tri mm so voi moc (Marlin da tinh)
@@ -182,24 +182,29 @@ void page_tbt_update(void) {
   // ---- dong huong dan: Marlin gui token "CW:0.150" / "CCW:nhe" / "DAT" / "PROBE" / "ERR" / "-"
   lv_color_t hcol = COL_ACCENT;
   if (!tbt.linked) {
-    snprintf(b, sizeof(b), "chua co du lieu (CYDLCD_TBT_LINK?)");
+    snprintf(b, sizeof(b), "%s", T(UI_T_TBT_NO_DATA));
     hcol = COL_ERR;
   }
   else if (tbt.st.phase != TBT_PH_IDLE) {
     snprintf(b, sizeof(b), "%s...", tbt_phase_name(tbt.st.phase));
   }
   else if (tbt.st.all_dat) {
-    snprintf(b, sizeof(b), T(UI_T_TBT_RESULT));
+    snprintf(b, sizeof(b), "%s", T(UI_T_TBT_RESULT));   // 2026-10-17: khong dung T() lam format
     hcol = COL_OK;
   }
   else {
     // "CW:0.150" -> "CW 0.150"; "CCW:nhe" -> "CCW nhe"
     const char *h = tbt.st.hint[0] ? tbt.st.hint : "-";
-    uint8_t k = 0;
-    for (; h[k] && k < sizeof(b) - 1; k++) b[k] = (h[k] == ':') ? ' ' : h[k];
-    b[k] = '\0';
-    if (h[0] == 'D') hcol = COL_OK;                                // DAT
-    else if (h[0] == 'E') hcol = COL_ERR;                          // ERR
+    if (strcmp(h, "DAT") == 0) {
+      snprintf(b, sizeof(b), "%s", T(UI_T_TBT_DONE));              // "DAT" -> "OK" o che do EN
+      hcol = COL_OK;
+    }
+    else {
+      uint8_t k = 0;
+      for (; h[k] && k < sizeof(b) - 1; k++) b[k] = (h[k] == ':') ? ' ' : h[k];
+      b[k] = '\0';
+      if (h[0] == 'E') hcol = COL_ERR;                             // ERR
+    }
   }
   set_text(tr_hint, b);
 
