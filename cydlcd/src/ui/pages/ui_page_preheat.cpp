@@ -325,8 +325,11 @@ void preheat_add_open(void) {
   // (con tao sau) ve DE LEN ban phim. Cac lop phu khac (hop sua preheat, lop phu SUA) deu dung
   // `lv_layer_top()` -> nay ban phim cung vay.
   s_kb_bd = lv_obj_create(lv_layer_top());
-  lv_obj_set_pos(s_kb_bd, 0, 0);
-  lv_obj_set_size(s_kb_bd, UI_LCD_HOR_RES, UI_LCD_VER_RES);
+  // 2026-10-17 (yeu cau nguoi dung: "mau title bar o cac trang chua dong nhat"):
+  // Truoc day backdrop ban phim phu CA MAN HINH -> thanh tieu de bi toi di, trong khi backdrop cua
+  // cac hop thoai khac chi phu VUNG NOI DUNG. Nay cho giong: phu tu CONT_Y, cao CONT_H.
+  lv_obj_set_pos(s_kb_bd, 0, CONT_Y);
+  lv_obj_set_size(s_kb_bd, UI_LCD_HOR_RES, CONT_H);
   lv_obj_set_style_bg_color(s_kb_bd, lv_color_hex(0x000000), 0);
   dlg_backdrop(s_kb_bd);      // 2026-10-17: nen mo thong nhat
   lv_obj_set_style_border_width(s_kb_bd, 0, 0);
