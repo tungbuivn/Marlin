@@ -48,6 +48,8 @@
 
 #include "../module/motion.h"
 #include "../module/probe.h"
+#include "../module/planner.h"              // planner.leveling_active
+#include "../feature/bedlevel/bedlevel.h"   // set_bed_leveling_enabled() - tat mesh quanh moi lan probe
 #include "../gcode/queue.h"
 
 #if ENABLED(BLTOUCH)
@@ -62,6 +64,7 @@ namespace tbt_run {
 // Khai bao truoc: dinh nghia o duoi (khu "CHAN AN TOAN"), nhung probe_xy/goto_worst/goto_index
 // nam TRUOC do nen phai biet ten.
 static bool can_move_now();
+
 // 2026-10-17 (yeu cau nguoi dung): che do TU DI CHUYEN (AUTO).
 //   ON  = wizard tu nhay toi goc can van (hanh vi cu)
 //   OFF = KHONG tu di chuyen; nguoi dung bam vao nhan goc (BR/BL/FL/FR) tren man CYD de di chuyen.
@@ -180,7 +183,17 @@ static bool probe_xy(const float x, const float y, float &out_z) {
   // (Lan revert truoc toi de sot them dong SUM_TERN(BLTOUCH,...) - voi BLTOUCH TAT no tra ve
   //  bltouch.z_extra_clearance() = 0 -> nozzle bi ha xuong Z=0 ngay truoc khi probe.)
   do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
+  // 2026-10-17 (yeu cau nguoi dung): TAT mesh NGAY TRUOC khi probe, PHUC HOI NGAY SAU khi probe xong.
+  // (M503 cho thay `M420 S1` = Leveling ON; probe co mesh se bi bu theo toa do X,Y nen so do khong con
+  //  la khoang cach thuan tuy toi Z-home. G35() goc cung tat leveling khi do.)
+  #if HAS_LEVELING
+    const bool lv_was = planner.leveling_active;
+    set_bed_leveling_enabled(false);
+  #endif
   out_z = probe.probe_at_point(x, y, TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_STOW : PROBE_PT_RAISE, 0, true);
+  #if HAS_LEVELING
+    set_bed_leveling_enabled(lv_was);       // phuc hoi ngay, khong doi den cuoi phien
+  #endif
   // 2026-10-17 (yeu cau nguoi dung): CHI giu MOT con so DO DUOC, bo z_truoc / z_ket_qua / z_measured.
   SERIAL_ECHOLNPGM("z_measured=", out_z);
   DEBUG_ECHOLNPGM("tramming_probe_xy(", x, ", ", y, ") = ", out_z);
