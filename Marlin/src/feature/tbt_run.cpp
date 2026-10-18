@@ -141,10 +141,13 @@ static float extreme_probed(const bool want_max) {
 //   4/ moc R = r LON NHAT (che do MAX; gia su r3) - goc nay KHONG can van
 //   5/ van vit o goc lech nhat, probe lai -> r_moi
 //   6/ DAT khi |r_moi - R| <= TBT_DONE_MM (0,02 mm)
-float ref() {
-  if (!z_ref_set) return extreme_probed(tramming_worst_max);
-  return tramming_worst_max ? z_ref_max : z_ref_min;
-}
+// 2026-10-17 (yeu cau nguoi dung): ref() LUON tra ve 0.
+// Y nghia: moi phep so sanh deu la SO VOI Z-HOME (khong con moc Z-MIN/Z-MAX).
+//   - Goi y (hint)          : delta = z_measured[i] - 0 = dung so do duoc, van CW/CCW theo dau
+//   - need_adjust(i)        : DAT khi |z_measured[i]| <= TBT_DONE_MM (0.02mm)
+//   - goto_worst()          : goc can van = goc co |z_measured| LON NHAT
+// => Muc tieu: dua ca 4 goc ve sat Z-home (0.000), khong con "chieu mot phia" theo cuc tri.
+float ref() { return 0; }
 
 // MOC dung de HIEN THI: khi CA 4 GOC DA DAT thi doi sang so voi TAM BAN (= diem home Z,
 // base_home_pos) de biet moi goc CAO HON hay THAP HON tam (so DUONG = goc cao hon tam).
