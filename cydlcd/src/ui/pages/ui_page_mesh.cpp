@@ -53,9 +53,10 @@ static bool      s_mesh_valid_prev = false;
 #define ME_NAV_H   24
 #define ME_EDIT_W  56                       // nut EDIT (goc tren phai cua bang)
 #define ME_EDIT_H  20
-#define ME_STEP_N  3
-static const int32_t ME_STEP_UM[ME_STEP_N] = { 10, 50, 100 };            // 0.01 / 0.05 / 0.1 mm (um)
-static const char *const ME_STEP_TXT[ME_STEP_N] = { "0.01", "0.05", "0.1" };
+// 2026-10-17 (yeu cau nguoi dung): nut MODIFY chi cho chon BIEN DO 0.01 hoac 0.1
+#define ME_STEP_N  2
+static const int32_t ME_STEP_UM[ME_STEP_N] = { 10, 100 };                // 0.01 / 0.1 mm (um)
+static const char *const ME_STEP_TXT[ME_STEP_N] = { "0.01", "0.1" };
 
 static lv_obj_t *me_layer;                  // lop phu dinh vi tuyet doi tren bang (nut EDIT + dieu huong)
 static lv_obj_t *me_edit_btn;
@@ -65,6 +66,12 @@ static lv_obj_t *me_mask, *me_box;          // lop phu + hop sua 1 o
 static lv_obj_t *me_box_title, *me_box_val;
 static lv_obj_t *me_step_btn[ME_STEP_N];
 static uint8_t   me_c = 0, me_r = 0;        // o dang sua
+
+// 2026-10-17 (yeu cau nguoi dung): nut "co le" (CFG) de DOI NGUONG nay ngay tren man hinh.
+static int32_t s_suspect_um = 100;   // 0.10mm, bam CFG de doi 0.05 -> 0.10 -> 0.15 -> 0.20
+static const int32_t SUSPECT_STEPS[] = { 50, 100, 150, 200 };
+#define SUSPECT_STEP_N (sizeof(SUSPECT_STEPS) / sizeof(SUSPECT_STEPS[0]))
+
 static int32_t   me_raw = 0;                // gia tri dang sua (um, cung don vi cydlcd.mesh[][])
 static uint8_t   me_step_k = 1;             // buoc dang chon (mac dinh 0.05 mm)
 
@@ -104,6 +111,26 @@ static void me_box_show(void) {
 }
 
 // Cham vao 1 o cua bang -> (chi khi bat EDIT) mo hop sua o do.
+// 2026-10-17 (yeu cau nguoi dung): nut "co le" (CFG) - doi nguong phat hien diem nghi ngo.
+static void cb_mesh_suspect_cycle(lv_event_t *e) {
+  (void)e;
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < SUSPECT_STEP_N; i++) if (SUSPECT_STEPS[i] == s_suspect_um) { k = i; break; }
+  s_suspect_um = SUSPECT_STEPS[(k + 1) % SUSPECT_STEP_N];
+  WIFILOG("[UI] MESH: nguong diem nghi ngo = %ld um\n", (long)s_suspect_um);
+  if (me_table) lv_obj_invalidate(me_table);   // ve lai luoi voi nguong moi
+}
+
+// 2026-10-17 (yeu cau nguoi dung): nut MODIFY - sua do cao bang tay cho O DANG CHON.
+// Chi 2 bien do: 0.01 va 0.1 (ME_STEP_UM). Dung lai hop thoai cu (me_box_show).
+static void cb_mesh_modify(lv_event_t *e) {
+  (void)e;
+  if (!me_table) return;
+  if (me_c >= cydlcd.mesh_nx || me_r >= cydlcd.mesh_ny) return;
+  me_raw = cydlcd.mesh[me_c][me_r];
+  me_box_show();
+}
+
 static void cb_mesh_cell(lv_event_t *e) {
   (void)e;
   if (!me_edit || !me_table) return;
@@ -214,7 +241,6 @@ static void cb_mesh_cancel(lv_event_t *e) { (void)e; me_box_hide(); }
 // 2026-10-17 (yeu cau nguoi dung: "to mau cam cac diem nghi ngo"):
 // Mat ban that Lien tuc, khong co "gai". Mot diem lech qua xa so voi trung binh cac diem ke
 // gan nhu chac chan la do sai (probe nhieu / bui ban / diem mesh cu).
-#define MESH_SUSPECT_UM 100      // 0.10 mm
 
 // LVGL 8.3: LV_EVENT_DRAW_PART_BEGIN cho o cua bang -> dsc->id = chi so o
 // (id = row * so_cot + col). Vat lieu to mau rieng tung o.
@@ -236,7 +262,7 @@ static bool mesh_cell_suspect(const uint8_t c, const uint8_t r) {
   const int32_t avg = sum / (int32_t)n;
   int32_t d = (int32_t)cydlcd.mesh[c][r] - avg;
   if (d < 0) d = -d;
-  return d > MESH_SUSPECT_UM;
+  return d > s_suspect_um;
 }
 
 static void mesh_draw_cb(lv_event_t *e) {
@@ -332,8 +358,16 @@ void page_mesh_create(lv_obj_t *p) {
     lv_obj_add_flag(me_btn_on,  LV_OBJ_FLAG_USER_1);
     lv_obj_add_flag(me_btn_off, LV_OBJ_FLAG_USER_1);
   }
-  // 2026-10-17: SAVE gio TU GOI G29 P3 (dien cac diem trong/bien) roi G29 S0 (luu slot 0) - xem do_action.
+  // 2026-10-17 (yeu cau nguoi dung): SAVE con rong -> chia them 2 nut:
+  //   CFG  = icon "co le" -> doi NGUONG phat hien diem nghi ngo (0.05/0.10/0.15/0.20 mm)
+  //   MOD  = "MODIFY"     -> thay doi do cao bang tay, chi 2 muc 0.01 / 0.1 (hop thoai cu)
   mk_btn_grow(ru2, "SAVE",     28, cb_action, (void *)(intptr_t)A_G29_SAVE);
+  // Nút "cờ lê" = glyph U+E015 (Material 'build'), đã sinh thêm vào font icon (22 glyph).
+  {
+    lv_obj_t *bcfg = mk_btn_grow(ru2, "\xEE\x80\x95", 28, cb_mesh_suspect_cycle, NULL);
+    if (bcfg) lv_obj_set_style_text_font(lv_obj_get_child(bcfg, 0), gfx4_font_icons_get(), 0);
+  }
+  mk_btn_grow(ru2, "MODIFY",   28, cb_mesh_modify, NULL);
 
   // ---------------------------------------------------------------------------
   // LOP PHU DINH VI TUYET DOI TREN BANG: nut EDIT (toggle) + 4 nut dieu huong + hop sua 1 o.

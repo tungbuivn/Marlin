@@ -33,6 +33,11 @@
  *     U+E012  <-  U+E646  'power_off'                nguon + gach cheo
  *     U+E013  <-  U+E157  'link'                     moc xich
  *     U+E014  <-  U+E16F  'link_off'                 moc xich + gach cheo
+ *     --- Them 2026-10-17: nut "co le" (CFG) o trang BED MESH - doi NGUONG phat hien diem nghi ngo ---
+ *     U+E015  <-  U+E869  'build'                    CO LE (wrench)            <-- DANG DUNG
+ *       Glyph nay cao 14 px trong khi yAdvance cua font la 13 -> thua 1 hang duoi baseline.
+ *       Giu nguyen yAdvance 13 de 21 glyph cu GIONG HET (da kiem: bitmap + metadata khop 100%),
+ *       vi nut CFG cao 28 px nen 14 px van du cho, khong bi cat khi ve.
  *   U+E00E..U+E014 la cac LUA CHON KHAC cho icon ket noi: doi 1 dong `--map` roi sinh lai, hoac
  *   doi hang so LINK_GLYPH_* trong ui_lvgl_int.h (ca 9 glyph da nam san trong font).
  *   ⚠️ 'settings_input_composite' U+E8C1 (2 phich cam vao nhau - dung y mo ta nhat) KHONG dung
@@ -120,7 +125,8 @@
  *       --map 0xE008=0xE5CC --map 0xE009=0xE5CB --map 0xE00A=0xE5CE --map 0xE00B=0xE5CF \
  *       --map 0xE00C=0xE1E0 --map 0xE00D=0xE4FA --map 0xE00E=0xE336 --map 0xE00F=0xEFE6 \
  *       --map 0xE010=0xF1D4 --map 0xE011=0xE63C --map 0xE012=0xE646 --map 0xE013=0xE157 \
- *       --map 0xE014=0xE16F \
+ *       --map 0xE014=0xE16F --map 0xE015=0xE869 \
+ *       --last 0xE015 \
  *       -o src/gfx4_font_icons.h
  *
  * ⚠️ DUNG BO SOT `--baseline 1`: thieu no tool tu tinh base_line khac di -> icon lech cho.
