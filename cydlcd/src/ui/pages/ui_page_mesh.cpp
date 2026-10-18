@@ -321,6 +321,26 @@ void page_mesh_create(lv_obj_t *p) {
 // CHAN DOAN (lenh `UI MCELL <cot> <hang>` tren COM8): mo hop sua cho 1 o Y NHU VUA CHAM VAO O DO.
 // VI SAO CAN: khong the "cham" bang tay tu PC; lenh nay di dung duong mo hop (khong tu gui M421) nen kiem tra
 // duoc hop sua + nut OK/HUY tu xa. Vi du: `UI MCELL 3 3` -> hop sua o cot 3 hang 3.
+// 2026-10-17 (yeu cau nguoi dung: "nut probe da di chuyen dau probe den diem duoc chon tren grid chua?"):
+// TRUOC DAY nut PROBE chi gui G30 -> probe tai cho nozzle dang dung, KHONG di chuyen.
+// Nay:
+//   1. M420 S0                  tat bu mesh (giong G35)
+//   2. G42 I<cot> J<hang> P1    di chuyen de DAU DO nam tren diem mesh dang chon (P1 = tinh offset probe)
+//   3. G30 x2                   probe lai 2 lan
+//   4. M420 S1                  bat lai bu mesh
+void page_mesh_probe_selected(void) {
+  if (!cydlcd.mesh_nx || !cydlcd.mesh_ny) return;
+  if (me_c >= cydlcd.mesh_nx || me_r >= cydlcd.mesh_ny) return;
+  char g[40];
+  cydlcd_link_send_gcode("M420 S0");
+  snprintf(g, sizeof(g), "G42 I%u J%u P1", (unsigned)me_c, (unsigned)me_r);
+  cydlcd_link_send_gcode(g);
+  cydlcd_link_send_gcode("G30");
+  cydlcd_link_send_gcode("G30");
+  cydlcd_link_send_gcode("M420 S1");
+  WIFILOG("[UI] MESH PROBE: o %u,%u -> %s\n", (unsigned)me_c, (unsigned)me_r, g);
+}
+
 void page_mesh_update(void) {
   if (!me_table) return;
 

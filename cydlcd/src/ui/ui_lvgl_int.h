@@ -997,6 +997,8 @@ void page_tbt_create(lv_obj_t *p);
 /** Cap nhat man TRAMMING tu dong 'TBT ...' cua Marlin (4 goc, huong dan van, mode). */
 void page_tbt_update(void);
 void page_tbt_dump(void);      // UI TBT: in 1 dong 4 goc + goi y
+// 2026-10-17: nut PROBE o trang MESH - di chuyen dau do toi o dang chon (G42) roi probe 2 lan.
+void page_mesh_probe_selected(void);
 
 // ---------------------------------------------------------------------------
 //  HUY TRANG (page recycling) - vong doi bo nho cua cac man UI
