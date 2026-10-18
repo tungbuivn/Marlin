@@ -167,10 +167,15 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
   lv_obj_set_style_border_color(box, title_col, 0);
   lv_obj_set_style_radius(box, 6, 0);
   lv_obj_set_style_pad_row(box, 6, 0);
-  // 2026-10-17 (nguoi dung: "lai bi mat padding voi duong bao dialog ngay phia duoi group nut"):
-  // Truoc day hop KHONG dat pad nen hang nut dinh sat vien duoi -> trong nhu mat padding/mat vien.
-  // Nay dat pad deu 4 phia (8px) -> haøng nut cach vien duoi 8px, vien 2px hien ro.
-  lv_obj_set_style_pad_all(box, 8, 0);
+  // 2026-10-17:
+  // - "lai bi mat padding ... ngay phia duoi group nut" -> chua 8px o DAY hop.
+  // - "ban cach 4 phia the la background title cung bi tut vao roi" -> KHONG dung pad_all nua:
+  //   pad_all lam TIEU DE (con flex dau tien) cung bi thut vao trong. Nay:
+  //     pad_all = 0  -> tieu de tran het be ngang, sat vien tren (giong thanh header)
+  //     pad_bottom = 8 -> chi chua khoang duoi hang nut
+  //     phan NOI DUNG tu chua le trai/phai bang padding cua chinh label (xem duoi)
+  lv_obj_set_style_pad_all(box, 0, 0);
+  lv_obj_set_style_pad_bottom(box, 8, 0);
   lv_obj_set_style_text_color(box, COL_TXT, 0);
 
   lv_obj_t *t = lv_msgbox_get_title(box);
@@ -186,7 +191,14 @@ static lv_obj_t *box_make(const char *title, const char *txt, lv_color_t title_c
     lv_obj_set_style_pad_right(t, 10, 0);
   }
   lv_obj_t *x = lv_msgbox_get_text(box);
-  if (x) lv_obj_set_style_text_color(x, COL_TXT, 0);
+  if (x) {
+    lv_obj_set_style_text_color(x, COL_TXT, 0);
+    // Noi dung khong duoc dinh sat vien: tu chua le 8px (va 4px tren / 3px duoi).
+    lv_obj_set_style_pad_left(x, 8, 0);
+    lv_obj_set_style_pad_right(x, 8, 0);
+    lv_obj_set_style_pad_top(x, 4, 0);
+    lv_obj_set_style_pad_bottom(x, 3, 0);
+  }
 
   lv_obj_t *bm = lv_msgbox_get_btns(box);
   if (bm) {
