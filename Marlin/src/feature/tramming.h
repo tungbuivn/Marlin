@@ -44,25 +44,28 @@ constexpr xy_pos_t tramming_points[] = TRAMMING_POINT_XY;
 extern bool tramming_worst_max;
 
 //
-// CHIEU VAN VIT - DO LAI TREN MAY NAY (ban Voron, vit M4, dau vit o TREN):
-//   2026-10-12: ghi "CW = NANG goc len"  (SAI)
-//   2026-10-17: nguoi dung do lai: "van CW thi z probe se CACH XA bed hon" tuc van CW lam goc do
-//               HA XUONG (bed tut xuong). NAY LAY KET QUA 2026-10-17 LAM CHUAN:
-//     van CW  (chieu kim dong ho)   -> goc do HA XUONG  (probe xa bed hon)
-//     van CCW (nguoc kim dong ho)   -> goc do NANG LEN
-// => goc THAP hon moc phai van CCW de nang len; goc CAO hon moc phai van CW de ha xuong.
-// Neu doi sang loai vit ren nguoc chieu thi khai bao ma S le (31 / 41 / 51) -> tu dong dao chieu.
+// CHIEU VAN VIT - CHUAN XAC DINH BANG TEST CASE CUA NGUOI DUNG (2026-10-17):
 //
+//   input  : br 1.25 | bl 1.33 | fr 0.52 | fl 0.73   (bl la moc = Z-MAX)
+//   goc lech nhat : fr, delta = 0.52 - 1.33 = -0.81
+//   yeu cau        : van CW
+//   br            : delta = 1.25 - 1.33 = -0.08   -> cung van CW
+//
+// => delta AM (goc THAP hon moc)  -> CW
+//    delta DUONG (goc CAO hon moc) -> CCW
+//    (ren trai: khai bao ma S le 31/41/51 -> tu dong dao chieu)
+//
+// GHI CHU: 2026-10-17 co mot lan sua SAI cho rang "CW = ha goc xuong" nen doi thanh CW khi delta
+// duong; test case tren da chung minh nguoc lai. Nay giu dung nhu ban goc.
+inline bool tramming_turn_cw(const float delta, const uint8_t screw_thread) {
+  const bool lower_cw = (screw_thread & 1);    // ren phai tren may nay (M4 = 40 -> 0)
+  return (delta > 0) == lower_cw;              // delta <= 0 -> CW
+}
+
+// Buoc ren (mm/vong) theo ma S: S30=M3, S40=M4, S50=M5.
 inline float tramming_pitch(const uint8_t screw_thread) {
   constexpr float threads_factor[] = { 0.5f, 0.7f, 0.8f };   // M3, M4, M5 (mm/vong)
   return threads_factor[(screw_thread - 30) / 10];
-}
-
-// true = van theo chieu KIM DONG HO (CW), false = nguoc kim dong ho (CCW)
-// delta > 0 = goc CAO hon mat phang TB -> phai HA xuong
-inline bool tramming_turn_cw(const float delta, const uint8_t screw_thread) {
-  const bool lower_cw = !(screw_thread & 1);   // ren phai tren may nay: HA goc xuong = van CW
-  return (delta > 0) == lower_cw;
 }
 
 // SO MM CAN CHINH - tu 2026-10-12 hien thi theo MM, khong phai "vong".
