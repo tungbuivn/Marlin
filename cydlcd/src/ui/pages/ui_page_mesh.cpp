@@ -118,6 +118,55 @@ static void me_box_show(void) {
 
 // Cham vao 1 o cua bang -> (chi khi bat EDIT) mo hop sua o do.
 // 2026-10-17 (yeu cau nguoi dung): nut "co le" (CFG) - doi nguong phat hien diem nghi ngo.
+// 2026-10-17 SUA LOI "nut mesh on/off vo hieu": truoc day nut DANG HIEN gui DUNG lenh cua trang
+// thai hien tai (dang ON -> gui "G29 A" -> khong doi gi). Nay BAM la TOGGLE: dang ON -> "G29 D".
+static void cb_mesh_ubl_toggle(lv_event_t *e) {
+  (void)e;
+  const bool turning_off = cydlcd.mesh_on;
+  cydlcd_link_send_gcode(turning_off ? "G29 D" : "G29 A");
+  WIFILOG("[UI] MESH: UBL %s -> gui %s\n", turning_off ? "ON->OFF" : "OFF->ON",
+          turning_off ? "G29 D" : "G29 A");
+}
+
+// 2026-10-17: hop nhap NGUONG NP (truoc day nut co le chi XOAY VONG 0.05/0.10/0.15/0.20).
+static lv_obj_t *np_mask, *np_box, *np_val;
+static int32_t np_edit_um;
+
+static void np_refresh(void) {
+  if (!np_val) return;
+  char b[32];
+  snprintf(b, sizeof(b), "NP = %ld.%02ld mm", (long)(np_edit_um / 1000), (long)((np_edit_um % 1000) / 10));
+  set_text(np_val, b);
+}
+static void np_hide(void) {
+  if (np_mask) lv_obj_add_flag(np_mask, LV_OBJ_FLAG_HIDDEN);
+  if (np_box)  lv_obj_add_flag(np_box,  LV_OBJ_FLAG_HIDDEN);
+}
+static void np_show(void) {
+  if (!np_box) return;
+  np_edit_um = s_suspect_um;
+  np_refresh();
+  if (np_mask) { lv_obj_move_foreground(np_mask); lv_obj_clear_flag(np_mask, LV_OBJ_FLAG_HIDDEN); }
+  lv_obj_move_foreground(np_box);
+  lv_obj_clear_flag(np_box, LV_OBJ_FLAG_HIDDEN);
+}
+static void cb_np_adj(lv_event_t *e) {
+  np_edit_um += (int32_t)(intptr_t)lv_event_get_user_data(e) * 10;   // 0.01 mm
+  if (np_edit_um < 10)  np_edit_um = 10;
+  if (np_edit_um > 500) np_edit_um = 500;
+  np_refresh();
+}
+static void cb_np_ok(lv_event_t *e) {
+  (void)e;
+  s_suspect_um = np_edit_um;
+  np_hide();
+  if (me_table) lv_obj_invalidate(me_table);
+  page_mesh_update();
+  WIFILOG("[UI] MESH: dat NP = %ld um\n", (long)s_suspect_um);
+}
+static void cb_np_cancel(lv_event_t *e) { (void)e; np_hide(); }
+static void cb_mesh_cfg(lv_event_t *e)  { (void)e; np_show(); }
+
 static void cb_mesh_suspect_cycle(lv_event_t *e) {
   (void)e;
   uint8_t k = 0;
@@ -416,8 +465,8 @@ void page_mesh_create(lv_obj_t *p) {
     lv_obj_set_style_bg_opa(kheap, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(kheap, 0, 0);
     lv_obj_set_style_pad_all(kheap, 0, 0);
-    me_btn_on  = mk_btn(kheap, "UBL ON",  96, 28, cb_action, (void *)(intptr_t)A_G29_ON);
-    me_btn_off = mk_btn(kheap, "UBL OFF", 96, 28, cb_action, (void *)(intptr_t)A_G29_OFF);
+    me_btn_on  = mk_btn(kheap, "UBL ON",  96, 28, cb_mesh_ubl_toggle, NULL);
+    me_btn_off = mk_btn(kheap, "UBL OFF", 96, 28, cb_mesh_ubl_toggle, NULL);
     lv_obj_set_pos(me_btn_on,  0, 0);
     lv_obj_set_pos(me_btn_off, 0, 0);
     mk_btn_set_bg(me_btn_on,  COL_OK);      // xanh = ON
@@ -431,7 +480,7 @@ void page_mesh_create(lv_obj_t *p) {
   mk_btn_grow(ru2, "SAVE",     28, cb_action, (void *)(intptr_t)A_G29_SAVE);
   // Nút "cờ lê" = glyph U+E015 (Material 'build'), đã sinh thêm vào font icon (22 glyph).
   {
-    lv_obj_t *bcfg = mk_btn_grow(ru2, "\xEE\x80\x95", 28, cb_mesh_suspect_cycle, NULL);
+    lv_obj_t *bcfg = mk_btn_grow(ru2, "\xEE\x80\x95", 28, cb_mesh_cfg, NULL);
     if (bcfg) lv_obj_set_style_text_font(lv_obj_get_child(bcfg, 0), gfx4_font_icons_get(), 0);
   }
   mk_btn_grow(ru2, "MODIFY",   28, cb_mesh_modify, NULL);
@@ -500,6 +549,45 @@ void page_mesh_create(lv_obj_t *p) {
   mk_dlg_btn(ra, "OK", 52, 26, DLG_OK_BG,      cb_mesh_ok, NULL);
   mk_dlg_btn(ra, T(UI_T_DLG_CANCEL), 52, 26, DLG_CANCEL_BG, cb_mesh_cancel, NULL);
   me_step_marks();
+
+  // ---------------------------------------------------------------------------
+  // 2026-10-17: HOP NHAP NGUONG NP (nut co le). Cung kieu voi hop sua o mesh.
+  // ---------------------------------------------------------------------------
+  np_mask = lv_obj_create(p);
+  lv_obj_add_flag(np_mask, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_pos(np_mask, 0, 0);
+  lv_obj_set_size(np_mask, UI_LCD_HOR_RES, CONT_H);
+  lv_obj_set_style_bg_color(np_mask, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(np_mask, LV_OPA_50, 0);
+  lv_obj_set_style_border_width(np_mask, 0, 0);
+  lv_obj_add_flag(np_mask, LV_OBJ_FLAG_HIDDEN);
+
+  np_box = lv_obj_create(p);
+  lv_obj_add_flag(np_box, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_size(np_box, 228, 100);
+  lv_obj_align(np_box, LV_ALIGN_TOP_MID, 0, 48);
+  lv_obj_set_style_bg_color(np_box, COL_BG, 0);
+  lv_obj_set_style_bg_opa(np_box, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(np_box, 0, 0);
+  lv_obj_set_style_pad_bottom(np_box, 0, 0);
+  lv_obj_set_flex_flow(np_box, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(np_box, 4, 0);
+  lv_obj_clear_flag(np_box, LV_OBJ_FLAG_SCROLLABLE);
+  dlg_frame(np_box);
+  lv_obj_add_flag(np_box, LV_OBJ_FLAG_HIDDEN);
+
+  {
+    lv_obj_t *nt = mk_label_w(np_box, "NP threshold", MR_MENU, LV_PCT(100));
+    dlg_title_bar(nt);
+    lv_obj_t *nb = dlg_body(np_box, 8, 6);
+    lv_obj_t *nv = mk_label_w(nb, "NP = 0.10 mm", COL_TXT, LV_PCT(100));
+    np_val = nv;
+    lv_obj_t *nr = mk_dlg_row(nb, LV_PCT(100), 26);
+    mk_dlg_btn(nr, "-", 44, 26, DLG_NEUTRAL_BG, cb_np_adj, (void *)(intptr_t)-1);
+    mk_dlg_btn(nr, "+", 44, 26, DLG_NEUTRAL_BG, cb_np_adj, (void *)(intptr_t)+1);
+    mk_dlg_btn(nr, "OK", 52, 26, DLG_OK_BG, cb_np_ok, NULL);
+    mk_dlg_btn(nr, T(UI_T_DLG_CANCEL), 56, 26, DLG_CANCEL_BG, cb_np_cancel, NULL);
+  }
 }
 
 
@@ -579,7 +667,7 @@ void page_mesh_update(void) {
   snprintf(b, sizeof(b), "%ux%u rows %u %s..%s%s  UBL:%s  NP:%ld.%02ld", (unsigned)cydlcd.mesh_nx,
            (unsigned)cydlcd.mesh_ny, (unsigned)cydlcd.mesh_rows, b1, b2,
            cydlcd.mesh_valid ? " valid" : " -", cydlcd.mesh_on ? "ON" : "OFF",
-           (long)(s_suspect_um / 100), (long)(s_suspect_um % 100));
+           (long)(s_suspect_um / 1000), (long)((s_suspect_um % 1000) / 10));
   set_text(me_info, b);
 
   // ---- TRANG THAI UBL/BED LEVELING: chi cap nhat khi gia tri DOI (khong set style moi vong) ----
@@ -642,6 +730,7 @@ void page_mesh_destroy(void) {
   for (uint8_t k = 0; k < 4; k++) me_nav[k] = NULL;
   for (uint8_t k = 0; k < ME_STEP_N; k++) me_step_btn[k] = NULL;
   me_mask = NULL; me_box = NULL; me_box_title = NULL; me_box_val = NULL;
+  np_mask = NULL; np_box = NULL; np_val = NULL;
   me_edit = false;
   s_mesh_nx = 0;
   s_mesh_ny = 0;
