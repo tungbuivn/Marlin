@@ -520,10 +520,14 @@ void page_mesh_probe_selected(void) {
   cydlcd_link_send_gcode("M420 S0");
   snprintf(g, sizeof(g), "G42 I%u J%u P1", (unsigned)me_c, (unsigned)me_r);
   cydlcd_link_send_gcode(g);
-  cydlcd_link_send_gcode("G30");
-  cydlcd_link_send_gcode("G30");
+  // 2026-10-17: G30 kem I/J de Marlin GHI ket qua vao dung o cua luoi (G30 tran chi do roi in ra).
+  snprintf(g, sizeof(g), "G30 I%u J%u", (unsigned)me_c, (unsigned)me_r);
+  cydlcd_link_send_gcode(g);
+  cydlcd_link_send_gcode(g);           // do lan 2 (lay gia tri tot hon)
   cydlcd_link_send_gcode("M420 S1");
-  WIFILOG("[UI] MESH PROBE: o %u,%u -> %s\n", (unsigned)me_c, (unsigned)me_r, g);
+  cydlcd_link_request((uint8_t)CYDLCD_REQ_MESH);   // xin lai luoi de hien gia tri MOI
+  WIFILOG("[UI] MESH PROBE: o %u,%u -> G42 I%u J%u P1 ; G30 I%u J%u (x2) ; M420 S1\n",
+          (unsigned)me_c, (unsigned)me_r, (unsigned)me_c, (unsigned)me_r, (unsigned)me_c, (unsigned)me_r);
 }
 
 

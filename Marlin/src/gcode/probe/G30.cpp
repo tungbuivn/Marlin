@@ -81,6 +81,27 @@ void GcodeSuite::G30() {
     TERN_(HAS_PTC, ptc.set_enabled(true));
     if (!isnan(measured_z)) {
       SERIAL_ECHOLNPGM("Bed X: ", pos.asLogical().x, " Y: ", pos.asLogical().y, " Z: ", measured_z);
+      #if HAS_LEVELING
+        // 2026-10-17 (yeu cau nguoi dung: kiem tra xem probe lai 1 diem tren luoi co cap nhat gia tri khong):
+        // G30 GOC chi do roi IN RA, KHONG ghi vao luoi -> nut PROBE o man BED MESH khong cap nhat duoc o.
+        // Them 2 tham so TUY CHON I<cot> J<hang>: do xong GHI ket qua vao dung o do cua luoi.
+        //   G42 I<c> J<r> P1   -> di chuyen dau do toi diem mesh
+        //   G30 I<c> J<r>      -> do VA ghi vao luoi
+        // intval('I') / intval('J') doc DUNG tung chu cai (value_int() chi tra ve gia tri CUOI CUNG
+        // trong dong lenh -> neu dung se lay nham J cho ca hai).
+        if (parser.seenval('I') && parser.seenval('J')) {
+          const int8_t ix = parser.intval('I', -1), iy = parser.intval('J', -1);
+          if (WITHIN(ix, 0, GRID_MAX_POINTS_X - 1) && WITHIN(iy, 0, GRID_MAX_POINTS_Y - 1)) {
+            bedlevel.z_values[ix][iy] = measured_z;
+            // UBL dung truc tiep z_values; cac loai khac can tinh lai bang
+            #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
+              bedlevel.refresh_bed_level();
+            #endif
+            SERIAL_ECHOLNPGM("Mesh point stored: I=", ix, " J=", iy, " Z=", measured_z);
+          }
+          else SERIAL_ERROR_MSG(STR_ERR_MESH_XY);
+        }
+      #endif
       #if EITHER(DWIN_LCD_PROUI, DWIN_CREALITY_LCD_JYERSUI)
         char msg[31], str_1[6], str_2[6], str_3[6];
         sprintf_P(msg, PSTR("X:%s, Y:%s, Z:%s"),
