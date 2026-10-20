@@ -1,6 +1,22 @@
 # THU VIEN ANH: TOAN BO MAN HINH + DIALOG (sinh tu dong boi tools/make_gallery.py)
 # DUNG CHI SO trang: vai ten trang co dau cach ("NHIET DO") hoac dau "/" ("FEED/FLOW") nen
 # lenh `page <ten>` khong dung duoc. Chi so lay tu PG_KEY[] trong ui_lvgl.cpp.
+# 2026-10-17 (yeu cau nguoi dung: "hop thoai save can hien ngay luc bam save de biet dang 'saving',
+# sau khi save xong thi doi text thanh 'saved'"): dat o DAU file de trang thai sach (khong bi anh huong
+# boi cac canh phia truoc).
+state basic
+ui MSGHIDE
+settle 300
+page 7
+settle 900
+tap 148 219
+settle 300
+shot dlg-15-save-saving
+settle 1400
+shot dlg-16-save-saved
+ui MSGHIDE
+settle 400
+
 state basic
 settle 600
 page 0

@@ -409,11 +409,16 @@ void boxes_update(void) {
     refocus_page();
   }
 
-  // ---- hen gio hien hop "SAVED" sau khi bam SAVE o man BED MESH ----
+  // ---- hop "SAVING..." -> "SAVED" sau khi bam SAVE o man BED MESH ----
   if (s_saved_ms && (uint32_t)(lv_tick_get() - s_saved_ms) >= 1200u) {
     s_saved_ms = 0;
-    if (!s_prompt_box && !s_cf_box && !s_pid_box && !s_msg_box)
-      ui_boxes_info(T(UI_T_PT_MESH), T(UI_T_CAL_SAVED));
+    if (s_msg_box) {
+      lv_obj_t *x = lv_msgbox_get_text(s_msg_box);
+      if (x) set_text(x, T(UI_T_CAL_SAVED));
+      lv_obj_t *bm = lv_msgbox_get_btns(s_msg_box);
+      if (bm) lv_obj_clear_flag(bm, LV_OBJ_FLAG_HIDDEN);
+      s_msg_shown_ms = lv_tick_get();       // bat dau dem 2,5 s tu dong dong
+    }
   }
 
   // ---- thong bao moi (cydlcd.message_ms doi) ----
@@ -502,7 +507,20 @@ void ui_boxes_info(const char *title, const char *txt) {
 // Hen hien hop "SAVED" sau 1,2 s. VI SAO CO DO TRE: CYD chi GUI lenh chu khong doc duoc tra loi
 // `ok` cua Marlin (khong co kenh ACK nguoc), nen day la bao "da gui lenh luu" sau khi cho Marlin
 // kip thuc hien G29 P3 + G29 S0. KHONG phai xac nhan doc ghi EEPROM thanh cong.
-void ui_boxes_saved_soon(void) { s_saved_ms = lv_tick_get() | 1u; }
+void ui_boxes_saving_show(void) {
+  // 2026-10-17 (yeu cau nguoi dung: "hop thoai save can hien ngay luc user bam nut save de biet no dang
+  // save 'saving', sau khi save xong thi doi text thanh 'saved'"):
+  //   - HIEN NGAY hop voi chu "SAVING...", AN nut OK (chua cho bam)
+  //   - sau 1,2 s: doi chu thanh "SAVED", HIEN nut OK, bat dau dem 2,5 s tu dong dong
+  box_close(&s_msg_box);
+  static const char *const btns[] = {"OK", ""};
+  s_msg_box = box_make(T(UI_T_PT_MESH), T(UI_T_CAL_SAVING), COL_ACCENT, btns);
+  lv_obj_add_event_cb(s_msg_box, cb_msg_value, LV_EVENT_VALUE_CHANGED, NULL);
+  lv_obj_t *bm = lv_msgbox_get_btns(s_msg_box);
+  if (bm) lv_obj_add_flag(bm, LV_OBJ_FLAG_HIDDEN);     // chua cho bam OK khi dang luu
+  s_msg_shown_ms = 0;                                  // chua dem tu dong dong
+  s_saved_ms = lv_tick_get() | 1u;
+}
 
 void ui_boxes_test_msg(uint8_t sev) {
   // 2026-10-17 (yeu cau nguoi dung: "hop error, warning, marlin, info dang dung tieng viet, hay dung

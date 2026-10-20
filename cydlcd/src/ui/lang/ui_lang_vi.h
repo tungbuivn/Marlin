@@ -295,6 +295,7 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   [UI_T_CAL_FAIL_L1]            = "khong hieu chuan duoc",
   [UI_T_CAL_FAIL_L2]            = "van dung gia tri cu",
   [UI_T_CAL_SAVED]              = "DA LUU",
+  [UI_T_CAL_SAVING]             = "DANG LUU...",
   [UI_T_CAL_CONTINUE]           = "cham de tiep tuc",
 
   [UI_T_VALUE_CORNERS]          = "4 goc",

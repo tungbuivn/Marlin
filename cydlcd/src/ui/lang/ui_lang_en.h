@@ -147,6 +147,7 @@ const ui_lang_ovr_t UI_OVR_EN[] = {
   { UI_T_CAL_FAIL_L1,           "calibration failed" },
   { UI_T_CAL_FAIL_L2,           "keeping old values" },
   { UI_T_CAL_SAVED,             "SAVED" },
+  { UI_T_CAL_SAVING,            "SAVING..." },
   { UI_T_CAL_CONTINUE,          "touch to continue" },
 
   { UI_T_VALUE_CORNERS,         "4 corners" },

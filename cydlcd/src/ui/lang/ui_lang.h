@@ -340,6 +340,7 @@ typedef enum {
   UI_T_CAL_FAIL_L1,
   UI_T_CAL_FAIL_L2,
   UI_T_CAL_SAVED,
+  UI_T_CAL_SAVING,                // 2026-10-17: "dang luu" - hop hien ngay khi bam SAVE
   UI_T_CAL_CONTINUE,
 
   UI_T_VALUE_CORNERS,
