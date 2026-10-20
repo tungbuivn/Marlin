@@ -224,3 +224,14 @@ settle 600
 ui UPLOAD
 settle 800
 shot dlg-13-upload-overlay
+
+# 2026-10-17 (yeu cau nguoi dung: "kiem tra ca nut save, neu save ok thi popup dialog saved"):
+# bam SAVE -> cho 1,2 s -> hop "SAVED" hien ra
+state basic
+page 7
+settle 800
+ui HIT 4
+settle 1800
+shot dlg-15-save-saved
+ui MSGHIDE
+settle 400

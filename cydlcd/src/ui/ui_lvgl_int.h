@@ -764,6 +764,8 @@ void ui_lang_apply_ui(void);
 void ui_confirm(const char *title, const char *txt, uint8_t action, uint8_t steps);
 // 2026-10-17: mo hop THONG BAO that voi muc do 0..3 (INFO/WARN/ERROR/FATAL) - de chup anh kiem tra.
 void ui_boxes_test_msg(uint8_t sev);
+void ui_boxes_info(const char *title, const char *txt);   // 2026-10-17: hộp INFO tuỳ ý (tự đóng 2,5 s)
+void ui_boxes_saved_soon(void);                          // 2026-10-17: hẹn hiện hộp "SAVED" sau 1,2 s
 void ui_boxes_test_prompt(void);   // 2026-10-17: hop PROMPT cua Marlin (de chup anh)
 void ui_boxes_test_pid(void);      // 2026-10-17: hop "tune xong" (de chup anh)
 void ui_boxes_test_hide(void);     // 2026-10-17: dong moi hop + tat lop phu upload (don dep)

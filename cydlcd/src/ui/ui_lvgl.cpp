@@ -367,6 +367,7 @@ void do_action(const int a) {
       // (noi suy tu cac diem da do) roi moi luu vao slot 0. Nho vay khong can nut "G29 P3T0" rieng.
       cydlcd_link_send_gcode("G29 P3");
       cydlcd_link_send_gcode("G29 S0");
+      ui_boxes_saved_soon();      // 2026-10-17: hen hien hop "SAVED" sau 1,2 s
       break;
 
     // ---- P2/P8 ----
