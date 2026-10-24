@@ -480,16 +480,13 @@
 #define CYDLCD_SD_MISO  19
 #define CYDLCD_SD_MOSI  23
 #define CYDLCD_SD_CS     5
-#define CYDLCD_SD_HZ     20000000     // 20 MHz = MAX (theo yeu cau nguoi dung 2026-10-15: "spi clock de max
-                                      // di"): ghi 4,5 MB chi mat ~5-8 s thay vi ~30 s o 4 MHz -> CUA SO
-                                      // RUI RO ngan hon nhieu (loi the giua phien ~1/2 lan o 4 MHz).
-                                      // `sd_mount()` van tu ha 20 -> 10 -> 4 MHz neu the khong chiu duoc.
-                                      // (loi that 2026-10-15: `SD.write()` tra ve thieu sau ~1,7-2 MB, moi
-                                      //  lan ghi 1436 B mat 50-170 ms; cung the do CO lan ghi tron 4,3 MB
-                                      //  => the/khe the bi margin, khong hong han). 4 MHz = cham hon
-                                      //  (~50-90 KB/s) nhung doc sector cho Marlin van du
-                                      //  (512 B @4 MHz ~1 ms, van nho hon chi phi khung UART).
-                                      // Muon thu lai toc do cao: doi so nay roi chay lai upload file lon.
+#define CYDLCD_SD_HZ     10000000     // 2026-10-23: HA 20 -> 10 MHz. Do thuc te voi file 12 133 887 B:
+                                      // 20 MHz lam the "dut" lien tuc (sdWait/sdSelect/token error)
+                                      // khoang moi 1-2 MB -> `SD.open()` fail, phien ghi bi bo o ~6 MB.
+                                      // 10 MHz cham hon (~60-90 KB/s) nhung on dinh hon nhieu; 12 MB
+                                      // mat ~2-4 phut (uu tien khong mat file).
+                                      // `sd_mount()` van tu ha tiep 10 -> 5 -> 4 MHz neu the khong chiu.
+                                      // Muon thu lai 20 MHz: doi so nay ve 20000000.
 #define CYDLCD_UPLOAD_TMP_DIR "/cydlcd_tmp"       // thu muc file tam (Marlin chi liet ke goc the -> khong thay)
 
 #endif  // CYDLCD_WIFI_UPLOAD

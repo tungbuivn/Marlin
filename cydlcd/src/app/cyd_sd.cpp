@@ -1133,35 +1133,77 @@ static void up_progress_log(void) {
 //  Chi DONG file dang mo roi MO LAI o che do GHI TIEP (FILE_APPEND): `f_open` doc lai dir entry/FAT cua
 //  chinh file do -> go duoc file handle bi FATFS vo hieu hoa, KHONG dung den volume (khong SD.end/SD.begin).
 //
-//  AN TOAN: CHI tiep tuc khi kich thuoc file tren the SAU khi mo lai == dung so byte da ghi nhan
-//  (`expect`). Neu thieu byte (du lieu da mat) thi file se bi LECH giua duong -> PHAI bo phien: KHONG bao
-//  gio de mot file .gcode cut/lech nam trong goc the (in ra la hong ban in).
+//  AN TOAN: Khi mo lai, kich thuoc THAT tren the phai nam trong khoang cua buffer dang ghi:
+//    [base, base + want]   (base = tong byte da ghi TRUOC buffer nay, want = so byte cua buffer)
+//  Neu nam ngoai khoang do thi da mat du lieu cua buffer TRUOC -> PHAI bo phien (khong de file cut/lech
+//  trong goc the). Neu nam trong khoang thi DONG BO LAI `*done = oncard - base` roi ghi tiep tu do.
+//
+//  !!! LOI THAT 2026-10-23 (upload V300_stealthburner_main_body.gcode 4 523 824 B qua web HTTP):
+//      the "dut" o 4 481 024 B, `s_file.write()` tra ve 8192 B nhung dir entry CHUA cap nhat; ham cu
+//      thay `oncard != expect` -> bao "BO PHIEN" NHUNG VAN DE FILE MO o offset CU roi ghi tiep phan
+//      con lai cua buffer => mat 8192 B dau cua buffer, trong khi `sd_wbuf_flush()` van tra ve DU
+//      `want` => `s_got` = 4 523 824 B. Chi den buoc kiem tra size SAU DOI TEN moi phat hien
+//      "file tren the sai size (4515632 / 4523824)" va XOA file. Nay: resync theo size that, va neu
+//      khong resync duoc thi DUNG NGAY (tra ve so byte thuc) de bao loi som, khong ghi lech offset.
 // ---------------------------------------------------------------------------
-static bool sd_recover_part(const uint32_t expect) {
+static bool sd_recover_part(const uint32_t base, const uint16_t want, size_t *done) {
   // 2026-10-17 (yeu cau nguoi dung): MOI truy cap the deu phai giu KHOA, ke ca liet ke/danh sach,
   // doc, ghi. Khong co khoa thi 2 luong (link core 1 phuc vu sector cho Marlin) va (net/UI core 0)
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
   // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
   CardLock lk(0);
-  if (s_tmp[0] == '\0' || !s_sd_ready) return false;
-  ELOG("[UP] PHUC HOI (KHONG mount lai the): dong + mo lai file part o che do GHI TIEP (can %lu B)\n",
-       (unsigned long)expect);
+  if (!done || s_tmp[0] == '\0' || !s_sd_ready) return false;
+  ELOG("[UP] PHUC HOI: dong + mo lai file part o che do GHI TIEP "
+       "(buffer %lu..%lu B, se mount lai the neu can)\n",
+       (unsigned long)base, (unsigned long)(base + want));
   if (s_file) s_file.close();
   s_file = SD.open(s_tmp, FILE_APPEND);
   if (!s_file) {
-    ELOG("[UP] PHUC HOI THAT BAI: khong mo lai duoc %s (the dang dut?)\n", s_tmp);
-    s_recover_fail++;
-    return false;
+    // 2026-10-23: the "dut" manh thi `SD.open()` fail luon (volume FATFS vo hieu). Chi dong/mo lai
+    // FILE la khong du -> phai MOUNT LAI THE. Truoc day chi mount MOT lan roi bo phien; do thuc te
+    // the co the mat 2-30 s (file 12 133 887 B chet o 8 830 976 B dung luc mount lai that bai).
+    // Nay thu mount lai trong 120 s, backoff 100 ms -> 5 s/lan, roi moi bo.
+    ELOG("[UP] PHUC HOI: khong mo lai duoc %s -> MOUNT LAI THE (thu toi 120 s)\n", s_tmp);
+    const uint32_t deadline = millis() + 120000u;
+    uint16_t wait_ms = 100;
+    while ((int32_t)(deadline - millis()) > 0) {
+      if (s_sd_ready) { SD.end(); s_sd_ready = false; s_sd_was = false; }
+      if (sd_mount(true)) {
+        #if CYDLCD_SD_UART
+          s_fatfs_written = false;    // vua mount lai -> cache FATFS da dong bo
+          s_fatfs_stale   = false;
+        #endif
+        s_file = SD.open(s_tmp, FILE_APPEND);
+        if (s_file) break;
+      }
+      ELOG("[UP] PHUC HOI: the chua mount duoc - cho %u ms roi THU LAI\n", (unsigned)wait_ms);
+      delay(wait_ms);
+      yield();
+      if (wait_ms < 5000u) {
+        const uint32_t nw = (uint32_t)wait_ms * 2u;
+        wait_ms = (uint16_t)(nw > 5000u ? 5000u : nw);
+      }
+    }
+    if (!s_file) {
+      ELOG("[UP] PHUC HOI THAT BAI: khong mount lai duoc the TF trong 120 s\n");
+      s_recover_fail++;
+      return false;
+    }
   }
   const uint32_t oncard = (uint32_t)s_file.size();
-  if (oncard != expect) {
-    ELOG("[UP] PHUC HOI KHONG AN TOAN: file tren the %lu B KHAC %lu B da ghi -> BO PHIEN "
-         "(khong de file cut trong goc the)\n",
-         (unsigned long)oncard, (unsigned long)expect);
+  if (oncard < base || oncard > base + (uint32_t)want) {
+    ELOG("[UP] PHUC HOI KHONG AN TOAN: file tren the %lu B NGOAI khoang [%lu..%lu] cua buffer "
+         "-> BO PHIEN (khong de file cut trong goc the)\n",
+         (unsigned long)oncard, (unsigned long)base, (unsigned long)(base + want));
+    // QUAN TRONG: dong handle vua mo. Neu de mo o offset CU ma van ghi tiep thi se mat byte
+    // (chinh la loi 2026-10-23).
+    s_file.close();
     s_recover_fail++;
     return false;
   }
-  ELOG("[UP] PHUC HOI OK: mo lai duoc %s (%lu B), ghi tiep\n", s_tmp, (unsigned long)oncard);
+  *done = (size_t)(oncard - base);
+  ELOG("[UP] PHUC HOI OK: mo lai duoc %s (%lu B) -> ghi tiep tu offset %u/%u cua buffer\n",
+       s_tmp, (unsigned long)oncard, (unsigned)*done, (unsigned)want);
   s_recover_ok++;
   return true;
 }
@@ -1190,7 +1232,17 @@ static size_t sd_wbuf_flush(void) {
     const uint16_t ms = backoff[try_i++];
     // Lan thu 2 va 5: DONG + MO LAI file part (KHONG mount lai the) de go file handle bi FATFS vo hieu.
     if ((try_i == 2u || try_i == 5u) && rec < 2u) {
-      if (sd_recover_part(s_cur_bytes + (uint32_t)done)) rec++;
+      size_t resync = done;
+      if (sd_recover_part(s_got, want, &resync)) {
+        rec++;
+        done = resync;                 // dong bo lai theo size THAT tren the (co the < hoac > `done`)
+      } else {
+        // KHONG resync duoc -> DUNG NGAY. Truoc day van ghi tiep phan con lai cua buffer o offset CU
+        // => mat byte ma van bao "ghi du" (loi "sai size" 2026-10-23). Tra ve `done` de bao loi som.
+        ELOG("[UP] PHUC HOI THAT BAI -> DUNG ghi buffer nay (%u/%u B), se bao loi phien\n",
+             (unsigned)done, (unsigned)want);
+        break;
+      }
     }
     ELOG("[UP] the ghi thieu (%u/%u B, da ghi %lu B) - cho %u ms roi THU LAI lan %u/%u\n",
          (unsigned)done, (unsigned)want, (unsigned long)(s_got + done), (unsigned)ms,
@@ -1280,9 +1332,21 @@ uint32_t cyd_sd_temp_close(void) {
   CardLock lk(0); if (!lk.ok) return 0;
   if (!s_file && !s_wbuf) return s_got;             // da dong roi -> khong lam gi
   s_last_ms = millis();                             // ghi cuoi cung (phat hien phien bi bo quen)
+  const uint16_t want = s_wbuf_n;                   // so byte con trong dem TRUOC khi flush
   const size_t flushed = sd_wbuf_flush();
   s_got += (uint32_t)flushed;
   s_cur_bytes += (uint32_t)flushed;
+  // 2026-10-23: truoc day bo qua ket qua flush o day. Neu buffer cuoi chi ghi duoc mot phan thi
+  // `s_got` VAN du (do sd_wbuf_flush cu tra ve `want`) => chi den buoc kiem tra size moi bao loi.
+  // Nay ghi nhan loi NGAY de `/status`/log chi ro "the ghi thieu khi dong part".
+  if (flushed != (size_t)want) {
+    snprintf(s_err, sizeof(s_err), "the ghi thieu khi dong part (%u/%u B)",
+             (unsigned)flushed, (unsigned)want);
+    snprintf(s_result, sizeof(s_result), "ERR %s", s_err);
+    s_written = s_got;
+    ELOG("[UP] DONG PART #%u: %s (tong da ghi %lu B)\n",
+         (unsigned)s_part, s_err, (unsigned long)s_got);
+  }
   if (s_file) {
     s_file.flush();
     s_file.close();
@@ -1338,20 +1402,35 @@ static uint32_t file_size_on_card(const char *path, bool *opened = nullptr) {
   // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
   CardLock lk(0);
   if (opened) *opened = false;
-  if (!s_sd_ready || !path || !path[0]) return 0;
+  if (!path || !path[0]) return 0;
   static const uint16_t rback[] = { 100, 200, 400, 800, 1500 };   // ~3 s
-  for (uint8_t i = 0; i <= (uint8_t)(sizeof(rback) / sizeof(rback[0])); i++) {
-    File f = SD.open(path, FILE_READ);
-    if (f) {
-      const uint32_t n = (uint32_t)f.size();
-      f.close();
-      if (opened) *opened = true;
-      return n;
+  const uint8_t n_back = (uint8_t)(sizeof(rback) / sizeof(rback[0]));
+  // 2026-10-23: sau khi the "dut", `SD.open()` co the that bai mai du file da doi ten xong. Thu MOUNT
+  // LAI THE mot lan roi doc lai (giong rename_with_retry) - neu khong, file dung se bi XOA oan.
+  for (uint8_t pass = 0; pass < 2u; pass++) {
+    for (uint8_t i = 0; i <= n_back; i++) {
+      if (!s_sd_ready) break;
+      File f = SD.open(path, FILE_READ);
+      if (f) {
+        const uint32_t n = (uint32_t)f.size();
+        f.close();
+        if (opened) *opened = true;
+        return n;
+      }
+      if (i >= n_back) break;
+      ELOG("[UP] mo lai %s de kiem tra size THAT BAI - cho %u ms roi thu lai\n", path, (unsigned)rback[i]);
+      delay(rback[i]);
+      yield();
     }
-    if (i >= (uint8_t)(sizeof(rback) / sizeof(rback[0]))) break;
-    ELOG("[UP] mo lai %s de kiem tra size THAT BAI - cho %u ms roi thu lai\n", path, (unsigned)rback[i]);
-    delay(rback[i]);
-    yield();
+    if (pass == 0u) {
+      ELOG("[UP] khong mo lai duoc %s -> MOUNT LAI THE de kiem tra size\n", path);
+      if (s_sd_ready) { SD.end(); s_sd_ready = false; s_sd_was = false; }
+      if (!sd_mount(true)) return 0;
+      #if CYDLCD_SD_UART
+        s_fatfs_written = false;    // vua mount lai -> cache FATFS da dong bo
+        s_fatfs_stale   = false;
+      #endif
+    }
   }
   return 0;
 }
@@ -1364,15 +1443,47 @@ static bool rename_with_retry(const char *src, const char *dst) {
   // chen nhau vao cung driver SD -> hong FATFS hoac Marlin cho sector qua 1000 ms -> dung in.
   // Mutex la RECURSIVE nen goi long nhau (vd fatfs_sync nam trong cyd_sd_delete) van an toan.
   CardLock lk(0);
-  static const uint16_t rback[] = { 100, 200, 300, 500, 800, 1000, 1500, 2000, 2000 };  // ~8,4 s
-  const uint8_t n_back = (uint8_t)(sizeof(rback) / sizeof(rback[0]));
-  for (uint8_t i = 0;; i++) {
+  // 2026-10-23 (yeu cau nguoi dung: "rename retry window too short ... tang thanh 5 phut"):
+  // The nay co the "dut" RAT LAU (do duoc > 8,4 s, co lan ~20 s) nen cua so 8,4 s cu qua ngan:
+  // vua het retry thi the moi hoi -> mat ca file 4,5 MB vua nhan. Nay thu trong 5 PHUT:
+  // bat dau 100 ms, gap doi dan den 10 s/lan (100+200+400+...+10 000, sau do 10 s moi lan).
+  const uint32_t deadline = millis() + 300000u;      // 5 phut
+  uint16_t wait_ms = 100;
+  uint8_t remount_n = 0;
+  for (uint16_t i = 1;; i++) {
     if (SD.rename(src, dst)) return true;
-    if (i >= n_back) return false;
-    ELOG("[UP] doi ten %s -> %s THAT BAI - cho %u ms roi THU LAI lan %u/%u\n",
-         src, dst, (unsigned)rback[i], (unsigned)(i + 1), (unsigned)n_back);
-    delay(rback[i]);
+    const uint32_t now = millis();
+    // 2026-10-23: `SD.rename()` KHONG TU HOI sau khi the "dut" - no tra `sdCommand(): token error`
+    // mai mai (do duoc 5 phut lien) vi FATFS/volume da vo hieu. Phai MOUNT LAI THE thi handle moi
+    // lam viec lai. Thu remount vai lan trong cua so 5 phut (khong mount lai vo ich moi 100 ms).
+    if (remount_n < 8u && (i == 2u || (i % 4u) == 0u)) {
+      remount_n++;
+      ELOG("[UP] doi ten that bai -> MOUNT LAI THE de phuc hoi FATFS (lan %u/8)\n",
+           (unsigned)remount_n);
+      if (s_sd_ready) { SD.end(); s_sd_ready = false; s_sd_was = false; }
+      if (sd_mount(true)) {
+        #if CYDLCD_SD_UART
+          s_fatfs_written = false;    // vua mount lai -> cache FATFS da dong bo
+          s_fatfs_stale   = false;
+        #endif
+        if (SD.rename(src, dst)) return true;   // thu NGAY sau khi mount lai
+      }
+    }
+    if ((int32_t)(deadline - now) <= 0) {
+      ELOG("[UP] doi ten %s -> %s THAT BAI sau 5 phut -> BO (giu file tam)\n", src, dst);
+      return false;
+    }
+    const uint32_t left = deadline - now;
+    uint16_t ms = wait_ms;
+    if ((uint32_t)ms > left) ms = (uint16_t)left;
+    ELOG("[UP] doi ten %s -> %s THAT BAI - cho %u ms roi THU LAI lan %u (con %lu s)\n",
+         src, dst, (unsigned)ms, (unsigned)i, (unsigned long)(left / 1000u));
+    delay(ms);
     yield();
+    if (wait_ms < 10000u) {
+      const uint32_t nw = (uint32_t)wait_ms * 2u;
+      wait_ms = (uint16_t)(nw > 10000u ? 10000u : nw);
+    }
   }
 }
 
@@ -1455,8 +1566,12 @@ bool cyd_sd_finish_upload(const char *name, uint32_t size, uint32_t *written, ch
         ov_set("DA GHI VAO THE SD", s_name, true);
       }
     } else {
-      snprintf(s_err, sizeof(s_err), "khong doi ten duoc file tren the");
-      if (SD.exists(s_tmp)) SD.remove(s_tmp);   // don file tam ngay (con dang giu bus)
+      // 2026-10-23: KHONG xoa file tam o day. The vua "dut" thi `SD.rename()` fail, nhung file tam
+      // da DU byte; xoa ngay la mat ca 4,5 MB vua nhan. Giu lai de con du lieu cho lan thu lai;
+      // `clean_dir` chi xoa file tam CU (qua 30 phut / truoc phien moi).
+      snprintf(s_err, sizeof(s_err), "khong doi ten duoc file tren the (the dang loi) - GIU file tam");
+      ELOG("[UP] %s: giu %s (%lu B) de thu lai, KHONG xoa\n",
+           s_err, s_tmp, (unsigned long)s_got);
       s_tmp[0] = '\0';
     }
   }
@@ -1647,7 +1762,14 @@ void cyd_sd_task(void) {
   if (s_sd_retry_req) { s_sd_retry_req = false; s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS; }
   else if (now - s_sd_retry_ms < s_sd_retry_gap_ms) return;
   s_sd_retry_ms = now;
-  if (sd_mount(false)) { s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS; clean_dir("mount lai", false); }
+  if (sd_mount(false)) {
+    s_sd_retry_gap_ms = CYDLCD_SD_RETRY_MS;
+    // 2026-10-23: KHONG goi clean_dir() o day nua. Sau khi the "dut" va remount, file tam cua phien
+    // vua nhan co the da DU 4,5 MB (chi con doi ten); don no ngay la mat du lieu. Viec don rac da co:
+    //   - `cyd_sd_begin()` luc khoi dong (xoa het .tmp cu),
+    //   - `clean_dir(..., CYDLCD_SD_CLEANUP_MS)` dinh ky 30 phut khi dang ranh,
+    //   - `clean_dir("truoc phien moi")` o lan upload ke tiep.
+  }
   else if (s_sd_retry_gap_ms < 30000u) {
     s_sd_retry_gap_ms *= 2u;
     if (s_sd_retry_gap_ms > 30000u) s_sd_retry_gap_ms = 30000u;

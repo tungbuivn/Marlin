@@ -38,7 +38,8 @@
   //  - `s_stage` / `s_hung_s` nam trong RTC RAM (KHONG bi xoa boi reset mem/WDT, chi mat khi cat dien)
   //    -> lan khoi dong sau biet vong lap truoc dung o chang nao va da treo bao lau (in o setup()).
   //  - Task `cyd_diag_task()` (1 Hz, tren core 0) theo doi `s_loop_n`: vong lap khong chay > 15 s thi
-  //    in ro chang dang dung roi TU KHOI DONG LAI -> panel khong bao gio "chet im" mai mai nua.
+  //    in ro chang dang dung. 2026-10-23 (yeu cau nguoi dung): DA TAT tu khoi dong lai - chi LOG
+  //    (buoc doi ten file upload co the cho the SD toi 5 phut, reset giua luc do se mat file vua nhan).
   //  - `s_ms[..]` do thoi gian tung chang o vong lap truoc, in o dong log 1 Hz (thay chang nao cham).
   //
   // 2026-10-16: `RTC_NOINIT_ATTR` la thuoc tinh CHI CO TREN ESP32 (dat bien vao RTC RAM). Board LVGL
@@ -84,7 +85,8 @@
             continue;
           }
           if (stall == 2 || stall == 5)
-            Serial.printf("[CYD] CANH BAO: upload KHONG tien trien %lu s (chang %u) - se tu khoi dong lai\n",
+            Serial.printf("[CYD] CANH BAO: upload KHONG tien trien %lu s (chang %u) - "
+                          "da TAT tu khoi dong lai, chi log\n",
                           (unsigned long)stall, (unsigned)s_stage);
         }
         stall++;
@@ -92,28 +94,30 @@
         if (stall == 2 || stall == 5 || stall == 10)
           Serial.printf("[CYD] CANH BAO: vong lap KHONG chay %lu s (dang o chang %u)\n",
                         (unsigned long)stall, (unsigned)s_stage);
-        // ---- WATCHDOG THEO HEARTBEAT (B4): task nao KHONG tang trong N giay => task do treo -> khoi dong lai ----
-        // VI SAO: watchdog cu chi nhin `loop()`; sau khi tach task thi `loop()` co the van chay trong khi task
-        // `ui`/`net`/`link` da chet (man hinh dung hinh / khong phuc vu Marlin nua).
+        // ---- WATCHDOG THEO HEARTBEAT (B4): task nao KHONG tang trong N giay => task do treo -> chi LOG ----
+        // 2026-10-23 (yeu cau nguoi dung: "cỏ cơ chế tự khởi động lại lcd"): DA TAT HOAN TOAN viec
+        // `esp_restart()` tu dong. Ly do: buoc DOI TEN file upload co the phai cho the SD "hoi" toi
+        // 5 phut (xem rename_with_retry); trong luc do task `net`/vong lap dung lau la BINH THUONG,
+        // tu khoi dong lai se giet giua phien va lam mat file vua nhan. Nay chi in canh bao de chan doan.
+        // (Van giu nguyen `esp_restart()` trong cydlcd_assert.cpp cho loi assert/panic that su.)
         {
           static uint32_t hb_l = 0, hb_u = 0, hb_n = 0;
           static uint16_t n_l = 0, n_u = 0, n_n = 0;
-          if (g_hb_link != hb_l) { hb_l = g_hb_link; n_l = 0; } else if (++n_l >= 5) {
-            Serial.printf("[CYD] task link TREO > 5 s -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          if (g_hb_link != hb_l) { hb_l = g_hb_link; n_l = 0; } else if (++n_l == 5) {
+            Serial.println("[CYD] task link TREO > 5 s (da TAT tu khoi dong lai, chi log)");
           }
-          if (g_hb_ui != hb_u) { hb_u = g_hb_ui; n_u = 0; } else if (++n_u >= 5) {
-            Serial.printf("[CYD] task ui TREO > 5 s -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          if (g_hb_ui != hb_u) { hb_u = g_hb_ui; n_u = 0; } else if (++n_u == 5) {
+            Serial.println("[CYD] task ui TREO > 5 s (da TAT tu khoi dong lai, chi log)");
           }
           // task `net` duoc MIEN TRU khi dang nhan file (handleClient xu ly CA body, 20-30 s la binh thuong).
           if (g_hb_net != hb_n) { hb_n = g_hb_net; n_n = 0; }
-          else if (++n_n >= 30 && !net_upload_active()) {
-            Serial.printf("[CYD] task net TREO > 30 s (khong phai upload) -> TU KHOI DONG LAI\n"); Serial.flush(); esp_restart();
+          else if (++n_n == 30 && !net_upload_active()) {
+            Serial.println("[CYD] task net TREO > 30 s (khong phai upload) - da TAT tu khoi dong lai, chi log");
           }
         }
-        if (stall >= 15) {                         // treo qua lau -> tu phuc hoi
-          Serial.printf("[CYD] TREO > 15 s o chang %u -> TU KHOI DONG LAI\n", (unsigned)s_stage);
-          Serial.flush();
-          esp_restart();
+        if (stall == 15) {                         // treo qua lau -> chi bao, KHONG tu reset
+          Serial.printf("[CYD] TREO > 15 s o chang %u (da TAT tu khoi dong lai, chi log)\n",
+                        (unsigned)s_stage);
         }
       }
     }
@@ -151,11 +155,23 @@ static void net_task_fn(void *) {
 }
 #endif  // CYDLCD_BOARD_CYD
   void setup() {
+    #if defined(CYDLCD_BOARD_CYD)
+      // 2026-10-23 (loi THAT khi upload file 12 133 887 B): ESP32 task watchdog bao
+      //   "Task watchdog got triggered ... IDLE0 ... CPU 0: net ... Aborting"
+      // => LCD reset giua upload, mat file tam. Task `net` (core 0, uu tien 4) xu ly CA body POST
+      // trong 1 lan goi + ghi the; voi file >100 s no giu core 0 qua lau, IDLE0 khong chay -> task WDT
+      // tu abort. Da TAT task watchdog CUA CORE 0 (chi core 0; core 1/task link van con WDT).
+      // Day cung dung tinh than "cỏ cơ chế tự khởi động lại lcd" (chi log, khong reset).
+      disableCore0WDT();
+    #endif
     #if defined(CYDLCD_CYD_DEBUG)
       Serial.begin(115200);
       delay(300);
       Serial.println();
       Serial.println("[CYD] ===== setup bat dau (LVGL + push) =====");
+      #if defined(CYDLCD_BOARD_CYD)
+        Serial.println("[CYD] da TAT task watchdog core 0 (upload file lon khong con bi reset)");
+      #endif
       Serial.printf("[CYD] reset reason = %d (1=poweron,3=sw,4=panic,5/6=wdt)\n", (int)esp_reset_reason());
       // Chang cua vong lap TRUOC khi reset: RTC RAM khong bi xoa boi reset mem/WDT (chi mat khi cat dien).
       // 0 = het vong lap (khong treo), 1 = console COM7, 2 = link Marlin, 3 = web server WiFi, 4 = UI LVGL.
