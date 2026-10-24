@@ -153,6 +153,9 @@ namespace {
     bool     s_sd_done = false;        // du 4 manh
     bool     s_sd_busy = false;        // dang cho sector -> hoan cac frame mang LENH lai
     bool     s_sd_present = false;     // cydlcd bao co the (tu lan cydlcd_serial_sd_init)
+    uint32_t s_sd_sector = 0xFFFFFFFF; // sector DANG cho (de loai frame den tre cua request TRUOC)
+    uint16_t s_sd_stale = 0;           // so frame SDDATA bi bo vi sai sector (chan doan)
+    uint16_t s_sd_retry = 0;           // so lan phai thu lai 1 sector (chan doan)
     volatile uint8_t s_wr_status = 0xFF;   // ket qua lenh GHI (CYDLCD_F_SDACK): 0xFF = chua co
     volatile uint32_t s_wr_sector = 0;
 
@@ -804,6 +807,11 @@ namespace {
     // Nhan 1 manh cua sector (goi tu handle_frame khi dang cho du lieu)
     void sd_take_chunk() {
       if (rx.len < 7) return;
+      // 2026-10-23 (lo hong THAT): frame PHAI dung SECTOR dang cho. Mot frame den TRE cua request
+      // TRUOC (sau khi timeout) co CRC dung, idx/n hop le -> neu khong kiem tra se duoc ghep vao
+      // buffer cua sector HIEN TAI => du lieu bi tron, ma khong CRC nao bat duoc (tung frame deu
+      // hop le). sector nam o payload[1..4] (u8 status, u32 sector, u8 idx, u8 n, ...).
+      if (cydlcd_u32(&rx.payload[1]) != s_sd_sector) { s_sd_stale++; return; }
       const uint8_t st   = rx.payload[0];
       const uint8_t idx  = rx.payload[5];
       const uint8_t n    = rx.payload[6];
@@ -932,7 +940,8 @@ namespace {
                        " | dang cho doi=[", s_pending_cmd[0] ? s_pending_cmd : "", "]");
       #if ENABLED(CYDLCD_SD_OVER_UART)
         SERIAL_ECHOLNPGM("PANEL DIAG: sd_busy=", (int)s_sd_busy, " defer=", s_defer_n,
-                         " hoan=", s_rx_defer, " bo=", s_rx_defer_drop);
+                         " hoan=", s_rx_defer, " bo=", s_rx_defer_drop,
+                         " | stale=", s_sd_stale, " thu lai=", s_sd_retry);
       #endif
     }
   #endif  // CYDLCD_SERIAL_UI
@@ -1211,15 +1220,17 @@ namespace ExtUI {
     // SD qua UART: Marlin hoi man hinh CYD tung sector 512 B (4 manh 128 B).
     // Xem cydlcd_serial.h + cydlcd/README.md muc 12.
     // ------------------------------------------------------------------------
-    bool cydlcd_serial_sd_read(uint32_t sector, uint8_t *dst, uint32_t timeout_ms) {
-      if (!dst) return false;
-
+    // 1 LAN thu doc sector: gui SDREQ roi cho du 4 manh.
+    // Tra ve CYDLCD_SD_ST_OK, hoac ma loi CYDLCD_SD_ST_ERR/NOCARD, hoac 0xFF = TIMEOUT.
+    static uint8_t sd_read_once(const uint32_t sector, uint8_t *dst, const uint32_t timeout_ms) {
       // 1) Gui yeu cau (di THANG ra UART, khong qua hang doi -> khong bi tre sau cac frame PUSH)
       cydlcd_tx_begin(&tx, CYDLCD_F_SDREQ);
       cydlcd_tx_u8(&tx, (uint8_t)CYDLCD_SD_OP_READ);
       cydlcd_tx_u32(&tx, sector);
       const uint8_t total = cydlcd_tx_finish(&tx);
 
+      // 2026-10-23: nho SECTOR dang cho TRUOC khi gui -> sd_take_chunk() loai frame den tre.
+      s_sd_sector = sector;
       s_sd_dst = dst; s_sd_have = 0; s_sd_err = 0; s_sd_done = false;
       const bool busy_prev = s_sd_busy;
       s_sd_busy = true;
@@ -1237,20 +1248,40 @@ namespace ExtUI {
 
       s_sd_busy = busy_prev;
       s_sd_dst = nullptr;
-      if (!s_sd_done || s_sd_err) {
-        // PHAN BIET 3 TRUONG HOP (sua 2026-10-15 tu cau hoi "trong luc upload ma Marlin gui M21/M22 thi co
-        // bi block khong?"):
-        //   NOCARD  = man hinh bao KHONG co the      -> mat the THAT SU (rut the) => s_sd_present = false
-        //   ERR     = co the nhung loi doc/man hinh dang ban ghi the => the VAN CON => giu true
-        //   TIMEOUT = khong co tra loi (man hinh bi `server.handleClient()` chan suot phien upload WiFi
-        //             ~20-30 s) => KHONG duoc ket luan la mat the!
-        // Truoc day dong nay dat `s_sd_present = (s_sd_err == CYDLCD_SD_ST_ERR)` nen moi lan timeout lai
-        // bao "khong co the" -> Marlin tuong vua bi rut the trong luc upload.
-        if (s_sd_err == CYDLCD_SD_ST_NOCARD) s_sd_present = false;
-        else if (s_sd_err == CYDLCD_SD_ST_ERR) s_sd_present = true;
-        return false;                                    // (timeout: giu nguyen trang thai cu)
+      if (s_sd_done && !s_sd_err) return (uint8_t)CYDLCD_SD_ST_OK;
+      return s_sd_err ? s_sd_err : 0xFF;               // 0xFF = timeout (khong co tra loi)
+    }
+
+    // Doc 1 sector, THU LAI toi CYDLCD_SD_TRIES lan (2026-10-23).
+    // VI SAO: 1 frame bi nhieu (CRC sai) hoac man hinh dang ban ghi the chi lam mat MOT lan doc;
+    // truoc day tra false ngay -> Marlin bao "SD read error" giua ban in. Thu lai re hon nhieu.
+    //   - NOCARD (rut the that su)  -> KHONG thu lai.
+    //   - ERR (con the, man hinh loi) -> thu lai, va giu s_sd_present = true.
+    //   - TIMEOUT (man hinh co the dang bi `server.handleClient()` chan ~20-30 s khi upload WiFi)
+    //     -> KHONG ket luan mat the, giu nguyen trang thai (nhu truoc day).
+    // Lan thu dau dung `timeout_ms`; cac lan sau chi `timeout_ms/4` (toi thieu 200 ms) de tong thoi
+    // gian chan vong lap chinh khong qua lon khi the/man hinh that su hong.
+    bool cydlcd_serial_sd_read(uint32_t sector, uint8_t *dst, uint32_t timeout_ms) {
+      if (!dst) return false;
+
+      for (uint8_t attempt = 1; attempt <= CYDLCD_SD_TRIES; attempt++) {
+        uint32_t to = timeout_ms;
+        if (attempt > 1u) { to = timeout_ms / 4u; if (to < 200u) to = 200u; }
+
+        const uint8_t st = sd_read_once(sector, dst, to);
+        if (st == CYDLCD_SD_ST_OK) { s_sd_present = true; return true; }
+        if (st == CYDLCD_SD_ST_NOCARD) { s_sd_present = false; return false; }
+        if (st == CYDLCD_SD_ST_ERR) s_sd_present = true;   // con the nhung loi doc / man hinh ban ghi
+
+        if (attempt < CYDLCD_SD_TRIES) {
+          s_sd_retry++;
+          SERIAL_ECHOLNPGM("PANEL SD: doc sector ", sector, " loi ", (int)st,
+                           " - thu lai ", (int)attempt, "/", (int)CYDLCD_SD_TRIES);
+          safe_delay(2);      // cho man hinh kip tra loi / hoi the (safe_delay nuoi WDT + nhiet)
+          yield();
+        }
       }
-      return true;
+      return false;
     }
 
     // Ghi sector: GIAI DOAN 1 (P1) CHUA ho tro - Marlin chay voi SDCARD_READONLY (xem README muc 12).

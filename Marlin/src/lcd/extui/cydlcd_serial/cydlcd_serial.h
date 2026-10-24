@@ -64,6 +64,13 @@
   #ifndef CYDLCD_SD_TIMEOUT_MS
     #define CYDLCD_SD_TIMEOUT_MS  1000   // cho toi da 1 sector (binh thuong ~25 ms) truoc khi bao loi
   #endif
+  // 2026-10-23: so LAN THU LAI doc 1 sector khi loi/timeout truoc khi tra false cho Marlin.
+  // VI SAO: 1 frame bi nhieu (CRC sai) hoac man hinh dang ban ghi the chi lam MAT mot lan doc;
+  // truoc day -> Marlin bao "SD read error" giua ban in va mat ca phien. Thu lai vai lan re hon.
+  // KHONG thu lai khi man hinh bao NOCARD (rut the that su) - xem cydlcd_serial_sd_read().
+  #ifndef CYDLCD_SD_TRIES
+    #define CYDLCD_SD_TRIES   3
+  #endif
 
   void cydlcd_serial_init();              // goi tu ExtUI::onStartup()
   void cydlcd_serial_task();              // goi tu ExtUI::onIdle()

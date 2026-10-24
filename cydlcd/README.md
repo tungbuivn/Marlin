@@ -2341,6 +2341,11 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
 * `status != OK` ⇒ màn hình CYD chỉ gửi **1 frame** (`n = 0`) để Marlin báo lỗi ngay.
 * Marlin chờ tối đa `CYDLCD_SD_TIMEOUT_MS` (1 s) + **nuôi watchdog** trong lúc chờ; hết hạn ⇒
   `readBlock()` trả `false` ⇒ Marlin báo "SD read error" và **dừng sạch**, không treo máy.
+* **[2026-10-23] Thử lại + chống ghép sai sector**: `readBlock()` thử lại tối đa `CYDLCD_SD_TRIES` (3) lần
+  trước khi báo lỗi — lần đầu chờ `CYDLCD_SD_TIMEOUT_MS`, các lần sau chờ `timeout/4` (≥ 200 ms) để không
+  chặn vòng lặp chính quá lâu; `NOCARD` thì **không** thử lại. Ngoài ra mỗi frame `SDDATA` phải khớp
+  `u32 sector` của request **hiện tại**, nếu không bị bỏ (đếm ở `stale=` dòng `PANEL DIAG`) — frame đến trễ
+  của request trước (sau timeout) tuy CRC đúng nhưng sẽ làm **trộn dữ liệu hai sector** nếu không kiểm tra.
 * Frame mang **lệnh** từ màn hình CYD (G-code/REQUEST/ANSWER/TBT_CMD) rơi vào lúc đang chờ sector sẽ được
   **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
 
