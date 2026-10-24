@@ -71,6 +71,19 @@
   #ifndef CYDLCD_SD_TRIES
     #define CYDLCD_SD_TRIES   3
   #endif
+  // 2026-10-24 (yeu cau nguoi dung): READ-AHEAD / "ram dem sector".
+  // Marlin van goi readBlock() cho TUNG sector, nhung driver giu mot RAM dem (FIFO) va tu xin
+  // TRUOC sector ke tiep qua UART trong luc Marlin dang ban plan/motion -> phan lon readBlock()
+  // chi con la memcpy (~0 ms) thay vi cho ~22 ms/sector o 250000 baud.
+  //   - khong doi giao thuc, khong doi baud, khong can sua firmware man hinh CYD;
+  //   - chi nap truoc khi DANG doc tuan tu (sau moi lan Marlin lay 1 sector), cache day thi thoi;
+  //   - CYDLCD_SD_CACHE_N = 8 -> 8 x 512 B = 4 KB RAM.
+  #ifndef CYDLCD_SD_CACHE_N
+    #define CYDLCD_SD_CACHE_N      8    // so sector giu trong RAM dem
+  #endif
+  #ifndef CYDLCD_SD_PF_TIMEOUT_MS
+    #define CYDLCD_SD_PF_TIMEOUT_MS 400 // cho toi da 1 prefetch (binh thuong ~25 ms)
+  #endif
 
   void cydlcd_serial_init();              // goi tu ExtUI::onStartup()
   void cydlcd_serial_task();              // goi tu ExtUI::onIdle()

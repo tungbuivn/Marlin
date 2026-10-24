@@ -2346,6 +2346,12 @@ chạy nguyên vì tất cả chỉ đi qua **2 hàm** của driver: `readBlock(
   chặn vòng lặp chính quá lâu; `NOCARD` thì **không** thử lại. Ngoài ra mỗi frame `SDDATA` phải khớp
   `u32 sector` của request **hiện tại**, nếu không bị bỏ (đếm ở `stale=` dòng `PANEL DIAG`) — frame đến trễ
   của request trước (sau timeout) tuy CRC đúng nhưng sẽ làm **trộn dữ liệu hai sector** nếu không kiểm tra.
+* **[2026-10-24] RAM đệm + đọc trước (read-ahead)**: driver giữ `CYDLCD_SD_CACHE_N` sector trong RAM
+  (mặc định **8 = 4 KB**). `readBlock()` lấy từ đệm (**memcpy ~0 ms**) rồi **xin trước** sector kế tiếp qua
+  UART; `onIdle()` ghép 4 mảnh vào đệm và xin tiếp cho đầy — nên "UART cập nhật đệm" chạy trong lúc Marlin
+  plan/motion. Chỉ còn **một lần chờ thật** khi đệm trống (lần đọc đầu / sau seek). Không đổi giao thức,
+  không đổi baud. Chẩn đoán: `PANEL DIAG: sd cache hit=… miss=… prefetch=…/… (n/8)`. Đo trên máy (250 000
+  baud, file 300 dòng tuần tự): `hit=18 miss=9 prefetch=41/0`, in xong, `stale=0`.
 * Frame mang **lệnh** từ màn hình CYD (G-code/REQUEST/ANSWER/TBT_CMD) rơi vào lúc đang chờ sector sẽ được
   **hoãn lại** rồi xử lý ở `onIdle()` (không enqueue G-code trong lúc `disk_read`).
 

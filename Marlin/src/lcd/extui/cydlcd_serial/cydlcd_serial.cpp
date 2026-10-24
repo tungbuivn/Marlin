@@ -156,6 +156,20 @@ namespace {
     uint32_t s_sd_sector = 0xFFFFFFFF; // sector DANG cho (de loai frame den tre cua request TRUOC)
     uint16_t s_sd_stale = 0;           // so frame SDDATA bi bo vi sai sector (chan doan)
     uint16_t s_sd_retry = 0;           // so lan phai thu lai 1 sector (chan doan)
+
+    // ---- RAM dem sector (read-ahead) --------------------------------------
+    // Marlin van goi readBlock() tung sector; driver giu cache va tu xin TRUOC sector ke tiep.
+    // Nho vay phan lon readBlock() la memcpy tu RAM thay vi cho UART ~22 ms/sector.
+    // `valid[]` thay cho "doi entry cuoi len": nho vay MOT sector dang duoc prefetch (slot rieng,
+    // valid=false) khong bi xao tron khi readBlock() lay 1 entry khac cung luc.
+    struct sd_cache_t { uint32_t sector; uint8_t data[CYDLCD_SD_SECTOR]; bool valid; };
+    sd_cache_t s_sd_cache[CYDLCD_SD_CACHE_N];
+    uint8_t  s_sd_cache_n = 0;              // so entry valid (0..CYDLCD_SD_CACHE_N-1 khi co prefetch)
+    int8_t   s_sd_pf_slot = -1;             // slot dang duoc ghep cho prefetch (-1 = khong co)
+    bool     s_sd_pf_active = false;        // dang xin truoc 1 sector (chua xong)
+    uint32_t s_sd_pf_next = 0xFFFFFFFF;     // sector se xin o lan prefetch ke tiep
+    millis_t s_sd_pf_ms = 0;                // moc bat dau prefetch (de timeout)
+    uint16_t s_sd_hits = 0, s_sd_misses = 0, s_sd_pf_ok = 0, s_sd_pf_drop = 0;   // chan doan
     volatile uint8_t s_wr_status = 0xFF;   // ket qua lenh GHI (CYDLCD_F_SDACK): 0xFF = chua co
     volatile uint32_t s_wr_sector = 0;
 
@@ -847,6 +861,120 @@ namespace {
       }
       s_defer_n = 0;
     }
+
+    // ------------------------------------------------------------------------
+    // RAM DEM SECTOR (read-ahead) -- 2026-10-24
+    //
+    // Y tuong (theo yeu cau nguoi dung): Marlin van goi readBlock(); driver tra NGAY bang memcpy
+    // tu RAM dem, va "UART lien tuc cap nhat RAM dem": moi lan Marlin lay 1 sector, driver xin
+    // TRUOC sector ke tiep. Viec xin truoc chay trong onIdle() (luc Marlin dang plan/motion) nen
+    // khong chan vong lap chinh. Cache day (CYDLCD_SD_CACHE_N) thi thoi xin.
+    //
+    // LUU Y: khong co "thread UART" nao ca - STM32 chay 1 luong. Phan "cap nhat lien tuc" la:
+    //   - readBlock() -> sd_cache_take() : HIT thi memcpy + sd_pf_start() gui request NGAY (khong cho);
+    //   - onIdle()     -> sd_cache_poll(): bom RX, ghep du 4 manh -> commit vao cache -> xin tiep.
+    // Nho vay chi con 1 lan "cho" that su: khi cache trong (lan doc dau / sau khi seek).
+    // ------------------------------------------------------------------------
+    int8_t sd_cache_find(const uint32_t sector) {
+      for (uint8_t i = 0; i < CYDLCD_SD_CACHE_N; i++)
+        if (s_sd_cache[i].valid && s_sd_cache[i].sector == sector) return (int8_t)i;
+      return -1;
+    }
+
+    void sd_cache_clear() {
+      for (uint8_t i = 0; i < CYDLCD_SD_CACHE_N; i++) s_sd_cache[i].valid = false;
+      s_sd_cache_n = 0;
+      s_sd_pf_next = 0xFFFFFFFF;        // khong doan tiep cho den lan doc sau
+    }
+
+    // Lay 1 sector tu RAM dem. true = co (da memcpy ra dst), false = khong co.
+    // AN TOAN khi 1 prefetch dang bay: slot cua prefetch co valid=false nen khong bao gio bi lay/xao.
+    bool sd_cache_take(const uint32_t sector, uint8_t *dst) {
+      const int8_t i = sd_cache_find(sector);
+      if (i < 0) return false;
+      memcpy(dst, s_sd_cache[i].data, CYDLCD_SD_SECTOR);
+      s_sd_cache[i].valid = false;
+      s_sd_cache_n--;
+      return true;
+    }
+
+    int8_t sd_cache_free_slot() {
+      for (uint8_t i = 0; i < CYDLCD_SD_CACHE_N; i++)
+        if (!s_sd_cache[i].valid && (int8_t)i != s_sd_pf_slot) return (int8_t)i;
+      return -1;
+    }
+
+    // Gui request xin TRUOC 1 sector (khong cho). Ket qua duoc onIdle()/sd_pf_finish() ghep.
+    void sd_pf_start() {
+      if (s_sd_pf_active) return;                       // da co 1 request dang bay
+      if (s_sd_pf_next == 0xFFFFFFFF) return;           // chua doc lan nao -> chua doan duoc
+      // Neu may sector ke tiep DA co trong cache (do da xin truoc) thi nhay qua, dung de
+      // `sd_pf_next` ket o mot sector da co -> cache khong bao gio duoc nap day lai.
+      while (sd_cache_find(s_sd_pf_next) >= 0) {
+        s_sd_pf_next++;
+        if (s_sd_pf_next == 0xFFFFFFFF) return;
+      }
+      const int8_t slot = sd_cache_free_slot();
+      if (slot < 0) return;                             // cache day
+
+      const uint32_t sector = s_sd_pf_next;
+      cydlcd_tx_begin(&tx, CYDLCD_F_SDREQ);
+      cydlcd_tx_u8(&tx, (uint8_t)CYDLCD_SD_OP_READ);
+      cydlcd_tx_u32(&tx, sector);
+      const uint8_t total = cydlcd_tx_finish(&tx);
+
+      s_sd_pf_slot = slot;
+      s_sd_sector  = sector;
+      s_sd_dst     = s_sd_cache[slot].data;
+      s_sd_have = 0; s_sd_err = 0; s_sd_done = false;
+      s_sd_busy = true;                                 // hoan frame LENH (nhu luc doc blocking)
+      s_sd_pf_active = true;
+      s_sd_pf_ms = millis();
+      tx_write_now(tx.buf, total);
+    }
+
+    void sd_pf_commit() {
+      s_sd_cache[s_sd_pf_slot].sector = s_sd_sector;
+      s_sd_cache[s_sd_pf_slot].valid = true;
+      s_sd_cache_n++;
+      s_sd_pf_ok++;
+      s_sd_pf_active = false;
+      s_sd_busy = false;
+      s_sd_dst = nullptr;
+      s_sd_pf_slot = -1;
+      s_sd_pf_next = s_sd_sector + 1;                   // xin tiep sector sau
+    }
+
+    void sd_pf_abort() {
+      s_sd_pf_active = false;
+      s_sd_busy = false;
+      s_sd_dst = nullptr;
+      s_sd_pf_slot = -1;                                // slot van valid=false
+      s_sd_pf_drop++;
+      // giu nguyen s_sd_pf_next de lan doc sau con thu lai
+    }
+
+    // Cho prefetch dang bay xong (hoac huy). Dung truoc 1 lenh doc blocking de khong tron trang thai.
+    void sd_pf_finish(const uint32_t timeout_ms) {
+      if (!s_sd_pf_active) return;
+      const millis_t t0 = millis();
+      while (!s_sd_done && !s_sd_err) {
+        if (ELAPSED(millis(), t0 + timeout_ms)) break;
+        while (CYDLCD_SERIAL.available())
+          if (cydlcd_rx_byte(&rx, (uint8_t)CYDLCD_SERIAL.read())) handle_frame();
+        tx_drain();
+        hal.watchdog_refresh();
+      }
+      if (s_sd_done && !s_sd_err) sd_pf_commit();
+      else sd_pf_abort();
+    }
+
+    // Goi tu onIdle() SAU khi da bom RX: ghep prefetch xong -> commit -> xin tiep cho day cache.
+    void sd_cache_poll() {
+      if (!s_sd_pf_active) { sd_pf_start(); return; }
+      if (s_sd_done && !s_sd_err) { sd_pf_commit(); sd_pf_start(); }
+      else if (s_sd_err || ELAPSED(millis(), s_sd_pf_ms + CYDLCD_SD_PF_TIMEOUT_MS)) sd_pf_abort();
+    }
   #endif  // CYDLCD_SD_OVER_UART
 
   void do_request() {
@@ -942,6 +1070,9 @@ namespace {
         SERIAL_ECHOLNPGM("PANEL DIAG: sd_busy=", (int)s_sd_busy, " defer=", s_defer_n,
                          " hoan=", s_rx_defer, " bo=", s_rx_defer_drop,
                          " | stale=", s_sd_stale, " thu lai=", s_sd_retry);
+        SERIAL_ECHOLNPGM("PANEL DIAG: sd cache hit=", s_sd_hits, " miss=", s_sd_misses,
+                         " prefetch=", s_sd_pf_ok, "/", s_sd_pf_drop,
+                         " (", (int)s_sd_cache_n, "/", (int)CYDLCD_SD_CACHE_N, ")");
       #endif
     }
   #endif  // CYDLCD_SERIAL_UI
@@ -1140,6 +1271,12 @@ namespace ExtUI {
     while (CYDLCD_SERIAL.available())
       if (cydlcd_rx_byte(&rx, (uint8_t)CYDLCD_SERIAL.read())) handle_frame();
 
+    // 2026-10-24: ghep prefetch SD (read-ahead) va xin tiep sector ke tiep.
+    // Dat SAU khi bom RX -> prefetch nao vua du 4 manh se duoc commit ngay trong vong nay.
+    #if ENABLED(CYDLCD_SD_OVER_UART)
+      sd_cache_poll();
+    #endif
+
     const millis_t now = millis();
     if (cydlcd_alive && ELAPSED(now, last_rx_ms + CYDLCD_TIMEOUT_MS)) cydlcd_alive = false;
 
@@ -1264,12 +1401,40 @@ namespace ExtUI {
     bool cydlcd_serial_sd_read(uint32_t sector, uint8_t *dst, uint32_t timeout_ms) {
       if (!dst) return false;
 
+      // 1) HIT NGAY tu RAM dem -- lay TRUOC khi cho prefetch. Neu cho truoc thi lan doc nao cung
+      //    phai doi ~22 ms (onIdle luon co 1 prefetch dang bay) => mat het loi ich cua read-ahead.
+      if (sd_cache_take(sector, dst)) {
+        s_sd_hits++;
+        s_sd_pf_next = sector + 1;      // "UART cap nhat ram dem": xin truoc sector ke tiep
+        sd_pf_start();
+        return true;
+      }
+
+      // 2) MISS: don prefetch dang bay (chi 1 request SD tai 1 thoi diem).
+      //    Co the no dang xin DUNG sector nay -> commit vao cache roi lay lai.
+      sd_pf_finish(CYDLCD_SD_PF_TIMEOUT_MS);
+      if (sd_cache_take(sector, dst)) {
+        s_sd_hits++;
+        s_sd_pf_next = sector + 1;
+        sd_pf_start();
+        return true;
+      }
+      s_sd_misses++;
+
+      // 3) Khong co trong dem -> doc that (seek / FAT / lan doc dau). Bo dem cu vi da doi cho.
+      sd_cache_clear();
+
       for (uint8_t attempt = 1; attempt <= CYDLCD_SD_TRIES; attempt++) {
         uint32_t to = timeout_ms;
         if (attempt > 1u) { to = timeout_ms / 4u; if (to < 200u) to = 200u; }
 
         const uint8_t st = sd_read_once(sector, dst, to);
-        if (st == CYDLCD_SD_ST_OK) { s_sd_present = true; return true; }
+        if (st == CYDLCD_SD_ST_OK) {
+          s_sd_present = true;
+          s_sd_pf_next = sector + 1;    // doc xong -> bat dau nap truoc cho cac sector sau
+          sd_pf_start();
+          return true;
+        }
         if (st == CYDLCD_SD_ST_NOCARD) { s_sd_present = false; return false; }
         if (st == CYDLCD_SD_ST_ERR) s_sd_present = true;   // con the nhung loi doc / man hinh ban ghi
 
@@ -1287,6 +1452,10 @@ namespace ExtUI {
     // Ghi sector: GIAI DOAN 1 (P1) CHUA ho tro - Marlin chay voi SDCARD_READONLY (xem README muc 12).
     bool cydlcd_serial_sd_write(uint32_t sector, const uint8_t *src, uint32_t timeout_ms) {
       if (!src) return false;
+      // 2026-10-24: ghi -> du lieu the doi. Cho prefetch dang bay xong roi XOA RAM DEM
+      // (neu khong, lan doc sau se tra du lieu CU tu cache).
+      sd_pf_finish(CYDLCD_SD_PF_TIMEOUT_MS);
+      sd_cache_clear();
       // 1) Yeu cau GHI (5 byte, di thang ra UART)
       cydlcd_tx_begin(&tx, CYDLCD_F_SDREQ);
       cydlcd_tx_u8(&tx, (uint8_t)CYDLCD_SD_OP_WRITE);
@@ -1332,6 +1501,9 @@ namespace ExtUI {
       // LUU Y (2026-10-15): khi man hinh DANG ban ghi file upload thi lan doc nay se TIMEOUT (vong lap ben
       // do bi chan) -> KHONG duoc coi la "mat the" (xem cydlcd_serial_sd_read): chi dat true khi doc duoc,
       // con mat the that su thi man hinh da bao NOCARD ro rang.
+      // 2026-10-24: mount lai -> xoa RAM dem + moi trang thai prefetch (sector/block co the doi).
+      sd_pf_finish(CYDLCD_SD_PF_TIMEOUT_MS);
+      sd_cache_clear();
       static uint8_t tmp[CYDLCD_SD_SECTOR];
       const bool ok = cydlcd_serial_sd_read(0, tmp, CYDLCD_SD_TIMEOUT_MS);
       if (ok) s_sd_present = true;
