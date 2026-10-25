@@ -672,8 +672,9 @@
 
 // Enable PIDTEMP for PID control or MPCTEMP for Predictive Model.
 // temperature control. Disable both for bang-bang heating.
-// #define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
-#define MPCTEMP        // ** EXPERIMENTAL **
+// 2026-10-25 (yeu cau nguoi dung): MPC lam nhiet do nhay lung tung -> quay lai PID.
+#define PIDTEMP            // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
+//#define MPCTEMP          // ** EXPERIMENTAL **
 
 // switch 80W to 40W power
 #define BANG_MAX 128     // Limits current to nozzle while in bang-bang mode; 255=full current
