@@ -908,15 +908,46 @@ M500
 **Công cụ:** `.\monitor-temp.ps1 -Target 100 -Seconds 130` — giữ **một** kết nối duy nhất (mở lại cổng COM giữa chừng có thể reset board và mất target), đọc `M105` **trước** khi bật heater, **tự `M104 S0`** nếu vượt `target + GuardBand`, tự tắt khi hết giờ. `-ProbeOnly` để kiểm tra đường hiển thị mà **không** bật heater.
 
 > ⚠️ **Bộ mặc định ở trên KHÔNG phải đã autotune cho đầu in này** — nó là tham chiếu của Marlin cho
-> heater 40 W, và khớp phần cứng ở đây (model 40 W + `MPC_MAX = BANG_MAX = 128` giới hạn duty 50%
-> trên cartridge **80 W** → 40 W thực). Nó chạy tốt (bảng trên). Muốn khớp hơn thì `M306 T`
+> heater 40 W, và khớp phần cứng ở đây (cartridge **40 W** đo bằng đồng hồ công suất; từ 2026-10-26
+> `BANG_MAX = PID_MAX = 255` = full 40 W. Trước đó `= 128` (50 %) chỉ còn ~20 W → không đủ giữ
+> 230 °C, nhiệt tụt ~220 °C và báo Thermal Runaway). Nó chạy tốt (bảng trên). Muốn khớp hơn thì `M306 T`
 > — nhưng **autotune đo bằng chính cảm biến**, nên chỉ chạy khi cảm biến đã được xác nhận, và
 > chạy **từ trạng thái nguội, quạt tắt**. Luôn quay lại được vì bộ mặc định đã ghi ở đây.
 
-> 🔵 **Khuyến nghị dài hạn: cân nhắc bật lại `PIDTEMP`** (`Configuration.h:651`) và tắt `MPCTEMP`
-> (`:652`). Không phải vì PID "quen thuộc hơn", mà vì **PID điều khiển trực tiếp từ cảm biến** —
-> khi cảm biến hỏng thì bảo vệ nhiệt kích hoạt đúng, còn MPC che mất. Với thiết bị gia nhiệt, đó là
-> tiêu chí an toàn, không phải sở thích. (Cần flash + `M303 E0 S230 C8`.)
+> 🔵 **Trạng thái 2026-10-26: đang dùng `MPCTEMP`** (người dùng chọn lại sau khi sự cố dây
+> thermistor được sửa — xem mục dưới; MPC giữ nhiệt chặt hơn PID trong lúc `G28`). Lưu ý an toàn:
+> **PID điều khiển trực tiếp từ cảm biến**, còn MPC dựa trên model — nếu cảm biến hỏng thì MPC có
+> thể che mất; vì vậy phải kiểm tra thermistor định kỳ (bài test G28 bên dưới).
+
+
+### Sự cố 2026-10-26 — nhiệt độ nhảy khi đầu in di chuyển (dây thermistor trục Y đứt ngầm)
+
+**Triệu chứng**: đang giữ 230 °C, hễ `G28`/di chuyển là nhiệt hiển thị nhảy **180 ↔ 245 °C**
+(span 45–64 °C); đứng yên thì ổn định. Trước đó từng có lần nhiệt tụt ~220 °C rồi báo
+**Thermal Runaway**, nên ban đầu bị nghi do MPC/PID.
+
+**Chẩn đoán (số đo thật, cùng target 230 °C):**
+
+| Phép thử | Span nhiệt | Nhảy ≥2 °C |
+|---|---|---|
+| Đứng yên (baseline) | 3–6 °C | 0 |
+| Di chuyển **trục X** 50 ↔ 250 | ~4 °C | 0 |
+| Di chuyển **trục Y** 50 ↔ 250 | **51 °C** | **24** |
+
+→ Lỗi chỉ xuất hiện khi **trục Y** chạy ⇒ dây thermistor bị **đứt ngầm ở đoạn uốn theo Y**
+(vỏ ngoài còn, sợi dẫn bên trong gãy). Hàn lại giắc 2.54 ở đầu in **không** giải quyết.
+
+**Sau khi hàn lại đoạn dây nhánh Y** (cùng phép thử): X span 4,1 °C / Y span 4,1 °C, 0 nhảy ≥2 °C.
+Với MPC: baseline 2,8 °C; `G28` 0,4–1,0 °C.
+
+**Bài học:**
+- Nhiệt nhảy **theo chuyển động** → nghi **dây thermistor / giắc**, không phải thuật toán nhiệt.
+  Test phân biệt: đứng yên vs di chuyển X vs di chuyển Y (script `tests/` hoặc `M155 S1` + `M105`).
+- Đọc **tụt giả** (180 °C khi thực 230 °C) khiến heater chạy 100 % → **nguy cơ quá nhiệt thật**.
+  Kiểm tra dây trước khi in, đừng chỉ nhìn số trên màn hình.
+- `BANG_MAX/PID_MAX = 128` (50 %) chỉ đúng nếu cartridge 80 W. Máy này là **40 W** → 20 W không đủ
+  giữ 230 °C, tụt ~220 °C (đúng 10 °C = `THERMAL_PROTECTION_HYSTERESIS`) → Thermal Runaway.
+  Đã đổi **255** (full 40 W).
 
 ---
 

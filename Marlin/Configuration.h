@@ -672,12 +672,18 @@
 
 // Enable PIDTEMP for PID control or MPCTEMP for Predictive Model.
 // temperature control. Disable both for bang-bang heating.
-// 2026-10-25 (yeu cau nguoi dung): MPC lam nhiet do nhay lung tung -> quay lai PID.
-#define PIDTEMP            // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
-//#define MPCTEMP          // ** EXPERIMENTAL **
+// 2026-10-26 (yeu cau nguoi dung): tam thoi quay lai MPC de thu (truoc day MPC bi nghi
+// lam nhiet nhay, nhung nguyen nhan that la day thermistor truc Y bi dut - da han lai).
+//#define PIDTEMP          // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
+#define MPCTEMP            // ** EXPERIMENTAL **
 
-// switch 80W to 40W power
-#define BANG_MAX 128     // Limits current to nozzle while in bang-bang mode; 255=full current
+// 2026-10-26: hotend la cartridge 40W (do dong ho cong suat: duty 255 -> ~40W).
+// TRUOC DAY: BANG_MAX/PID_MAX = 128 (50%) -> chi con ~20W, khong du giu 230C: nhiet
+// tut dan ve ~220 (dung bang THERMAL_PROTECTION_HYSTERESIS 10) -> bao Thermal Runaway.
+// Nay chay FULL 255 = 40W dung dinh muc.
+// (M301 P121.94 I21.78 D170.72 la bo PID tune o 40W, chi dung neu bat lai PIDTEMP;
+//  hien dang dung MPCTEMP nen khong dung M301.)
+#define BANG_MAX 255     // Limits current to nozzle while in bang-bang mode; 255=full current
 #define PID_MAX BANG_MAX // Limits current to nozzle while PID is active (see PID_FUNCTIONAL_RANGE below); 255=full current
 #define PID_K1 0.95      // Smoothing factor within any PID loop
 

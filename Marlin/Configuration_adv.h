@@ -299,6 +299,7 @@
  * If you get false positives for "Thermal Runaway", increase
  * THERMAL_PROTECTION_HYSTERESIS and/or THERMAL_PROTECTION_PERIOD
  */
+
 #if ENABLED(THERMAL_PROTECTION_HOTENDS)
   #define THERMAL_PROTECTION_PERIOD 60        // Seconds
   #define THERMAL_PROTECTION_HYSTERESIS 10     // Degrees Celsius
@@ -411,7 +412,11 @@
    * 5. Enable PID_FAN_SCALING_ALTERNATIVE_DEFINITION and enter the two identified Kf-values in
    *    PID_FAN_SCALING_AT_FULL_SPEED and PID_FAN_SCALING_AT_MIN_SPEED. Enter the minimum speed in PID_FAN_SCALING_MIN_SPEED
    */
-  //#define PID_FAN_SCALING
+  // 2026-10-26 (yeu cau nguoi dung): bat bu theo toc do quat part-cooling.
+  // Dang dung dinh nghia mac dinh: LIN_FACTOR=0, DEFAULT_Kf=10, MIN_SPEED=10
+  // -> khi quat > 10/255 se cong them 10/255 (~4%) vao output. Se do thuc te o
+  // 0% / 33% / 50% roi chinh Kf cho phu hop.
+  #define PID_FAN_SCALING
   #if ENABLED(PID_FAN_SCALING)
     //#define PID_FAN_SCALING_ALTERNATIVE_DEFINITION
     #if ENABLED(PID_FAN_SCALING_ALTERNATIVE_DEFINITION)
