@@ -146,6 +146,7 @@ const char *const UI_STR_VI[UI_T_COUNT] = {
   [UI_T_SUB_HOTEND_PID_P]         = "Hotend PID-P",
   [UI_T_SUB_HOTEND_PID_I]         = "Hotend PID-I",
   [UI_T_SUB_HOTEND_PID_D]         = "Hotend PID-D",
+  [UI_T_SUB_HOTEND_PID_AUTOTUNE_M303] = "Hotend PID Autotune (M303)",
   [UI_T_SUB_E_IN_MM3_VOLUMETRIC]  = "E in mm3 (volumetric)",
   [UI_T_SUB_FILAMENT_DIAMETER]    = "Filament Diameter",
   [UI_T_SUB_UNLOAD_LENGTH_MM]     = "Unload Length (mm)",

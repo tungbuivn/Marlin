@@ -102,6 +102,9 @@ typedef struct {
   // = planner.leveling_active cua Marlin (UBL: G29 A/G29 D, ABL: M420 S1/S0...).
   // Man BED MESH hien "UBL ON/OFF" theo co nay - truoc day bam UBL ON/OFF xong khong biet da an hay chua.
   bool     mesh_on;
+  // 2026-10-25: canh bao qua nhiet/nhieu (byte thu 5 cua CYDLCD_F_STATUS, bit0).
+  // Man hinh khong nhan duoc byte 5 (Marlin cu) -> false.
+  bool     overheat;
 
   // ---- danh sach file SD ----
   cydlcd_file_t files[CYDLCD_MAX_FILES]; uint8_t n_files; bool files_done, files_pending;

@@ -223,7 +223,8 @@ static const sm_item_t SM_I_TEMP[] = {
   SM_A(UI_T_SUB_BED_PID_AUTOTUNE_M303,   A_PID_BED),
   SM_V(UI_T_SUB_HOTEND_PID_P,              CYDLCD_SET_PID_E_KP),            // M301 P (E0)
   SM_V(UI_T_SUB_HOTEND_PID_I,              CYDLCD_SET_PID_E_KI),
-  SM_V(UI_T_SUB_HOTEND_PID_D,              CYDLCD_SET_PID_E_KD)
+  SM_V(UI_T_SUB_HOTEND_PID_D,              CYDLCD_SET_PID_E_KD),
+  SM_A(UI_T_SUB_HOTEND_PID_AUTOTUNE_M303, A_PID_HOTEND)   // 2026-10-26: them dong autotune hotend
 };
 
 static const sm_item_t SM_I_FILAMENT[] = {

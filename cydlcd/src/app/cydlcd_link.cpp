@@ -512,6 +512,8 @@ static void handle_frame() {
       // Byte thu 4 (2026-10-15): mesh/leveling dang BAT hay TAT. Marlin cu chi gui 3 byte -> giu gia tri
       // cu (khong doan bua); chi cap nhat khi frame co du 4 byte.
       if (n >= 4) s_src.mesh_on = (p[3] != 0);
+      // Byte thu 5 (2026-10-25): co canh bao qua nhiet/nhieu. Marlin cu chi gui 4 byte.
+      if (n >= 5) s_src.overheat = (p[4] != 0);
       break;
 
     case CYDLCD_F_TEMPS: {

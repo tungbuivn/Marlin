@@ -54,6 +54,8 @@
 
 static lv_obj_t *st_cell[ST_CELLS], *st_icon[ST_CELLS];
 static lv_obj_t *st_tgt[ST_CELLS], *st_cur[ST_CELLS];
+// 2026-10-25: icon canh bao qua nhiet/nhieu (o thu 4 hang 1). Hien khi cydlcd.overheat.
+static lv_obj_t *st_warn;
 static lv_obj_t *st_axis_val[3], *st_xyz_frame;
 static lv_obj_t *st_rate_val[2], *st_rate_icon[2];
 static lv_obj_t *st_time, *st_pct, *st_bar, *st_msg;
@@ -131,6 +133,26 @@ void page_status_create(lv_obj_t *p) {
   status_cell(p, 1, &ui_icon_bed,    A_GOTO_TEMP);
   status_cell(p, 2, &ui_icon_fan,    A_GOTO_TEMP);
   lv_obj_set_pos(st_icon[2], 0, MR_FAN_ICON_Y);        // Marlin ve icon quat o y=10
+
+  // ---- o thu 4 (2026-10-25): icon canh bao qua nhiet/nhieu ----
+  // Hinh tron do + dau "!" (chua co bitmap canh bao rieng trong ui_lvgl_icons.h).
+  // An mac dinh; page_status_update() bat/tat theo cydlcd.overheat.
+  st_warn = lv_obj_create(p);
+  lv_obj_set_size(st_warn, 48, 48);
+  lv_obj_set_pos(st_warn, MR_CELL_X(3) + 8, MR_ICON_Y + 8);
+  lv_obj_set_style_radius(st_warn, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(st_warn, MR_HOTEND, 0);
+  lv_obj_set_style_bg_opa(st_warn, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(st_warn, 0, 0);
+  lv_obj_clear_flag(st_warn, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(st_warn, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(st_warn, LV_OBJ_FLAG_HIDDEN);
+  {
+    lv_obj_t *wl = lv_label_create(st_warn);
+    lv_label_set_text(wl, "!");
+    lv_obj_center(wl);
+    lv_obj_set_style_text_color(wl, lv_color_black(), 0);
+  }
 
   // ---- hang XYZ: khung (4, 103, 312, 24) ----
   // Khung ve rieng (de doi mau theo LINK) + vung bam trong suot dat de len tren
@@ -287,6 +309,12 @@ lv_color_t temp_ramp(const int16_t cur, const int16_t tmin, const int16_t tmax, 
 
 void page_status_update(void) {
   if (!st_msg) return;                    // trang da bi thu hoi (an toan: xem page_status_destroy)
+
+  // 2026-10-25: icon canh bao qua nhiet/nhieu (o thu 4 hang 1)
+  if (st_warn) {
+    if (cydlcd.overheat) lv_obj_clear_flag(st_warn, LV_OBJ_FLAG_HIDDEN);
+    else                 lv_obj_add_flag(st_warn, LV_OBJ_FLAG_HIDDEN);
+  }
   char b[48], a1[12], a2[12], t1[10], t2[10];
   int16_t cur = 0, tgt = 0;
   const bool homed = (cydlcd.flags & CYDLCD_SF_HOMED) != 0;
@@ -480,6 +508,7 @@ void page_status_destroy(void) {
   st_xyz_frame = NULL;
   for (uint8_t i = 0; i < 2; i++) { st_rate_val[i] = NULL; st_rate_icon[i] = NULL; }
   st_time = NULL; st_pct = NULL; st_bar = NULL; st_msg = NULL;
+  st_warn = NULL;
   for (uint8_t i = 0; i < 3; i++) st_pb[i] = NULL;      // 3 nut PAUSE/RESUME/STOP
   // 2 icon trang thai nam trong kho cua ui_chrome.cpp (cap nhat dinh ky o MOI trang) -> phai quen.
   status_icons_forget();

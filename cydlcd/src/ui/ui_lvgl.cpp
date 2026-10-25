@@ -386,6 +386,8 @@ void do_action(const int a) {
     // Configuration > Advanced Settings > Temperature (trang TUNING cu da bo).
     case A_MPC_TUNE: cydlcd_link_send_gcode("M306 T");       break;
     case A_PID_BED:  cydlcd_link_send_gcode("M303 E-1 S60"); break;   // PID ban in, target 60 do C
+    // 2026-10-26 (yeu cau nguoi dung): autotune HOTEND (E0), target 230 do C, 8 chu ky, U1 = tu luu EEPROM.
+    case A_PID_HOTEND: cydlcd_link_send_gcode("M303 E0 S230 C8 U1"); break;
 
     // ---- thanh day: lui/toi 1 trang noi dung (xem bot_sync de biet khi nao co thanh nay) ----
     case A_PAGE_PREV: page_scroll(-1); break;

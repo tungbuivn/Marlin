@@ -351,7 +351,7 @@ enum {
   // P4/P6 - endstop M119 + filament (M600/M412)
   A_GOTO_ENDSTOP, A_REQ_ENDSTOPS, A_FILAMENT_CHANGE, A_RUNOUT_TOGGLE,
   // P5 - tuning nhiet (dung cho Configuration > Advanced Settings > Temperature)
-  A_MPC_TUNE, A_PID_BED,
+  A_MPC_TUNE, A_PID_BED, A_PID_HOTEND,
   // 2026-10-15: A_GOTO_MPC da BO cung trang PG_MPC (muc "Tuning (MPC/PID)" o MENU).
   // Man FILE: xoa file SD dang chon (chi chay SAU khi xac nhan 2 buoc - xem do_confirmed)
   A_FILES_DELETE,
@@ -389,7 +389,9 @@ enum {
 #define MR_H         UI_LCD_VER_RES                       // 240
 #define MR_CELL_W    64                                   // o nhiet/quat: 64x100
 #define MR_CELL_H    100
-#define MR_CELL_X(i) ((lv_coord_t)(21 + 106 * (int)(i)))  // 3 o: 21 / 127 / 234
+// 2026-10-25: hang 1 co 4 o (them icon canh bao qua nhiet o o thu 4).
+// 4 o x 80 px = 320: x = 8 / 88 / 168 / 248 (o rong 64 -> con 16 px khe giua).
+#define MR_CELL_X(i) ((lv_coord_t)(8 + 80 * (int)(i)))   // 4 o: 8 / 88 / 168 / 248
 #define MR_TGT_Y     8                                    // target temp (Marlin: y=8)
 #define MR_ICON_Y    18                                   // icon 64x64 (Marlin: add_image(0,18,..))
 #define MR_ICON_SZ   64
