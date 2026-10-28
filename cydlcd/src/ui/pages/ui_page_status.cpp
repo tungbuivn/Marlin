@@ -132,14 +132,17 @@ void page_status_create(lv_obj_t *p) {
   status_cell(p, 0, &ui_icon_hotend, A_GOTO_TEMP);
   status_cell(p, 1, &ui_icon_bed,    A_GOTO_TEMP);
   status_cell(p, 2, &ui_icon_fan,    A_GOTO_TEMP);
+  // 2026-10-26 (yeu cau nguoi dung): quat giu o NGOAI CUNG ben phai (khong de trong),
+  // con icon canh bao nam o trong, GIUA bed va quat.
+  lv_obj_set_pos(st_cell[2], MR_CELL_X(3), 0);         // o quat -> slot 3 (phai cung)
   lv_obj_set_pos(st_icon[2], 0, MR_FAN_ICON_Y);        // Marlin ve icon quat o y=10
 
-  // ---- o thu 4 (2026-10-25): icon canh bao qua nhiet/nhieu ----
+  // ---- icon canh bao qua nhiet/nhieu: o slot 2, giua bed va quat ----
   // Hinh tron do + dau "!" (chua co bitmap canh bao rieng trong ui_lvgl_icons.h).
   // An mac dinh; page_status_update() bat/tat theo cydlcd.overheat.
   st_warn = lv_obj_create(p);
   lv_obj_set_size(st_warn, 48, 48);
-  lv_obj_set_pos(st_warn, MR_CELL_X(3) + 8, MR_ICON_Y + 8);
+  lv_obj_set_pos(st_warn, MR_CELL_X(2) + 8, MR_ICON_Y + 8);
   lv_obj_set_style_radius(st_warn, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(st_warn, MR_HOTEND, 0);
   lv_obj_set_style_bg_opa(st_warn, LV_OPA_COVER, 0);

@@ -23,6 +23,9 @@ static lv_obj_t *s_prompt_box, *s_msg_box;
 static lv_obj_t *s_pid_box;                                  // P5: hop "tune xong"
 static uint32_t  s_msg_shown_ms = 0, s_msg_seen_ms = 0;
 static uint32_t  s_saved_ms = 0;      // 2026-10-17: hen gio hien hop "SAVED" (ui_boxes_saved_soon)
+static bool      s_store_wait = false;   // 2026-10-26: dang cho CYDLCD_EV_SETTINGS_STORED
+static uint32_t  s_store_seen_ms = 0;    // moc event da thay
+static uint32_t  s_store_saved_ms = 0;   // hen dong hop "SAVED" sau 1 s
 static uint32_t  s_pid_seen = 0;                             // moc pid_done_ms da hien
 static lv_obj_t *s_crit_screen = NULL;                       // != NULL khi dang hien MAN HINH LOI NANG
 
@@ -450,6 +453,24 @@ void boxes_update(void) {
                     sev_name(cydlcd.message_sev), cydlcd.message);
     }
   }
+  // ---- 2026-10-26: hop "Store Settings (M500)": DANG LUU -> DA LUU (theo event Marlin) -> dong sau 1 s ----
+  if (s_store_wait && cydlcd.event == CYDLCD_EV_SETTINGS_STORED && cydlcd.event_ms != s_store_seen_ms) {
+    s_store_wait = false;
+    s_store_seen_ms = cydlcd.event_ms;
+    if (s_msg_box) {
+      lv_obj_t *x = lv_msgbox_get_text(s_msg_box);
+      if (x) set_text(x, T(UI_T_CAL_SAVED));
+      lv_obj_t *bm = lv_msgbox_get_btns(s_msg_box);
+      if (bm) lv_obj_clear_flag(bm, LV_OBJ_FLAG_HIDDEN);
+      s_msg_shown_ms = lv_tick_get();
+      s_store_saved_ms = lv_tick_get() | 1u;
+    }
+  }
+  if (s_store_saved_ms && (uint32_t)(lv_tick_get() - s_store_saved_ms) >= 1000u) {
+    s_store_saved_ms = 0;
+    box_close(&s_msg_box);
+  }
+
   // tu dong dong thong bao sau 6s (prompt thi de nguoi dung tra loi) - chi con tac dung khi
   // CYDLCD_MSG_BOX_ON_LCD = 1 (mac dinh 0 nen `s_msg_box` luon NULL).
   if (s_msg_box && lv_tick_elaps(s_msg_shown_ms) > 6000U) box_close(&s_msg_box);
@@ -520,6 +541,22 @@ void ui_boxes_saving_show(void) {
   if (bm) lv_obj_add_flag(bm, LV_OBJ_FLAG_HIDDEN);     // chua cho bam OK khi dang luu
   s_msg_shown_ms = 0;                                  // chua dem tu dong dong
   s_saved_ms = lv_tick_get() | 1u;
+}
+
+// 2026-10-26 (yeu cau nguoi dung): menu "Store Settings (M500)" -> hien hop "DANG LUU..." NGAY,
+// khi Marlin bao CYDLCD_EV_SETTINGS_STORED thi doi text thanh "DA LUU", 1 s sau tu dong dong.
+// Khac ui_boxes_saving_show() cua BED MESH: ben do hen gio 1,2 s (khong co ACK); o day co event that.
+void ui_boxes_save_show(void) {
+  box_close(&s_msg_box);
+  static const char *const btns[] = {"OK", ""};
+  s_msg_box = box_make(T(UI_T_SUB_STORE_SETTINGS_M500), T(UI_T_CAL_SAVING), COL_ACCENT, btns);
+  lv_obj_add_event_cb(s_msg_box, cb_msg_value, LV_EVENT_VALUE_CHANGED, NULL);
+  lv_obj_t *bm = lv_msgbox_get_btns(s_msg_box);
+  if (bm) lv_obj_add_flag(bm, LV_OBJ_FLAG_HIDDEN);     // chua cho bam OK khi dang luu
+  s_msg_shown_ms  = lv_tick_get();                     // khong de bo dem 6 s dong ngay
+  s_store_wait    = true;
+  s_store_seen_ms = cydlcd.event_ms;
+  s_store_saved_ms = 0;
 }
 
 void ui_boxes_test_msg(uint8_t sev) {

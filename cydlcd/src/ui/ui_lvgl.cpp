@@ -334,7 +334,9 @@ void do_action(const int a) {
     case A_STOP:          ui_confirm(T(UI_T_CF_STOP_TITLE), T(UI_T_CF_STOP_TEXT), (uint8_t)A_STOP_NOW, 1); break;
     case A_STOP_NOW:      stop_request(); break;                   // gui lai M524 toi khi dung (xem stop_retry_task)
     case A_COOLDOWN:      cydlcd_link_send_gcode("M104 S0"); cydlcd_link_send_gcode("M140 S0"); break;
-    case A_SAVE:          cydlcd_link_request((uint8_t)CYDLCD_REQ_SAVE_SETTINGS); break;
+    case A_SAVE:          cydlcd_link_request((uint8_t)CYDLCD_REQ_SAVE_SETTINGS);
+                          ui_boxes_save_show();   // 2026-10-26: hien hop DANG LUU -> DA LUU -> dong sau 1 s
+                          break;
     // M501: nap lai thong so tu EEPROM vao RAM (muc "Load Settings" cua menu Configuration).
     // KHONG xac nhan 2 buoc: lenh nay chi DOC EEPROM, hoan tac duoc (sua lai roi SAVE) - khac M502.
     // Sau khi nap thi gia tri trong RAM doi -> xin Marlin gui lai bang thong so cho man hinh.
