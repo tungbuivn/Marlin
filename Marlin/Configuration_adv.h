@@ -4326,7 +4326,7 @@
 //
 // M42 - Set pin states
 //
-//#define DIRECT_PIN_CONTROL
+#define DIRECT_PIN_CONTROL   // 2026-10-26: bat M42 de nhap nhay PB14/PB15/PD14 do chan header WIFI
 
 //
 // M43 - display pin status, toggle pins, watch pins, watch endstops & toggle LED, test servo probe
