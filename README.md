@@ -58,7 +58,7 @@ khong tim thay, khong suy dien.
 | `PIDTEMP` | **TAT** (comment) | `Configuration.h:675` | |
 | `PIDTEMPBED` | **BAT** | `Configuration.h:766` | ban in van PID |
 | `CLASSIC_JERK` | **BAT** | `Configuration.h:1309` | kem `S_CURVE_ACCELERATION` (`:1352`); khong dung Junction Deviation |
-| `LIN_ADVANCE` | **TAT** (comment) | `Configuration_adv.h:2151` | |
+| `LIN_ADVANCE` | **BẬT trong config** — firmware trên máy **CHƯA nạp** | `Configuration_adv.h:2212` | `ADVANCE_K 0.05` (1.75 direct drive); `ALLOW_LOW_EJERK` bật vì `DEFAULT_EJERK 5.0`; hiệu chuẩn bằng `M900` + `M500` sau khi flash |
 | `BABYSTEPPING` | **TAT** (comment) | `Configuration_adv.h:2104` | ⇒ **khong co** babystep Z khi dang in |
 | `AUTO_BED_LEVELING_UBL` | **BAT** | `Configuration.h:2001` | luoi 7×7, `MESH_INSET 15` (`:2112`) |
 | `ASSISTED_TRAMMING` + `_WIZARD` | **BAT** | `Configuration_adv.h:1036, 1054` | `G35` + Tramming Wizard |
@@ -69,6 +69,10 @@ khong tim thay, khong suy dien.
 | `STM32_DFU_REBOOT` | **BAT** | `Configuration_adv.h:4287` | cho `M997` nhay vao ROM DFU — dung de nap firmware |
 | `CYDLCD_SERIAL_UI` | **BAT** | `Configuration.h:3170` | ExtUI PUSH ⇒ `MKS_MINI_12864_V3` **phai tat** |
 | `CYDLCD_TBT_LINK` | **TAT** (comment) | `Configuration.h:3189` | kieu TRAM cu; **loai tru** voi `CYDLCD_SERIAL_UI` |
+
+> ⚠️ **`LIN_ADVANCE` mới bật trong source, CHƯA flash.** Firmware đang chạy trên máy vẫn là bản
+> không có LA, nên G-code hiện tại (không có `M900`) chạy y như cũ. Sau khi build + nạp,
+> `ADVANCE_K 0.05` là giá trị khởi đầu; chỉnh bằng `M900 K...` (test pattern) rồi `M500`.
 
 Ba con so hay dung, lay dung tu code:
 
@@ -1492,7 +1496,7 @@ quên `M92` hay do firmware/driver lệch nhau. `M122` đọc MRES từ driver q
 | `monitor-temp.ps1` | đặt nhiệt độ hotend và **theo dõi bằng `M105` trong MỘT kết nối duy nhất** (mở lại cổng COM giữa chừng có thể reset board → mất `M104` target). Đọc + in **trước** khi bật heater; **tự `M104 S0`** nếu vượt `target + GuardBand`; tự tắt khi hết giờ. `-ProbeOnly` kiểm đường hiển thị mà không bật heater. Ví dụ: `.\monitor-temp.ps1 -Target 100 -Seconds 130` |
 | `UPLOAD_README.md` | hướng dẫn nạp + xử lý sự cố DFU |
 | `cura_profile/machine_definition_changes.inst.cfg` | **Profile Cura — container của MÁY IN** (bàn, gốc, endstop, feedrate/accel/jerk, steps/mm, Start/End G-code) |
-| `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (Extruder Start G-code = đường purge, Extruder End G-code = retract) |
+| `cura_profile/extruder_definition_changes.inst.cfg` | **Profile Cura — container `definition_changes` của EXTRUDER** (để trống; G-code purge/retract nằm ở container `user` của extruder và Start G-code của máy) |
 | `cura_profile/extruder_user.inst.cfg` | **Profile Cura — container `user` của EXTRUDER** (tốc độ retract). Phải nằm ở đây, xem 11.6 |
 | `cura_profile/voron21_300_mks_monster8.def.json` | Định nghĩa máy in mới (`inherits: voron2_base`) — chỉ dùng khi muốn thêm máy in riêng trong Cura |
 | `install-cura-profile.ps1` | Áp cả 4 container + script hậu xử lý + **đồng bộ setting đang lưu của script** vào Cura (mặc định sửa máy in "Voron2 300" đang có, **không cần Admin**). Script copy `cura_profile\scripts\*.py` — nên `ClampFeeds.py` (đã gỡ, xem §11.6) **không** còn được cài |
@@ -1534,14 +1538,26 @@ Cura có **4** ô G-code, nằm ở 2 tab khác nhau của `Machine settings` �
 
 | Tab | Ô | Key | Script điền gì |
 |---|---|---|---|
-| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `M190 S60` → `M109 S230` → `M420 S1 Z10` (**fade 10 mm**). **`G34` và `G28 Z` đã bỏ** — xem §5 |
+| **Printer** | Start G-code | `machine_start_gcode` | `M104 S230` + `M140 S60` (**cố định**) → `G28` → `M190 S60` → `M109 S230` → `M420 S1` → **purge nozzle 20 cm** (`X2 Y10` → `X2 Y210`, `E20`) → về tâm `X152.5 Y152.5`. **`G34` và `G28 Z` đã bỏ** — xem §5 |
 | **Printer** | End G-code | `machine_end_gcode` | `M400` → nâng Z → `G27` park → tắt nhiệt → `M84 X Y E` |
-| **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | `G1 Z2.0` → **đi ngang** tới `X2 Y10` → **rồi mới** hạ `Z0.3` → purge `Y10 → Y100` → `G92 E0` → nhấc `Z2.0` → về tâm `X152.5 Y152.5` |
+| **Extruder 1** | Extruder Start G-code | `machine_extruder_start_code` | **Để trống** — purge 20 cm đã nằm trong Start G-code của máy, không lặp lại ở đây |
 | **Extruder 1** | Extruder End G-code | `machine_extruder_end_code` | retract `G1 E-2 F2700` |
 
 `machine_extruder_*` nằm trong `fdmextruder.def.json` với `default_value = ""`, nên **mặc định
 Cura để trống** và chúng thuộc container của **extruder**, không phải của máy in — script ghi
 vào cả hai container.
+
+> **Purge nozzle 20 cm (200 mm).** Start G-code của máy in purge dọc mép trái bàn:
+> `G1 X2 Y10 F5000` (đi ngang ở `Z2.0`) → `G1 Z0.3 F600` (hạ) → `G1 X2 Y210 F1500 E20`
+> (đúng **200 mm** = 20 cm) → `G92 E0` → nhấc `Z2.0` → về tâm `X152.5 Y152.5`.
+> `E20` là lượng nhựa đủ dày cho đường purge ~0,8 mm rộng ở `Z0.3`; muốn purge nhiều/ít hơn thì
+> chỉnh `E` (không đổi chiều dài 200 mm). **Đừng** đặt purge trong Extruder Start G-code nữa —
+> Cura sẽ chạy nó **sau** Start G-code của máy và purge thành 2 lần.
+
+> **Speed Slowdown Layers = 1** (thay vì 4). Chỉ layer 0 in chậm; từ layer 1 in đúng tốc độ/acceleration.
+> Giá trị nằm trong `cura_profile/machine_user.inst.cfg` (container `user` của máy in) nên
+> `install-cura-profile.ps1` giữ được khi merge. Để 4 như cũ làm layer 1–3 bị hạ acceleration
+> (98/165/232 mm/s²), dễ tràn góc khi chưa có `LIN_ADVANCE`.
 
 > ⚠️ **Nhiệt độ đã cố định trong Start G-code** — `M104 S230` / `M140 S60` / `M190 S60` /
 > `M109 S230` là số cứng, **không còn placeholder `{material_print_temperature_layer_0}`**.
@@ -1557,12 +1573,12 @@ vào cả hai container.
 > thời 3 trục** — Marlin nội suy nên đầu in vừa chạy ngang vừa hạ dần, tạo một **đường dốc cắt qua
 > mặt bàn** từ `(152, 152, 2.0)` xuống `(2, 10, 0.3)`. Đúng thứ tự phải là tách ra:
 > ```gcode
-> G1 Z2.0 F3000       ; giu Z cao
-> G1 X2 Y10 F5000     ; di NGANG toi diem purge, chua ha
-> G1 Z0.3 F600        ; toi noi roi MOI ha dau in
-> G1 X2 Y100 F1500 E15
+> G1 Z2.0 F3000            ; giu Z cao
+> G1 X2 Y10 F5000          ; di NGANG toi diem purge, chua ha
+> G1 Z0.3 F600             ; toi noi roi MOI ha dau in
+> G1 X2 Y210 F1500 E20     ; purge 200 mm = 20 cm
 > G92 E0
-> G1 Z2.0 F3000       ; purge xong NHAC Z len
+> G1 Z2.0 F3000            ; purge xong NHAC Z len
 > G1 X152.5 Y152.5 F6000   ; roi moi di tiep, ve tam ban
 > ```
 > Quên nhấc Z sau khi purge thì mọi travel sau đó đều **kéo nozzle quét mặt bàn** ở `Z0.3`.
@@ -1603,11 +1619,11 @@ vào cả hai container.
 > con số trong file nay đúng bằng con số Cura thật sự muốn.
 >
 > ⚠️ Nhưng `ClampFeeds` còn làm **3 việc khác**, nên gỡ script là **mất luôn** chúng:
-> **(a)** tách bước gộp XY+Z — nay bước gộp (ví dụ đường purge viết tay trong Extruder Start G-code)
+> **(a)** tách bước gộp XY+Z — nay bước gộp (ví dụ đường purge viết tay trong Start G-code của máy)
 > **giữ nguyên**, mà Marlin nội suy nên đầu in vừa chạy ngang vừa hạ dần;
 > **(b)** chèn bước **về tâm sau purge** (`after_purge_xy`) — không còn;
 > **(c)** ép `M204 S` — không còn (firmware tự `min()` với `M201`, xem §3.3).
-> Nếu thấy purge/travel **cào mặt bàn**, **đừng** bật lại script: sửa thẳng **Extruder Start G-code**
+> Nếu thấy purge/travel **cào mặt bàn**, **đừng** bật lại script: sửa thẳng **Start G-code của máy**
 > trong Cura cho tách XY/Z và nhấc Z đúng thứ tự (xem cảnh báo *"Đừng gộp XY và Z trong một lệnh
 > purge"* ở §11.6).
 
@@ -1635,7 +1651,7 @@ Kết quả đo trên `V300_Part3.gcode`:
 Purge **sau khi qua script** (ảnh chụp lịch sử trên `V300_Part3_proj.gcode`). Các dòng
 `; ClampFeeds: tach XY`, `; ClampFeeds: ha Z sau` và `; --- ClampFeeds: ve tam sau purge ---` là do
 **chính script này** chèn/sửa. Từ 2026-10-12 chúng **không còn** trong G-code mới — khối purge gốc
-(nếu có) chỉ còn do Extruder Start G-code quyết định, và bước "về tâm" do `after_purge_xy` chèn thì
+(nếu có) nay do Start G-code của máy quyết định, và bước "về tâm" do `after_purge_xy` chèn thì
 **mất hẳn**:
 
 ```gcode
@@ -1651,6 +1667,9 @@ G1 F900 E-0.75
 G1 F6000 X152.5 Y152.5
 ;LAYER_COUNT:5
 ```
+
+> ℹ️ Đây là ảnh chụp **lịch sử** (purge 98 mm, `E15`). Profile hiện tại purge **200 mm**
+> (`X2 Y10` → `X2 Y210`, `E20`) và nằm trong Start G-code của máy — xem bảng bốn ô G-code ở trên.
 
 > ~~**Bật:** `Extensions` → `Post Processing` → `Add a script` → **Clamp Feeds** → `Close`.~~
 > ~~Cura chỉ nạp script lúc khởi động nên phải **mở lại Cura**.~~ **Không còn áp dụng** — script đã gỡ

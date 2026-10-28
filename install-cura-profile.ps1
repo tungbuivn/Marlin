@@ -226,7 +226,8 @@ if (-not $AddAsNewPrinter) {
         Write-Host "  1. MO CURA LAI."
         Write-Host "  2. Manage printers > Machine settings > tab Printer:"
         Write-Host "     'Origin at center' TAT, ban 305x305, Start/End G-code la ban Marlin."
-        Write-Host "  3. tab Extruder 1: 'Extruder Start G-code' = duong purge,"
+        Write-Host "  3. tab Printer: Start G-code da co san duong purge nozzle 20 cm."
+        Write-Host "     tab Extruder 1: 'Extruder Start G-code' de TRONG (purge nam o Start G-code cua may),"
         Write-Host "     'Extruder End G-code' = retract."
         exit 0
     } else {
